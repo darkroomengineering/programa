@@ -180,6 +180,8 @@ final class SidebarHelpMenuUITests: XCTestCase {
 
 final class CommandPaletteAllSurfacesUITests: XCTestCase {
     private var socketPath = ""
+    private var diagnosticsPath = ""
+    private var launchTag = ""
     private let hiddenSurfaceToken = "programa-command-palette-hidden-surface"
     private let visibleSurfaceToken = "programa-command-palette-visible-surface"
     private let noMatchWorkspaceQuery = "programa-command-palette-no-match"
@@ -188,11 +190,15 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
         super.setUp()
         continueAfterFailure = false
         socketPath = "/tmp/programa-ui-test-command-palette-\(UUID().uuidString).sock"
+        diagnosticsPath = "/tmp/programa-ui-test-command-palette-\(UUID().uuidString).json"
+        launchTag = "ui-tests-command-palette-\(UUID().uuidString.prefix(8).lowercased())"
         try? FileManager.default.removeItem(atPath: socketPath)
+        try? FileManager.default.removeItem(atPath: diagnosticsPath)
     }
 
     override func tearDown() {
         try? FileManager.default.removeItem(atPath: socketPath)
+        try? FileManager.default.removeItem(atPath: diagnosticsPath)
         super.tearDown()
     }
 
@@ -206,6 +212,11 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
         app.launchEnvironment["PROGRAMA_SOCKET_PATH"] = socketPath
         app.launchEnvironment["PROGRAMA_SOCKET_ENABLE"] = "1"
         app.launchEnvironment["PROGRAMA_SOCKET_MODE"] = "allowAll"
+        // Debug launches need a tag, and a tagged launch honors PROGRAMA_SOCKET_PATH only with the override.
+        app.launchEnvironment["PROGRAMA_TAG"] = launchTag
+        app.launchEnvironment["PROGRAMA_ALLOW_SOCKET_OVERRIDE"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_SOCKET_SANITY"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_DIAGNOSTICS_PATH"] = diagnosticsPath
         if showSettingsWindow {
             app.launchEnvironment["PROGRAMA_UI_TEST_SHOW_SETTINGS"] = "1"
         }
@@ -222,7 +233,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
             },
             "Expected the main window to be visible"
         )
-        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath)")
+        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath). diagnostics=\(loadDiagnostics(at: diagnosticsPath) ?? [:])")
 
         let mainWindowId = try XCTUnwrap(currentWindowId(), "Expected window.current to return a window id")
 
@@ -335,7 +346,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
             },
             "Expected the main window and Settings window to be visible"
         )
-        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath)")
+        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath). diagnostics=\(loadDiagnostics(at: diagnosticsPath) ?? [:])")
 
         let mainWindowId = try XCTUnwrap(currentWindowId(), "Expected window.current to return a window id")
         let secondaryWorkspaceId = try XCTUnwrap(createWorkspaceId(), "Expected workspace.create to return a workspace ID")
@@ -492,7 +503,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
             },
             "Expected the main window and Settings window to be visible"
         )
-        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath)")
+        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath). diagnostics=\(loadDiagnostics(at: diagnosticsPath) ?? [:])")
 
         let mainWindowId = try XCTUnwrap(currentWindowId(), "Expected window.current to return a window id")
 
@@ -580,7 +591,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
             },
             "Expected the main window to be visible"
         )
-        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath)")
+        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath). diagnostics=\(loadDiagnostics(at: diagnosticsPath) ?? [:])")
 
         let mainWindowId = try XCTUnwrap(currentWindowId(), "Expected window.current to return a window id")
         try seedWorkspaceSwitcherCorpus(workspaceCount: 96)

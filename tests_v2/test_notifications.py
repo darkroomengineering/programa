@@ -67,15 +67,22 @@ def ensure_two_surfaces(client: ProgramaClient) -> list[tuple[int, str, bool]]:
     return surfaces
 
 
-def focused_surface_index(client: ProgramaClient) -> int:
+def focused_surface_id(client: ProgramaClient) -> str:
     surfaces = client.list_surfaces()
     focused = next((s for s in surfaces if s[2]), None)
     if focused is None:
         raise RuntimeError("No focused surface")
-    return focused[0]
+    return focused[1]
 
 
-def send_osc(client: ProgramaClient, sequence: str, surface: Optional[int] = None) -> None:
+def select_new_workspace(client: ProgramaClient) -> str:
+    """workspace.create does not steal focus over the socket; select the new workspace explicitly."""
+    workspace_id = client.new_workspace()
+    client.select_workspace(workspace_id)
+    return workspace_id
+
+
+def send_osc(client: ProgramaClient, sequence: str, surface: Optional[str] = None) -> None:
     """Send an OSC sequence by printing it in the shell."""
     command = f"printf '{sequence}'\\n"
     if surface is None:
@@ -105,16 +112,18 @@ def test_clear_prior_notifications(client: ProgramaClient) -> TestResult:
 
 
 def test_suppress_when_focused(client: ProgramaClient) -> TestResult:
-    result = TestResult("Suppress When App+Panel Focused")
+    result = TestResult("Record When App+Panel Focused")
     try:
         client.clear_notifications()
         client.set_app_focus(True)
         client.notify("focused")
-        items = wait_for_notifications(client, 0)
-        if len(items) == 0:
-            result.success("Suppressed notification when focused")
+        # Focus suppresses only the external banner; the notification itself is still recorded
+        # (and rings the local sound) so it stays in the list until the user dismisses it.
+        items = wait_for_notifications(client, 1)
+        if len(items) == 1 and items[0]["title"] == "focused":
+            result.success("Recorded notification for focused panel")
         else:
-            result.failure(f"Expected 0 notifications, got {len(items)}")
+            result.failure(f"Expected 1 recorded notification, got {len(items)}")
     except Exception as e:
         result.failure(f"Exception: {e}")
     return result
@@ -146,7 +155,7 @@ def test_kitty_notification_simple(client: ProgramaClient) -> TestResult:
         # Avoid Ghostty's 1s desktop notification rate limit. This test can run
         # immediately after app launch in CI/VM environments.
         time.sleep(1.1)
-        surface = focused_surface_index(client)
+        surface = focused_surface_id(client)
         send_osc(client, "\\x1b]99;;Kitty Simple\\x1b\\\\", surface)
         items = wait_for_notifications(client, 1)
         if len(items) != 1:
@@ -167,7 +176,7 @@ def test_kitty_notification_chunked(client: ProgramaClient) -> TestResult:
         client.set_app_focus(False)
         # Avoid Ghostty's 1s desktop notification rate limit.
         time.sleep(1.1)
-        surface = focused_surface_index(client)
+        surface = focused_surface_id(client)
         send_osc(client, "\\x1b]99;i=kitty:d=0:p=title;Kitty Title\\x1b\\\\", surface)
         time.sleep(0.1)
         items = client.list_notifications()
@@ -197,7 +206,7 @@ def test_rxvt_notification_osc777(client: ProgramaClient) -> TestResult:
         client.set_app_focus(False)
         # Avoid Ghostty's 1s desktop notification rate limit.
         time.sleep(1.1)
-        surface = focused_surface_index(client)
+        surface = focused_surface_id(client)
         command = "printf '\\x1b]777;notify;OSC777 Title;OSC777 Body\\x07'"
         client.send_surface(surface, command + "\\n")
         items = wait_for_notifications(client, 1)
@@ -228,11 +237,11 @@ def test_mark_read_on_focus_change(client: ProgramaClient) -> TestResult:
             return result
 
         client.set_app_focus(False)
-        client.notify_surface(other[0], "focusread")
+        client.notify_surface(other[1], "focusread")
         time.sleep(0.1)
 
         client.set_app_focus(True)
-        client.focus_surface(other[0])
+        client.focus_surface(other[1])
         time.sleep(0.1)
 
         items = client.list_notifications()
@@ -289,8 +298,7 @@ def test_mark_read_on_tab_switch(client: ProgramaClient) -> TestResult:
         client.notify("tabswitch")
         time.sleep(0.1)
 
-        tab2 = client.new_workspace()
-        time.sleep(0.1)
+        select_new_workspace(client)
 
         client.set_app_focus(True)
         client.select_workspace(tab1)
@@ -326,7 +334,7 @@ def test_flash_on_tab_switch(client: ProgramaClient) -> TestResult:
         client.notify("tabswitchflash")
         time.sleep(0.1)
 
-        client.new_workspace()
+        select_new_workspace(client)
         time.sleep(0.1)
 
         client.set_app_focus(True)
@@ -357,12 +365,12 @@ def test_focus_on_notification_click(client: ProgramaClient) -> TestResult:
             return result
 
         client.set_app_focus(False)
-        client.notify_surface(other[0], "notifyfocus")
+        client.notify_surface(other[1], "notifyfocus")
         time.sleep(0.1)
 
         client.set_app_focus(True)
         workspace_id = client.current_workspace()
-        client.focus_notification(workspace_id, other[0])
+        client.focus_notification(workspace_id, other[1])
         time.sleep(0.2)
 
         surfaces = client.list_surfaces()
@@ -394,11 +402,11 @@ def test_restore_focus_on_tab_switch(client: ProgramaClient) -> TestResult:
             result.failure("Unable to identify focused and unfocused surfaces")
             return result
 
-        client.focus_surface(other[0])
+        client.focus_surface(other[1])
         time.sleep(0.1)
 
         tab1 = client.current_workspace()
-        client.new_workspace()
+        select_new_workspace(client)
         time.sleep(0.1)
 
         client.select_workspace(tab1)
@@ -431,7 +439,7 @@ def test_clear_on_tab_close(client: ProgramaClient) -> TestResult:
             result.failure(f"Expected 1 notification, got {len(items)}")
             return result
 
-        client.new_workspace()
+        select_new_workspace(client)
         time.sleep(0.1)
         client.close_workspace(tab1)
         time.sleep(0.2)

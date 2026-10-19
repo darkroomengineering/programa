@@ -142,16 +142,19 @@ final class WorkspaceDescriptionUITests: XCTestCase {
             "Expected Enter to save and dismiss the workspace description editor after multiline input"
         )
 
+        // The description Text is wrapped in a Group that carries the identifier and label, so
+        // SwiftUI may expose it as a generic element rather than a static text.
         let renderedDescription = app
-            .descendants(matching: .staticText)
-            .matching(NSPredicate(format: "label == %@", description))
+            .descendants(matching: .any)
+            .matching(identifier: "SidebarWorkspaceDescriptionText")
             .firstMatch
 
         XCTAssertTrue(
             workspaceDescriptionPollUntil(timeout: 5.0) {
-                renderedDescription.exists
+                renderedDescription.exists && renderedDescription.label == description
             },
-            "Expected the sidebar to render the saved multiline description with a newline-preserving label"
+            "Expected the sidebar to render the saved multiline description with a newline-preserving label. " +
+                "exists=\(renderedDescription.exists) label=\(renderedDescription.exists ? renderedDescription.label : "")"
         )
     }
 

@@ -37,6 +37,16 @@ def _palette_results(client: ProgramaClient, window_id: str, limit=12) -> dict:
 def _open_palette_and_rows(client: ProgramaClient, window_id: str, limit: int = 80) -> list:
     _set_palette_visible(client, window_id, False)
     _set_palette_visible(client, window_id, True)
+    # The palette fills its rows asynchronously after it becomes visible, and the
+    # workspace/tab commands only join once the first context refresh lands.
+    _wait_until(
+        lambda: any(
+            str((row or {}).get("command_id") or "") == "palette.renameTab"
+            for row in _palette_results(client, window_id, limit=limit).get("results") or []
+        ),
+        timeout_s=6.0,
+        message="command palette never listed palette.renameTab",
+    )
     payload = _palette_results(client, window_id, limit=limit)
     rows = payload.get("results") or []
     if not rows:

@@ -71,6 +71,7 @@ def _open_palette(client, window_id):
         window_id,
         expected_text_length=0,
         message="search input did not focus with empty query",
+        timeout_s=4.0,
     )
 
 

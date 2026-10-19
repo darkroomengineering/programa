@@ -37,6 +37,10 @@ EXPECTED_EVENTS = [
     "PermissionRequest",
     "SessionEnd",
 ]
+# The unguarded form older installs wrote. Ownership is an exact match on a known command, so
+# only this form (not an arbitrary `programa codex-hook <anything>` line) is replaced on reinstall.
+STALE_SESSION_START_COMMAND = f"{CODEX_HOOK_MARKER} session-start"
+STALE_STOP_COMMAND = f"{CODEX_HOOK_MARKER} stop"
 
 
 def _run(
@@ -141,12 +145,12 @@ def test_preserves_user_hooks_and_replaces_stale_entry(cli: str) -> None:
                         "hooks": [{"type": "command", "command": "echo my-custom-start-hook"}],
                     },
                     {
-                        "hooks": [{"type": "command", "command": f"{CODEX_HOOK_MARKER} old-form"}],
+                        "hooks": [{"type": "command", "command": STALE_SESSION_START_COMMAND}],
                     },
                 ],
                 "Stop": [
                     {
-                        "hooks": [{"type": "command", "command": f"{CODEX_HOOK_MARKER} stop-old-format"}],
+                        "hooks": [{"type": "command", "command": STALE_STOP_COMMAND}],
                     }
                 ],
             }
@@ -184,7 +188,7 @@ def test_preserves_user_hooks_and_replaces_stale_entry(cli: str) -> None:
         )
         _must(len(programa_groups) == 1, f"expected exactly 1 programa SessionStart group, got: {programa_groups}")
         _must(
-            "old-form" not in programa_groups[0]["hooks"][0]["command"],
+            programa_groups[0]["hooks"][0]["command"] != STALE_SESSION_START_COMMAND,
             f"stale programa SessionStart entry should be replaced, got: {programa_groups[0]}",
         )
 
@@ -192,7 +196,7 @@ def test_preserves_user_hooks_and_replaces_stale_entry(cli: str) -> None:
         stop_commands = _hooks_commands(hooks, "Stop")
         _must(len(stop_commands) == 1, f"expected exactly 1 Stop hook command, got: {stop_commands}")
         _must(CODEX_HOOK_MARKER in stop_commands[0], f"Stop hook should be a programa hook, got: {stop_commands}")
-        _must("stop-old-format" not in stop_commands[0], f"stale Stop command should be replaced, got: {stop_commands}")
+        _must(stop_commands[0] != STALE_STOP_COMMAND, f"stale Stop command should be replaced, got: {stop_commands}")
 
         print("  PASS: install preserves user hooks and replaces stale programa entries")
 

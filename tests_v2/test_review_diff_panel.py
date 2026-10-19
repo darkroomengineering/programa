@@ -101,8 +101,12 @@ def main() -> int:
                 str(opened.get("source_surface_id") or "") == source_surface_id,
                 f"Expected review.open to report the reviewed surface: {opened}",
             )
+            # Untracked files are listed as "New file" rows without content, so they count toward
+            # file_count but not diffable_file_count (docs/plans/diff-review-panel.md §2).
             diffable_count = int(opened.get("diffable_file_count") or 0)
-            _must(diffable_count >= 2, f"Expected at least 2 diffable files (modified + untracked): {opened}")
+            file_count = int(opened.get("file_count") or 0)
+            _must(diffable_count >= 1, f"Expected the modified tracked file to be diffable: {opened}")
+            _must(file_count >= 2, f"Expected the modified and untracked files to be listed: {opened}")
             _must(bool(opened.get("pane_id")), f"Expected review.open to return a pane_id: {opened}")
 
             # 2. review.comment.add / review.comment.list round-trip.

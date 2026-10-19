@@ -76,7 +76,10 @@ def main():
         before_rows = before.get("results") or []
         if not before_rows:
             raise ProgramaClientError(f"no results for 'open': {before}")
-        if str(before_rows[0].get("command_id") or "") != "palette.terminalOpenDirectory":
+        # "Open Folder…" and the per-app "Open Current Directory in <app>" commands
+        # (palette.terminalOpenDirectory.<app>, one per installed app) all match "open".
+        top_before = str(before_rows[0].get("command_id") or "")
+        if top_before != "palette.openFolder" and not top_before.startswith("palette.terminalOpenDirectory."):
             raise ProgramaClientError(f"unexpected top command for 'open': {before_rows[0]}")
 
         client.simulate_shortcut("cmd+a")
