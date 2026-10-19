@@ -192,13 +192,13 @@ def main() -> int:
         if len(panes) < 2:
             raise ProgramaClientError(f"expected multiple panes, got: {panes}")
 
-        mid = len(panes) // 2
+        mid = panes[len(panes) // 2][1]
         c.focus_pane(mid)
         time.sleep(0.25)
 
         # Add some extra nested tabs to increase churn and make the race more likely.
-        for pane_idx in range(min(4, len(panes))):
-            c.focus_pane(pane_idx)
+        for pane in panes[:4]:
+            c.focus_pane(pane[1])
             time.sleep(0.15)
             for _ in range(2):
                 _ = c.new_surface(panel_type="terminal")

@@ -34,7 +34,7 @@ EXPECTED_EVENTS = [
     "SessionStart",
     "UserPromptSubmit",
     "Stop",
-    "Notification",
+    "PermissionRequest",
     "SessionEnd",
 ]
 

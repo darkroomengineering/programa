@@ -6,9 +6,9 @@ each other, and `tests_v2` is not "the second attempt at `tests`".
 | Directory | Language | Needs a running app? | Run by |
 |---|---|---|---|
 | `tests/` | shell + python | no | `workflow-guard-tests`, CLI steps in `ci.yml` |
-| `tests_v2/` | python | **yes** | `socket-integration-tests`, lag/perf jobs |
+| `tests_v2/` | python | **yes** | `socket-integration-tests` (`ci_subset.txt`), lag/perf jobs, the nightly extended-tests workflow (`nightly_subset.txt`) |
 | `programaTests/` | Swift (XCTest) | launches its app test host | `unit-tests` (`programa-unit` scheme) |
-| `programaUITests/` | Swift (XCUITest) | launches its own | `ui-regressions` |
+| `programaUITests/` | Swift (XCUITest) | launches its own | `ui-regressions`, the nightly extended-tests workflow (`scripts/nightly-ui-classes.txt`) |
 
 ## What `_v2` means
 
@@ -40,6 +40,12 @@ test. See the test-quality policy in `CLAUDE.md`.
 delivery and AppKit: clicks, drags, menus, focus.
 
 ## Running them
+
+`.github/workflows/nightly-extended-tests.yml` runs, once a night and on demand,
+the tests that are too slow or too load-sensitive to gate PRs:
+`tests_v2/nightly_subset.txt` and `scripts/nightly-ui-classes.txt`. To try a new
+test before listing it, dispatch that workflow with `v2_files` or `ui_classes`.
+Files in neither a CI list nor the nightly list are not run anywhere.
 
 Per `CLAUDE.md`, tests are **not run locally** — they run on CI or the VM.
 `programa-unit` is the local unit-test exception, but it is **app-hosted**:

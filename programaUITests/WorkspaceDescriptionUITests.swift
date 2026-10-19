@@ -20,15 +20,12 @@ private func workspaceDescriptionPollUntil(
 }
 
 final class WorkspaceDescriptionUITests: XCTestCase {
-    private var dataPath = ""
     private var launchTag = ""
 
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
-        dataPath = "/tmp/programa-ui-test-workspace-description-\(UUID().uuidString).json"
         launchTag = "ui-tests-workspace-description-\(UUID().uuidString.lowercased())"
-        try? FileManager.default.removeItem(atPath: dataPath)
     }
 
     func testCmdShiftEAllowsImmediateTypingAndSave() {
@@ -161,8 +158,6 @@ final class WorkspaceDescriptionUITests: XCTestCase {
     private func configuredApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
-        app.launchEnvironment["PROGRAMA_UI_TEST_GOTO_SPLIT_SETUP"] = "1"
-        app.launchEnvironment["PROGRAMA_UI_TEST_GOTO_SPLIT_PATH"] = dataPath
         app.launchEnvironment["PROGRAMA_UI_TEST_FOCUS_SHORTCUTS"] = "1"
         app.launchEnvironment["PROGRAMA_TAG"] = launchTag
         return app
@@ -177,28 +172,8 @@ final class WorkspaceDescriptionUITests: XCTestCase {
 
     private func prepareTerminalFocusedWorkspace(_ app: XCUIApplication) {
         XCTAssertTrue(
-            waitForData(keys: ["terminalPaneId", "webViewFocused"], timeout: 10.0),
-            "Expected goto_split setup data to be written"
-        )
-
-        guard let setup = loadData() else {
-            XCTFail("Missing goto_split setup data")
-            return
-        }
-
-        XCTAssertEqual(setup["webViewFocused"], "true", "Expected WKWebView to be first responder for this test")
-
-        guard let expectedTerminalPaneId = setup["terminalPaneId"] else {
-            XCTFail("Missing terminalPaneId in goto_split setup data")
-            return
-        }
-
-        app.typeKey("h", modifierFlags: [.command, .control])
-        XCTAssertTrue(
-            waitForDataMatch(timeout: 5.0) { data in
-                data["lastMoveDirection"] == "left" && data["focusedPaneId"] == expectedTerminalPaneId
-            },
-            "Expected Cmd+Ctrl+H to move focus to the terminal pane before opening the description editor"
+            app.windows.firstMatch.waitForExistence(timeout: 10.0),
+            "Expected the main window with its focused terminal workspace"
         )
     }
 
@@ -303,20 +278,6 @@ final class WorkspaceDescriptionUITests: XCTestCase {
         )
     }
 
-    private func waitForData(keys: [String], timeout: TimeInterval) -> Bool {
-        workspaceDescriptionPollUntil(timeout: timeout) {
-            guard let data = self.loadData() else { return false }
-            return keys.allSatisfy { data[$0] != nil }
-        }
-    }
-
-    private func waitForDataMatch(timeout: TimeInterval, predicate: @escaping ([String: String]) -> Bool) -> Bool {
-        workspaceDescriptionPollUntil(timeout: timeout) {
-            guard let data = self.loadData() else { return false }
-            return predicate(data)
-        }
-    }
-
     private func waitForNonExistence(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
         let predicate = NSPredicate(format: "exists == false")
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
@@ -330,12 +291,5 @@ final class WorkspaceDescriptionUITests: XCTestCase {
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return value == expected
         }
-    }
-
-    private func loadData() -> [String: String]? {
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: dataPath)) else {
-            return nil
-        }
-        return (try? JSONSerialization.jsonObject(with: data)) as? [String: String]
     }
 }

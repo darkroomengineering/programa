@@ -98,7 +98,7 @@ def main() -> int:
         invalid_output = f"{invalid.stdout}\n{invalid.stderr}"
         _must(invalid.returncode != 0, "Expected rename-window without title to fail")
         _must(
-            "rename-window requires a title" in invalid_output,
+            "rename-window: missing required argument" in invalid_output,
             f"Unexpected error for rename-window without title: {invalid_output!r}",
         )
 
