@@ -50,6 +50,12 @@ final class SidebarHelpMenuUITests: XCTestCase {
             hierarchy.name = "hierarchy after toggle click"
             hierarchy.lifetime = .keepAlways
             add(hierarchy)
+            if let log = try? String(contentsOfFile: "/tmp/programa-debug.log", encoding: .utf8) {
+                let debugLog = XCTAttachment(string: String(log.suffix(20_000)))
+                debugLog.name = "debug log tail after toggle click"
+                debugLog.lifetime = .keepAlways
+                add(debugLog)
+            }
         }
         XCTAssertTrue(
             sidebarHidden,
