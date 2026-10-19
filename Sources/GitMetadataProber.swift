@@ -604,7 +604,12 @@ extension CanonicalSubprocessRunner {
             return "\(path):\(info.st_ino):\(info.st_ctimespec.tv_sec).\(info.st_ctimespec.tv_nsec)"
         }
         var parts: [String] = []
-        var path = URL(fileURLWithPath: directory).standardizedFileURL.path
+        // Git discovers on the physical path, so walk the same ancestors it does.
+        var path = directory
+        if let resolved = realpath(directory, nil) {
+            path = String(cString: resolved)
+            free(resolved)
+        }
         while true {
             if let config = identity((path as NSString).appendingPathComponent("config")) { parts.append(config) }
             let dotGit = (path as NSString).appendingPathComponent(".git")
