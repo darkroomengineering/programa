@@ -35,7 +35,6 @@ struct TerminalSurfaceReviveDescriptor {
     /// creation, so the user sees prior output above the now-live session.
     /// Nil if no usable scrollback was available.
     let scrollbackText: String?
-    var retainedDescriptor: SessionEscrowRetainedDescriptor? = nil
 }
 
 final class TerminalSurfaceRegistry {
@@ -992,7 +991,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
         reviveReplayCanceled.withLock { $0 = true }
 
         if let leftoverReviveDescriptor = reviveDescriptor {
-            leftoverReviveDescriptor.retainedDescriptor?.markRecoveryPending()
             close(leftoverReviveDescriptor.masterFD)
             reviveDescriptor = nil
         }
@@ -1577,7 +1575,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
             // or hasn't consumed the descriptor at all yet (early returns
             // above, which leave `reviveDescriptor` set for a later retry).
             if let consumedReviveDescriptor {
-                consumedReviveDescriptor.retainedDescriptor?.markRecoveryPending()
                 close(consumedReviveDescriptor.masterFD)
             }
             // A retry of `createSurface` reuses this same TerminalSurface
@@ -1612,7 +1609,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
             return
         }
         guard let createdSurface = surface else { return }
-        consumedReviveDescriptor?.retainedDescriptor?.releaseAfterOwnershipTransfer()
         TerminalSurfaceRegistry.shared.registerRuntimeSurface(createdSurface, ownerId: id)
         rendererRealized = true
         recordRuntimeSurfaceCreation()
@@ -1960,14 +1956,12 @@ final class TerminalSurface: Identifiable, ObservableObject {
         SessionEscrowClient.shared.escrow(
             surfaceId: surfaceId,
             dupedMasterFD: dupedFD,
-            childPID: childPID,
-            retainedDescriptor: descriptor.retainedDescriptor
+            childPID: childPID
         ) { result in
             guard let result else {
                 dilog("escrow.reattach", "early_reescrow session=\(surfaceId.prefix(8)) outcome=failed")
                 return
             }
-            descriptor.retainedDescriptor?.releaseAfterOwnershipTransfer()
             dilog("escrow.reattach", "early_reescrow session=\(surfaceId.prefix(8)) outcome=ok")
             SessionWALStore.shared.stampDeferredReviveEscrow(
                 surfaceId: surfaceId,

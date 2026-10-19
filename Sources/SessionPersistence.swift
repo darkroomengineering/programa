@@ -433,12 +433,9 @@ struct SessionWindowSnapshot: Codable, Sendable {
     var display: SessionDisplaySnapshot?
     var tabManager: SessionTabManagerSnapshot
     var sidebar: SessionSidebarSnapshot
-    /// `true` in snapshots written by older builds for a window the user had closed. Restore
-    /// never shows such a window: it ends the window's escrowed shells instead. Never written
-    /// by this build; `nil` means visible.
+    /// Written by older builds for a window the user had closed. Decoded so those snapshot
+    /// files still load; nothing reads it.
     var isHidden: Bool?
-
-    var isHiddenWindow: Bool { isHidden == true }
 }
 
 struct AppSessionSnapshot: Codable, Sendable {
@@ -486,9 +483,20 @@ enum SessionPersistenceStore {
         })
     }
 
+    /// A snapshot file untouched for this long stops pinning its session ids,
+    /// unless it is the running bundle's own. Bundles that still run rewrite
+    /// their snapshot on every autosave, so only abandoned dev tags age out.
+    static let foreignSnapshotPinMaxAge: TimeInterval = 14 * 24 * 60 * 60
+
     /// WAL storage is shared by production and tagged bundles. Consult every
-    /// current snapshot before deleting its session data, with bounded scan work.
-    static func allOwnedTerminalSessionIDs(in directory: URL) -> Set<String>? {
+    /// pinning snapshot before deleting its session data, with bounded scan work.
+    /// Other bundles' snapshots older than `foreignSnapshotPinMaxAge` are
+    /// skipped without being read; `ownSnapshotFileURL` always pins.
+    static func allOwnedTerminalSessionIDs(
+        in directory: URL,
+        ownSnapshotFileURL: URL? = defaultSnapshotFileURL(),
+        now: Date = Date()
+    ) -> Set<String>? {
         var failed = false
         guard let enumerator = FileManager.default.enumerator(
             at: directory,
@@ -498,10 +506,21 @@ enum SessionPersistenceStore {
         ) else { return nil }
         var owned = Set<String>()
         var inspected = 0
+        let ownName = ownSnapshotFileURL?.lastPathComponent
+        let pinCutoff = now.addingTimeInterval(-foreignSnapshotPinMaxAge)
         while let entry = enumerator.nextObject() as? URL {
+            let name = entry.lastPathComponent
+            // `session-<bundle>.scrollback-policy.json` shares the prefix and extension
+            // but is not a snapshot; reading it as one would defer the sweep forever.
+            guard name.hasPrefix("session-"), entry.pathExtension == "json",
+                  !name.hasSuffix(".scrollback-policy.json") else { continue }
             inspected += 1
             guard inspected <= historyDirectoryScanLimit else { return nil }
-            guard entry.lastPathComponent.hasPrefix("session-"), entry.pathExtension == "json" else { continue }
+            if name != ownName,
+               let modified = (try? FileManager.default.attributesOfItem(atPath: entry.path))?[.modificationDate] as? Date,
+               modified < pinCutoff {
+                continue
+            }
             guard let ids = ownedTerminalSessionIDs(fileURL: entry) else { return nil }
             owned.formUnion(ids)
         }
@@ -724,14 +743,7 @@ enum SessionPersistenceStore {
         from snapshot: AppSessionSnapshot,
         limit: Int = SessionPersistencePolicy.maxWindowsPerSnapshot
     ) -> [SessionWindowSnapshot] {
-        // Windows flagged closed by older builds are never shown again; their shells are
-        // ended instead (`hiddenWindows(from:)`).
-        Array(snapshot.windows.filter { !$0.isHiddenWindow }.prefix(max(0, limit)))
-    }
-
-    /// Windows an older build flagged as closed. Restore skips them and ends their shells.
-    static func hiddenWindows(from snapshot: AppSessionSnapshot) -> [SessionWindowSnapshot] {
-        snapshot.windows.filter(\.isHiddenWindow)
+        Array(snapshot.windows.prefix(max(0, limit)))
     }
 
     /// Archives the current snapshot file into `session-history/` before anything else can

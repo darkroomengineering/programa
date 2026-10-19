@@ -465,32 +465,19 @@ final class SessionPersistenceTests: XCTestCase {
         )
     }
 
-    func testWindowsToRestoreSkipsHiddenWindowsAndOlderSnapshotsStayVisible() throws {
+    func testSnapshotFlaggedWithLegacyIsHiddenStillDecodes() throws {
         let base = makeSnapshot(version: SessionSnapshotSchema.currentVersion)
-        var hidden = try XCTUnwrap(base.windows.first)
-        hidden.isHidden = true
-        let mixed = AppSessionSnapshot(
+        var flagged = try XCTUnwrap(base.windows.first)
+        flagged.isHidden = true
+        let legacy = AppSessionSnapshot(
             version: base.version,
             createdAt: base.createdAt,
-            windows: base.windows + [hidden, hidden],
+            windows: base.windows + [flagged],
             cleanShutdown: true
         )
 
-        XCTAssertEqual(
-            SessionPersistenceStore.windowsToRestore(from: mixed).count, 1,
-            "A window the user closed before quitting must not be restored"
-        )
-        XCTAssertEqual(SessionPersistenceStore.hiddenWindows(from: mixed).count, 2)
-
-        // Snapshots written before `isHidden` existed carry no key at all.
-        let encoded = try JSONEncoder().encode(base)
-        XCTAssertFalse(String(decoding: encoded, as: UTF8.self).contains("isHidden"))
-        let decoded = try XCTUnwrap(SessionPersistenceStore.decodeSnapshot(from: encoded))
-        XCTAssertEqual(SessionPersistenceStore.windowsToRestore(from: decoded).count, 1)
-        XCTAssertTrue(SessionPersistenceStore.hiddenWindows(from: decoded).isEmpty)
-
-        let roundTripped = try XCTUnwrap(SessionPersistenceStore.decodeSnapshot(from: JSONEncoder().encode(mixed)))
-        XCTAssertEqual(SessionPersistenceStore.hiddenWindows(from: roundTripped).count, 2)
+        let decoded = try XCTUnwrap(SessionPersistenceStore.decodeSnapshot(from: JSONEncoder().encode(legacy)))
+        XCTAssertEqual(decoded.windows.count, 2)
     }
 
     func testDecodeSnapshotDetectsVersionMismatchWithoutRequiringAppKit() throws {
@@ -2049,6 +2036,56 @@ final class SessionPersistenceTests: XCTestCase {
             XCTAssertTrue(FileManager.default.fileExists(atPath: sessions.appendingPathComponent(id.uuidString).path))
         }
         XCTAssertFalse(FileManager.default.fileExists(atPath: sessions.appendingPathComponent(abandonedID.uuidString).path))
+    }
+
+    func testOrphanSweepIgnoresStaleForeignSnapshotsButKeepsFreshForeignAndOwn() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let sessions = root.appendingPathComponent("sessions")
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let now = Date()
+        let day: TimeInterval = 24 * 60 * 60
+        let ownID = UUID(), freshForeignID = UUID(), staleForeignID = UUID(), unownedID = UUID()
+        for id in [ownID, freshForeignID, staleForeignID, unownedID] {
+            let directory = sessions.appendingPathComponent(id.uuidString)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try FileManager.default.setAttributes(
+                [.modificationDate: now.addingTimeInterval(-SessionWALPolicy.orphanDirectoryMaxAge - 1)],
+                ofItemAtPath: directory.path
+            )
+        }
+        func writeSnapshot(_ id: UUID, to url: URL, age: TimeInterval) throws {
+            XCTAssertTrue(SessionPersistenceStore.save(makeOwnershipSnapshot(id), fileURL: url))
+            try FileManager.default.setAttributes(
+                [.modificationDate: now.addingTimeInterval(-age)], ofItemAtPath: url.path
+            )
+        }
+        let ownFile = try XCTUnwrap(SessionPersistenceStore.defaultSnapshotFileURL(
+            bundleIdentifier: "dev.own", appSupportDirectory: root
+        ))
+        // The running bundle's own snapshot pins its ids however old it is.
+        try writeSnapshot(ownID, to: ownFile, age: 60 * day)
+        try writeSnapshot(freshForeignID, to: root.appendingPathComponent("session-staging.json"), age: 13 * day)
+        try writeSnapshot(staleForeignID, to: root.appendingPathComponent("session-old-tag.json"), age: 15 * day)
+        // An abandoned snapshot that no longer decodes must not defer the sweep, and a
+        // scrollback policy file is not a snapshot.
+        let corruptStale = root.appendingPathComponent("session-dead-tag.json")
+        try Data("corrupt".utf8).write(to: corruptStale)
+        try FileManager.default.setAttributes(
+            [.modificationDate: now.addingTimeInterval(-40 * day)], ofItemAtPath: corruptStale.path
+        )
+        try Data(#"{"enabled":true}"#.utf8).write(to: root.appendingPathComponent("session-staging.scrollback-policy.json"))
+
+        SessionWALStore.sweepOrphanedSessionDirectories(
+            at: sessions, registeredSessionIDs: [], ownSnapshotFileURL: ownFile, now: now
+        )
+
+        for id in [ownID, freshForeignID] {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: sessions.appendingPathComponent(id.uuidString).path))
+        }
+        for id in [staleForeignID, unownedID] {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: sessions.appendingPathComponent(id.uuidString).path))
+        }
     }
 
     private func makeOwnershipSnapshot(_ id: UUID) -> AppSessionSnapshot {

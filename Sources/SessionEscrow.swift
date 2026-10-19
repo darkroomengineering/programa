@@ -756,103 +756,6 @@ enum UnixDomainFDPassing {
 
 // MARK: - App-side client
 
-/// Keeps the retrieved master alive through deferred/failed surface creation.
-/// The registry deliberately owns failed migrations until Retry can hand them
-/// to a holder; deinitializing a failed panel must not close the last master.
-final class SessionEscrowRetainedDescriptor: @unchecked Sendable {
-    struct Destination {
-        let sessionId: String
-        let tokenHex: String
-        let socketPath: String
-    }
-
-    private static let registryLock = NSLock()
-    private static var registry: [String: SessionEscrowRetainedDescriptor] = [:]
-    private let lock = NSLock()
-    private var masterFD: Int32
-    private var destination: Destination
-    private var recoveryPending: Bool
-    let sessionId: String
-    let childPID: Int32
-
-    private init(sessionId: String, masterFD: Int32, childPID: Int32, tokenHex: String, socketPath: String, recoveryPending: Bool) {
-        self.sessionId = sessionId
-        self.masterFD = masterFD
-        self.childPID = childPID
-        self.recoveryPending = recoveryPending
-        destination = Destination(sessionId: sessionId, tokenHex: tokenHex, socketPath: socketPath)
-    }
-
-    static func retain(sessionId: String, masterFD: Int32, childPID: Int32, tokenHex: String, socketPath: String, recoveryPending: Bool = true) -> SessionEscrowRetainedDescriptor {
-        registryLock.lock()
-        defer { registryLock.unlock() }
-        if let existing = registry[sessionId] {
-            close(masterFD)
-            return existing
-        }
-        let owner = SessionEscrowRetainedDescriptor(
-            sessionId: sessionId, masterFD: masterFD, childPID: childPID, tokenHex: tokenHex, socketPath: socketPath,
-            recoveryPending: recoveryPending
-        )
-        registry[sessionId] = owner
-        return owner
-    }
-
-    static func pending() -> [SessionEscrowRetainedDescriptor] {
-        registryLock.lock()
-        defer { registryLock.unlock() }
-        return Array(registry.values)
-    }
-
-    func duplicate() -> Int32? {
-        lock.lock()
-        defer { lock.unlock() }
-        guard masterFD >= 0 else { return nil }
-        // F_DUPFD_CLOEXEC, not dup(): the copy must not leak into children
-        // spawned by a concurrent fork/exec.
-        let fd = fcntl(masterFD, F_DUPFD_CLOEXEC, 0)
-        return fd >= 0 ? fd : nil
-    }
-
-    func markRecoveryPending() {
-        lock.lock()
-        recoveryPending = true
-        lock.unlock()
-        DispatchQueue.main.async { ScrollbackPersistenceSettings.retryLegacyMigration() }
-    }
-
-    var canRecoverWithoutPanel: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return recoveryPending && masterFD >= 0
-    }
-
-    func recordDestination(sessionId: String, tokenHex: String, socketPath: String) {
-        lock.lock()
-        destination = Destination(sessionId: sessionId, tokenHex: tokenHex, socketPath: socketPath)
-        lock.unlock()
-    }
-
-    func pendingDestination() -> Destination {
-        lock.lock()
-        defer { lock.unlock() }
-        return destination
-    }
-
-    func releaseAfterOwnershipTransfer() {
-        Self.registryLock.lock()
-        defer { Self.registryLock.unlock() }
-        lock.lock()
-        if masterFD >= 0 {
-            close(masterFD)
-            masterFD = -1
-        }
-        lock.unlock()
-        if Self.registry[sessionId] === self { Self.registry.removeValue(forKey: sessionId) }
-        DispatchQueue.main.async { ScrollbackPersistenceSettings.retryLegacyMigration() }
-    }
-}
-
 /// App-side singleton: owns the one persistent connection to the holder
 /// for this app instance, lazily connecting (and spawning the holder if
 /// nothing answers) on the first surface's escrow attempt. All socket I/O
@@ -860,162 +763,6 @@ final class SessionEscrowRetainedDescriptor: @unchecked Sendable {
 /// the full protocol/degradation contract.
 final class SessionEscrowClient {
     static let shared = SessionEscrowClient()
-    private static let migrationQueue = DispatchQueue(label: "com.darkroom.programa.scrollback-migration", qos: .utility)
-
-    private static let unreadableLegacyMetaLock = NSLock()
-    private static var loggedUnreadableLegacyMeta: Set<String> = []
-
-    /// Sessions still claimed by the v1 holder socket. An unreadable
-    /// `meta.json` is skipped (logged once per path), never a reason to
-    /// fail the whole scan: one corrupt file must not latch the migration
-    /// into a permanent "legacy sessions pending" state. Only a failure to
-    /// list the sessions directory throws.
-    static func legacySessions(
-        root rootOverride: URL? = nil,
-        legacySocketPath socketPathOverride: String? = nil
-    ) throws -> [(sessionId: String, meta: SessionWALMeta)] {
-        guard let root = rootOverride ?? SessionWALPaths.sessionsRootURL() else { throw CocoaError(.fileNoSuchFile) }
-        guard FileManager.default.fileExists(atPath: root.path) else { return [] }
-        let socketPath = socketPathOverride ?? legacySocketPath()
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        var result: [(sessionId: String, meta: SessionWALMeta)] = []
-        for entry in try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) {
-            guard UUID(uuidString: entry.lastPathComponent) != nil else { continue }
-            let paths = SessionWALPaths(sessionDirectory: entry)
-            guard FileManager.default.fileExists(atPath: paths.metaURL.path) else { continue }
-            let meta: SessionWALMeta
-            do {
-                meta = try decoder.decode(SessionWALMeta.self, from: Data(contentsOf: paths.metaURL))
-            } catch {
-                unreadableLegacyMetaLock.lock()
-                let firstTime = loggedUnreadableLegacyMeta.insert(paths.metaURL.path).inserted
-                unreadableLegacyMetaLock.unlock()
-                if firstTime {
-                    dilog("escrow.migration", "skip_unreadable_meta session=\(entry.lastPathComponent.prefix(8)) error=\(error)")
-                }
-                continue
-            }
-            if meta.escrowed == true, meta.escrowSocketPath == socketPath {
-                result.append((entry.lastPathComponent, meta))
-            }
-        }
-        return result
-    }
-
-    static func hasLegacySessions() -> Bool {
-        // Only a directory-listing failure lands here; unreadable entries
-        // are skipped inside `legacySessions`.
-        guard let legacy = try? legacySessions() else { return true }
-        return !legacy.isEmpty || !SessionEscrowRetainedDescriptor.pending().isEmpty
-    }
-
-    static func migrateLegacySessions(completion: @escaping (Bool) -> Void) {
-        migrationQueue.async {
-            // An early re-escrow may still be acknowledging ownership when a
-            // deferred native creation fails. Resolve that attempt first.
-            shared.queue.sync {}
-            var success = true
-            guard let candidates = try? legacySessions() else { completion(false); return }
-            let retainedIds = Set(SessionEscrowRetainedDescriptor.pending().map(\.sessionId))
-            for candidate in candidates where !retainedIds.contains(candidate.sessionId) {
-                guard let token = candidate.meta.escrowToken, let pid = candidate.meta.childPID else {
-                    success = false
-                    continue
-                }
-                switch retrieveOutcome(
-                    sessionId: candidate.sessionId, tokenHex: token, socketPath: legacySocketPath(),
-                    allowUnspecifiedDenyRetry: true,
-                    retryDeadline: .now() + SessionEscrowPolicy.retrieveDenyRetryWindow
-                ) {
-                case .granted(let fd):
-                    _ = SessionEscrowRetainedDescriptor.retain(
-                        sessionId: candidate.sessionId, masterFD: fd, childPID: pid,
-                        tokenHex: token, socketPath: legacySocketPath()
-                    )
-                case .denied(.unknownSession):
-                    // Only this explicit denial establishes that this holder
-                    // no longer owns the session. Transport/token errors do not.
-                    guard let paths = SessionWALPaths.make(sessionId: candidate.sessionId) else {
-                        success = false
-                        continue
-                    }
-                    if (try? SessionWALCore.clearEscrowClaim(at: paths, ifSocketMatches: legacySocketPath())) == nil { success = false }
-                default:
-                    success = false
-                }
-            }
-            for owner in SessionEscrowRetainedDescriptor.pending() {
-                if !owner.canRecoverWithoutPanel || !migrateRetainedDescriptor(owner) { success = false }
-            }
-            completion(success && !hasLegacySessions())
-        }
-    }
-
-    private static func migrateRetainedDescriptor(_ owner: SessionEscrowRetainedDescriptor) -> Bool {
-        let destination = owner.pendingDestination()
-        let targetSocket = escrowSocketPath()
-        // A lost acknowledgement may already have handed the master to the
-        // new holder. Stop that drain before issuing the same session again.
-        if destination.socketPath == targetSocket,
-           let probeFD = UnixDomainFDPassing.connect(to: targetSocket) {
-            close(probeFD)
-            switch retrieveOutcome(
-                sessionId: destination.sessionId, tokenHex: destination.tokenHex, socketPath: targetSocket,
-                retryDeadline: .now() + SessionEscrowPolicy.retrieveDenyRetryWindow
-            ) {
-            case .granted(let fd): close(fd) // owner still holds the master
-            case .denied(.unknownSession): break
-            case .denied(.notDraining):
-                guard releaseUnclaimedRegistration(destination, socketPath: targetSocket) else { return false }
-            default: return false
-            }
-        }
-        var connection: Int32?
-        var spawned = false
-        for attempt in 0..<SessionEscrowPolicy.connectRetryCount {
-            connection = UnixDomainFDPassing.connect(to: targetSocket)
-            if connection != nil { break }
-            if !spawned {
-                spawned = true
-                spawnHolderIfNeeded(socketPath: targetSocket)
-            }
-            if attempt + 1 < SessionEscrowPolicy.connectRetryCount {
-                Thread.sleep(forTimeInterval: SessionEscrowPolicy.connectRetryDelay)
-            }
-        }
-        guard let connection else { return false }
-        // EOF starts the new holder's drain without creating unrelated UI.
-        defer { close(connection) }
-        guard let fd = owner.duplicate() else { return true }
-        defer { close(fd) }
-        guard let token = decodeHexToken(destination.tokenHex),
-              var frame = EscrowWireFormat.encodeEscrowFrame(
-                sessionId: destination.sessionId, token: token, childPID: owner.childPID
-              ) else { return false }
-        frame[0] = EscrowWireFormat.acknowledgedEscrowType
-        owner.recordDestination(sessionId: destination.sessionId, tokenHex: destination.tokenHex, socketPath: targetSocket)
-        guard UnixDomainFDPassing.send(fd: fd, payload: frame, over: connection),
-              receiveEscrowAcknowledgement(over: connection, sessionId: destination.sessionId) else { return false }
-        owner.releaseAfterOwnershipTransfer()
-        if destination.sessionId != owner.sessionId,
-           let paths = SessionWALPaths.make(sessionId: owner.sessionId) {
-            return (try? SessionWALCore.clearEscrowClaim(at: paths, ifSocketMatches: legacySocketPath())) != nil
-        }
-        return true
-    }
-
-    private static func releaseUnclaimedRegistration(
-        _ destination: SessionEscrowRetainedDescriptor.Destination, socketPath: String
-    ) -> Bool {
-        guard let connection = UnixDomainFDPassing.connect(to: socketPath) else { return false }
-        defer { close(connection) }
-        guard let token = decodeHexToken(destination.tokenHex),
-              var frame = EscrowWireFormat.encodeReleaseFrame(sessionId: destination.sessionId, token: token) else { return false }
-        frame[0] = EscrowWireFormat.acknowledgedReleaseType
-        return UnixDomainFDPassing.send(fd: nil, payload: frame, over: connection)
-            && receiveEscrowAcknowledgement(over: connection, sessionId: destination.sessionId)
-    }
 
     /// Returned to the caller on a successful escrow so it can be recorded
     /// in `meta.json` (`SessionWALStore.markEscrowed`).
@@ -1045,7 +792,6 @@ final class SessionEscrowClient {
         surfaceId: String,
         dupedMasterFD: Int32,
         childPID: Int32,
-        retainedDescriptor: SessionEscrowRetainedDescriptor? = nil,
         completion: @escaping (Result?) -> Void
     ) {
         guard !SessionMachineryGate.isUnitTesting else {
@@ -1092,7 +838,6 @@ final class SessionEscrowClient {
             }
             frame[0] = EscrowWireFormat.acknowledgedEscrowType
             let tokenHex = token.map { String(format: "%02x", $0) }.joined()
-            retainedDescriptor?.recordDestination(sessionId: surfaceId, tokenHex: tokenHex, socketPath: self.socketPath)
 
             guard UnixDomainFDPassing.send(fd: dupedMasterFD, payload: frame, over: fd) else {
                 #if DEBUG
@@ -1247,24 +992,6 @@ final class SessionEscrowClient {
                 self.teardownConnection()
             }
         }
-    }
-
-    /// Derived from the app's own control-socket path
-    /// (`SocketControlSettings.socketPath()`), which is already
-    /// bundle-id/tag-scoped and already lives under `/tmp` specifically to
-    /// stay well under `sockaddr_un.sun_path`'s ~104-byte limit -- see
-    /// `SocketControlSettings.taggedDebugSocketPath`. Reusing that scoping
-    /// means a tagged debug build and the production app (or two different
-    /// tags) always get distinct holder sockets, matching the isolation
-    /// the rest of the socket-path machinery already guarantees.
-    static func legacySocketPath() -> String {
-        let base = SocketControlSettings.socketPath()
-        let baseURL = URL(fileURLWithPath: base)
-        let name = baseURL.deletingPathExtension().lastPathComponent + "-escrow"
-        return baseURL.deletingLastPathComponent()
-            .appendingPathComponent(name)
-            .appendingPathExtension("sock")
-            .path
     }
 
     /// Version the holder policy so upgraded apps register with the new
@@ -1524,27 +1251,18 @@ extension SessionEscrowClient {
     /// retrieve-before-drain race (this launch beat the holder's death
     /// detection), and the holder resolves it BY ITSELF within
     /// `heartbeatStaleAfter` -- so it is retried on a bounded deadline
-    /// instead of being treated as a permanent fallback. `.unspecified`
-    /// may be that same race reported by a pre-reason holder (the holder
-    /// OUTLIVES the app, so an updated client talking to a previous
-    /// version's holder is the normal update path, not an edge case); it is
-    /// retried only when the caller vouches via `allowUnspecifiedDenyRetry`
-    /// (Workspace restore passes meta.json heartbeat freshness -- an app
-    /// that was alive seconds ago is the race signature; one long dead is
-    /// not worth stalling on). `retryDeadline` exists for tests; production
-    /// callers share `sharedDenyRetryDeadline`.
+    /// instead of being treated as a permanent fallback. `retryDeadline`
+    /// exists for tests; production callers share `sharedDenyRetryDeadline`.
     static func retrieve(
         sessionId: String,
         tokenHex: String,
         socketPath: String,
         recvTimeout: TimeInterval = SessionEscrowPolicy.retrieveRecvTimeout,
-        allowUnspecifiedDenyRetry: Bool = false,
         retryDeadline: DispatchTime? = nil
     ) -> Int32? {
         if case .granted(let fd) = retrieveOutcome(
             sessionId: sessionId, tokenHex: tokenHex, socketPath: socketPath,
-            recvTimeout: recvTimeout, allowUnspecifiedDenyRetry: allowUnspecifiedDenyRetry,
-            retryDeadline: retryDeadline
+            recvTimeout: recvTimeout, retryDeadline: retryDeadline
         ) { return fd }
         return nil
     }
@@ -1554,7 +1272,6 @@ extension SessionEscrowClient {
         tokenHex: String,
         socketPath: String,
         recvTimeout: TimeInterval = SessionEscrowPolicy.retrieveRecvTimeout,
-        allowUnspecifiedDenyRetry: Bool = false,
         retryDeadline: DispatchTime? = nil
     ) -> RetrieveOutcome {
         var attempt = 0
@@ -1571,13 +1288,11 @@ extension SessionEscrowClient {
             case .failed:
                 return .failed
             case .denied(let reason):
-                let retryable = reason == .notDraining
-                    || (reason == .unspecified && allowUnspecifiedDenyRetry)
                 // Retryability first: a permanent denial (unknown session,
                 // token mismatch) must not be the access that anchors the
                 // lazy shared window, or it silently eats the budget a
                 // later legitimate not_draining denial needs.
-                guard retryable else { return .denied(reason) }
+                guard reason == .notDraining else { return .denied(reason) }
                 let deadline = retryDeadline ?? sharedDenyRetryDeadline
                 guard DispatchTime.now() < deadline else { return .denied(reason) }
                 dilog("escrow.retrieve", "retry session=\(sessionId.prefix(8)) attempt=\(attempt) reason=\(reason)")

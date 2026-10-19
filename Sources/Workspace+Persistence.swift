@@ -661,27 +661,17 @@ extension Workspace {
             dilog("escrow.reattach", "session=\(oldSessionId.prefix(8)) outcome=fallback reason=not_escrowed")
             return nil
         }
-        // 2026-08-10 mass-drain fix: a pre-reason holder (the holder
-        // outlives the app, so an updated client talking to the previous
-        // version's holder is the NORMAL update path) can only deny with an
-        // unspecified reason. A heartbeat written within the death-detection
-        // window plus the retry window means the old app was alive seconds
-        // ago -- the retrieve-before-drain race signature -- so an
-        // unspecified denial is worth retrying; one long dead is not.
-        let heartbeatFreshEnoughToRetryUnspecifiedDeny = Date().timeIntervalSince(meta.lastHeartbeatAt)
-            < SessionEscrowPolicy.heartbeatStaleAfter + SessionEscrowPolicy.retrieveDenyRetryWindow
         let masterFD: Int32
         switch SessionEscrowClient.retrieveOutcome(
             sessionId: oldSessionId,
             tokenHex: tokenHex,
-            socketPath: socketPath,
-            allowUnspecifiedDenyRetry: heartbeatFreshEnoughToRetryUnspecifiedDeny
+            socketPath: socketPath
         ) {
         case .granted(let fd):
             masterFD = fd
         case .denied(.unknownSession):
             // Only this explicit denial proves the holder no longer owns the session (token
-            // errors do not; see migrateLegacySessions). Clear the claim
+            // errors do not). Clear the claim
             // so later launches stop counting the dir as an escrowed orphan and rebuilding a
             // recovery window for it until the 24h sweep.
             if let paths = SessionWALPaths.make(sessionId: oldSessionId) {
@@ -695,28 +685,10 @@ extension Workspace {
         }
 
         let scrollbackText = SessionWALStore.shared.readFallbackScrollbackText(sessionId: oldSessionId)
-        let retainedDescriptor: SessionEscrowRetainedDescriptor?
-        let descriptorFD: Int32
-        if socketPath == SessionEscrowClient.legacySocketPath() {
-            let owner = SessionEscrowRetainedDescriptor.retain(
-                sessionId: oldSessionId, masterFD: masterFD, childPID: childPID,
-                tokenHex: tokenHex, socketPath: socketPath, recoveryPending: false
-            )
-            guard let fd = owner.duplicate() else {
-                owner.markRecoveryPending()
-                return nil
-            }
-            retainedDescriptor = owner
-            descriptorFD = fd
-        } else {
-            retainedDescriptor = nil
-            descriptorFD = masterFD
-        }
         let reviveDescriptor = TerminalSurfaceReviveDescriptor(
-            masterFD: descriptorFD,
+            masterFD: masterFD,
             childPID: Int64(childPID),
-            scrollbackText: scrollbackText,
-            retainedDescriptor: retainedDescriptor
+            scrollbackText: scrollbackText
         )
 
         guard let terminalPanel = newTerminalSurface(
@@ -725,10 +697,6 @@ extension Workspace {
             workingDirectory: workingDirectory,
             reviveDescriptor: reviveDescriptor
         ) else {
-            retainedDescriptor?.markRecoveryPending()
-            // TerminalSurface closes its descriptor on failure. A legacy
-            // migration retains a separate master until Retry can establish
-            // acknowledged holder ownership, preserving the running child.
             dilog("escrow.reattach", "session=\(oldSessionId.prefix(8)) outcome=fallback reason=panel_creation_failed")
             return nil
         }
