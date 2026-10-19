@@ -13,7 +13,8 @@ final class BonsplitTabDragUITests: XCTestCase {
 
         let cleanup = XCUIApplication()
         cleanup.terminate()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        _ = cleanup.wait(for: .notRunning, timeout: 10.0)
+        RunLoop.current.run(until: Date().addingTimeInterval(2.0))
     }
 
     func testMinimalModeKeepsTabReorderWorking() {
@@ -435,9 +436,6 @@ final class BonsplitTabDragUITests: XCTestCase {
         if startWithHiddenSidebar {
             app.launchEnvironment["PROGRAMA_UI_TEST_BONSPLIT_START_WITH_HIDDEN_SIDEBAR"] = "1"
         }
-        // A relaunch must not restore the previous run's window state: the restored window
-        // keeps a SwiftUI-generated identifier and the harness never finds the main window.
-        app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
         app.launchArguments += ["-workspacePresentationMode", presentationMode.rawValue]
         app.launch()
         app.activate()
