@@ -163,7 +163,10 @@ extension AppDelegate {
 
         func runSetupWhenWindowReady() {
             guard Date() < deadline else {
-                writeBonsplitTabDragUITestData(["setupError": "Timed out waiting for main window"])
+                let windowSummary = NSApp.windows
+                    .map { "\($0.identifier?.rawValue ?? "nil")|visible=\($0.isVisible)" }
+                    .joined(separator: ",")
+                writeBonsplitTabDragUITestData(["setupError": "Timed out waiting for main window. windows=[\(windowSummary)]"])
                 return
             }
             guard hasMainTerminalWindow() else {

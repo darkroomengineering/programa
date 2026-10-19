@@ -68,9 +68,16 @@ final class BonsplitTabDragUITests: XCTestCase {
             steps: 28,
             dragDuration: 0.45
         )
+        let indicatorShown = waitForCondition(timeout: 2.0) { dropIndicator.exists }
+        if !indicatorShown {
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.name = "hierarchy during tab drag"
+            hierarchy.lifetime = .keepAlways
+            add(hierarchy)
+        }
         XCTAssertTrue(
-            waitForCondition(timeout: 2.0) { dropIndicator.exists },
-            "Expected dragging beta onto alpha to reveal the Bonsplit drop indicator."
+            indicatorShown,
+            "Expected dragging beta onto alpha to reveal the Bonsplit drop indicator. start=\(start) destination=\(destination) alpha=\(alphaTab.frame) beta=\(betaTab.frame) data=\(loadJSON(atPath: dataPath) ?? [:])"
         )
         endMouseDrag(dragSession, atAccessibilityPoint: destination)
 
