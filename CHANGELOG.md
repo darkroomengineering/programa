@@ -8,7 +8,6 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 
 ### Added
 - Programs can report their status to Programa with the OSC 7501 Program Status Protocol. The sidebar shows working, blocked, done and error, an unfocused terminal gets a notification when a program finishes, fails or needs input, and `surface.list`, `system.tree` and `surface.wait` (`program_state`) expose it without ever returning the message text. Programa's own agent hooks emit it too, and it outranks hook and screen-detected state. See `docs/program-status.md`.
-- Programa can be set as the default web browser. Links clicked in other apps open as a browser tab in the focused pane of the active window, including a link that launches Programa. Links Programa sends to an external browser skip Programa itself and go to the next installed browser.
 - A ports button in the sidebar footer shows what is listening on a port in each workspace, plus dev servers left running after their terminal closed, with Open, Copy URL, Reveal and Stop. `programa list-ports` and `programa stop-port` and the `ports.list` and `ports.stop` socket methods do the same from the command line.
 - New `agent.needs_input` socket method reports a surface as blocked on the user and posts its notification in one call, instead of three separate calls that could fail independently.
 - New `surface.resolve_tty` socket method finds the terminal surface for a tty without changing focus. `agent.spawn` returns the new terminal's `pane_id` and `pane_ref`, and `agent.detection.list` reports manifests it rejected in a `rejected` list.
@@ -27,9 +26,8 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - `programa claude`, `codex` and `opencode` `install-integration` run without a terminal now need `--yes`.
 - The CLI no longer connects to a dev, staging or tagged app's socket on its own. Point it at one with `--socket` or `PROGRAMA_SOCKET_PATH`.
 - A program that writes to the clipboard with OSC 52 asks before the clipboard changes.
-- Browser cookie methods act on the current page's site by default; `all_domains: true` widens them, and a `domain` filter matches the exact host or its subdomains only. `browser.state.save` writes its file with `0600` permissions to an absolute path and exports only the current site's cookies unless asked for more.
 - Socket errors are consistent: a reference that does not resolve returns `not_found` (a malformed one stays `invalid_params`), splitting a workspace that already has four panes returns `limit_reached` before anything is created, and closing a window's last workspace returns `invalid_state`.
-- `surface.send_text` and `agent.prompt` report `"queued": true` when the text waits for a terminal that is not attached yet. `surface.wait` resolves with `"outcome": "closed"` when its surface closes, caps `timeout_ms` at one hour, and rejects `exit` on a browser surface.
+- `surface.send_text` and `agent.prompt` report `"queued": true` when the text waits for a terminal that is not attached yet. `surface.wait` resolves with `"outcome": "closed"` when its surface closes and caps `timeout_ms` at one hour.
 - A workspace's `agent_state` counts only helpers that are still running; finished helpers are counted in the new `helper_outcomes` field of `workspace.list` and `system.tree`.
 - Password mode closes a connection after five failed `auth.login` attempts and compares the password in constant time.
 - Agent hooks fail open: outside Programa, or when the app is not reachable, they answer the agent normally and let it continue. The Codex installer keeps everything it writes to `config.toml` inside one `# BEGIN programa` block.
@@ -40,7 +38,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - Each workspace row now shows one agent indicator (Needs input, Working, or Idle) instead of the badge, status row, and notification text sometimes disagreeing with each other. It dims and shows "(stale)" after ten minutes with no update from the agent, and only clears when the agent itself reports it's resumed, not just from opening the workspace.
 
 ### Removed
-- Browser socket methods that only ever answered `not_supported` (network routing, viewport emulation, raw input injection and similar) are gone; calling them is now an unknown-method error.
+- The built-in browser, its panes, the `browser.*` socket methods and the matching CLI and MCP tools. Links open in your default browser. See `docs/removed/built-in-browser.md`.
 - The library-validation and unsigned-executable-memory entitlements.
 - The `programa codex install-hooks` and `uninstall-hooks` legacy aliases. Use `programa codex install-integration` and `uninstall-integration`.
 
