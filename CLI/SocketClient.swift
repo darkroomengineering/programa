@@ -322,7 +322,9 @@ final class SocketClient {
                 socklen_t(MemoryLayout<timeval>.size)
             )
         }
-        guard result == 0 else {
+        // Darwin fails setsockopt with EINVAL once the peer has closed. The reply may
+        // already be buffered, and a read on a closed peer cannot block, so keep reading.
+        guard result == 0 || errno == EINVAL else {
             throw CLIError(message: "Failed to configure socket receive timeout")
         }
     }
