@@ -104,6 +104,10 @@ def main() -> int:
             surface_b = _focused_surface(client, workspace_b)
 
             for iteration in range(6):
+                # Every iteration ends on A, so hand the visible focus back to B first.
+                client.select_workspace(workspace_b)
+                time.sleep(0.25)
+
                 # Mutate A's portal/layout while B owns the visible AppKit focus. The split
                 # explicitly has no focus intent and must not steal either model or responder focus.
                 split_result = client._call(
