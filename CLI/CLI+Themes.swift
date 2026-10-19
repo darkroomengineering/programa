@@ -14,168 +14,7 @@ extension ProgramaCLI {
         let targetBundleIdentifier: String
     }
 
-    private enum ThemePickerTargetMode: String {
-        case both
-        case light
-        case dark
-    }
-
-    private func shouldUseInteractiveThemePicker(jsonOutput: Bool) -> Bool {
-        guard !jsonOutput else { return false }
-        return isatty(STDIN_FILENO) == 1 && isatty(STDOUT_FILENO) == 1
-    }
-
-    private func runInteractiveThemes() throws {
-        guard let helperURL = bundledHelperURL(named: "ghostty") else {
-            throw CLIError(message: "Bundled Ghostty theme picker helper not found")
-        }
-
-        let themeStore = TerminalThemeStore.live()
-        let selection = themeStore.currentSelection()
-        var environment = ProcessInfo.processInfo.environment
-        environment["PROGRAMA_THEME_PICKER_CONFIG"] = themeStore.managedConfigURL.path
-        environment["PROGRAMA_THEME_PICKER_BUNDLE_ID"] = currentProgramaAppBundleIdentifier()
-            ?? TerminalThemeStore.overrideBundleIdentifier
-        environment["PROGRAMA_THEME_PICKER_TARGET"] = defaultThemePickerTargetMode(current: selection).rawValue
-        environment["PROGRAMA_THEME_PICKER_COLOR_SCHEME"] = defaultAppearancePrefersDarkThemes() ? "dark" : "light"
-        if let light = selection.light {
-            environment["PROGRAMA_THEME_PICKER_INITIAL_LIGHT"] = light
-        }
-        if let dark = selection.dark {
-            environment["PROGRAMA_THEME_PICKER_INITIAL_DARK"] = dark
-        }
-        if let resourcesURL = bundledGhosttyResourcesURL() {
-            environment["GHOSTTY_RESOURCES_DIR"] = resourcesURL.path
-        }
-
-        try execInteractiveHelper(
-            executablePath: helperURL.path,
-            arguments: ["+list-themes"],
-            environment: environment
-        )
-    }
-
-    private func defaultThemePickerTargetMode(current: TerminalThemeSelection) -> ThemePickerTargetMode {
-        if let light = current.light,
-           let dark = current.dark,
-           light.caseInsensitiveCompare(dark) == .orderedSame {
-            return .both
-        }
-        return defaultAppearancePrefersDarkThemes() ? .dark : .light
-    }
-
-    private func defaultAppearancePrefersDarkThemes() -> Bool {
-        let globalDefaults = UserDefaults.standard.persistentDomain(forName: UserDefaults.globalDomain)
-        let interfaceStyle = (globalDefaults?["AppleInterfaceStyle"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return interfaceStyle?.caseInsensitiveCompare("Dark") == .orderedSame
-    }
-
-    private func bundledHelperURL(named helperName: String) -> URL? {
-        let fileManager = FileManager.default
-        guard let executableURL = resolvedExecutableURL() else { return nil }
-
-        var candidates: [URL] = [
-            executableURL.deletingLastPathComponent().appendingPathComponent(helperName, isDirectory: false)
-        ]
-
-        var current = executableURL.deletingLastPathComponent().standardizedFileURL
-        while true {
-            if current.lastPathComponent == "Contents" {
-                candidates.append(
-                    current
-                        .appendingPathComponent("Resources", isDirectory: true)
-                        .appendingPathComponent("bin", isDirectory: true)
-                        .appendingPathComponent(helperName, isDirectory: false)
-                )
-            }
-
-            let projectMarker = current.appendingPathComponent("GhosttyTabs.xcodeproj/project.pbxproj", isDirectory: false)
-            let repoHelper = current
-                .appendingPathComponent("ghostty", isDirectory: true)
-                .appendingPathComponent("zig-out", isDirectory: true)
-                .appendingPathComponent("bin", isDirectory: true)
-                .appendingPathComponent(helperName, isDirectory: false)
-            if fileManager.fileExists(atPath: projectMarker.path),
-               fileManager.isExecutableFile(atPath: repoHelper.path) {
-                candidates.append(repoHelper)
-                break
-            }
-
-            guard let parent = parentSearchURL(for: current) else { break }
-            current = parent
-        }
-
-        return candidates.first(where: { fileManager.isExecutableFile(atPath: $0.path) })
-    }
-
-    private func execInteractiveHelper(
-        executablePath: String,
-        arguments: [String],
-        environment: [String: String]
-    ) throws -> Never {
-        var argv = ([executablePath] + arguments).map { strdup($0) }
-        defer {
-            for item in argv {
-                free(item)
-            }
-        }
-        argv.append(nil)
-
-        var envp = environment
-            .map { key, value in strdup("\(key)=\(value)") }
-        defer {
-            for item in envp {
-                free(item)
-            }
-        }
-        envp.append(nil)
-
-        execve(executablePath, &argv, &envp)
-        let code = errno
-        throw CLIError(message: "Failed to launch interactive theme picker: \(String(cString: strerror(code)))")
-    }
-
-    private func bundledGhosttyResourcesURL() -> URL? {
-        let fileManager = FileManager.default
-        guard let executableURL = resolvedExecutableURL() else { return nil }
-
-        var current = executableURL.deletingLastPathComponent().standardizedFileURL
-        while true {
-            if current.lastPathComponent == "Contents" {
-                let candidate = current
-                    .appendingPathComponent("Resources", isDirectory: true)
-                    .appendingPathComponent("ghostty", isDirectory: true)
-                if fileManager.fileExists(atPath: candidate.path) {
-                    return candidate
-                }
-            }
-
-            let projectMarker = current.appendingPathComponent("GhosttyTabs.xcodeproj/project.pbxproj", isDirectory: false)
-            let repoResources = current
-                .appendingPathComponent("Resources", isDirectory: true)
-                .appendingPathComponent("ghostty", isDirectory: true)
-            if fileManager.fileExists(atPath: projectMarker.path),
-               fileManager.fileExists(atPath: repoResources.path) {
-                return repoResources
-            }
-
-            guard let parent = parentSearchURL(for: current) else { break }
-            current = parent
-        }
-
-        return Bundle.main.resourceURL?.appendingPathComponent("ghostty", isDirectory: true)
-    }
-
     func runThemes(commandArgs: [String], jsonOutput: Bool) throws {
-        if commandArgs.isEmpty {
-            if shouldUseInteractiveThemePicker(jsonOutput: jsonOutput) {
-                try runInteractiveThemes()
-                return
-            }
-            try printThemesList(jsonOutput: jsonOutput)
-            return
-        }
-
         guard let subcommand = commandArgs.first else {
             try printThemesList(jsonOutput: jsonOutput)
             return
@@ -531,7 +370,14 @@ extension ProgramaCLI {
         if availableThemes.isEmpty {
             return trimmed
         }
-        throw CLIError(message: "Unknown theme '\(trimmed)'. Run 'programa themes' to list available themes.")
+        let needle = trimmed.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        let nearMatches = availableThemes.filter {
+            $0.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current).contains(needle)
+        }.prefix(5)
+        let suggestion = nearMatches.isEmpty
+            ? ""
+            : " Did you mean: \(nearMatches.map { "'\($0)'" }.joined(separator: ", "))?"
+        throw CLIError(message: "Unknown theme '\(trimmed)'.\(suggestion) Run 'programa themes' to list available themes.")
     }
 
     private func reloadThemesIfPossible() -> ThemeReloadStatus {
@@ -597,14 +443,9 @@ extension ProgramaCLI {
                    programa themes set --opacity <0-1> [--blur|--no-blur] [--font <name>] [--font-size <n>]
                    programa themes clear
 
-            When run in a TTY, `programa themes` opens an interactive theme picker with
-            live app preview. Use `programa themes list` for a plain listing.
-
-            The picker previews the selected theme across the running programa app and
-            lets you apply it to the light theme, dark theme, or both defaults.
-
             Commands:
               list                      List available themes and mark the current light/dark defaults and appearance
+                                        (running `programa themes` with no subcommand does the same)
               set <theme>               Set the same theme for both light and dark appearance
               set --light <theme>       Set the light appearance theme
               set --dark <theme>        Set the dark appearance theme

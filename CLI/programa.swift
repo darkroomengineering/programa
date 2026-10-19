@@ -563,9 +563,6 @@ struct ProgramaCLI {
             ),
             CommandDescriptor(names: ["themes"], helpLines: ["themes [list|set|clear]"], connectionPolicy: .local, execute: nil),
             CommandDescriptor(names: ["claude-teams"], helpLines: ["claude-teams [claude-args...]"], connectionPolicy: .local, helpPolicy: .passthrough, execute: nil),
-            CommandDescriptor(names: ["omo"], helpLines: ["omo [opencode-args...]"], connectionPolicy: .local, helpPolicy: .passthrough, execute: nil),
-            CommandDescriptor(names: ["omx"], helpLines: ["omx [omx-args...]"], connectionPolicy: .local, helpPolicy: .passthrough, execute: nil),
-            CommandDescriptor(names: ["omc"], helpLines: ["omc [omc-args...]"], connectionPolicy: .local, helpPolicy: .passthrough, execute: nil),
             CommandDescriptor(
                 names: ["codex"],
                 helpLines: ["codex <install-integration|uninstall-integration> [--yes]"],
@@ -5490,7 +5487,7 @@ struct ProgramaCLI {
 
         // Local commands are registered for unified lookup/help, but do not
         // acquire the app socket through the generic dispatcher.
-        case "shortcuts", "feedback", "themes", "claude-teams", "omo", "omx", "omc":
+        case "shortcuts", "feedback", "themes", "claude-teams":
             return
         case "codex", "claude", "opencode":
             // `-y` is a single-dash token, so it arrives as a positional after the subcommand.

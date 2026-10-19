@@ -389,38 +389,6 @@ jobs:
         run: |
           ./scripts/download-prebuilt-ghosttykit.sh
 
-      - name: Resolve zig version
-        id: zig-version
-        run: printf 'version=%s\n' "$(./scripts/required-zig-version.sh)" >> "$GITHUB_OUTPUT"
-
-      # install-zig.sh re-checks the tarball against scripts/zig-macos-aarch64.sha256
-      # on every run, so a cache hit never skips the checksum.
-      - name: Cache zig toolchain tarball
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
-        with:
-          path: ~/.cache/programa-zig-dist
-          key: zig-dist-macos-arm64-${{ steps.zig-version.outputs.version }}
-
-      - name: Install zig
-        run: ./scripts/install-zig.sh
-
-      - name: Cache Zig packages
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
-        with:
-          path: ~/.cache/zig
-          key: zig-packages-${{ hashFiles('ghostty/build.zig.zon', 'ghostty/build.zig.zon.json') }}
-          restore-keys: zig-packages-
-
-      # The "Copy Ghostty Resources" build phase compiles the Ghostty CLI helper
-      # (Resources/bin/ghostty) with zig. zig's local cache turns that into a
-      # no-op while the ghostty revision and zig version stay the same. No
-      # restore-keys: an exact key keeps the cache from accumulating old builds.
-      - name: Cache Ghostty CLI helper build
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
-        with:
-          path: ghostty/.zig-cache
-          key: ghostty-cli-helper-${{ steps.ghostty-revision.outputs.revision }}-zig${{ steps.zig-version.outputs.version }}
-
       - name: Cache DerivedData
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
         with:
@@ -504,11 +472,6 @@ jobs:
       PROGRAMA_DERIVED_DATA_DIR: ${{ github.workspace }}/.ci-derived-data-unit-${{ matrix.shard }}
       PROGRAMA_UNIT_TEST_SHARD: ${{ matrix.shard }}
       PROGRAMA_UNIT_TEST_SHARD_COUNT: 2
-      # No unit test runs the Ghostty CLI helper (Resources/bin/ghostty), so the
-      # shards take the build script's stub instead of compiling it with zig.
-      # build-app still builds the real helper; its artifact feeds the jobs that
-      # do run it (theme-picker-helper-regression, socket and UI tests).
-      PROGRAMA_SKIP_ZIG_BUILD: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -675,6 +638,7 @@ jobs:
           result=0
           for t in \
             tests/test_cli_noninteractive_install_regression.py \
+            tests/test_cli_themes.py \
             tests/test_cli_socket_no_autodiscovery_regression.py \
             tests/test_cli_wait_surface_agent_state.py \
             tests/test_cli_claude_settings_preservation.py \
@@ -777,41 +741,6 @@ jobs:
           fi
           echo "unit-tests-shard: $SHARD_RESULT (change-detection: $DETECTION_RESULT, run_app_jobs: $RUN_APP_JOBS)" >&2
           exit 1
-
-  # Independent of unit-tests: same "programa" scheme app build-app already
-  # produces, so this reuses that artifact instead of paying for its own
-  # ~3 min build. Split out so it does not serialize behind the unit-test
-  # shards.
-  theme-picker-helper-regression:
-    needs:
-      - build-app
-      - change-detection
-    if: needs.change-detection.outputs.run_app_jobs == 'true'
-    runs-on: macos-26
-    timeout-minutes: 15
-    env:
-      PROGRAMA_DERIVED_DATA_DIR: ${{ github.workspace }}/.ci-derived-data-theme-picker
-    steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: Download build artifact
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
-        with:
-          name: programa-app-build
-          path: .
-
-      - name: Extract build artifact
-        run: |
-          set -euo pipefail
-          mkdir -p "$PROGRAMA_DERIVED_DATA_DIR"
-          tar -xzf app-build.tar.gz -C "$PROGRAMA_DERIVED_DATA_DIR"
-
-      - name: Run bundled Ghostty theme picker helper regression
-        run: |
-          set -euo pipefail
-          PROGRAMA_PREBUILT_APP_PATH="$PROGRAMA_DERIVED_DATA_DIR/Build/Products/Debug/Programa DEV.app" \
-            ./tests/test_bundled_ghostty_theme_picker_helper.sh
 
   socket-integration-tests:
     needs:

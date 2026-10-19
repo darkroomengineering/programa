@@ -321,10 +321,6 @@ if [[ -z "$TAG" ]]; then
     PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID"
   )
 fi
-# Forward the explicit skip escape hatch to xcodebuild run script phases.
-if [[ "${PROGRAMA_SKIP_ZIG_BUILD:-}" == "1" ]]; then
-  XCODEBUILD_ARGS+=(PROGRAMA_SKIP_ZIG_BUILD=1)
-fi
 XCODEBUILD_ARGS+=(build)
 
 XCODE_LOG="/tmp/programa-xcodebuild-${TAG_SLUG}.log"
@@ -420,21 +416,6 @@ if [[ -x "$CLI_PATH" ]]; then
   fi
 fi
 
-# Build the ghostty helper binary (needed for both launch and no-launch).
-GHOSTTY_HELPER_SRC="$PWD/ghostty/zig-out/bin/ghostty"
-if [[ -d "$PWD/ghostty" ]]; then
-  if [[ "${PROGRAMA_SKIP_ZIG_BUILD:-}" == "1" ]]; then
-    echo "Skipping direct ghostty CLI helper zig build (PROGRAMA_SKIP_ZIG_BUILD=1)"
-  else
-    (cd "$PWD/ghostty" && zig build cli-helper -Dapp-runtime=none -Demit-macos-app=false -Demit-xcframework=false -Doptimize=ReleaseFast)
-  fi
-fi
-if [[ -x "$GHOSTTY_HELPER_SRC" ]]; then
-  BIN_DIR="$APP_PATH/Contents/Resources/bin"
-  mkdir -p "$BIN_DIR"
-  cp "$GHOSTTY_HELPER_SRC" "$BIN_DIR/ghostty"
-  chmod +x "$BIN_DIR/ghostty"
-fi
 CLI_PATH="$APP_PATH/Contents/Resources/bin/programa"
 if [[ -x "$CLI_PATH" ]]; then
   echo "$CLI_PATH" > /tmp/programa-last-cli-path || true

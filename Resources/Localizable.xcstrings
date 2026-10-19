@@ -4030,23 +4030,6 @@
         }
       }
     },
-    "cli.omo.usage": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Usage: programa omo [opencode-args...]\n\nLaunch OpenCode with oh-my-openagent in a Programa-aware environment.\n\noh-my-openagent orchestrates multiple AI models as specialized agents in\nparallel. This command sets up a tmux shim so agent panes become native\nPrograma splits with sidebar metadata and notifications.\n\nThis command:\n  - sets a tmux-like environment so oh-my-openagent uses Programa splits\n  - prepends a private tmux shim to PATH\n  - forwards all remaining arguments to opencode\n\nThe tmux shim translates tmux window/pane commands into Programa workspace\nand split operations in the current Programa session.\n\nExamples:\n  programa omo\n  programa omo --continue\n  programa omo --model claude-sonnet-4-6"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "使用方法: programa omo [opencode-args...]\n\nPrograma対応環境でoh-my-openagentを使ってOpenCodeを起動します。\n\noh-my-openagentは複数のAIモデルを専門エージェントとして並列に\nオーケストレーションします。このコマンドはtmuxシムを設定し、エージェントペインを\nサイドバーメタデータと通知を備えたネイティブなPrograma分割にします。\n\nこのコマンドは次の処理を行います:\n  - oh-my-openagentがProgramaの分割を使用するようtmux互換環境を設定\n  - 専用のtmuxシムをPATHの先頭に追加\n  - 残りの引数をすべてopencodeに渡す\n\ntmuxシムは、tmuxのwindow/paneコマンドを、現在のProgramaセッションにおける\nワークスペースと分割の操作に変換します。\n\n例:\n  programa omo\n  programa omo --continue\n  programa omo --model claude-sonnet-4-6"
-          }
-        }
-      }
-    },
     "cli.uninstall.adminRequired": {
       "extractionState": "manual",
       "localizations": {
@@ -15926,40 +15909,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "コメントを削除"
-          }
-        }
-      }
-    },
-    "cli.omx.usage": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Usage: programa omx [omx-args...]\n\nLaunch Oh My Codex (OMX) with native programa pane integration.\n\nOMX is a multi-agent orchestration layer for OpenAI Codex CLI. This\ncommand sets up a tmux shim so OMX team mode, HUD, and agent panes\nbecome native programa splits.\n\nThis command:\n  - sets a tmux-like environment so OMX uses programa splits\n  - prepends a private tmux shim to PATH\n  - forwards all remaining arguments to omx\n\nInstall: npm install -g oh-my-codex\n\nExamples:\n  programa omx\n  programa omx --madmax --high\n  programa omx team"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "使用方法: programa omx [omx-args...]\n\nprograma のペインとネイティブに連携した状態で Oh My Codex (OMX) を起動します。\n\nOMX は OpenAI Codex CLI 向けのマルチエージェント・オーケストレーション層です。\nこのコマンドは tmux シムを設定し、OMX のチームモード、HUD、エージェントの\nペインを programa のネイティブな分割として表示します。\n\nこのコマンドは次の処理を行います:\n  - OMX が programa の分割を使うよう tmux 互換の環境を設定\n  - 専用の tmux シムを PATH の先頭に追加\n  - 残りの引数をすべて omx に渡す\n\nインストール: npm install -g oh-my-codex\n\n例:\n  programa omx\n  programa omx --madmax --high\n  programa omx team"
-          }
-        }
-      }
-    },
-    "cli.omc.usage": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Usage: programa omc [omc-args...]\n\nLaunch Oh My Claude Code (OMC) with native programa pane integration.\n\nOMC is a multi-agent orchestration system for Claude Code with\nspecialized agents, smart model routing, and team pipelines. This\ncommand sets up a tmux shim so OMC team mode and agent panes become\nnative programa splits.\n\nThis command:\n  - sets a tmux-like environment so OMC uses programa splits\n  - prepends a private tmux shim to PATH\n  - injects NODE_OPTIONS restore module for Claude compatibility\n  - forwards all remaining arguments to omc\n\nInstall: npm install -g oh-my-claude-sisyphus\n\nExamples:\n  programa omc\n  programa omc team 3:claude \"implement feature\"\n  programa omc --watch"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "使用方法: programa omc [omc-args...]\n\nprograma のペインとネイティブに連携した状態で Oh My Claude Code (OMC) を起動します。\n\nOMC は Claude Code 向けのマルチエージェント・オーケストレーション・システムで、\n専門エージェント、スマートなモデルルーティング、チームパイプラインを備えています。\nこのコマンドは tmux シムを設定し、OMC のチームモードとエージェントのペインを\nprograma のネイティブな分割として表示します。\n\nこのコマンドは次の処理を行います:\n  - OMC が programa の分割を使うよう tmux 互換の環境を設定\n  - 専用の tmux シムを PATH の先頭に追加\n  - Claude との互換性のため NODE_OPTIONS の復元モジュールを注入\n  - 残りの引数をすべて omc に渡す\n\nインストール: npm install -g oh-my-claude-sisyphus\n\n例:\n  programa omc\n  programa omc team 3:claude \"implement feature\"\n  programa omc --watch"
           }
         }
       }

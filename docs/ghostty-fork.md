@@ -69,7 +69,7 @@ tend to conflict together during rebases.
   - Adds a parser for kitty OSC 99 notifications and wires it into the OSC dispatcher.
   - Adapts the parser to upstream's newer capture API so the Programa OSC 99 hook survives the March 30 upstream sync.
 
-### 4) Programa theme picker helper hooks
+### 4) Programa theme picker helper hooks (unused)
 
 - Commits:
   - `1da7281fd` (Add Programa theme picker helper hooks)
@@ -87,6 +87,7 @@ tend to conflict together during rebases.
   - Adds a `zig build cli-helper` step so Programa can bundle Ghostty's CLI helper binary on macOS.
   - Lets `+list-themes` switch into a Programa-managed mode via env vars, writing the Programa theme override file and posting the existing Programa reload notification for live app-wide preview.
   - Keeps the preview UI readable in light mode, matches upstream picker startup behavior, and hardens writes to the Programa-managed theme override file.
+  - Programa does not build or bundle the helper: `programa themes` lists and sets themes in Swift. These patches stay on the fork branch only so the pin does not move; drop the group at the next fork rebase.
 
 ### 5) Color scheme mode 2031 reporting
 
@@ -245,15 +246,6 @@ These files change frequently upstream; be careful when rebasing the fork:
 
 - `src/terminal/osc/parsers.zig`
   - Ensure `kitty_notification` stays imported after upstream parser reorganizations.
-
-- `src/cli/list_themes.zig`
-  - Programa now relies on the upstream picker UI plus local env-driven hooks for live preview and restore.
-    If upstream reorganizes the preview loop or key handling, re-check the Programa mode path and keep the
-    stock Ghostty behavior unchanged when the Programa env vars are absent.
-
-- `build.zig`
-  - Upstream's new wasm/libghostty work touched the same build graph. Keep the Programa-only `cli-helper`
-    step wired in without regressing the upstream `lib-vt` or wasm build paths.
 
 - `include/ghostty.h`, `src/Surface.zig`, `src/apprt/embedded.zig`, `src/termio/Exec.zig`
   - Upstream removed Programa-used selection exports. Preserve the re-exported

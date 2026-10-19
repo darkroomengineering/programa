@@ -212,9 +212,7 @@ jobs:
           bun-version: 1.3.14
 
       - name: Install build deps
-        run: |
-          ./scripts/install-zig.sh
-          ./scripts/install-create-dmg.sh
+        run: ./scripts/install-create-dmg.sh
 
       # Always download and checksum GhosttyKit here instead of restoring the CI
       # cache: the pinned SHA-256 covers the archive, not an extracted tree, so a
@@ -263,8 +261,7 @@ jobs:
         run: |
           ./scripts/verify-release-architectures.sh \
             "build-universal/Build/Products/Release/Programa.app/Contents/MacOS/Programa" \
-            "build-universal/Build/Products/Release/Programa.app/Contents/Resources/bin/programa" \
-            "build-universal/Build/Products/Release/Programa.app/Contents/Resources/bin/ghostty"
+            "build-universal/Build/Products/Release/Programa.app/Contents/Resources/bin/programa"
 
       - name: Archive dSYMs
         run: |
@@ -301,12 +298,6 @@ jobs:
           CLI_BINARY="build-universal/Build/Products/Release/Programa.app/Contents/Resources/bin/programa"
           [ -x "$CLI_BINARY" ] || { echo "programa CLI binary not found at $CLI_BINARY" >&2; exit 1; }
           PROGRAMA_CLI_BIN="$CLI_BINARY" python3 tests/test_cli_version_memory_guard.py
-
-      - name: Verify bundled Ghostty theme picker helper
-        run: |
-          set -euo pipefail
-          HELPER_BINARY="build-universal/Build/Products/Release/Programa.app/Contents/Resources/bin/ghostty"
-          [ -x "$HELPER_BINARY" ] || { echo "Ghostty theme picker helper not found at $HELPER_BINARY" >&2; exit 1; }
 
       - name: Inject Sparkle keys into Info.plist
         run: |
@@ -373,10 +364,9 @@ jobs:
           fi
           APP_PATH="build-universal/Build/Products/Release/Programa.app"
           CLI_PATH="$APP_PATH/Contents/Resources/bin/programa"
-          HELPER_PATH="$APP_PATH/Contents/Resources/bin/ghostty"
           MCP_PATH="$APP_PATH/Contents/Resources/bin/programa-mcp"
           ./scripts/sign-release-app.sh "$APP_PATH" "$APPLE_SIGNING_IDENTITY" programa.entitlements
-          ./scripts/verify-release-entitlements.sh "$APP_PATH" "$CLI_PATH" "$HELPER_PATH" "$MCP_PATH"
+          ./scripts/verify-release-entitlements.sh "$APP_PATH" "$CLI_PATH" "$MCP_PATH"
           ./scripts/verify-provision-profile.sh "$APP_PATH"
 
       - name: Verify embedded Sparkle artifact

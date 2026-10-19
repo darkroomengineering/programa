@@ -97,21 +97,6 @@ jobs:
           path: GhosttyKit.xcframework
           key: ghosttykit-v3-${{ steps.ghostty-revision.outputs.revision }}
 
-      - name: Resolve zig version
-        id: zig-version
-        run: printf 'version=%s\n' "$(./scripts/required-zig-version.sh)" >> "$GITHUB_OUTPUT"
-
-      # install-zig.sh re-checks the tarball against scripts/zig-macos-aarch64.sha256
-      # on every run, so a cache hit never skips the checksum.
-      - name: Cache zig toolchain tarball
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
-        with:
-          path: ~/.cache/programa-zig-dist
-          key: zig-dist-macos-arm64-${{ steps.zig-version.outputs.version }}
-
-      - name: Set up required Zig
-        run: ./scripts/install-zig.sh
-
       - name: Download pre-built GhosttyKit.xcframework
         if: steps.cache-ghosttykit.outputs.cache-hit != 'true'
         run: |

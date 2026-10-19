@@ -36,11 +36,13 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - The tmux shim's `resize-pane` counts terminal cells, `capture-pane` shows the visible screen, and `send-keys` supports named keys.
 - The Rust core is no longer part of the macOS app; it serves the Windows app only.
 - Each workspace row now shows one agent indicator (Needs input, Working, or Idle) instead of the badge, status row, and notification text sometimes disagreeing with each other. It dims and shows "(stale)" after ten minutes with no update from the agent, and only clears when the agent itself reports it's resumed, not just from opening the workspace.
+- `programa themes` lists and sets themes without the interactive picker, and the app no longer bundles a second copy of the ghostty command-line tool (about 6 MB smaller). Unknown theme names suggest close matches.
 
 ### Removed
 - The built-in browser, its panes, the `browser.*` socket methods and the matching CLI and MCP tools. Links open in your default browser. See `docs/removed/built-in-browser.md`.
 - The library-validation and unsigned-executable-memory entitlements.
 - The `programa codex install-hooks` and `uninstall-hooks` legacy aliases. Use `programa codex install-integration` and `uninstall-integration`.
+- The `programa omo`, `omx` and `omc` wrappers for oh-my-openagent, Oh My Codex and Oh My Claude Code. The `programa claude`, `codex` and `opencode` integrations are unchanged. See `docs/removed/omo-omx-omc-wrappers.md` to restore them.
 
 ### Fixed
 - With dozens of tabs in a pane, each tab keeps a width that shows its title instead of shrinking to one letter. The tab bar scrolls with a regular mouse wheel and keeps the selected tab in view.
