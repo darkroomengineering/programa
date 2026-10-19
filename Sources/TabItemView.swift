@@ -871,6 +871,7 @@ struct TabItemView: View, Equatable {
         .background(SidebarRowHoverProbe(isHovering: $isHovering))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text(accessibilityTitle))
+        .accessibilityValue(Text(accessibilityDescription))
         .accessibilityIdentifier("sidebarWorkspace.\(tab.id.uuidString)")
         .accessibilityHint(Text(accessibilityHintText))
         .accessibilityAction(named: Text(moveUpActionText)) {
@@ -1214,6 +1215,13 @@ struct TabItemView: View, Equatable {
 
     private var accessibilityTitle: String {
         String(localized: "accessibility.workspacePosition", defaultValue: "\(tab.title), workspace \(index + 1) of \(accessibilityWorkspaceCount)")
+    }
+
+    /// `.combine` hides the description's own accessibility element, so the row exposes the
+    /// description (markdown rendered to plain text, line breaks kept) as its value.
+    private var accessibilityDescription: String {
+        guard let description = tab.customDescription else { return "" }
+        return SidebarMarkdownRenderer.renderWorkspaceDescription(description).map { String($0.characters) } ?? description
     }
 
     private func moveBy(_ delta: Int) {
