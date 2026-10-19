@@ -912,6 +912,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 #endif
 
 #if DEBUG
+        WindowIdentifierTrace.shared.noteLaunchState()
         writeUITestDiagnosticsIfNeeded(stage: "didFinishLaunching")
         ProgramaMainRunLoopStallMonitor.shared.installIfNeeded()
         ProgramaMainThreadTurnProfiler.shared.installIfNeeded()
@@ -7975,6 +7976,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         // part of what feeds the safe-area invalidation storm in issue #307 — diffing
         // stops the re-entry without changing what gets configured on first apply.
         let nextIdentifier = NSUserInterfaceItemIdentifier(windowIdentifier)
+#if DEBUG
+        WindowIdentifierTrace.shared.attach(to: window)
+#endif
         if window.identifier != nextIdentifier {
             window.identifier = nextIdentifier
         }
