@@ -347,7 +347,11 @@ func windowDragHandleShouldCaptureHit(
     }
 
     #if DEBUG
-    dlog("titlebar.dragHandle.hitTest capture=true point=\(windowDragHandleFormatPoint(point)) siblingCount=\(siblingCount)")
+    dlog(
+        "titlebar.dragHandle.hitTest capture=true point=\(windowDragHandleFormatPoint(point)) siblingCount=\(siblingCount) " +
+        "frameInWindow=\(NSStringFromRect(dragHandleView.convert(dragHandleView.bounds, to: nil))) " +
+        "superview=\(type(of: superview)) superFlipped=\(superview.isFlipped)"
+    )
     #endif
     return true
 }
