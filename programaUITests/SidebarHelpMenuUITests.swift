@@ -44,9 +44,16 @@ final class SidebarHelpMenuUITests: XCTestCase {
 
         toggle.click()
 
+        let sidebarHidden = sidebarHelpPollUntil(timeout: 3.0) { !sidebar.exists || !sidebar.isHittable }
+        if !sidebarHidden {
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.name = "hierarchy after toggle click"
+            hierarchy.lifetime = .keepAlways
+            add(hierarchy)
+        }
         XCTAssertTrue(
-            sidebarHelpPollUntil(timeout: 3.0) { !sidebar.exists || !sidebar.isHittable },
-            "The sidebar header toggle must hide the SidebarState that rendered it"
+            sidebarHidden,
+            "The sidebar header toggle must hide the SidebarState that rendered it. sidebar.exists=\(sidebar.exists) sidebar.frame=\(sidebar.frame) toggle.exists=\(toggle.exists)"
         )
     }
 
