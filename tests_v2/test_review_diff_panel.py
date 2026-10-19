@@ -183,6 +183,12 @@ def main() -> int:
             _must(marker in terminal_text, f"Expected marker {marker!r} to land in the reviewed terminal: {terminal_text!r}")
             _must("untracked.txt" in terminal_text, f"Expected serialized file path to land in the terminal: {terminal_text!r}")
 
+            # The text sits on the prompt line as one line (read_text joins soft-wrapped rows).
+            _must(
+                any("Code review comments (3):" in row and marker in row for row in terminal_text.splitlines()),
+                f"Expected the comments flattened onto one prompt line in the plain shell: {terminal_text!r}",
+            )
+
             # Give a shell that wrongly received Return time to run the substitution.
             time.sleep(1.5)
             _must(
@@ -203,6 +209,7 @@ def main() -> int:
 
             # 4. A shell that enables bracketed paste (zsh) keeps the multi-line text: the comment
             # line starts its own row instead of being flattened onto the header's row.
+            c.send_key_surface(source_surface_id, "ctrl-c")  # drop the unsent line left at the bash prompt
             c.send_surface(source_surface_id, "exec /bin/zsh -f\n")
             _wait_for_surface_command_roundtrip(c, workspace_id, source_surface_id)
             zsh_marker = f"ZSHP{int(time.time()) % 100000000}"
