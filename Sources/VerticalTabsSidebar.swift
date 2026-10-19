@@ -234,6 +234,10 @@ struct VerticalTabsSidebar: View {
                 // action here — double-click on the header strip opens a tab.
                 WindowDragHandleView(onDoubleClick: { tabManager.addTab() })
             )
+            // On macOS 26 the list's HostingScrollView (and its BackdropView) is laid out
+            // over the header strip. Without this, the list wins the hit-test and a click
+            // on the header controls never reaches them.
+            .zIndex(1)
 
             GeometryReader { proxy in
                 ScrollViewReader { scrollProxy in
