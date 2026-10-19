@@ -1038,10 +1038,11 @@ jobs:
           fi
           rm -f /tmp/create-virtual-display
 
+  # Independent of unit-tests: it reuses the build-app artifact, so waiting
+  # on the unit-test shards only lengthens the main-push CI tail.
   ui-regressions:
     needs:
       - build-app
-      - unit-tests
       - change-detection
     if: ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.notification_ui)) && needs.change-detection.outputs.run_app_jobs == 'true'
     runs-on: macos-26
