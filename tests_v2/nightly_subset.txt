@@ -18,6 +18,8 @@ test_command_palette_navigation_keys.py
 test_command_palette_rename_enter.py
 test_command_palette_rename_select_all.py
 test_command_palette_search_action_sync.py
+test_command_palette_search_typing_stability.py
+test_command_palette_shortcut_hint_sync.py
 test_command_palette_switcher_all_windows.py
 test_command_palette_window_scope.py
 test_ctrl_socket.py
@@ -37,6 +39,7 @@ test_pane_resize_preserves_visible_content.py
 test_ports_list_stop.py
 test_rename_tab_cli_parity.py
 test_rename_window_workspace_parity.py
+test_review_diff_panel.py
 test_shortcut_window_scope.py
 test_snapshot_list_and_restore_param_validation.py
 test_socket_limits_and_focus_sweep.py

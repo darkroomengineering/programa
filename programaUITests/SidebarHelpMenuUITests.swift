@@ -288,10 +288,15 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
             firstWorkspaceRow["title"] as? String,
             "Expected the restored workspace row to include a title. snapshot=\(switcherSnapshot)"
         )
-        let workspaceLabel = app.staticTexts[workspaceTitle].firstMatch
+        // The sidebar row can share the workspace's title (and sits behind the palette), so look
+        // the palette row up by its own identifier and compare the command it represents.
+        let workspaceCommandId = try XCTUnwrap(firstWorkspaceRow["command_id"] as? String)
+        let workspaceRow = app.descendants(matching: .any)
+            .matching(identifier: "CommandPaletteResultRow.0")
+            .firstMatch
         XCTAssertTrue(
             sidebarHelpPollUntil(timeout: 2.0) {
-                workspaceLabel.exists && workspaceLabel.isHittable
+                workspaceRow.exists && workspaceRow.isHittable && (workspaceRow.value as? String) == workspaceCommandId
             },
             "Expected the restored workspace row to be visibly rendered. title=\(workspaceTitle) snapshot=\(switcherSnapshot)"
         )
@@ -414,7 +419,8 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
                     let trailingLabel = row["trailing_label"] as? String ?? ""
                     return commandId.hasPrefix("switcher.surface.") && trailingLabel == "Terminal"
                 }
-            }
+            },
+            "Expected a hidden terminal row. snapshot=\(String(describing: commandPaletteSnapshot(windowId: mainWindowId)))"
         )
 
         XCTAssertTrue(
@@ -633,7 +639,8 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
                 return (snapshot["query"] as? String) == String(repeating: "z", count: 8)
                     && self.commandPaletteResultRows(from: snapshot).isEmpty
             },
-            "Expected the switcher to reach a visible no-results state before refining the query"
+            "Expected the switcher to reach a visible no-results state before refining the query. " +
+                "labelExists=\(emptyLabel.exists) snapshot=\(String(describing: commandPaletteSnapshot(windowId: mainWindowId)))"
         )
 
         try debugTypeText("z")
