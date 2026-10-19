@@ -2046,7 +2046,8 @@ final class SessionPersistenceTests: XCTestCase {
         let now = Date()
         let day: TimeInterval = 24 * 60 * 60
         let ownID = UUID(), freshForeignID = UUID(), staleForeignID = UUID(), unownedID = UUID()
-        for id in [ownID, freshForeignID, staleForeignID, unownedID] {
+        let staleReleaseID = UUID()
+        for id in [ownID, freshForeignID, staleForeignID, unownedID, staleReleaseID] {
             let directory = sessions.appendingPathComponent(id.uuidString)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             try FileManager.default.setAttributes(
@@ -2065,11 +2066,13 @@ final class SessionPersistenceTests: XCTestCase {
         ))
         // The running bundle's own snapshot pins its ids however old it is.
         try writeSnapshot(ownID, to: ownFile, age: 60 * day)
-        try writeSnapshot(freshForeignID, to: root.appendingPathComponent("session-staging.json"), age: 13 * day)
-        try writeSnapshot(staleForeignID, to: root.appendingPathComponent("session-old-tag.json"), age: 15 * day)
+        try writeSnapshot(freshForeignID, to: root.appendingPathComponent("session-app.debug.fresh-tag.json"), age: 13 * day)
+        try writeSnapshot(staleForeignID, to: root.appendingPathComponent("session-app.debug.old-tag.json"), age: 15 * day)
+        // A release bundle's snapshot pins however long that app has been closed.
+        try writeSnapshot(staleReleaseID, to: root.appendingPathComponent("session-com.darkroom.programa.json"), age: 60 * day)
         // An abandoned snapshot that no longer decodes must not defer the sweep, and a
         // scrollback policy file is not a snapshot.
-        let corruptStale = root.appendingPathComponent("session-dead-tag.json")
+        let corruptStale = root.appendingPathComponent("session-app.bench.dead-tag.json")
         try Data("corrupt".utf8).write(to: corruptStale)
         try FileManager.default.setAttributes(
             [.modificationDate: now.addingTimeInterval(-40 * day)], ofItemAtPath: corruptStale.path
@@ -2080,7 +2083,7 @@ final class SessionPersistenceTests: XCTestCase {
             at: sessions, registeredSessionIDs: [], ownSnapshotFileURL: ownFile, now: now
         )
 
-        for id in [ownID, freshForeignID] {
+        for id in [ownID, freshForeignID, staleReleaseID] {
             XCTAssertTrue(FileManager.default.fileExists(atPath: sessions.appendingPathComponent(id.uuidString).path))
         }
         for id in [staleForeignID, unownedID] {

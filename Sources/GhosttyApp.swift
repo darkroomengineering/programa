@@ -1830,6 +1830,10 @@ class GhosttyApp {
         resolveTerminalPanel(tabId: tabId, surfaceId: surfaceId)?.surface
     }
 
+    nonisolated private static let reportedDirectoryValidationQueue = DispatchQueue(
+        label: "com.darkroom.programa.reported-directory-validation", qos: .utility
+    )
+
     /// A terminal-reported working directory (OSC 7) is untrusted: the background repository
     /// probes run in whatever it names. Accepts only an absolute path without `.` or `..`
     /// components to an existing directory, including the `file://` form `TabManager` normalizes.
@@ -2200,13 +2204,17 @@ class GhosttyApp {
             guard let tabId = callbackTabId,
                   let surfaceId = callbackSurfaceId else { return true }
             let reportedPwd = action.action.pwd.pwd.flatMap { String(cString: $0) } ?? ""
-            guard let pwd = Self.validatedReportedDirectory(reportedPwd) else { return true }
-            DispatchQueue.main.async {
-                AppDelegate.shared?.tabManagerFor(tabId: tabId)?.updateSurfaceDirectory(
-                    tabId: tabId,
-                    surfaceId: surfaceId,
-                    directory: pwd
-                )
+            // The existence check can block on a stalled network mount, so it runs on a
+            // serial queue; serial-then-main keeps each terminal's updates in order.
+            Self.reportedDirectoryValidationQueue.async {
+                guard let pwd = Self.validatedReportedDirectory(reportedPwd) else { return }
+                DispatchQueue.main.async {
+                    AppDelegate.shared?.tabManagerFor(tabId: tabId)?.updateSurfaceDirectory(
+                        tabId: tabId,
+                        surfaceId: surfaceId,
+                        directory: pwd
+                    )
+                }
             }
             return true
         case GHOSTTY_ACTION_PROGRESS_REPORT:

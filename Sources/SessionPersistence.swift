@@ -483,15 +483,19 @@ enum SessionPersistenceStore {
         })
     }
 
-    /// A snapshot file untouched for this long stops pinning its session ids,
-    /// unless it is the running bundle's own. Bundles that still run rewrite
-    /// their snapshot on every autosave, so only abandoned dev tags age out.
+    /// A dev or bench snapshot untouched for this long stops pinning its session
+    /// ids, unless it is the running bundle's own. Release bundles (production,
+    /// staging) always pin: their shells can outlive a long gap between launches.
     static let foreignSnapshotPinMaxAge: TimeInterval = 14 * 24 * 60 * 60
+
+    static func isExpirableDevSnapshotName(_ name: String) -> Bool {
+        name.contains(".debug.") || name.contains(".bench.")
+    }
 
     /// WAL storage is shared by production and tagged bundles. Consult every
     /// pinning snapshot before deleting its session data, with bounded scan work.
-    /// Other bundles' snapshots older than `foreignSnapshotPinMaxAge` are
-    /// skipped without being read; `ownSnapshotFileURL` always pins.
+    /// Other dev or bench bundles' snapshots older than `foreignSnapshotPinMaxAge`
+    /// are skipped without being read; `ownSnapshotFileURL` always pins.
     static func allOwnedTerminalSessionIDs(
         in directory: URL,
         ownSnapshotFileURL: URL? = defaultSnapshotFileURL(),
@@ -516,7 +520,7 @@ enum SessionPersistenceStore {
                   !name.hasSuffix(".scrollback-policy.json") else { continue }
             inspected += 1
             guard inspected <= historyDirectoryScanLimit else { return nil }
-            if name != ownName,
+            if name != ownName, isExpirableDevSnapshotName(name),
                let modified = (try? FileManager.default.attributesOfItem(atPath: entry.path))?[.modificationDate] as? Date,
                modified < pinCutoff {
                 continue
