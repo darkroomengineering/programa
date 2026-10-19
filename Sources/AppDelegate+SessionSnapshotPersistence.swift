@@ -122,8 +122,8 @@ extension AppDelegate {
 #endif
         // Preferences can synchronously notify main-queue observers; never write them
         // from the disk queue while quit is synchronously waiting for that queue.
-        Self.removeLegacyPersistedWindowGeometry()
-        if let persistedGeometryData {
+        if let persistedGeometryData,
+           UserDefaults.standard.data(forKey: Self.persistedWindowGeometryDefaultsKey) != persistedGeometryData {
             UserDefaults.standard.set(persistedGeometryData, forKey: Self.persistedWindowGeometryDefaultsKey)
         }
 

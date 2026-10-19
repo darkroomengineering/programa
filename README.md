@@ -34,7 +34,7 @@ See [Windows support](#windows-preview) and the
 - **Race agents against each other.** `programa race "<prompt>"` fans one prompt across N agents (Claude Code, OpenCode, or Codex), each in its own isolated worktree/workspace, so you can compare approaches and merge the one you like.
 - **Native and fast.** Swift/AppKit with libghostty rendering, no Electron. Reads your existing `~/.config/ghostty/config` for themes, fonts, and colors.
 
-More: named layouts (`programa layout save/apply`), a markdown viewer panel, instant agent splits (⌘D / ⌘⇧D, ⌘⇧C for Claude Code), the command palette (⌘⇧P), and a CLI plus Unix-socket JSON-RPC API scriptable end to end.
+More: named layouts (`programa layout save/apply`), a markdown viewer panel, splits (⌘D / ⌘⇧D), a new Claude Code workspace in one keystroke (⌘⇧C), the command palette (⌘⇧P), and a CLI plus Unix-socket JSON-RPC API scriptable end to end.
 
 ## Install
 

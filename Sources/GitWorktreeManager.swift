@@ -134,12 +134,19 @@ struct GitWorktreeManager {
         listWorktrees(repoRoot: repoRoot)?.first { $0.branch == branch }
     }
 
-    nonisolated static func branchExistsLocally(_ branch: String, repoRoot: String) -> Bool {
-        let result = runGitCommand(
+    /// nil when git could not answer (refused, timed out, or failed for another reason than the
+    /// ref being absent). Callers must treat nil as "unknown", never as "absent": acting on a
+    /// false "absent" can delete a branch the user created.
+    nonisolated static func branchExistsLocally(_ branch: String, repoRoot: String) -> Bool? {
+        guard let result = runGitCommand(
             directory: repoRoot,
             arguments: ["show-ref", "--verify", "--quiet", "refs/heads/\(branch)"]
-        )
-        return result?.exitStatus == 0
+        ), !result.timedOut else { return nil }
+        switch result.exitStatus {
+        case 0: return true
+        case 1: return false
+        default: return nil
+        }
     }
 
     // MARK: - Add
@@ -164,7 +171,9 @@ struct GitWorktreeManager {
         // read as a path or ref name, never as an option. `-b <branch>` is an option value and
         // is safe before it.
         var arguments = ["worktree", "add"]
-        let branchExisted = branchExistsLocally(branch, repoRoot: repoRoot)
+        guard let branchExisted = branchExistsLocally(branch, repoRoot: repoRoot) else {
+            return .gitCommandFailed(message: "Could not determine whether branch '\(branch)' already exists")
+        }
         if branchExisted {
             arguments.append(contentsOf: ["--", path, branch])
         } else {
@@ -195,10 +204,12 @@ struct GitWorktreeManager {
     /// Deletes local branch `branch` when no worktree has it checked out. Used to undo a
     /// branch that this process created with `worktree add -b` when the add (or the caller's
     /// follow-up) failed. Callers must only pass a branch they created: this does not check
-    /// whether the branch holds commits. Returns whether the branch is gone afterwards.
+    /// whether the branch holds commits. Returns whether the branch is gone afterwards; false
+    /// without touching anything when git cannot say whether the branch exists.
     @discardableResult
     nonisolated static func deleteBranchIfUnused(_ branch: String, repoRoot: String) -> Bool {
-        guard branchExistsLocally(branch, repoRoot: repoRoot) else { return true }
+        guard let exists = branchExistsLocally(branch, repoRoot: repoRoot) else { return false }
+        guard exists else { return true }
         guard worktreeEntry(forBranch: branch, repoRoot: repoRoot) == nil else { return false }
         let result = runGitCommand(
             directory: repoRoot,

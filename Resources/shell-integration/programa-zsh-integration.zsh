@@ -566,15 +566,15 @@ _programa_report_git_branch_for_path() {
     # Skip git operations if not in a git repository to avoid TCC prompts
     git -C "$repo_path" rev-parse --git-dir >/dev/null 2>&1 || return 0
 
-    local branch dirty=false first workspace_id="" params
+    # No `git status` here: it runs the repository's configured commands (core.fsmonitor,
+    # filter drivers). The app computes dirty with its hardened git probe.
+    local branch workspace_id="" params
     branch="$(git -C "$repo_path" branch --show-current 2>/dev/null)"
     workspace_id="$(_programa_relay_workspace_id)" || workspace_id="$PROGRAMA_TAB_ID"
     if [[ -n "$branch" ]]; then
-        first="$(git -C "$repo_path" status --porcelain -uno 2>/dev/null | head -1)"
-        [[ -n "$first" ]] && dirty=true
         local branch_json
         branch_json="$(_programa_json_escape "$branch")"
-        params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"branch\":\"$branch_json\",\"dirty\":$dirty}"
+        params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\",\"branch\":\"$branch_json\"}"
         _programa_relay_rpc "surface.report_git_branch" "$params"
     else
         params="{\"workspace_id\":\"$workspace_id\",\"surface_id\":\"$PROGRAMA_PANEL_ID\"}"

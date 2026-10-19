@@ -141,7 +141,7 @@ struct ReviewDiffProber {
         switch runCommandResult(
             directory: repoRoot,
             executable: "git",
-            arguments: ["diff", "--no-color", "--no-ext-diff", "--no-textconv", "--find-renames"] + diffRangeArgs
+            arguments: ["diff", "--no-color", "--no-ext-diff", "--no-textconv", "--ignore-submodules=dirty", "--find-renames"] + diffRangeArgs
         ) {
         case .failure(let error):
             return .failure(error)
@@ -163,7 +163,7 @@ struct ReviewDiffProber {
         switch runCommandResult(
             directory: repoRoot,
             executable: "git",
-            arguments: ["diff", "--numstat", "--no-ext-diff", "--no-textconv", "--find-renames"] + diffRangeArgs
+            arguments: ["diff", "--numstat", "--no-ext-diff", "--no-textconv", "--ignore-submodules=dirty", "--find-renames"] + diffRangeArgs
         ) {
         case .failure(let error):
             return .failure(error)

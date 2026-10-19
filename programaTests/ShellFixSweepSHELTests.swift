@@ -113,10 +113,10 @@ final class ExternalOpenPolicySHELTests: XCTestCase {
     }
 }
 
-// MARK: - SHEL-15: notification reorder keeps children under their parent
+// MARK: - SHEL-15: hierarchy order keeps children under their parent
 
 @MainActor
-final class NotificationReorderHierarchyTests: XCTestCase {
+final class WorkspaceHierarchyOrderTests: XCTestCase {
     private func makeManager() -> (TabManager, Workspace, Workspace, Workspace) {
         let manager = TabManager()
         let a = manager.tabs[0]
@@ -124,25 +124,6 @@ final class NotificationReorderHierarchyTests: XCTestCase {
         let c = manager.addWorkspace()
         manager.tabs = [a, b, c]
         return (manager, a, b, c)
-    }
-
-    func testChildStaysDirectlyAfterItsParentWhenItNotifies() {
-        let (manager, a, b, c) = makeManager()
-        c.agentParentWorkspaceId = a.id
-        manager.canonicalizeHierarchyOrderIfNeeded()
-        XCTAssertEqual(manager.tabs.map(\.id), [a.id, c.id, b.id])
-
-        manager.moveTabToTopForNotification(c.id)
-        XCTAssertEqual(manager.tabs.map(\.id), [a.id, c.id, b.id], "A child must not leave its parent")
-    }
-
-    func testNotifyingChildMovesItsWholeGroupToTop() {
-        let (manager, a, b, c) = makeManager()
-        c.agentParentWorkspaceId = b.id
-        manager.canonicalizeHierarchyOrderIfNeeded()
-
-        manager.moveTabToTopForNotification(c.id)
-        XCTAssertEqual(manager.tabs.map(\.id), [b.id, c.id, a.id])
     }
 
     func testMoveDownCarriesChildrenPastTheNextSibling() {

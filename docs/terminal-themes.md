@@ -13,6 +13,8 @@ programa themes set --opacity 0.85 --blur --font "JetBrains Mono" --font-size 13
 programa themes clear
 ```
 
+`programa themes` with no subcommand prints the same list as `programa themes list`. `programa themes set` with a name that matches no theme exits with an error and suggests close matches.
+
 All surfaces write the same managed block in `~/Library/Application Support/com.darkroom.programa/config.ghostty`, preserving unrelated directives in that file. Setting one field (e.g. opacity) never disturbs another field Programa already manages there (e.g. theme or font) — but it also never captures a field it doesn't yet manage, even if that field currently resolves to a value from your own raw Ghostty config. Programa only ever writes the specific field you changed.
 
 ## settings.json

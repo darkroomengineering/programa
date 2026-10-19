@@ -109,7 +109,6 @@ run_entrypoint() {
     TEST_ENSURE_MARKER="$ENSURE_MARKER" \
     TEST_REQUIRE_ENSURE="$require_ensure" \
     PROGRAMA_ENSURE_GHOSTTYKIT_COMMAND="$STUB_BIN/ensure-ghosttykit" \
-    PROGRAMA_SKIP_ZIG_BUILD=1 \
     "$@"
   )
 }
@@ -200,7 +199,7 @@ with tempfile.TemporaryDirectory(prefix="pr-", dir="/tmp") as temporary:
     environment = dict(os.environ, HOME=str(home), PATH=f"{stub_bin}:/usr/bin:/bin",
                        TEST_COMMAND_LOG=str(fixture / "commands"),
                        TEST_ENSURE_MARKER=str(fixture / "ready"),
-                       TEST_REQUIRE_ENSURE="1", PROGRAMA_SKIP_ZIG_BUILD="1",
+                       TEST_REQUIRE_ENSURE="1",
                        PROGRAMA_ENSURE_GHOSTTYKIT_COMMAND=str(stub_bin / "ensure-ghosttykit"))
 
     def build(tag):

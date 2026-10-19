@@ -60,13 +60,10 @@ struct SidebarTabItemSettingsSnapshot: Equatable {
     let sidebarShortcutHintYOffset: Double
     let alwaysShowShortcutHints: Bool
     let showsGitBranch: Bool
-    let usesVerticalBranchLayout: Bool
     let showsGitBranchIcon: Bool
-    let showsNotificationMessage: Bool
     let activeTabIndicatorStyle: SidebarActiveTabIndicatorStyle
     let selectionColorHex: String?
     let notificationBadgeColorHex: String?
-    let visibleAuxiliaryDetails: SidebarWorkspaceAuxiliaryDetailVisibility
 
     init(defaults: UserDefaults = .standard) {
         sidebarShortcutHintXOffset = Self.double(
@@ -85,17 +82,7 @@ struct SidebarTabItemSettingsSnapshot: Equatable {
             defaultValue: ShortcutHintDebugSettings.defaultAlwaysShowHints
         )
         showsGitBranch = Self.bool(defaults: defaults, key: "sidebarShowGitBranch", defaultValue: true)
-        usesVerticalBranchLayout = true
         showsGitBranchIcon = Self.bool(defaults: defaults, key: "sidebarShowGitBranchIcon", defaultValue: false)
-        showsNotificationMessage = true
-        visibleAuxiliaryDetails = SidebarWorkspaceAuxiliaryDetailVisibility(
-            showsMetadata: true,
-            showsLog: true,
-            showsProgress: true,
-            showsBranchDirectory: true,
-            showsPullRequests: true,
-            showsPorts: true
-        )
 
         activeTabIndicatorStyle = SidebarActiveTabIndicatorSettings.current(defaults: defaults)
         selectionColorHex = defaults.string(forKey: "sidebarSelectionColorHex")
@@ -195,10 +182,6 @@ struct VerticalTabsSidebar: View {
         WorkspacePresentationModeSettings.mode(for: workspacePresentationMode) == .minimal
     }
 
-    private var showsSidebarNotificationMessage: Bool {
-        tabItemSettingsStore.snapshot.showsNotificationMessage
-    }
-
     private var workspaceNumberShortcut: StoredShortcut {
         let _ = keyboardShortcutSettingsObserver.revision
         return KeyboardShortcutSettings.shortcut(for: .selectWorkspaceByNumber)
@@ -253,96 +236,104 @@ struct VerticalTabsSidebar: View {
             )
 
             GeometryReader { proxy in
-                ScrollView {
-                    VStack(spacing: 0) {
-                        // Workspaces are bounded, so prefer a non-lazy stack here.
-                        // LazyVStack + drag-state invalidations can recurse through layout.
-                        VStack(spacing: tabRowSpacing) {
-                            ForEach(visibleTabs, id: \.id) { tab in
-                                let index = tabIndexById[tab.id] ?? 0
-                                let usesSelectedContextMenuTargets = selectedTabIds.contains(tab.id)
-                                let contextMenuWorkspaceIds = usesSelectedContextMenuTargets
-                                    ? selectedContextTargetIds
-                                    : [tab.id]
-                                let showsWorktreeBadge = tab.worktreeParentWorkspaceId != nil
-                                let worktreeChildCount = SidebarWorkspaceHierarchy.childCount(
-                                    of: tab.id,
-                                    in: hierarchyEntries
-                                )
-                                TabItemView(
-                                    tabManager: tabManager,
-                                    notificationStore: notificationStore,
-                                    tab: tab,
-                                    index: index,
-                                    isActive: tabManager.selectedTabId == tab.id,
-                                    workspaceShortcutDigit: WorkspaceShortcutMapper.digitForWorkspace(
-                                        at: index,
-                                        workspaceCount: workspaceCount
-                                    ),
-                                    workspaceShortcutModifierSymbol: workspaceNumberShortcut.numberedDigitHintPrefix,
-                                    canCloseWorkspace: canCloseWorkspace,
-                                    accessibilityWorkspaceCount: workspaceCount,
-                                    unreadCount: notificationStore.unreadCount(forTabId: tab.id),
-                                    latestNotificationText: {
-                                        guard showsSidebarNotificationMessage,
-                                              let notification = notificationStore.latestNotification(forTabId: tab.id) else {
-                                            return nil
-                                        }
-                                        let text = notification.body.isEmpty ? notification.title : notification.body
-                                        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                                        return trimmed.isEmpty ? nil : trimmed
-                                    }(),
-                                    rowSpacing: tabRowSpacing,
-                                    setSelectionToTabs: { selection = .tabs },
-                                    selectedTabIds: $selectedTabIds,
-                                    lastSidebarSelectionIndex: $lastSidebarSelectionIndex,
-                                    showsModifierShortcutHints: modifierKeyMonitor.isModifierPressed,
-                                    dragAutoScrollController: dragAutoScrollController,
-                                    draggedTabIdSnapshot: draggedTabId,
-                                    dropIndicatorSnapshot: dropIndicator,
-                                    draggedTabId: $draggedTabId,
-                                    dropIndicator: $dropIndicator,
-                                    contextMenuWorkspaceIds: contextMenuWorkspaceIds,
-                                    settings: tabItemSettings,
-                                    showsWorktreeBadge: showsWorktreeBadge,
-                                    isWorktreeFolder: tab.isWorktreeFolder,
-                                    isWorktreeFolderCollapsed: tab.isWorktreeFolderCollapsed,
-                                    worktreeChildCount: worktreeChildCount,
-                                    rowMetrics: rowMetrics
-                                )
-                                .equatable()
-                                .padding(
-                                    .leading,
-                                    CGFloat(SidebarWorkspaceHierarchy.depth(of: tab.id, entries: hierarchyEntries)) * 14
-                                )
+                ScrollViewReader { scrollProxy in
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            // Workspaces are bounded, so prefer a non-lazy stack here.
+                            // LazyVStack + drag-state invalidations can recurse through layout.
+                            VStack(spacing: tabRowSpacing) {
+                                ForEach(visibleTabs, id: \.id) { tab in
+                                    let index = tabIndexById[tab.id] ?? 0
+                                    let usesSelectedContextMenuTargets = selectedTabIds.contains(tab.id)
+                                    let contextMenuWorkspaceIds = usesSelectedContextMenuTargets
+                                        ? selectedContextTargetIds
+                                        : [tab.id]
+                                    let showsWorktreeBadge = tab.worktreeParentWorkspaceId != nil
+                                    let worktreeChildCount = SidebarWorkspaceHierarchy.childCount(
+                                        of: tab.id,
+                                        in: hierarchyEntries
+                                    )
+                                    TabItemView(
+                                        tabManager: tabManager,
+                                        notificationStore: notificationStore,
+                                        tab: tab,
+                                        index: index,
+                                        isActive: tabManager.selectedTabId == tab.id,
+                                        workspaceShortcutDigit: WorkspaceShortcutMapper.digitForWorkspace(
+                                            at: index,
+                                            workspaceCount: workspaceCount
+                                        ),
+                                        workspaceShortcutModifierSymbol: workspaceNumberShortcut.numberedDigitHintPrefix,
+                                        canCloseWorkspace: canCloseWorkspace,
+                                        accessibilityWorkspaceCount: workspaceCount,
+                                        unreadCount: notificationStore.unreadCount(forTabId: tab.id),
+                                        latestNotificationText: {
+                                            guard let notification = notificationStore.latestNotification(forTabId: tab.id) else {
+                                                return nil
+                                            }
+                                            let text = notification.body.isEmpty ? notification.title : notification.body
+                                            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                                            return trimmed.isEmpty ? nil : trimmed
+                                        }(),
+                                        rowSpacing: tabRowSpacing,
+                                        setSelectionToTabs: { selection = .tabs },
+                                        selectedTabIds: $selectedTabIds,
+                                        lastSidebarSelectionIndex: $lastSidebarSelectionIndex,
+                                        showsModifierShortcutHints: modifierKeyMonitor.isModifierPressed,
+                                        dragAutoScrollController: dragAutoScrollController,
+                                        draggedTabIdSnapshot: draggedTabId,
+                                        dropIndicatorSnapshot: dropIndicator,
+                                        draggedTabId: $draggedTabId,
+                                        dropIndicator: $dropIndicator,
+                                        contextMenuWorkspaceIds: contextMenuWorkspaceIds,
+                                        settings: tabItemSettings,
+                                        showsWorktreeBadge: showsWorktreeBadge,
+                                        isWorktreeFolder: tab.isWorktreeFolder,
+                                        isWorktreeFolderCollapsed: tab.isWorktreeFolderCollapsed,
+                                        worktreeChildCount: worktreeChildCount,
+                                        rowMetrics: rowMetrics
+                                    )
+                                    .equatable()
+                                    .padding(
+                                        .leading,
+                                        CGFloat(SidebarWorkspaceHierarchy.depth(of: tab.id, entries: hierarchyEntries)) * 14
+                                    )
+                                    .id(tab.id)
+                                }
                             }
-                        }
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
-                        SidebarEmptyArea(
-                            tabManager: tabManager,
-                            rowSpacing: tabRowSpacing,
-                            selection: $selection,
-                            selectedTabIds: $selectedTabIds,
-                            lastSidebarSelectionIndex: $lastSidebarSelectionIndex,
-                            dragAutoScrollController: dragAutoScrollController,
-                            draggedTabId: $draggedTabId,
-                            dropIndicator: $dropIndicator
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            SidebarEmptyArea(
+                                tabManager: tabManager,
+                                rowSpacing: tabRowSpacing,
+                                selection: $selection,
+                                selectedTabIds: $selectedTabIds,
+                                lastSidebarSelectionIndex: $lastSidebarSelectionIndex,
+                                dragAutoScrollController: dragAutoScrollController,
+                                draggedTabId: $draggedTabId,
+                                dropIndicator: $dropIndicator
+                            )
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                        .frame(minHeight: proxy.size.height, alignment: .top)
                     }
-                    .frame(minHeight: proxy.size.height, alignment: .top)
+                    .background(
+                        SidebarScrollViewResolver { scrollView in
+                            dragAutoScrollController.attach(scrollView: scrollView)
+                        }
+                        .frame(width: 0, height: 0)
+                    )
+                    .background(Color.clear)
+                    .modifier(ClearScrollBackground())
+                    .onAppear {
+                        scrollSelectedWorkspaceIntoView(scrollProxy, animated: false)
+                    }
+                    .onChange(of: tabManager.selectedTabId) {
+                        scrollSelectedWorkspaceIntoView(scrollProxy, animated: true)
+                    }
                 }
-                .background(
-                    SidebarScrollViewResolver { scrollView in
-                        dragAutoScrollController.attach(scrollView: scrollView)
-                    }
-                    .frame(width: 0, height: 0)
-                )
-                .background(Color.clear)
-                .modifier(ClearScrollBackground())
             }
             SidebarFooter(updateViewModel: updateViewModel, onSendFeedback: onSendFeedback)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -424,6 +415,22 @@ struct VerticalTabsSidebar: View {
             draggedTabId = nil
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    /// Scrolls the selected workspace into view by the minimum distance (nil anchor), so a row
+    /// that is already fully visible does not move. Deferred one runloop turn so a workspace
+    /// added in the same update has a laid-out row to target.
+    private func scrollSelectedWorkspaceIntoView(_ scrollProxy: ScrollViewProxy, animated: Bool) {
+        DispatchQueue.main.async {
+            guard let selectedId = tabManager.selectedTabId else { return }
+            if animated, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                withAnimation(.easeOut(duration: 0.15)) {
+                    scrollProxy.scrollTo(selectedId)
+                }
+            } else {
+                scrollProxy.scrollTo(selectedId)
+            }
+        }
     }
 
     private func debugShortSidebarTabId(_ id: UUID?) -> String {

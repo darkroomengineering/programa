@@ -65,8 +65,6 @@ Read by the app, the CLI and `programa-mcp`. Modes and discovery are described i
 | `PROGRAMA_CLAUDE_SESSION_ID_CACHE_KEY`, `PROGRAMA_CLAUDE_SESSION_ID_CACHE_VAL` | Session id cache shared between the `claude` wrapper invocations. |
 | `PROGRAMA_ORIGINAL_NODE_OPTIONS`, `PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT` | The caller's `NODE_OPTIONS`, saved so the wrappers can restore it. |
 | `PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN`, `PROGRAMA_CLAUDE_TEAMS_TERM` | `programa` binary and `TERM` for the Claude teams wrapper. |
-| `PROGRAMA_OMO_PROGRAMA_BIN`, `PROGRAMA_OMO_TERM`, `PROGRAMA_OMX_PROGRAMA_BIN`, `PROGRAMA_OMX_TERM`, `PROGRAMA_OMC_PROGRAMA_BIN`, `PROGRAMA_OMC_TERM` | The same pair for the OpenCode, Codex and Claude agent wrappers. |
-| `PROGRAMA_THEME_PICKER_CONFIG`, `_BUNDLE_ID`, `_TARGET`, `_COLOR_SCHEME`, `_INITIAL_LIGHT`, `_INITIAL_DARK` | Set by `programa themes` for Ghostty's `+list-themes` helper so it edits Programa's managed theme override. |
 
 ## App behavior and diagnostics
 
@@ -105,13 +103,11 @@ no app, CLI or daemon code reads them.
 
 | Variable | Read by | Meaning |
 |---|---|---|
-| `PROGRAMA_SKIP_ZIG_BUILD` | `reload.sh`, `build-ghostty-cli-helper.sh` | `1` skips the Zig builds and bundles a stub Ghostty CLI helper. The CI unit-test shards set it. |
 | `ZIG_DIST_CACHE_DIR`, `ZIG_INSTALL_ROOT` | `install-zig.sh` | Where the checksum-verified zig tarball is kept (default `~/.cache/programa-zig-dist`, cached by CI) and where it is extracted (default `~/.local/share/programa-zig`). |
 | `PROGRAMA_ENSURE_GHOSTTYKIT_COMMAND` | `reload.sh`, `reloadp.sh`, `reloads.sh` | Command to run instead of `scripts/ensure-ghosttykit.sh`. |
 | `PROGRAMA_GHOSTTYKIT_CACHE_DIR` | `ensure-ghosttykit.sh` | GhosttyKit cache folder. Default `~/.cache/programa/ghosttykit`. |
 | `PROGRAMA_GHOSTTYKIT_LOCK_TIMEOUT`, `PROGRAMA_GHOSTTYKIT_LOCK_POLL_INTERVAL` | `ensure-ghosttykit.sh` | Seconds to wait for the cache lock (default 300) and between polls (default 1). |
 | `PROGRAMA_RELOAD_CACHE_MANAGED` | `reload.sh`, `tagged-build-cache.py` | `1` marks a reload that the tagged build cache already wraps. |
-| `PROGRAMA_PREBUILT_APP_PATH` | `tests/test_bundled_ghostty_theme_picker_helper.sh` | Path of an already built `Programa DEV.app` to test. |
 | `PROGRAMA_DERIVED_DATA_DIR` | CI scripts | DerivedData folder of the job. Required by `run-tests-v2-ci.sh` and `smoke-test-ci.sh`. |
 | `PROGRAMA_XCODEBUILD_COMMAND`, `PROGRAMA_SOURCE_PACKAGES_DIR`, `PROGRAMA_SWIFTPM_CACHE_DIR`, `PROGRAMA_TEST_OUTPUT_FILE`, `PROGRAMA_RESULT_BUNDLE_ROOT` | `ci-run-unit-tests.sh` | `xcodebuild` command, Swift package and cache folders, output file and `.xcresult` folder. |
 | `PROGRAMA_UNIT_TEST_SCOPE`, `PROGRAMA_UNIT_TEST_SHARD`, `PROGRAMA_UNIT_TEST_SHARD_COUNT`, `PROGRAMA_UNIT_TEST_QUARANTINE` | `ci-run-unit-tests.sh` | Which unit tests to run, and the quarantine list. |

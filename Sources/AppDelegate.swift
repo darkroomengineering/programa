@@ -912,6 +912,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     func applicationDidFinishLaunching(_ notification: Notification) {
         let env = ProcessInfo.processInfo.environment
         let isRunningUnderXCTest = isRunningUnderXCTest(env)
+        Self.removeLegacyPersistedWindowGeometry()
 
         DistributedNotificationCenter.default().addObserver(
             self,
@@ -1399,14 +1400,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             SessionPersistenceStore.rotateIntoHistory(includeScrollback: false)
         }
         guard !didHandleExplicitOpenIntentAtStartup, SessionRestorePolicy.shouldAttemptRestore() else { return }
-        Self.removeLegacyPersistedWindowGeometry()
         startupSessionSnapshot = core.sessionSnapshots.loadWithHistoryFallback()
     }
 
     private func persistedWindowGeometry(
         defaults: UserDefaults = .standard
     ) -> PersistedWindowGeometry? {
-        Self.removeLegacyPersistedWindowGeometry(defaults: defaults)
         guard let data = defaults.data(forKey: Self.persistedWindowGeometryDefaultsKey) else {
             return nil
         }
@@ -1422,8 +1421,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         display: SessionDisplaySnapshot?,
         defaults: UserDefaults = .standard
     ) {
-        Self.removeLegacyPersistedWindowGeometry(defaults: defaults)
-        guard let data = Self.encodedPersistedWindowGeometryData(frame: frame, display: display) else {
+        guard let data = Self.encodedPersistedWindowGeometryData(frame: frame, display: display),
+              defaults.data(forKey: Self.persistedWindowGeometryDefaultsKey) != data else {
             return
         }
         defaults.set(data, forKey: Self.persistedWindowGeometryDefaultsKey)
@@ -1589,7 +1588,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         isApplyingStartupSessionRestore = false
         saveSessionSnapshot(includeScrollback: false)
         reconcileOrphanedEscrowedSessions()
-        ScrollbackPersistenceSettings.retryLegacyMigration()
     }
 
     /// Ends the shells of windows the user had closed before the previous run ended.
@@ -1677,9 +1675,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             }
         }
 
-        let ownedSockets = Set([SessionEscrowClient.legacySocketPath(), SessionEscrowClient.escrowSocketPath()])
+        let ownedSocket = SessionEscrowClient.escrowSocketPath()
         let orphans = SessionWALStore.shared.escrowedSessionIds(excluding: known).filter {
-            $0.meta.escrowSocketPath.map(ownedSockets.contains) == true
+            $0.meta.escrowSocketPath == ownedSocket
         }
         guard !orphans.isEmpty else {
             dilog("escrow.reconcile", "found=0")
@@ -4232,7 +4230,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             startupSessionSnapshot = nil
             didAttemptStartupSessionRestore = true
         }
-        ScrollbackPersistenceSettings.retryLegacyMigration()
     }
 
     private func externalOpenDirectories(from urls: [URL]) -> [String] {

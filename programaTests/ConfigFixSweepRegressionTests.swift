@@ -136,6 +136,273 @@ final class ConfigFixSweepRegressionTests: XCTestCase {
         )
     }
 
+    // MARK: - Filter drivers are repository-controlled commands
+
+    /// A repo whose tracked `a.txt` is modified and whose `.gitattributes` routes `*.txt` to
+    /// the filter driver `driver`. The driver is configured last so the fixture's own commands
+    /// never run it; `configure` receives the repo to set the driver up. The edit keeps the
+    /// file's size: a size change lets `git status` mark it modified from the index alone,
+    /// without reading the content through the clean filter.
+    private func makeFilterRepo(driver: String, configure: (URL) throws -> Void) throws -> URL {
+        let repo = try makeRepo(branch: "feature-x", fileName: "a.txt")
+        try "*.txt filter=\(driver)\n".write(
+            to: repo.appendingPathComponent(".gitattributes"), atomically: true, encoding: .utf8)
+        try "two\n".write(
+            to: repo.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        try configure(repo)
+        return repo
+    }
+
+    func testProbesNeverRunRepositoryLocalFilterDriver() throws {
+        let marker = tempRoot.appendingPathComponent("filter-ran")
+        let repo = try makeFilterRepo(driver: "evil") { repo in
+            try configFixtureGit(["config", "filter.evil.clean", "touch \(marker.path); cat"], in: repo)
+        }
+
+        // Positive control: plain git runs the clean filter for the modified file.
+        try configFixtureGit(["status", "--porcelain"], in: repo)
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: marker.path),
+            "control: plain `git status` should execute the repository's clean filter"
+        )
+        try FileManager.default.removeItem(at: marker)
+
+        let snapshot = GitMetadataProber.initialWorkspaceGitMetadataSnapshot(for: repo.path)
+        let review = ReviewDiffProber.diffSnapshot(directory: repo.path, mode: .uncommitted, baseBranch: "main")
+
+        XCTAssertEqual(snapshot.branch, "feature-x")
+        XCTAssertTrue(snapshot.isDirty)
+        XCTAssertNil(review.error)
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: marker.path),
+            "a background git probe executed the repository's filter driver"
+        )
+    }
+
+    /// Git LFS is configured in the user's global config; its filter must keep working or every
+    /// LFS file would read as modified.
+    func testProbesKeepFilterDriverDefinedOnlyInGlobalConfig() throws {
+        let marker = tempRoot.appendingPathComponent("global-filter-ran")
+        let globalConfig = tempRoot.appendingPathComponent("global-gitconfig")
+        try "[filter \"trusted\"]\n\tclean = touch \(marker.path); cat\n"
+            .write(to: globalConfig, atomically: true, encoding: .utf8)
+        let originalGlobal = ProcessInfo.processInfo.environment["GIT_CONFIG_GLOBAL"]
+        setenv("GIT_CONFIG_GLOBAL", globalConfig.path, 1)
+        defer {
+            if let originalGlobal { setenv("GIT_CONFIG_GLOBAL", originalGlobal, 1) } else { unsetenv("GIT_CONFIG_GLOBAL") }
+        }
+        let repo = try makeFilterRepo(driver: "trusted") { _ in }
+
+        _ = GitMetadataProber.initialWorkspaceGitMetadataSnapshot(for: repo.path)
+
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: marker.path),
+            "a filter driver defined only by the user's global config must still run"
+        )
+    }
+
+    func testFilterOverridesCoverOnlyDriversRepositoryConfigDefinesOrChanges() {
+        let output = [
+            "global", "filter.lfs.clean\ngit-lfs clean -- %f",
+            "global", "filter.lfs.required\ntrue",
+            "global", "filter.same.clean\ncat",
+            "local", "filter.same.clean\ncat",
+            "global", "filter.hijacked.clean\ncat",
+            "local", "filter.hijacked.clean\ntouch x",
+            "local", "filter.dotted.name.process\ntouch y",
+            "local", "filter.a=b.smudge\ncat",
+            "command", "filter.lfs.clean\ngit-lfs clean -- %f",
+        ].joined(separator: "\0") + "\0"
+
+        let keys = CanonicalSubprocessRunner.untrustedFilterDriverConfig(fromShowScopeOutput: output)
+            .map { "\($0.key)=\($0.value)" }
+
+        XCTAssertEqual(keys, [
+            "filter.hijacked.clean=", "filter.hijacked.smudge=", "filter.hijacked.process=", "filter.hijacked.required=false",
+            "filter.dotted.name.clean=", "filter.dotted.name.smudge=", "filter.dotted.name.process=", "filter.dotted.name.required=false",
+            "filter.a=b.clean=", "filter.a=b.smudge=", "filter.a=b.process=", "filter.a=b.required=false",
+        ])
+    }
+
+    /// Git LFS runs `lfs.extension.<name>.clean` from the repository's own config inside the
+    /// `filter.lfs` driver, so a repository-local extension makes the trusted global driver a
+    /// command runner for that repository.
+    func testRepositoryLocalLFSExtensionNeutralizesTheGlobalLFSFilter() {
+        let output = [
+            "global", "filter.lfs.clean\ngit-lfs clean -- %f",
+            "global", "filter.lfs.required\ntrue",
+            "local", "lfs.extension.x.clean\ntouch x",
+        ].joined(separator: "\0") + "\0"
+
+        let keys = CanonicalSubprocessRunner.untrustedFilterDriverConfig(fromShowScopeOutput: output)
+            .map { "\($0.key)=\($0.value)" }
+
+        XCTAssertEqual(keys, [
+            "filter.lfs.clean=", "filter.lfs.smudge=", "filter.lfs.process=", "filter.lfs.required=false",
+        ])
+    }
+
+    func testLFSExtensionNeutralizesFilterLFSEvenWhenNoFilterKeyIsListed() {
+        let output = ["worktree", "lfs.extension.x.clean\ntouch x"].joined(separator: "\0") + "\0"
+
+        let keys = CanonicalSubprocessRunner.untrustedFilterDriverConfig(fromShowScopeOutput: output)
+            .map(\.key)
+
+        XCTAssertEqual(keys, ["filter.lfs.clean", "filter.lfs.smudge", "filter.lfs.process", "filter.lfs.required"])
+    }
+
+    func testMixedCaseLFSExtensionStillNeutralizesFilterLFS() {
+        let output = ["local", "lfs.Extension.x.clean\ntouch x"].joined(separator: "\0") + "\0"
+
+        let keys = CanonicalSubprocessRunner.untrustedFilterDriverConfig(fromShowScopeOutput: output)
+            .map(\.key)
+
+        XCTAssertEqual(keys, ["filter.lfs.clean", "filter.lfs.smudge", "filter.lfs.process", "filter.lfs.required"])
+    }
+
+    /// A non-repository directory's cached "no filters" answer must not outlive a repository
+    /// appearing in it, or the next probe runs git there without the filter overrides.
+    func testRepositoryConfigFingerprintChangesWhenARepositoryAppears() throws {
+        let parent = FileManager.default.temporaryDirectory
+            .appendingPathComponent("fingerprint-\(UUID().uuidString)")
+        let directory = parent.appendingPathComponent("work")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: parent) }
+
+        let before = CanonicalSubprocessRunner.repositoryConfigFingerprint(directory: directory.path)
+        XCTAssertEqual(before, CanonicalSubprocessRunner.repositoryConfigFingerprint(directory: directory.path))
+
+        try configFixtureGit(["init", "-q"], in: directory)
+        let afterInit = CanonicalSubprocessRunner.repositoryConfigFingerprint(directory: directory.path)
+        XCTAssertNotEqual(before, afterInit)
+
+        try configFixtureGit(["config", "filter.x.clean", "cat"], in: directory)
+        XCTAssertNotEqual(afterInit, CanonicalSubprocessRunner.repositoryConfigFingerprint(directory: directory.path))
+    }
+
+    func testGlobalLFSExtensionLeavesTheGlobalLFSFilterAlone() {
+        let output = [
+            "global", "filter.lfs.clean\ngit-lfs clean -- %f",
+            "global", "lfs.extension.x.clean\ntrusted-tool",
+            "local", "lfs.repositoryformatversion\n0",
+        ].joined(separator: "\0") + "\0"
+
+        XCTAssertTrue(CanonicalSubprocessRunner.untrustedFilterDriverConfig(fromShowScopeOutput: output).isEmpty)
+    }
+
+    func testProbesNeverRunGlobalLFSFilterForRepositoryWithLocalLFSExtension() throws {
+        let marker = tempRoot.appendingPathComponent("lfs-filter-ran")
+        let globalConfig = tempRoot.appendingPathComponent("global-lfs-gitconfig")
+        try "[filter \"lfs\"]\n\tclean = touch \(marker.path); cat\n"
+            .write(to: globalConfig, atomically: true, encoding: .utf8)
+        let originalGlobal = ProcessInfo.processInfo.environment["GIT_CONFIG_GLOBAL"]
+        setenv("GIT_CONFIG_GLOBAL", globalConfig.path, 1)
+        defer {
+            if let originalGlobal { setenv("GIT_CONFIG_GLOBAL", originalGlobal, 1) } else { unsetenv("GIT_CONFIG_GLOBAL") }
+        }
+        let repo = try makeFilterRepo(driver: "lfs") { repo in
+            try configFixtureGit(["config", "lfs.extension.x.clean", "touch \(marker.path); cat"], in: repo)
+        }
+
+        let snapshot = GitMetadataProber.initialWorkspaceGitMetadataSnapshot(for: repo.path)
+
+        XCTAssertEqual(snapshot.branch, "feature-x")
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: marker.path),
+            "a repository-local lfs.extension reached the trusted global filter.lfs driver"
+        )
+    }
+
+    // MARK: - Submodules are probed without their own config
+
+    /// `git status` and `git diff` spawn a child `git status` inside each populated submodule,
+    /// which reads the submodule's own config and does not inherit the parent's overrides.
+    func testProbesNeverRunFilterDriverConfiguredInASubmodule() throws {
+        let marker = tempRoot.appendingPathComponent("submodule-filter-ran")
+        let upstream = try makeRepo(branch: "main", fileName: "a.txt", contents: "a\n")
+        let parent = try makeRepo(branch: "feature-x")
+        try configFixtureGit(["-c", "protocol.file.allow=always", "submodule", "add", "-q", upstream.path, "sub"], in: parent)
+        try configFixtureGit(["commit", "-q", "-m", "add submodule"], in: parent)
+        let checkout = parent.appendingPathComponent("sub", isDirectory: true)
+        try "*.txt filter=evil\n".write(
+            to: checkout.appendingPathComponent(".gitattributes"), atomically: true, encoding: .utf8)
+        // Same size, new mtime: git has to run the clean filter to learn whether it changed.
+        try "b\n".write(to: checkout.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        try configFixtureGit(["config", "filter.evil.clean", "touch \(marker.path); cat"], in: checkout)
+
+        try configFixtureGit(["status", "--porcelain", "-uno"], in: parent)
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: marker.path),
+            "control: plain `git status` should run the submodule's clean filter"
+        )
+        try FileManager.default.removeItem(at: marker)
+
+        let snapshot = GitMetadataProber.initialWorkspaceGitMetadataSnapshot(for: parent.path)
+        let review = ReviewDiffProber.diffSnapshot(directory: parent.path, mode: .uncommitted, baseBranch: "main")
+
+        XCTAssertNil(review.error)
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: marker.path),
+            "a background git probe executed a filter driver configured in a submodule"
+        )
+
+        // Only the submodule's working tree was ignored: a moved gitlink commit still counts.
+        XCTAssertFalse(snapshot.isDirty)
+        try configFixtureGit(["commit", "-q", "-a", "-m", "move"], in: checkout)
+        XCTAssertTrue(GitMetadataProber.initialWorkspaceGitMetadataSnapshot(for: parent.path).isDirty)
+    }
+
+    func testAutomaticGitEnvironmentCarriesFilterOverridesVerbatim() {
+        let environment = CanonicalSubprocessRunner.gitConfigEnvironment([
+            ("core.fsmonitor", "false"),
+            ("filter.a=b.clean", ""),
+        ])
+
+        XCTAssertEqual(environment["GIT_CONFIG_COUNT"], "2")
+        XCTAssertEqual(environment["GIT_CONFIG_KEY_1"], "filter.a=b.clean")
+        XCTAssertEqual(environment["GIT_CONFIG_VALUE_1"], "")
+    }
+
+    // MARK: - Filter overrides are not cached for "not a repository" or "no filters"
+
+    private func configKeys(in environment: [String: String]?) -> Set<String> {
+        Set((environment ?? [:]).filter { $0.key.hasPrefix("GIT_CONFIG_KEY_") }.values)
+    }
+
+    func testFilterOverridesAreReadAgainOnceADirectoryBecomesARepository() throws {
+        let directory = tempRoot.appendingPathComponent("extracted-later", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let before = CanonicalSubprocessRunner.automaticGitEnvironment(directory: directory.path)
+        XCTAssertNotNil(before, "a directory that is not a repository is not a config read failure")
+        XCTAssertFalse(configKeys(in: before).contains("filter.evil.clean"))
+
+        try configFixtureGit(["init", "-q", "-b", "main"], in: directory)
+        try configFixtureGit(["config", "filter.evil.clean", "touch x; cat"], in: directory)
+
+        XCTAssertTrue(
+            configKeys(in: CanonicalSubprocessRunner.automaticGitEnvironment(directory: directory.path))
+                .contains("filter.evil.clean"),
+            "the empty answer for a non-repository was cached and reused for the repository that appeared"
+        )
+    }
+
+    func testFilterOverridesAreReadAgainWhenARepositoryGainsFilterConfig() throws {
+        let repo = try makeRepo(branch: "main")
+
+        XCTAssertFalse(
+            configKeys(in: CanonicalSubprocessRunner.automaticGitEnvironment(directory: repo.path))
+                .contains("filter.evil.clean")
+        )
+        try configFixtureGit(["config", "filter.evil.clean", "touch x; cat"], in: repo)
+
+        XCTAssertTrue(
+            configKeys(in: CanonicalSubprocessRunner.automaticGitEnvironment(directory: repo.path))
+                .contains("filter.evil.clean"),
+            "the empty answer for a repository without filters was cached and reused"
+        )
+    }
+
     // MARK: - CONF-02: review diff survives hostile or surprising git config and non-ASCII paths
 
     /// `diff.external` would replace git's diff output with a program's, and `diff.noprefix`
@@ -215,7 +482,46 @@ final class ConfigFixSweepRegressionTests: XCTestCase {
         guard case .gitCommandFailed = outcome else {
             return XCTFail("expected .gitCommandFailed for base \"--detach\", got \(outcome)")
         }
-        XCTAssertFalse(GitWorktreeManager.branchExistsLocally("x", repoRoot: repo.path))
+        XCTAssertEqual(GitWorktreeManager.branchExistsLocally("x", repoRoot: repo.path), false)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: worktreePath))
+    }
+
+    // MARK: - An unknown branch state never leads to a deleted branch
+
+    func testBranchExistsLocallyReportsPresentAbsentAndUnknown() throws {
+        let repo = try makeRepo(branch: "main")
+        let notARepository = tempRoot.appendingPathComponent("plain", isDirectory: true)
+        try FileManager.default.createDirectory(at: notARepository, withIntermediateDirectories: true)
+
+        XCTAssertEqual(GitWorktreeManager.branchExistsLocally("main", repoRoot: repo.path), true)
+        XCTAssertEqual(GitWorktreeManager.branchExistsLocally("nope", repoRoot: repo.path), false)
+        XCTAssertNil(GitWorktreeManager.branchExistsLocally("main", repoRoot: notARepository.path))
+    }
+
+    /// A config git cannot parse makes every probe fail, so whether the branch exists is
+    /// unknown. The user's branch must survive both the add and the cleanup helper.
+    func testWorktreeAddRefusesAndKeepsBranchWhenBranchExistenceIsUnknown() throws {
+        let repo = try makeRepo(branch: "main")
+        try configFixtureGit(["branch", "keep"], in: repo)
+        let configURL = repo.appendingPathComponent(".git/config")
+        let goodConfig = try String(contentsOf: configURL, encoding: .utf8)
+        let worktreePath = tempRoot.appendingPathComponent("wt-keep").path
+        try (goodConfig + "[broken\n").write(to: configURL, atomically: true, encoding: .utf8)
+        var configRestored = false
+        defer {
+            if !configRestored { try? goodConfig.write(to: configURL, atomically: true, encoding: .utf8) }
+        }
+
+        XCTAssertNil(GitWorktreeManager.branchExistsLocally("keep", repoRoot: repo.path))
+        let outcome = GitWorktreeManager.add(repoRoot: repo.path, branch: "keep", base: nil, path: worktreePath)
+        guard case .gitCommandFailed = outcome else {
+            return XCTFail("expected .gitCommandFailed when branch existence is unknown, got \(outcome)")
+        }
+        XCTAssertFalse(GitWorktreeManager.deleteBranchIfUnused("keep", repoRoot: repo.path))
+
+        try goodConfig.write(to: configURL, atomically: true, encoding: .utf8)
+        configRestored = true
+        XCTAssertEqual(GitWorktreeManager.branchExistsLocally("keep", repoRoot: repo.path), true)
         XCTAssertFalse(FileManager.default.fileExists(atPath: worktreePath))
     }
 }

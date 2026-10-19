@@ -14,15 +14,20 @@ import Bonsplit
 /// 2. The callback (`sessionWALPTYTeeCallback`) does exactly one thing:
 ///    `SessionWALRingBuffer.append` — a bounded memcpy into a fixed-capacity
 ///    buffer preallocated at registration time (never in the callback).
-/// 3. A single shared background queue (`SessionWALStore.writeQueue`, a
-///    serial `DispatchQueue`) runs a periodic timer every ~100ms
-///    (`SessionWALPolicy.drainInterval`) that drains every registered
-///    surface's ring buffer and appends the bytes to that session's
-///    `wal.log`. WAL fsync is batched separately at
-///    `SessionWALPolicy.walSyncInterval`, avoiding one serial fsync per
-///    output-bearing tick and writer.
-/// 4. `meta.json` (the fact file) is refreshed only at the heartbeat cadence
-///    or immediately when identity/escrow/generation changes.
+/// 3. When a ring buffer goes from empty to non-empty, its
+///    `onBytesAvailable` merges into a coalescing dispatch source (a lock-free
+///    atomic OR, no allocation). The source's handler on the single shared
+///    background queue (`SessionWALStore.writeQueue`, a serial
+///    `DispatchQueue`) schedules one drain `SessionWALPolicy.drainInterval`
+///    (~100ms) later, which appends every registered surface's buffered bytes
+///    to that session's `wal.log`. Nothing runs while no surface emits output.
+///    WAL fsync is batched separately at `SessionWALPolicy.walSyncInterval`;
+///    a writer left with unsynchronized bytes arms a follow-up pass for it.
+/// 4. `meta.json` (the fact file) is written when identity/escrow/generation
+///    changes, plus an hourly heartbeat (`SessionWALPolicy.heartbeatInterval`)
+///    that keeps `lastHeartbeatAt` far inside the orphan sweep's 24h window.
+///    The heartbeat runs only while scrollback capture is on or the writer
+///    holds an escrow claim.
 ///
 /// ## Ring buffer lock, a disclosed pragmatic tradeoff
 /// The callback must not allocate or block. A textbook wait-free SPSC ring
@@ -138,9 +143,12 @@ import Bonsplit
 ///   its `meta.json` heartbeat (or, if that can't be parsed, its own
 ///   filesystem modification date) is older than
 ///   `SessionWALPolicy.orphanDirectoryMaxAge`. A directory whose age cannot
-///   be determined at all is kept. Every bundle's current snapshot protects
-///   its terminal directories regardless of age; unreadable snapshots defer
-///   the sweep so tagged builds cannot destroy production retrieval tokens.
+///   be determined at all is kept. This bundle's own snapshot, and any other
+///   bundle's snapshot modified within
+///   `SessionPersistenceStore.foreignSnapshotPinMaxAge`, protects its terminal
+///   directories regardless of directory age; unreadable pinning snapshots
+///   defer the sweep so tagged builds cannot destroy production retrieval
+///   tokens.
 enum SessionWALPolicy {
     /// Fixed capacity of the in-memory ring buffer the tee callback writes
     /// into. Large enough to absorb a burst between 100ms drains for normal
@@ -149,14 +157,19 @@ enum SessionWALPolicy {
     static let ringBufferCapacityBytes = 64 * 1024
     /// Per-session wal.log cap before rotating to wal.log.1.
     static let walCapBytes: Int64 = 8 * 1024 * 1024
+    /// Batching delay between the first buffered byte and the drain that
+    /// writes it.
     static let drainInterval: TimeInterval = 0.1
     /// WAL durability is intentionally batched instead of issuing a serial
     /// fsync for every 100ms drain tick. Rotation and final writer teardown
     /// still force an immediate sync.
     static let walSyncInterval: TimeInterval = 1.0
-    /// Fact-file heartbeat cadence. Identity, escrow, and generation changes
-    /// bypass this throttle and are persisted immediately.
-    static let metaRefreshInterval: TimeInterval = 5.0
+    /// Fact-file heartbeat cadence. The only consumers of `lastHeartbeatAt`
+    /// are the orphan sweeps (24h `orphanDirectoryMaxAge`, in this build and
+    /// in older builds sharing the sessions root), so this stays an order of
+    /// magnitude inside that window. Identity, escrow, and generation changes
+    /// are persisted immediately and independently.
+    static let heartbeatInterval: TimeInterval = 60 * 60
     static let orphanSweepDelay: TimeInterval = 5.0
     /// Minimum spacing between successful/attempted frame captures for a
     /// single session. Deliberately slow (20-30s) since capture is
@@ -165,6 +178,7 @@ enum SessionWALPolicy {
     /// How often the writeQueue timer wakes to check which writers are due
     /// for a frame capture. Lighter than `frameCaptureInterval` itself so a
     /// writer becoming eligible doesn't wait a full cycle before capture.
+    /// Runs only while scrollback capture is enabled.
     static let frameCaptureCheckInterval: TimeInterval = 5.0
     /// A session directory with no live writer is only eligible for deletion
     /// by the sweep once it is at least this old (by `meta.json` heartbeat,
@@ -191,10 +205,19 @@ final class SessionWALRingBuffer {
     private var count = 0
     private var lock = os_unfair_lock()
     private var policy: SessionScrollbackPolicy
+    /// Called from `append` (after the lock is released) only when the buffer
+    /// goes from empty to non-empty, so the owner can schedule one drain
+    /// instead of polling. Must be non-blocking and allocation-free.
+    private let onBytesAvailable: (() -> Void)?
 
-    init(capacity: Int, policy: SessionScrollbackPolicy = .init(enabled: true, generation: UUID())) {
+    init(
+        capacity: Int,
+        policy: SessionScrollbackPolicy = .init(enabled: true, generation: UUID()),
+        onBytesAvailable: (() -> Void)? = nil
+    ) {
         self.capacity = capacity
         self.policy = policy
+        self.onBytesAvailable = onBytesAvailable
         self.firstStorage = UnsafeMutablePointer<UInt8>.allocate(capacity: capacity)
         self.secondStorage = UnsafeMutablePointer<UInt8>.allocate(capacity: capacity)
     }
@@ -212,8 +235,15 @@ final class SessionWALRingBuffer {
     func append(_ buf: UnsafePointer<UInt8>, _ len: Int) {
         guard len > 0 else { return }
         guard os_unfair_lock_trylock(&lock) else { return }
-        defer { os_unfair_lock_unlock(&lock) }
-        guard policy.enabled else { return }
+        let wasEmpty = count == 0
+        let stored = storeLocked(buf, len)
+        os_unfair_lock_unlock(&lock)
+        if stored, wasEmpty { onBytesAvailable?() }
+    }
+
+    /// Caller holds `lock`. Returns false when the policy rejects the bytes.
+    private func storeLocked(_ buf: UnsafePointer<UInt8>, _ len: Int) -> Bool {
+        guard policy.enabled else { return false }
         let storage = storage(at: activeStorageIndex)
 
         if len >= capacity {
@@ -221,7 +251,7 @@ final class SessionWALRingBuffer {
             memcpy(storage, src, capacity)
             head = 0
             count = capacity
-            return
+            return true
         }
 
         let writeStart = (head + count) % capacity
@@ -238,6 +268,7 @@ final class SessionWALRingBuffer {
         } else {
             count = newCount
         }
+        return true
     }
 
     /// Background-queue only: swaps the active preallocated buffer while
@@ -1008,7 +1039,6 @@ private final class SessionWALWriter {
     /// Resolved the same way as `childPID`, see above.
     var ptyPath: String?
     var currentWalSize: Int64 = 0
-    var lastMetaWriteAt: Date = .distantPast
     var lastWALSyncAt: Date = .distantPast
     var hasUnsynchronizedWALWrites = false
     /// Set after the first failed WAL append is logged, so a full disk
@@ -1052,20 +1082,26 @@ final class SessionWALStore {
         let surfaceId: String
         let ringBuffer: SessionWALRingBuffer
 
-        init(surfaceId: String) {
+        init(surfaceId: String, onBytesAvailable: (() -> Void)? = nil) {
             self.surfaceId = surfaceId
             self.ringBuffer = SessionWALRingBuffer(
                 capacity: SessionWALPolicy.ringBufferCapacityBytes,
-                policy: SessionScrollbackPolicy(enabled: false, generation: UUID())
+                policy: SessionScrollbackPolicy(enabled: false, generation: UUID()),
+                onBytesAvailable: onBytesAvailable
             )
         }
     }
 
     static let shared = SessionWALStore()
 
-    private let writeQueue = DispatchQueue(label: "com.darkroom.programa.session-wal", qos: .utility)
+    private let writeQueue: DispatchQueue
+    /// Merged into from the tee callback via `Context.onBytesAvailable`;
+    /// its handler runs on `writeQueue`.
+    private let drainWake: DispatchSourceUserDataOr
     private var writersBySurfaceId: [String: SessionWALWriter] = [:]
-    private var drainTimer: DispatchSourceTimer?
+    private var drainScheduled = false
+    private var syncCheckScheduled = false
+    private var heartbeatTimer: DispatchSourceTimer?
     private var frameCaptureTimer: DispatchSourceTimer?
     private var hasScheduledOrphanSweep = false
     private var capturePolicy = SessionScrollbackPolicy(enabled: false, generation: UUID())
@@ -1086,7 +1122,15 @@ final class SessionWALStore {
         return decoder
     }()
 
-    private init() {}
+    private init() {
+        let queue = DispatchQueue(label: "com.darkroom.programa.session-wal", qos: .utility)
+        writeQueue = queue
+        drainWake = DispatchSource.makeUserDataOrSource(queue: queue)
+        drainWake.setEventHandler { [weak self] in
+            self?.scheduleDrain()
+        }
+        drainWake.resume()
+    }
 
     func currentCapturePolicy() -> SessionScrollbackPolicy {
         writeQueue.sync { capturePolicy }
@@ -1110,6 +1154,7 @@ final class SessionWALStore {
         for writer in writersBySurfaceId.values {
             writer.context.ringBuffer.transition(to: policy)
         }
+        refreshTimers()
     }
 
     /// Registers the PTY tee for a newly created surface and starts its
@@ -1121,7 +1166,8 @@ final class SessionWALStore {
         surfaceId: String,
         workingDirectory: String?
     ) -> Unmanaged<Context> {
-        let context = Context(surfaceId: surfaceId)
+        let wake = drainWake
+        let context = Context(surfaceId: surfaceId, onBytesAvailable: { wake.or(data: 1) })
         let unmanaged = Unmanaged<Context>.passRetained(context)
         if SessionMachineryGate.isUnitTesting {
             return unmanaged
@@ -1184,9 +1230,8 @@ final class SessionWALStore {
             if writer.childPID == nil, let childPID {
                 writer.childPID = childPID
             }
-            let now = Date()
-            self.writeMeta(writer: writer, at: now)
-            writer.lastMetaWriteAt = now
+            self.writeMeta(writer: writer, at: Date())
+            self.refreshTimers()
         }
     }
 
@@ -1205,8 +1250,7 @@ final class SessionWALStore {
     /// "Fact file" doc comment). Only fills fields that are still nil --
     /// never overwrites an already-resolved value, and passing nil here
     /// just means "still unknown", not "clear it". Forces an immediate meta
-    /// write when something actually changed so a freshly resolved PID
-    /// doesn't sit behind the up-to-1s heartbeat throttle; a no-op if the
+    /// write when something actually changed; a no-op if the
     /// writer has already been torn down or nothing changed.
     func updateSurfaceIdentity(surfaceId: String, childPID: Int32?, ptyPath: String?) {
         guard childPID != nil || ptyPath != nil else { return }
@@ -1222,16 +1266,14 @@ final class SessionWALStore {
                 changed = true
             }
             guard changed else { return }
-            let now = Date()
-            self.writeMeta(writer: writer, at: now)
-            writer.lastMetaWriteAt = now
+            self.writeMeta(writer: writer, at: Date())
         }
     }
 
     /// Records a successful escrow hand-off (issue #182 slice 1, `Sources
     /// /SessionEscrow.swift`). Forces an immediate meta write, same as
     /// `updateSurfaceIdentity`, so `meta.json` reflects escrow state
-    /// without waiting on the up-to-1s heartbeat throttle. A no-op if the
+    /// at once. A no-op if the
     /// writer has already been torn down (surface closed before the
     /// escrow round-trip completed).
     func markEscrowed(surfaceId: String, socketPath: String, token: String) {
@@ -1240,9 +1282,8 @@ final class SessionWALStore {
             writer.escrowed = true
             writer.escrowSocketPath = socketPath
             writer.escrowToken = token
-            let now = Date()
-            self.writeMeta(writer: writer, at: now)
-            writer.lastMetaWriteAt = now
+            self.writeMeta(writer: writer, at: Date())
+            self.refreshTimers()
         }
     }
 
@@ -1426,57 +1467,108 @@ final class SessionWALStore {
             writer.ptyPath = existing.ptyPath
         }
         writersBySurfaceId[surfaceId] = writer
-        let now = Date()
-        writeMeta(writer: writer, at: now)
-        writer.lastMetaWriteAt = now
+        writeMeta(writer: writer, at: Date())
 
-        ensureDrainTimerStarted()
-        ensureFrameCaptureTimerStarted()
+        refreshTimers()
         scheduleOrphanSweepIfNeeded()
     }
 
     private func stopWriter(surfaceId: String, deleteDirectory: Bool) {
         guard let writer = writersBySurfaceId.removeValue(forKey: surfaceId) else { return }
-        drain(writer: writer, forceMetaWrite: false, forceWALSync: true)
+        drain(writer: writer, forceWALSync: true)
         if deleteDirectory {
             try? FileManager.default.removeItem(at: writer.paths.sessionDirectory)
         }
-        stopTimersIfIdle()
+        refreshTimers()
     }
 
-    private func ensureDrainTimerStarted() {
-        guard drainTimer == nil else { return }
-        let timer = DispatchSource.makeTimerSource(queue: writeQueue)
-        let interval = SessionWALPolicy.drainInterval
-        timer.schedule(deadline: .now() + interval, repeating: interval)
-        timer.setEventHandler { [weak self] in
-            self?.drainAllWriters()
+    /// Starts or cancels the two periodic timers so an idle store schedules
+    /// nothing. Dispatch sources cannot be reconfigured after cancellation,
+    /// so each is cleared here and lazily recreated when needed again.
+    /// - Frame capture: only while scrollback capture is enabled.
+    /// - Heartbeat: while capture is enabled, or for any writer holding an
+    ///   escrow claim (`meta.json` carries the retrieval token, and the orphan
+    ///   sweeps age a directory by `lastHeartbeatAt`, so a live escrowed
+    ///   session's heartbeat must keep moving even with capture off).
+    private func refreshTimers() {
+        let hasWriters = !writersBySurfaceId.isEmpty
+        if hasWriters, capturePolicy.enabled {
+            if frameCaptureTimer == nil {
+                let timer = DispatchSource.makeTimerSource(queue: writeQueue)
+                let interval = SessionWALPolicy.frameCaptureCheckInterval
+                timer.schedule(deadline: .now() + interval, repeating: interval)
+                timer.setEventHandler { [weak self] in
+                    self?.considerFrameCaptureTick()
+                }
+                timer.resume()
+                frameCaptureTimer = timer
+            }
+        } else {
+            frameCaptureTimer?.cancel()
+            frameCaptureTimer = nil
         }
-        timer.resume()
-        drainTimer = timer
-    }
 
-    private func ensureFrameCaptureTimerStarted() {
-        guard frameCaptureTimer == nil else { return }
-        let timer = DispatchSource.makeTimerSource(queue: writeQueue)
-        let interval = SessionWALPolicy.frameCaptureCheckInterval
-        timer.schedule(deadline: .now() + interval, repeating: interval)
-        timer.setEventHandler { [weak self] in
-            self?.considerFrameCaptureTick()
+        let needsHeartbeat = hasWriters
+            && (capturePolicy.enabled || writersBySurfaceId.values.contains { $0.escrowed })
+        if needsHeartbeat {
+            if heartbeatTimer == nil {
+                // Wall-clock deadline: a monotonic timer does not count time
+                // the machine spends asleep.
+                let timer = DispatchSource.makeTimerSource(queue: writeQueue)
+                let interval = SessionWALPolicy.heartbeatInterval
+                timer.schedule(wallDeadline: .now() + interval, repeating: interval, leeway: .seconds(60))
+                timer.setEventHandler { [weak self] in
+                    self?.heartbeatAllWriters()
+                }
+                timer.resume()
+                heartbeatTimer = timer
+            }
+        } else {
+            heartbeatTimer?.cancel()
+            heartbeatTimer = nil
         }
-        timer.resume()
-        frameCaptureTimer = timer
     }
 
-    private func stopTimersIfIdle() {
-        guard writersBySurfaceId.isEmpty else { return }
-        // Dispatch sources cannot be safely reconfigured after cancellation;
-        // clear them here and the next registration lazily recreates/resumes
-        // both sweeps.
-        drainTimer?.cancel()
-        drainTimer = nil
-        frameCaptureTimer?.cancel()
-        frameCaptureTimer = nil
+    private func heartbeatAllWriters() {
+        let now = Date()
+        for writer in writersBySurfaceId.values where capturePolicy.enabled || writer.escrowed {
+            writeMeta(writer: writer, at: now)
+        }
+    }
+
+    /// Runs on `writeQueue` when a ring buffer received its first bytes since
+    /// the last drain. One pending drain covers every writer.
+    private func scheduleDrain() {
+        guard !drainScheduled else { return }
+        drainScheduled = true
+        writeQueue.asyncAfter(deadline: .now() + SessionWALPolicy.drainInterval) { [weak self] in
+            guard let self else { return }
+            self.drainScheduled = false
+            self.drainAllWriters()
+            self.scheduleSyncCheckIfNeeded()
+        }
+    }
+
+    /// Output that stops after a drain leaves its bytes unsynchronized and no
+    /// further wake would arrive, so arm one follow-up pass for the batched
+    /// fsync. Re-arms until every writer is synchronized.
+    private func scheduleSyncCheckIfNeeded() {
+        guard !syncCheckScheduled else { return }
+        let now = Date()
+        var delay: TimeInterval?
+        for writer in writersBySurfaceId.values where writer.hasUnsynchronizedWALWrites {
+            let due = writer.lastWALSyncAt.addingTimeInterval(SessionWALPolicy.walSyncInterval)
+                .timeIntervalSince(now)
+            delay = min(delay ?? due, due)
+        }
+        guard let delay else { return }
+        syncCheckScheduled = true
+        writeQueue.asyncAfter(deadline: .now() + max(delay, SessionWALPolicy.drainInterval)) { [weak self] in
+            guard let self else { return }
+            self.syncCheckScheduled = false
+            self.drainAllWriters()
+            self.scheduleSyncCheckIfNeeded()
+        }
     }
 
     /// Fires every `frameCaptureCheckInterval`; writers that are due
@@ -1588,13 +1680,12 @@ final class SessionWALStore {
 
     private func drainAllWriters() {
         for writer in writersBySurfaceId.values {
-            drain(writer: writer, forceMetaWrite: false, forceWALSync: false)
+            drain(writer: writer, forceWALSync: false)
         }
     }
 
     private func drain(
         writer: SessionWALWriter,
-        forceMetaWrite: Bool,
         forceWALSync: Bool
     ) {
         let capture = writer.context.ringBuffer.drainCaptured()
@@ -1609,11 +1700,6 @@ final class SessionWALStore {
                 writer.hasUnsynchronizedWALWrites = false
                 writer.lastWALSyncAt = now
             }
-        }
-        if forceMetaWrite
-            || now.timeIntervalSince(writer.lastMetaWriteAt) >= SessionWALPolicy.metaRefreshInterval {
-            writeMeta(writer: writer, at: now)
-            writer.lastMetaWriteAt = now
         }
     }
 
@@ -1688,10 +1774,13 @@ final class SessionWALStore {
     static func sweepOrphanedSessionDirectories(
         at root: URL,
         registeredSessionIDs: Set<String>,
+        ownSnapshotFileURL: URL? = SessionPersistenceStore.defaultSnapshotFileURL(),
         now: Date = Date()
     ) {
         guard let owned = SessionPersistenceStore.allOwnedTerminalSessionIDs(
-            in: root.deletingLastPathComponent()
+            in: root.deletingLastPathComponent(),
+            ownSnapshotFileURL: ownSnapshotFileURL,
+            now: now
         ) else { return }
         guard let entries = try? FileManager.default.contentsOfDirectory(
             at: root,

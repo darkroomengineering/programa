@@ -259,7 +259,7 @@ enum SurfaceTools {
                     "workspace_id": ProgramaToolSchema.string("Workspace UUID or short ref."),
                     "surface_id": ProgramaToolSchema.string("Surface UUID or short ref."),
                     "branch": ProgramaToolSchema.string("Git branch name."),
-                    "dirty": ProgramaToolSchema.boolean("Whether the working tree has uncommitted changes. Defaults to false."),
+                    "dirty": ProgramaToolSchema.boolean("Whether the working tree has uncommitted changes. When omitted, the last value the app probed is kept (false if none)."),
                 ],
                 required: ["workspace_id", "surface_id", "branch"]
             )

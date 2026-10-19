@@ -355,8 +355,6 @@ final class TerminalNotificationStore: ObservableObject {
             setFocusedReadIndicator(forTabId: tabId, surfaceId: surfaceId)
         }
 
-        owningTabManager?.moveTabToTopForNotification(tabId)
-
         let notification = TerminalNotification(
             id: UUID(),
             tabId: tabId,

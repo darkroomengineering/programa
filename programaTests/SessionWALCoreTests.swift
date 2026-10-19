@@ -36,6 +36,24 @@ final class SessionWALCoreTests: XCTestCase {
         XCTAssertEqual(ring.drain(), Array("23456789".utf8))
     }
 
+    func testRingSignalsOnlyWhenBufferGoesFromEmptyToNonEmpty() {
+        var signals = 0
+        let ring = SessionWALRingBuffer(capacity: 16, onBytesAvailable: { signals += 1 })
+
+        append(Array("a".utf8), to: ring)
+        append(Array("b".utf8), to: ring)
+        XCTAssertEqual(signals, 1, "Bytes landing in an already-pending buffer share one drain")
+
+        XCTAssertEqual(ring.drain(), Array("ab".utf8))
+        append(Array("c".utf8), to: ring)
+        XCTAssertEqual(signals, 2, "The first bytes after a drain schedule the next one")
+
+        _ = ring.drain()
+        ring.transition(to: SessionScrollbackPolicy(enabled: false, generation: UUID()))
+        append(Array("d".utf8), to: ring)
+        XCTAssertEqual(signals, 2, "Rejected bytes must not wake the writer")
+    }
+
     func testAppendRotatesAndPersistsGenerationBeforeFrameCapture() throws {
         let paths = makePaths()
         try seedMeta(at: paths)

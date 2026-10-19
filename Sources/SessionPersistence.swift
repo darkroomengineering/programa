@@ -486,9 +486,24 @@ enum SessionPersistenceStore {
         })
     }
 
+    /// A dev or bench snapshot untouched for this long stops pinning its session
+    /// ids, unless it is the running bundle's own. Release bundles (production,
+    /// staging) always pin: their shells can outlive a long gap between launches.
+    static let foreignSnapshotPinMaxAge: TimeInterval = 14 * 24 * 60 * 60
+
+    static func isExpirableDevSnapshotName(_ name: String) -> Bool {
+        name.contains(".debug.") || name.contains(".bench.")
+    }
+
     /// WAL storage is shared by production and tagged bundles. Consult every
-    /// current snapshot before deleting its session data, with bounded scan work.
-    static func allOwnedTerminalSessionIDs(in directory: URL) -> Set<String>? {
+    /// pinning snapshot before deleting its session data, with bounded scan work.
+    /// Other dev or bench bundles' snapshots older than `foreignSnapshotPinMaxAge`
+    /// are skipped without being read; `ownSnapshotFileURL` always pins.
+    static func allOwnedTerminalSessionIDs(
+        in directory: URL,
+        ownSnapshotFileURL: URL? = defaultSnapshotFileURL(),
+        now: Date = Date()
+    ) -> Set<String>? {
         var failed = false
         guard let enumerator = FileManager.default.enumerator(
             at: directory,
@@ -498,10 +513,21 @@ enum SessionPersistenceStore {
         ) else { return nil }
         var owned = Set<String>()
         var inspected = 0
+        let ownName = ownSnapshotFileURL?.lastPathComponent
+        let pinCutoff = now.addingTimeInterval(-foreignSnapshotPinMaxAge)
         while let entry = enumerator.nextObject() as? URL {
+            let name = entry.lastPathComponent
+            // `session-<bundle>.scrollback-policy.json` shares the prefix and extension
+            // but is not a snapshot; reading it as one would defer the sweep forever.
+            guard name.hasPrefix("session-"), entry.pathExtension == "json",
+                  !name.hasSuffix(".scrollback-policy.json") else { continue }
             inspected += 1
             guard inspected <= historyDirectoryScanLimit else { return nil }
-            guard entry.lastPathComponent.hasPrefix("session-"), entry.pathExtension == "json" else { continue }
+            if name != ownName, isExpirableDevSnapshotName(name),
+               let modified = (try? FileManager.default.attributesOfItem(atPath: entry.path))?[.modificationDate] as? Date,
+               modified < pinCutoff {
+                continue
+            }
             guard let ids = ownedTerminalSessionIDs(fileURL: entry) else { return nil }
             owned.formUnion(ids)
         }

@@ -44,11 +44,11 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
         var oldContents: [String] = []
         var newContents: [String] = []
         GhosttyApp.handleClipboardConfirmation(
-            contents: "old private clipboard", kind: GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ,
+            contents: "old paste", kind: GHOSTTY_CLIPBOARD_REQUEST_PASTE,
             window: oldWindow, surface: surface
         ) { oldContents.append($0) }
         GhosttyApp.handleClipboardConfirmation(
-            contents: "new private clipboard", kind: GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ,
+            contents: "new paste", kind: GHOSTTY_CLIPBOARD_REQUEST_PASTE,
             window: newWindow, surface: surface
         ) { newContents.append($0) }
 
@@ -63,6 +63,34 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
         XCTAssertEqual(newContents, [""], "Stale presentation callbacks must not disclose or complete either request twice")
         XCTAssertNil(oldWindow.attachedSheet)
         XCTAssertNil(newWindow.attachedSheet)
+    }
+
+    /// A program can send OSC 52 in a loop. Replacing the open prompt on every request would
+    /// keep it out from under the user's click, so a request arriving while one is open is denied.
+    func testOSC52RequestWhilePromptIsOpenIsDeniedAndKeepsTheOpenPrompt() async {
+        let window = NSWindow(contentRect: .zero, styleMask: [], backing: .buffered, defer: true)
+        let surface = UnsafeMutableRawPointer.allocate(byteCount: 1, alignment: 1)
+        defer { surface.deallocate() }
+        var firstContents: [String] = []
+        var secondContents: [String] = []
+        GhosttyApp.handleClipboardConfirmation(
+            contents: "first write", kind: GHOSTTY_CLIPBOARD_REQUEST_OSC_52_WRITE,
+            window: window, surface: surface
+        ) { firstContents.append($0) }
+        GhosttyApp.handleClipboardConfirmation(
+            contents: "second write", kind: GHOSTTY_CLIPBOARD_REQUEST_OSC_52_WRITE,
+            window: window, surface: surface
+        ) { secondContents.append($0) }
+
+        XCTAssertEqual(secondContents, [""], "A request arriving while a prompt is open must be denied")
+        XCTAssertTrue(firstContents.isEmpty, "The open prompt must stay pending")
+        GhosttyApp.cancelConfirmationsBeforeFree(surface)
+        XCTAssertEqual(firstContents, [""], "The open prompt must remain registered for native teardown")
+
+        await drainClipboardPresentationQueue()
+        XCTAssertEqual(firstContents, [""])
+        XCTAssertEqual(secondContents, [""])
+        XCTAssertNil(window.attachedSheet)
     }
 
     func testClipboardWindowCloseDeniesPendingReadAndRemovesTeardownCompletion() async {
@@ -101,6 +129,91 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
             completedContents, [""],
             "Without a surface that can obtain consent, clipboard confirmation must finish by denying access"
         )
+    }
+
+    func testClipboardWritePreviewKeepsShortTextWhole() {
+        let preview = ClipboardWritePreview("hello\nworld\n")
+
+        XCTAssertEqual(preview.text, "hello\nworld")
+        XCTAssertFalse(preview.isTruncated)
+        XCTAssertEqual(preview.lineCount, 2)
+        XCTAssertEqual(preview.byteCount, 12)
+    }
+
+    func testClipboardWritePreviewCutsLongTextAndReportsFullSize() {
+        let manyLines = (1...20).map { "line \($0)" }.joined(separator: "\n")
+        let byLines = ClipboardWritePreview(manyLines)
+        XCTAssertTrue(byLines.isTruncated)
+        XCTAssertEqual(byLines.lineCount, 20)
+        XCTAssertEqual(byLines.text.split(separator: "\n").count, ClipboardWritePreview.maxLines)
+
+        let longLine = String(repeating: "é", count: ClipboardWritePreview.maxCharacters + 50)
+        let byCharacters = ClipboardWritePreview(longLine)
+        XCTAssertTrue(byCharacters.isTruncated)
+        XCTAssertEqual(byCharacters.text.count, ClipboardWritePreview.maxCharacters)
+        XCTAssertEqual(byCharacters.byteCount, longLine.utf8.count)
+        XCTAssertEqual(byCharacters.lineCount, 1)
+    }
+
+    func testClipboardWriteAllowIsRememberedPerTerminalAndEndsWithIt() {
+        _ = NSApplication.shared
+        func makeTerminal() -> TerminalSurface {
+            TerminalSurface(
+                tabId: UUID(),
+                context: GHOSTTY_SURFACE_CONTEXT_SPLIT,
+                configTemplate: nil,
+                workingDirectory: nil
+            )
+        }
+        let trusted = makeTerminal()
+        let other = makeTerminal()
+        XCTAssertFalse(GhosttyApp.allowsClipboardWrites(from: trusted))
+
+        GhosttyApp.rememberClipboardWriteAllowed(for: trusted)
+
+        XCTAssertTrue(GhosttyApp.allowsClipboardWrites(from: trusted))
+        XCTAssertFalse(GhosttyApp.allowsClipboardWrites(from: other), "Allowing one terminal must not allow another")
+    }
+
+    func testClipboardWriteDenyHoldsForThirtySecondsPerTerminal() {
+        _ = NSApplication.shared
+        func makeTerminal() -> TerminalSurface {
+            TerminalSurface(
+                tabId: UUID(),
+                context: GHOSTTY_SURFACE_CONTEXT_SPLIT,
+                configTemplate: nil,
+                workingDirectory: nil
+            )
+        }
+        let denied = makeTerminal()
+        let other = makeTerminal()
+        let start = Date()
+        XCTAssertFalse(GhosttyApp.isDenyingClipboardWrites(from: denied, now: start))
+
+        GhosttyApp.denyClipboardWrites(from: denied, now: start)
+
+        XCTAssertTrue(GhosttyApp.isDenyingClipboardWrites(from: denied, now: start.addingTimeInterval(29)))
+        XCTAssertFalse(GhosttyApp.isDenyingClipboardWrites(from: denied, now: start.addingTimeInterval(31)))
+        XCTAssertFalse(GhosttyApp.isDenyingClipboardWrites(from: other, now: start), "Denying one terminal must not deny another")
+    }
+
+    func testReportedDirectoryMustBeAnExistingAbsoluteDirectoryWithoutRelativeComponents() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("reported-dir-\(UUID().uuidString)", isDirectory: true)
+        let child = root.appendingPathComponent("child", isDirectory: true)
+        try FileManager.default.createDirectory(at: child, withIntermediateDirectories: true)
+        let file = root.appendingPathComponent("file.txt")
+        try "x".write(to: file, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        XCTAssertEqual(GhosttyApp.validatedReportedDirectory(child.path), child.path)
+        XCTAssertEqual(GhosttyApp.validatedReportedDirectory(child.absoluteString), child.path)
+        XCTAssertNil(GhosttyApp.validatedReportedDirectory(""))
+        XCTAssertNil(GhosttyApp.validatedReportedDirectory("relative/dir"))
+        XCTAssertNil(GhosttyApp.validatedReportedDirectory(child.path + "/../child"))
+        XCTAssertNil(GhosttyApp.validatedReportedDirectory(child.path + "/./"))
+        XCTAssertNil(GhosttyApp.validatedReportedDirectory(root.appendingPathComponent("missing").path))
+        XCTAssertNil(GhosttyApp.validatedReportedDirectory(file.path), "A file is not a working directory")
     }
 
     private func make1x1PNG(color: NSColor) throws -> Data {

@@ -235,12 +235,48 @@ class GhosttyApp {
     @MainActor
     private static var clipboardConfirmations: [UInt: ClipboardConfirmation] = [:]
 
+    /// Terminals whose user chose "Always allow for this terminal" for OSC 52 writes. Held weakly
+    /// and never persisted, so the choice ends with the terminal.
+    @MainActor
+    private static let clipboardWriteAllowedTerminals = NSHashTable<TerminalSurface>.weakObjects()
+
+    @MainActor
+    static func allowsClipboardWrites(from terminal: TerminalSurface) -> Bool {
+        clipboardWriteAllowedTerminals.contains(terminal)
+    }
+
+    @MainActor
+    static func rememberClipboardWriteAllowed(for terminal: TerminalSurface) {
+        clipboardWriteAllowedTerminals.add(terminal)
+    }
+
+    /// How long a terminal's OSC 52 writes are denied without a sheet after the user clicks Deny,
+    /// so a program that retries in a loop cannot stack up prompts.
+    private static let clipboardWriteDenyWindow: TimeInterval = 30
+
+    @MainActor
+    private static var clipboardWriteDeniedUntil: [UUID: Date] = [:]
+
+    @MainActor
+    static func denyClipboardWrites(from terminal: TerminalSurface, now: Date = Date()) {
+        clipboardWriteDeniedUntil = clipboardWriteDeniedUntil.filter { $0.value > now }
+        clipboardWriteDeniedUntil[terminal.id] = now.addingTimeInterval(clipboardWriteDenyWindow)
+    }
+
+    @MainActor
+    static func isDenyingClipboardWrites(from terminal: TerminalSurface, now: Date = Date()) -> Bool {
+        clipboardWriteDeniedUntil[terminal.id].map { $0 > now } ?? false
+    }
+
     @MainActor
     private final class ClipboardConfirmation {
         let contents: String
         let kind: ghostty_clipboard_request_e
         let surfaceIdentity: UInt?
+        let sourceName: String?
         weak var window: NSWindow?
+        let onAlwaysAllow: (@MainActor () -> Void)?
+        let onDeny: (@MainActor () -> Void)?
         var completion: ((String) -> Void)?
         var alert: NSAlert?
         var closeObserver: NSObjectProtocol?
@@ -250,12 +286,18 @@ class GhosttyApp {
             kind: ghostty_clipboard_request_e,
             window: NSWindow,
             surfaceIdentity: UInt?,
+            sourceName: String?,
+            onAlwaysAllow: (@MainActor () -> Void)?,
+            onDeny: (@MainActor () -> Void)?,
             completion: @escaping (String) -> Void
         ) {
             self.contents = contents
             self.kind = kind
             self.window = window
             self.surfaceIdentity = surfaceIdentity
+            self.sourceName = sourceName
+            self.onAlwaysAllow = onAlwaysAllow
+            self.onDeny = onDeny
             self.completion = completion
         }
 
@@ -292,19 +334,78 @@ class GhosttyApp {
                 alert.informativeText = String(localized: "dialog.clipboardConfirmation.paste.message", defaultValue: "This clipboard text may execute commands when pasted into the terminal. Allow this paste?")
             } else if kind == GHOSTTY_CLIPBOARD_REQUEST_OSC_52_WRITE {
                 alert.messageText = String(localized: "sess.clipboardWrite.title", defaultValue: "Allow Clipboard Write?")
-                alert.informativeText = String(localized: "sess.clipboardWrite.message", defaultValue: "A program running in this terminal wants to replace your clipboard contents. Allow it to write to the clipboard?")
+                if let sourceName {
+                    alert.informativeText = String(
+                        localized: "sess.clipboardWrite.messageNamed",
+                        defaultValue: "A program running in \"\(sourceName)\" wants to replace your clipboard contents. Allow it to write to the clipboard?"
+                    )
+                } else {
+                    alert.informativeText = String(localized: "sess.clipboardWrite.message", defaultValue: "A program running in this terminal wants to replace your clipboard contents. Allow it to write to the clipboard?")
+                }
             } else {
                 alert.messageText = String(localized: "dialog.clipboardConfirmation.read.title", defaultValue: "Allow Clipboard Access?")
                 alert.informativeText = String(localized: "dialog.clipboardConfirmation.read.message", defaultValue: "A program running in this terminal requested your clipboard contents. Allow it to read the clipboard?")
             }
-            let cancel = alert.addButton(withTitle: String(localized: "dialog.clipboardConfirmation.cancel", defaultValue: "Cancel"))
+            let isWrite = kind == GHOSTTY_CLIPBOARD_REQUEST_OSC_52_WRITE
+            let cancel = alert.addButton(withTitle: isWrite
+                ? String(localized: "sess.clipboardWrite.deny", defaultValue: "Deny")
+                : String(localized: "dialog.clipboardConfirmation.cancel", defaultValue: "Cancel"))
             cancel.keyEquivalent = "\r"
             let allow = alert.addButton(withTitle: String(localized: "dialog.clipboardConfirmation.allow", defaultValue: "Allow"))
             allow.keyEquivalent = ""
+            if isWrite {
+                alert.accessoryView = Self.writePreviewView(for: ClipboardWritePreview(contents))
+                if onAlwaysAllow != nil {
+                    let always = alert.addButton(withTitle: String(
+                        localized: "sess.clipboardWrite.alwaysAllow",
+                        defaultValue: "Always allow until this terminal closes"
+                    ))
+                    always.keyEquivalent = ""
+                }
+            }
             self.alert = alert
             alert.beginSheetModal(for: window) { [self] response in
-                finish(allow: response == .alertSecondButtonReturn)
+                if response == .alertThirdButtonReturn { onAlwaysAllow?() }
+                if response == .alertFirstButtonReturn { onDeny?() }
+                finish(allow: response == .alertSecondButtonReturn || response == .alertThirdButtonReturn)
             }
+        }
+
+        private static let previewWidth: CGFloat = 420
+
+        private static func writePreviewView(for preview: ClipboardWritePreview) -> NSView {
+            let stack = NSStackView()
+            stack.orientation = .vertical
+            stack.alignment = .leading
+            stack.spacing = 6
+
+            func label(_ text: String, font: NSFont) -> NSTextField {
+                let field = NSTextField(wrappingLabelWithString: text)
+                field.font = font
+                field.isSelectable = true
+                field.preferredMaxLayoutWidth = previewWidth
+                field.widthAnchor.constraint(equalToConstant: previewWidth).isActive = true
+                return field
+            }
+
+            let body = label(
+                preview.isTruncated ? preview.text + "\u{2026}" : preview.text,
+                font: .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
+            )
+            body.drawsBackground = true
+            body.backgroundColor = .textBackgroundColor
+            stack.addArrangedSubview(body)
+            if preview.isTruncated {
+                stack.addArrangedSubview(label(
+                    String(
+                        localized: "sess.clipboardWrite.truncated",
+                        defaultValue: "Showing the start of \(preview.byteCount) bytes across \(preview.lineCount) lines."
+                    ),
+                    font: .systemFont(ofSize: NSFont.smallSystemFontSize)
+                ))
+            }
+            stack.setFrameSize(stack.fittingSize)
+            return stack
         }
     }
 
@@ -314,11 +415,20 @@ class GhosttyApp {
         kind: ghostty_clipboard_request_e? = nil,
         window: NSWindow? = nil,
         surface: ghostty_surface_t? = nil,
+        sourceName: String? = nil,
+        onAlwaysAllow: (@MainActor () -> Void)? = nil,
+        onDeny: (@MainActor () -> Void)? = nil,
         completion: @escaping (String) -> Void
     ) {
         let identity = surface.map { UInt(bitPattern: $0) }
-        if let identity {
-            clipboardConfirmations[identity]?.finish(allow: false)
+        if let identity, let pending = clipboardConfirmations[identity] {
+            // A program can send OSC 52 in a loop; replacing the sheet on every request would
+            // keep it out from under the user's click, so later requests are denied instead.
+            if kind == GHOSTTY_CLIPBOARD_REQUEST_OSC_52_WRITE || kind == GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ {
+                completion("")
+                return
+            }
+            pending.finish(allow: false)
         }
         guard let window, let kind,
               kind == GHOSTTY_CLIPBOARD_REQUEST_PASTE || kind == GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ
@@ -331,6 +441,9 @@ class GhosttyApp {
             kind: kind,
             window: window,
             surfaceIdentity: identity,
+            sourceName: sourceName,
+            onAlwaysAllow: onAlwaysAllow,
+            onDeny: onDeny,
             completion: completion
         )
         if let identity { clipboardConfirmations[identity] = request }
@@ -605,13 +718,26 @@ class GhosttyApp {
             let callbackContext = GhosttyApp.callbackContext(from: userdata)
             let presentConfirmation = {
                 MainActor.assumeIsolated { () -> Void in
-                    let window = callbackContext.flatMap {
+                    let terminal = callbackContext.flatMap {
                         GhosttyApp.resolveTerminalSurface(tabId: $0.tabId, surfaceId: $0.surfaceId)
-                    }?.hostedView.window
+                    }
+                    if let terminal, GhosttyApp.allowsClipboardWrites(from: terminal) {
+                        GhosttyPasteboardHelper.writeString(chosen, to: location)
+                        return
+                    }
+                    if let terminal, GhosttyApp.isDenyingClipboardWrites(from: terminal) { return }
                     GhosttyApp.handleClipboardConfirmation(
                         contents: chosen,
                         kind: GHOSTTY_CLIPBOARD_REQUEST_OSC_52_WRITE,
-                        window: window
+                        window: terminal?.hostedView.window,
+                        surface: terminal?.liveSurfaceForGhosttyAccess(reason: "clipboard.write"),
+                        sourceName: callbackContext.flatMap { GhosttyApp.clipboardSourceName(tabId: $0.tabId) },
+                        onAlwaysAllow: terminal.map { terminal in
+                            { GhosttyApp.rememberClipboardWriteAllowed(for: terminal) }
+                        },
+                        onDeny: terminal.map { terminal in
+                            { GhosttyApp.denyClipboardWrites(from: terminal) }
+                        }
                     ) { confirmedContent in
                         guard !confirmedContent.isEmpty else { return }
                         GhosttyPasteboardHelper.writeString(confirmedContent, to: location)
@@ -682,6 +808,12 @@ class GhosttyApp {
                 return
             }
 
+            loadInlineGhosttyConfig(
+                "clipboard-write = ask",
+                into: fallbackConfig,
+                prefix: "programa-clipboard-write",
+                logLabel: "clipboard write default (fallback)"
+            )
             loadInlineGhosttyConfig(
                 "macos-background-from-layer = true",
                 into: fallbackConfig,
@@ -754,9 +886,7 @@ class GhosttyApp {
                 ghostty_config_load_file(config, path)
             }
         } catch {
-            #if DEBUG
-            dlog("ghostty.config.inlineLoad.failed label=\(logLabel) error=\(error.localizedDescription)")
-            #endif
+            dilog("ghostty.config", "inlineLoad.failed label=\(logLabel) error=\(error.localizedDescription)")
         }
     }
 
@@ -788,6 +918,15 @@ class GhosttyApp {
                 logLabel: "card layout padding default"
             )
         }
+        // Ghostty defaults `clipboard-write` to allow, which lets any program in a pane
+        // replace the clipboard silently. Loaded BEFORE the user's config files so a
+        // user-set `clipboard-write` still wins.
+        loadInlineGhosttyConfig(
+            "clipboard-write = ask",
+            into: config,
+            prefix: "programa-clipboard-write",
+            logLabel: "clipboard write default"
+        )
         ghostty_config_load_default_files(config)
         loadLegacyGhosttyConfigIfNeeded(config)
         ghostty_config_load_recursive_files(config)
@@ -1732,9 +1871,41 @@ class GhosttyApp {
         return workspace.panels[surfaceId] as? TerminalPanel
     }
 
+    /// Workspace title for the clipboard sheet, cut to one short line because a program can set it.
+    @MainActor
+    private static func clipboardSourceName(tabId: UUID?) -> String? {
+        guard let tabId,
+              let app = AppDelegate.shared,
+              let title = (app.tabManagerFor(tabId: tabId) ?? app.tabManager)?.titleForTab(tabId),
+              let firstLine = title.split(whereSeparator: \.isNewline).first else { return nil }
+        let name = String(firstLine.prefix(80)).trimmingCharacters(in: .whitespaces)
+        return name.isEmpty ? nil : name
+    }
+
     @MainActor
     private static func resolveTerminalSurface(tabId: UUID?, surfaceId: UUID?) -> TerminalSurface? {
         resolveTerminalPanel(tabId: tabId, surfaceId: surfaceId)?.surface
+    }
+
+    nonisolated private static let reportedDirectoryValidationQueue = DispatchQueue(
+        label: "com.darkroom.programa.reported-directory-validation", qos: .utility
+    )
+
+    /// A terminal-reported working directory (OSC 7) is untrusted: the background repository
+    /// probes run in whatever it names. Accepts only an absolute path without `.` or `..`
+    /// components to an existing directory, including the `file://` form `TabManager` normalizes.
+    nonisolated static func validatedReportedDirectory(_ reported: String) -> String? {
+        var path = reported.trimmingCharacters(in: .whitespacesAndNewlines)
+        if path.hasPrefix("file://") {
+            guard let url = URL(string: path), !url.path.isEmpty else { return nil }
+            path = url.path
+        }
+        guard path.hasPrefix("/"),
+              !path.split(separator: "/").contains(where: { $0 == "." || $0 == ".." }) else { return nil }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
+              isDirectory.boolValue else { return nil }
+        return path
     }
 
     @MainActor
@@ -2089,13 +2260,18 @@ class GhosttyApp {
         case GHOSTTY_ACTION_PWD:
             guard let tabId = callbackTabId,
                   let surfaceId = callbackSurfaceId else { return true }
-            let pwd = action.action.pwd.pwd.flatMap { String(cString: $0) } ?? ""
-            DispatchQueue.main.async {
-                AppDelegate.shared?.tabManagerFor(tabId: tabId)?.updateSurfaceDirectory(
-                    tabId: tabId,
-                    surfaceId: surfaceId,
-                    directory: pwd
-                )
+            let reportedPwd = action.action.pwd.pwd.flatMap { String(cString: $0) } ?? ""
+            // The existence check can block on a stalled network mount, so it runs on a
+            // serial queue; serial-then-main keeps each terminal's updates in order.
+            Self.reportedDirectoryValidationQueue.async {
+                guard let pwd = Self.validatedReportedDirectory(reportedPwd) else { return }
+                DispatchQueue.main.async {
+                    AppDelegate.shared?.tabManagerFor(tabId: tabId)?.updateSurfaceDirectory(
+                        tabId: tabId,
+                        surfaceId: surfaceId,
+                        directory: pwd
+                    )
+                }
             }
             return true
         case GHOSTTY_ACTION_PROGRESS_REPORT:

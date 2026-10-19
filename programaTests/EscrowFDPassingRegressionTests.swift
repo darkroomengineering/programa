@@ -91,23 +91,6 @@ final class EscrowFDPassingRegressionTests: XCTestCase {
         XCTAssertTrue(isCloseOnExec(received), "a received PTY master must not be inherited by a concurrent exec")
     }
 
-    func testRetainedDescriptorDuplicateIsCloseOnExec() throws {
-        let pipeEnds = try makePipe()
-        // Ownership of the read end moves to the registry; releaseAfterOwnershipTransfer closes it.
-        let master = fcntl(pipeEnds.read, F_DUPFD, 0)
-        XCTAssertGreaterThanOrEqual(master, 0)
-        let owner = SessionEscrowRetainedDescriptor.retain(
-            sessionId: UUID().uuidString, masterFD: master, childPID: 0,
-            tokenHex: String(repeating: "ab", count: 32), socketPath: "/tmp/programa-sess01-unused.sock",
-            recoveryPending: false
-        )
-        defer { owner.releaseAfterOwnershipTransfer() }
-        guard let copy = owner.duplicate() else { return XCTFail("duplicate returned nil") }
-        _ = track(copy)
-        XCTAssertNotEqual(copy, master)
-        XCTAssertTrue(isCloseOnExec(copy), "the duplicate handed to a holder must not leak into spawned children")
-    }
-
     func testPeerAttachingTwoDescriptorsLeaksNeitherExtra() throws {
         let (sender, receiver) = try makeSocketPair()
         let a = try makePipe()

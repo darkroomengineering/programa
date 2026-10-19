@@ -48,7 +48,6 @@ def _run_tmux_compat(cli: str, args: List[str]) -> subprocess.CompletedProcess[s
     env.pop("PROGRAMA_WORKSPACE_ID", None)
     env.pop("PROGRAMA_SURFACE_ID", None)
     env["PROGRAMA_SOCKET_PATH"] = SOCKET_PATH
-    env["PROGRAMA_OMO_PROGRAMA_BIN"] = cli
     cmd = [cli, "--socket", SOCKET_PATH, "__tmux-compat"] + args
     return subprocess.run(cmd, capture_output=True, text=True, check=False, env=env)
 

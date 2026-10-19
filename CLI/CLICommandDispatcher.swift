@@ -166,27 +166,6 @@ struct CLICommandDispatcher {
             explicitPassword: socketPasswordArg
         )
         return
-    case "omo":
-        try cli.runOMO(
-            commandArgs: commandArgs,
-            socketPath: resolveSocketPath(),
-            explicitPassword: socketPasswordArg
-        )
-        return
-    case "omx":
-        try cli.runOMX(
-            commandArgs: commandArgs,
-            socketPath: resolveSocketPath(),
-            explicitPassword: socketPasswordArg
-        )
-        return
-    case "omc":
-        try cli.runOMC(
-            commandArgs: commandArgs,
-            socketPath: resolveSocketPath(),
-            explicitPassword: socketPasswordArg
-        )
-        return
     case "aside":
         try cli.runAside(arguments: commandArgs)
         return

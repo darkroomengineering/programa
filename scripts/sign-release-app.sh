@@ -29,7 +29,6 @@ sign_if_present "$sparkle/Autoupdate"
 sign_if_present "$app_path/Contents/Frameworks/Sparkle.framework"
 sign_if_present "$app_path/Contents/PlugIns/ProgramaDockTilePlugin.plugin"
 sign_if_present "$app_path/Contents/Resources/bin/programa"
-sign_if_present "$app_path/Contents/Resources/bin/ghostty"
 sign_if_present "$app_path/Contents/Resources/bin/programa-mcp"
 
 # Embed a Developer ID provisioning profile if one was supplied via

@@ -44,15 +44,6 @@ enum NewWorkspacePlacement: String, CaseIterable, Identifiable {
     }
 }
 
-struct SidebarWorkspaceAuxiliaryDetailVisibility: Equatable {
-    let showsMetadata: Bool
-    let showsLog: Bool
-    let showsProgress: Bool
-    let showsBranchDirectory: Bool
-    let showsPullRequests: Bool
-    let showsPorts: Bool
-}
-
 enum SidebarActiveTabIndicatorStyle: String, CaseIterable, Identifiable {
     case leftRail
     case solidFill
@@ -149,10 +140,7 @@ enum WorkspaceTabColorSettings {
     static let folderColorOrderKey = "workspaceTabColor.folderColorOrder"
     static let maxRememberedFolderColors = 256
 
-    private static let legacyDefaultOverridesKey = "workspaceTabColor.defaultOverrides"
-    private static let legacyCustomColorsKey = "workspaceTabColor.customColors"
-
-    private static let originalPRPalette: [WorkspaceTabColorEntry] = [
+    static let defaultPalette: [WorkspaceTabColorEntry] = [
         WorkspaceTabColorEntry(name: "Red", hex: "#C0392B"),
         WorkspaceTabColorEntry(name: "Crimson", hex: "#922B21"),
         WorkspaceTabColorEntry(name: "Orange", hex: "#A04000"),
@@ -170,10 +158,6 @@ enum WorkspaceTabColorSettings {
         WorkspaceTabColorEntry(name: "Brown", hex: "#7B3F00"),
         WorkspaceTabColorEntry(name: "Charcoal", hex: "#3E4B5E"),
     ]
-
-    static var defaultPalette: [WorkspaceTabColorEntry] {
-        originalPRPalette
-    }
 
     static func palette(defaults: UserDefaults = .standard) -> [WorkspaceTabColorEntry] {
         let paletteMap = effectivePaletteMap(defaults: defaults)
@@ -196,19 +180,6 @@ enum WorkspaceTabColorSettings {
         return palette(defaults: defaults).filter { !builtInNames.contains($0.name) }
     }
 
-    static func currentColorHex(named name: String, defaults: UserDefaults = .standard) -> String? {
-        effectivePaletteMap(defaults: defaults)[name]
-    }
-
-    static func setColor(named name: String, hex: String, defaults: UserDefaults = .standard) {
-        guard let normalizedName = normalizedColorName(name),
-              let normalizedHex = normalizedHex(hex) else { return }
-
-        var palette = editablePaletteMap(defaults: defaults)
-        palette[normalizedName] = normalizedHex
-        persistPaletteMap(palette, defaults: defaults)
-    }
-
     static func persistPaletteMap(_ rawPalette: [String: String], defaults: UserDefaults = .standard) {
         let normalizedPalette = normalizedPaletteMap(rawPalette)
         if normalizedPalette == defaultPaletteMap {
@@ -216,13 +187,11 @@ enum WorkspaceTabColorSettings {
         } else {
             defaults.set(normalizedPalette, forKey: paletteKey)
         }
-        defaults.removeObject(forKey: legacyDefaultOverridesKey)
-        defaults.removeObject(forKey: legacyCustomColorsKey)
     }
 
     static func addCustomColor(_ hex: String, defaults: UserDefaults = .standard) -> String? {
         guard let normalized = normalizedHex(hex) else { return nil }
-        var palette = editablePaletteMap(defaults: defaults)
+        var palette = effectivePaletteMap(defaults: defaults)
         if palette.contains(where: { $0.value == normalized }) {
             return normalized
         }
@@ -234,8 +203,6 @@ enum WorkspaceTabColorSettings {
 
     static func reset(defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: paletteKey)
-        defaults.removeObject(forKey: legacyDefaultOverridesKey)
-        defaults.removeObject(forKey: legacyCustomColorsKey)
     }
 
     static func resetRememberedFolderColors(defaults: UserDefaults = .standard) {
@@ -330,62 +297,12 @@ enum WorkspaceTabColorSettings {
     }
 
     private static func effectivePaletteMap(defaults: UserDefaults) -> [String: String] {
-        if let stored = storedPaletteMap(defaults: defaults) {
-            return stored
-        }
-        if let legacy = legacyPaletteMap(defaults: defaults) {
-            return legacy
-        }
-        return defaultPaletteMap
-    }
-
-    private static func editablePaletteMap(defaults: UserDefaults) -> [String: String] {
-        if let stored = storedPaletteMap(defaults: defaults) {
-            return stored
-        }
-        if let legacy = legacyPaletteMap(defaults: defaults) {
-            return legacy
-        }
-        return defaultPaletteMap
+        storedPaletteMap(defaults: defaults) ?? defaultPaletteMap
     }
 
     private static func storedPaletteMap(defaults: UserDefaults) -> [String: String]? {
         guard let raw = defaults.dictionary(forKey: paletteKey) as? [String: String] else { return nil }
         return normalizedPaletteMap(raw)
-    }
-
-    private static func legacyPaletteMap(defaults: UserDefaults) -> [String: String]? {
-        let hasLegacyOverrides = defaults.object(forKey: legacyDefaultOverridesKey) != nil
-        let hasLegacyCustomColors = defaults.object(forKey: legacyCustomColorsKey) != nil
-        guard hasLegacyOverrides || hasLegacyCustomColors else { return nil }
-
-        var palette = defaultPaletteMap
-
-        if let rawOverrides = defaults.dictionary(forKey: legacyDefaultOverridesKey) as? [String: String] {
-            let validNames = Set(defaultPalette.map(\.name))
-            for (name, hex) in rawOverrides {
-                guard validNames.contains(name),
-                      let normalized = normalizedHex(hex) else { continue }
-                palette[name] = normalized
-            }
-        }
-
-        if let rawCustomColors = defaults.array(forKey: legacyCustomColorsKey) as? [String] {
-            var index = 1
-            var seenCustomHexes: Set<String> = []
-            for rawHex in rawCustomColors {
-                guard let normalized = normalizedHex(rawHex),
-                      seenCustomHexes.insert(normalized).inserted else { continue }
-                let name = nextCustomColorName(
-                    existingNames: Set(palette.keys),
-                    startingAt: index
-                )
-                palette[name] = normalized
-                index += 1
-            }
-        }
-
-        return palette
     }
 
     private static func normalizedPaletteMap(_ rawPalette: [String: String]) -> [String: String] {
@@ -450,11 +367,8 @@ enum WorkspaceTabColorSettings {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    private static func nextCustomColorName(
-        existingNames: Set<String>,
-        startingAt initialIndex: Int = 1
-    ) -> String {
-        var index = max(1, initialIndex)
+    private static func nextCustomColorName(existingNames: Set<String>) -> String {
+        var index = 1
         while true {
             let candidate = "Custom \(index)"
             if !existingNames.contains(where: { $0.caseInsensitiveCompare(candidate) == .orderedSame }) {
@@ -1782,37 +1696,9 @@ class TabManager: ObservableObject {
         tabs = selectedPinned + remainingPinned + selectedUnpinned + remainingUnpinned
     }
 
-    /// Moves the notifying workspace's top-level group (root ancestor plus its children) to the
-    /// top; a child never moves away from its parent.
-    func moveTabToTopForNotification(_ tabId: UUID) {
-        canonicalizeHierarchyOrderIfNeeded()
-        guard let rootId = hierarchyRootId(of: tabId),
-              let index = tabs.firstIndex(where: { $0.id == rootId }) else { return }
-        let pinnedCount = tabs.filter { $0.isPinned }.count
-        guard index != pinnedCount else { return }
-        let tab = tabs[index]
-        guard !tab.isPinned else { return }
-        var reordered = tabs
-        reordered.remove(at: index)
-        reordered.insert(tab, at: min(pinnedCount, reordered.count))
-        tabs = reordered
-    }
-
     /// The sidebar nests a workspace under its worktree parent, else its agent parent.
     private func hierarchyParentId(of workspace: Workspace) -> UUID? {
         workspace.worktreeParentWorkspaceId ?? workspace.agentParentWorkspaceId
-    }
-
-    private func hierarchyRootId(of tabId: UUID) -> UUID? {
-        let byId = Dictionary(tabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        guard var current = byId[tabId] else { return nil }
-        var visited: Set<UUID> = [current.id]
-        while let parentId = hierarchyParentId(of: current),
-              let parent = byId[parentId],
-              visited.insert(parentId).inserted {
-            current = parent
-        }
-        return current.id
     }
 
     /// ⌘1-9, Move Up/Down and drop planning index `tabs`, so `tabs` must match the sidebar:
@@ -2115,12 +2001,25 @@ class TabManager: ObservableObject {
         tabId: UUID,
         surfaceId: UUID,
         branch: String,
-        isDirty: Bool
+        isDirty reportedDirty: Bool?
     ) {
         guard let tab = workspace(withId: tabId) else { return }
         let current = tab.panelGitBranches[surfaceId]
+        let isDirty = reportedDirty ?? current?.isDirty ?? false
         let normalizedBranch = GitMetadataProber.normalizedBranchName(branch) ?? branch
-        guard current?.branch != normalizedBranch || current?.isDirty != isDirty else { return }
+        guard current?.branch != normalizedBranch || current?.isDirty != isDirty else {
+            // A shell report without `dirty` is the prompt-time cue to re-check it: the shell no
+            // longer runs `git status`. A probe already in flight for this panel covers it.
+            let probeKey = WorkspaceGitProbeKey(workspaceId: tabId, panelId: surfaceId)
+            if reportedDirty == nil, workspaceGitProbeGenerationByKey[probeKey] == nil {
+                scheduleWorkspaceGitMetadataRefreshIfPossible(
+                    workspaceId: tabId,
+                    panelId: surfaceId,
+                    reason: "shellReport"
+                )
+            }
+            return
+        }
         tab.updatePanelGitBranch(panelId: surfaceId, branch: normalizedBranch, isDirty: isDirty)
         if let directory = gitProbeDirectory(for: tab, panelId: surfaceId) {
             let probeKey = WorkspaceGitProbeKey(workspaceId: tabId, panelId: surfaceId)

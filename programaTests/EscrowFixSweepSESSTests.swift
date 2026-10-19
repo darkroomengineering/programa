@@ -79,35 +79,6 @@ final class EscrowFixSweepSESSTests: XCTestCase {
         XCTAssertFalse(SessionEscrowHolder.constantTimeTokensEqual([], token))
     }
 
-    // MARK: SESS-07 legacy scan tolerates a corrupt meta.json
-
-    func testLegacySessionsSkipsUnreadableMetaAndReturnsValidOne() throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("sess07-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-
-        let socketPath = "/tmp/programa-sess07-\(UUID().uuidString.prefix(8)).sock"
-        let validId = UUID().uuidString
-        let garbageId = UUID().uuidString
-        let validDir = root.appendingPathComponent(validId, isDirectory: true)
-        let garbageDir = root.appendingPathComponent(garbageId, isDirectory: true)
-        try FileManager.default.createDirectory(at: validDir, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: garbageDir, withIntermediateDirectories: true)
-
-        var meta = SessionWALMeta(sessionId: validId, lastHeartbeatAt: Date())
-        meta.escrowed = true
-        meta.escrowSocketPath = socketPath
-        meta.escrowToken = String(repeating: "cd", count: 32)
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        try encoder.encode(meta).write(to: SessionWALPaths(sessionDirectory: validDir).metaURL)
-        try Data("{ not json".utf8).write(to: SessionWALPaths(sessionDirectory: garbageDir).metaURL)
-
-        let found = try SessionEscrowClient.legacySessions(root: root, legacySocketPath: socketPath)
-        XCTAssertEqual(found.map(\.sessionId), [validId])
-    }
-
     // MARK: SESS-09 history rotation is scoped to the rotating bundle
 
     func testRotationPrunesOnlyOwnBundleArchives() throws {

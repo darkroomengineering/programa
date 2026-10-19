@@ -549,36 +549,6 @@ extension Workspace {
         return resolved
     }
 
-    func sidebarDirectoriesInDisplayOrder(orderedPanelIds: [UUID]) -> [String] {
-        let resolvedDirectories = sidebarResolvedPanelDirectories(orderedPanelIds: orderedPanelIds)
-        let homeDirectoryForCanonicalization = sidebarHomeDirectoryForCanonicalization(
-            resolvedPanelDirectories: resolvedDirectories
-        )
-        var ordered: [String] = []
-        var seen: Set<String> = []
-
-        for panelId in orderedPanelIds {
-            guard let directory = resolvedDirectories[panelId],
-                  let key = SidebarBranchOrdering.canonicalDirectoryKey(
-                      directory,
-                      homeDirectoryForTildeExpansion: homeDirectoryForCanonicalization
-                  ) else { continue }
-            if seen.insert(key).inserted {
-                ordered.append(directory)
-            }
-        }
-
-        if ordered.isEmpty, let fallbackDirectory = normalizedSidebarDirectory(currentDirectory) {
-            return [fallbackDirectory]
-        }
-
-        return ordered
-    }
-
-    func sidebarDirectoriesInDisplayOrder() -> [String] {
-        sidebarDirectoriesInDisplayOrder(orderedPanelIds: sidebarOrderedPanelIds())
-    }
-
     func sidebarGitBranchesInDisplayOrder(orderedPanelIds: [UUID]) -> [SidebarGitBranchState] {
         SidebarBranchOrdering
             .orderedUniqueBranches(

@@ -80,9 +80,6 @@ jobs:
           GHOSTTYKIT_DOWNLOAD_RETRY_DELAY: 20
         run: ./scripts/download-prebuilt-ghosttykit.sh
 
-      - name: Install zig
-        run: ./scripts/install-zig.sh
-
       - name: Create virtual display
         if: ${{ inputs.test_filter != 'DisplayResolutionRegressionUITests' }}
         run: |

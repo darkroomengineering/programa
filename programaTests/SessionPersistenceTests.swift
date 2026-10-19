@@ -2051,6 +2051,58 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: sessions.appendingPathComponent(abandonedID.uuidString).path))
     }
 
+    func testOrphanSweepIgnoresStaleForeignSnapshotsButKeepsFreshForeignAndOwn() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let sessions = root.appendingPathComponent("sessions")
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let now = Date()
+        let day: TimeInterval = 24 * 60 * 60
+        let ownID = UUID(), freshForeignID = UUID(), staleForeignID = UUID(), unownedID = UUID()
+        let staleReleaseID = UUID()
+        for id in [ownID, freshForeignID, staleForeignID, unownedID, staleReleaseID] {
+            let directory = sessions.appendingPathComponent(id.uuidString)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try FileManager.default.setAttributes(
+                [.modificationDate: now.addingTimeInterval(-SessionWALPolicy.orphanDirectoryMaxAge - 1)],
+                ofItemAtPath: directory.path
+            )
+        }
+        func writeSnapshot(_ id: UUID, to url: URL, age: TimeInterval) throws {
+            XCTAssertTrue(SessionPersistenceStore.save(makeOwnershipSnapshot(id), fileURL: url))
+            try FileManager.default.setAttributes(
+                [.modificationDate: now.addingTimeInterval(-age)], ofItemAtPath: url.path
+            )
+        }
+        // Snapshots sit next to `sessions/`, where the sweep scans for them.
+        let ownFile = root.appendingPathComponent("session-dev.own.json")
+        // The running bundle's own snapshot pins its ids however old it is.
+        try writeSnapshot(ownID, to: ownFile, age: 60 * day)
+        try writeSnapshot(freshForeignID, to: root.appendingPathComponent("session-app.debug.fresh-tag.json"), age: 13 * day)
+        try writeSnapshot(staleForeignID, to: root.appendingPathComponent("session-app.debug.old-tag.json"), age: 15 * day)
+        // A release bundle's snapshot pins however long that app has been closed.
+        try writeSnapshot(staleReleaseID, to: root.appendingPathComponent("session-com.darkroom.programa.json"), age: 60 * day)
+        // An abandoned snapshot that no longer decodes must not defer the sweep, and a
+        // scrollback policy file is not a snapshot.
+        let corruptStale = root.appendingPathComponent("session-app.bench.dead-tag.json")
+        try Data("corrupt".utf8).write(to: corruptStale)
+        try FileManager.default.setAttributes(
+            [.modificationDate: now.addingTimeInterval(-40 * day)], ofItemAtPath: corruptStale.path
+        )
+        try Data(#"{"enabled":true}"#.utf8).write(to: root.appendingPathComponent("session-staging.scrollback-policy.json"))
+
+        SessionWALStore.sweepOrphanedSessionDirectories(
+            at: sessions, registeredSessionIDs: [], ownSnapshotFileURL: ownFile, now: now
+        )
+
+        for id in [ownID, freshForeignID, staleReleaseID] {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: sessions.appendingPathComponent(id.uuidString).path))
+        }
+        for id in [staleForeignID, unownedID] {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: sessions.appendingPathComponent(id.uuidString).path))
+        }
+    }
+
     private func makeOwnershipSnapshot(_ id: UUID) -> AppSessionSnapshot {
         var snapshot = makeSnapshot(version: SessionSnapshotSchema.currentVersion)
         snapshot.windows[0].tabManager.workspaces[0].panels = [SessionPanelSnapshot(
