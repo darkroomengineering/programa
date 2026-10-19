@@ -87,9 +87,8 @@ def main() -> int:
             source_surface_id = str(surface_rows[0].get("id") or "")
             _must(bool(source_surface_id), f"Initial surface has no id: {surface_rows}")
 
-            # Pasted multi-line text only stays inert in a shell that enables bracketed paste.
-            # The CI runner's login shell is bash 3.2, which does not; zsh does.
-            c.send_surface(source_surface_id, "exec /bin/zsh -f\n")
+            # The initial shell is the runner's login shell (bash 3.2 on CI), which has no bracketed
+            # paste: the delivery below must reach it as one inert line.
             _wait_for_surface_command_roundtrip(c, workspace_id, source_surface_id)
 
             # 1. review.open on the dirty repo returns the panel + a non-empty diffable file list.
@@ -184,6 +183,12 @@ def main() -> int:
             _must(marker in terminal_text, f"Expected marker {marker!r} to land in the reviewed terminal: {terminal_text!r}")
             _must("untracked.txt" in terminal_text, f"Expected serialized file path to land in the terminal: {terminal_text!r}")
 
+            # The text sits on the prompt line as one line (read_text joins soft-wrapped rows).
+            _must(
+                any("Code review comments (3):" in row and marker in row for row in terminal_text.splitlines()),
+                f"Expected the comments flattened onto one prompt line in the plain shell: {terminal_text!r}",
+            )
+
             # Give a shell that wrongly received Return time to run the substitution.
             time.sleep(1.5)
             _must(
@@ -201,6 +206,36 @@ def main() -> int:
             # Sending again with nothing pending is a no-op, not an error.
             resent = c._call("review.send_comments", {"surface_id": review_surface_id}, timeout_s=10.0) or {}
             _must(int(resent.get("sent_count") or 0) == 0, f"Expected sent_count 0 for an empty pending queue: {resent}")
+
+            # 4. A shell that enables bracketed paste (zsh) keeps the multi-line text: the comment
+            # line starts its own row instead of being flattened onto the header's row.
+            c.send_key_surface(source_surface_id, "ctrl-c")  # drop the unsent line left at the bash prompt
+            c.send_surface(source_surface_id, "exec /bin/zsh -f\n")
+            _wait_for_surface_command_roundtrip(c, workspace_id, source_surface_id)
+            zsh_marker = f"ZSHP{int(time.time()) % 100000000}"
+            zsh_header = "ZSHHEAD"
+            c._call(
+                "review.comment.add",
+                {
+                    "surface_id": review_surface_id,
+                    "file_path": "src_foo.txt",
+                    "start_line": 4,
+                    "text": zsh_marker,
+                },
+                timeout_s=10.0,
+            )
+            zsh_sent = c._call(
+                "review.send_comments",
+                {"surface_id": review_surface_id, "preamble": zsh_header},
+                timeout_s=10.0,
+            ) or {}
+            _must(int(zsh_sent.get("sent_count") or 0) == 1, f"Expected 1 comment sent to zsh: {zsh_sent}")
+            zsh_text = _read_terminal_text_until(c, source_surface_id, zsh_marker)
+            marker_rows = [row for row in zsh_text.splitlines() if zsh_marker in row]
+            _must(
+                bool(marker_rows) and all(f"{zsh_header} (1)" not in row for row in marker_rows),
+                f"Expected zsh (bracketed paste) to keep the comment on its own row: {zsh_text!r}",
+            )
 
     finally:
         if workspace_id:

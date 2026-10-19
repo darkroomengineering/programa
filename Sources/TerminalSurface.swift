@@ -180,12 +180,16 @@ final class TerminalSurface: Identifiable, ObservableObject {
         case text(Data)
         /// Text delivered through the key-text path (`sendInput`), not as a paste.
         case keyText(String)
+        /// Text from `sendPaste`: the bracketed-paste decision is made at delivery time.
+        case paste(String)
         case key(PendingKeyEvent)
 
         var estimatedBytes: Int {
             switch self {
             case .text(let data):
                 return data.count
+            case .paste(let text):
+                return max(text.utf8.count, 1)
             case .keyText(let text):
                 return max(text.utf8.count, 1)
             case .key(let event):
@@ -2474,6 +2478,45 @@ final class TerminalSurface: Identifiable, ObservableObject {
         writeTextData(data, to: surface)
     }
 
+    /// Sends `text` as one paste. Multi-line text is sent as is only while the foreground program
+    /// has bracketed paste (DEC mode 2004) on, so its newlines stay inside one prompt. Otherwise
+    /// the terminal turns every pasted newline into Return and a shell would run each line, so the
+    /// newlines become spaces and the text arrives as one line at the prompt.
+    func sendPaste(_ text: String) {
+        guard !text.isEmpty else { return }
+        guard let surface = surface else {
+            enqueuePendingSocketInput(.paste(text))
+            requestBackgroundSurfaceStartIfNeeded()
+            return
+        }
+        deliverPaste(text, to: surface)
+    }
+
+    private func deliverPaste(_ text: String, to surface: ghostty_surface_t) {
+        let resolved = isBracketedPasteEnabled(surface)
+            ? text
+            : text.replacingOccurrences(of: "[\\r\\n]+", with: " ", options: .regularExpression)
+        guard let data = resolved.data(using: .utf8), !data.isEmpty else { return }
+        writeTextData(data, to: surface)
+    }
+
+    /// Reads DEC mode 2004 from the exported terminal state. Ghostty has no direct mode query, so
+    /// this takes the render-grid export with an empty scrollback. Only for rare, user-initiated
+    /// sends, never per-keystroke paths. Returns false when the export is unreadable, which
+    /// selects the safe single-line delivery.
+    private func isBracketedPasteEnabled(_ surface: ghostty_surface_t) -> Bool {
+        let surfaceId = id.uuidString
+        let exported = surfaceId.withCString { ghostty_surface_render_grid_json(surface, $0, UInt(strlen($0)), 0, 0) }
+        defer { ghostty_string_free(exported) }
+        guard let ptr = exported.ptr, exported.len > 0 else { return false }
+        let json = Data(bytes: ptr, count: Int(exported.len))
+        guard let root = try? JSONSerialization.jsonObject(with: json) as? [String: Any],
+              let modes = root["modes"] as? [[String: Any]] else { return false }
+        return modes.contains {
+            ($0["code"] as? Int) == 2004 && ($0["ansi"] as? Bool) == false && ($0["on"] as? Bool) == true
+        }
+    }
+
     @discardableResult
     func sendNamedKey(_ keyName: String) -> Bool {
         guard let event = pendingKeyEvent(for: keyName) else { return false }
@@ -2549,6 +2592,8 @@ final class TerminalSurface: Identifiable, ObservableObject {
         switch input {
         case .text(let chunk):
             writeTextData(chunk, to: surface)
+        case .paste(let text):
+            deliverPaste(text, to: surface)
         case .keyText(let text):
             var buffer = text
             flushText(&buffer, surface: surface)
