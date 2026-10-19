@@ -60,18 +60,23 @@ def _close_palette_if_open(client, window_id):
 
 
 def _open_palette(client, window_id):
+    """Opens the palette and returns the prefilled query length (the toggle opens in command
+    mode with the ">" prefix, caret after it)."""
     _close_palette_if_open(client, window_id)
     client._call("debug.command_palette.toggle", {"window_id": window_id})
     _wait_until(
         lambda: _palette_visible(client, window_id),
         message="command palette failed to open",
     )
+    base_length = len(">")
     _wait_for_input_state(
         client,
         window_id,
-        expected_text_length=0,
-        message="search input did not focus with empty query",
+        expected_text_length=base_length,
+        message="search input did not focus with the command prefix only",
+        timeout_s=4.0,
     )
+    return base_length
 
 
 def main():
@@ -94,13 +99,13 @@ def main():
         probe = "typingstability"
         cycles = 4
         for cycle in range(cycles):
-            _open_palette(client, window_id)
+            base_length = _open_palette(client, window_id)
             for idx, ch in enumerate(probe, start=1):
                 client.simulate_type(ch)
                 _wait_for_input_state(
                     client,
                     window_id,
-                    expected_text_length=idx,
+                    expected_text_length=base_length + idx,
                     timeout_s=0.7,
                     message=(
                         f"search typing did not accumulate at cycle {cycle + 1}/{cycles}, "

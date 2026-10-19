@@ -22,6 +22,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must as _must
+from pane_resize_test_support import (
+    wait_for_surface_command_roundtrip as _wait_for_surface_command_roundtrip,
+)
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
@@ -84,6 +87,11 @@ def main() -> int:
             source_surface_id = str(surface_rows[0].get("id") or "")
             _must(bool(source_surface_id), f"Initial surface has no id: {surface_rows}")
 
+            # Pasted multi-line text only stays inert in a shell that enables bracketed paste.
+            # The CI runner's login shell is bash 3.2, which does not; zsh does.
+            c.send_surface(source_surface_id, "exec /bin/zsh -f\n")
+            _wait_for_surface_command_roundtrip(c, workspace_id, source_surface_id)
+
             # 1. review.open on the dirty repo returns the panel + a non-empty diffable file list.
             opened = c._call(
                 "review.open",
@@ -101,8 +109,12 @@ def main() -> int:
                 str(opened.get("source_surface_id") or "") == source_surface_id,
                 f"Expected review.open to report the reviewed surface: {opened}",
             )
+            # Untracked files are listed as "New file" rows without content, so they count toward
+            # file_count but not diffable_file_count (docs/plans/diff-review-panel.md §2).
             diffable_count = int(opened.get("diffable_file_count") or 0)
-            _must(diffable_count >= 2, f"Expected at least 2 diffable files (modified + untracked): {opened}")
+            file_count = int(opened.get("file_count") or 0)
+            _must(diffable_count >= 1, f"Expected the modified tracked file to be diffable: {opened}")
+            _must(file_count >= 2, f"Expected the modified and untracked files to be listed: {opened}")
             _must(bool(opened.get("pane_id")), f"Expected review.open to return a pane_id: {opened}")
 
             # 2. review.comment.add / review.comment.list round-trip.

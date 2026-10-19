@@ -180,6 +180,8 @@ final class SidebarHelpMenuUITests: XCTestCase {
 
 final class CommandPaletteAllSurfacesUITests: XCTestCase {
     private var socketPath = ""
+    private var diagnosticsPath = ""
+    private var launchTag = ""
     private let hiddenSurfaceToken = "programa-command-palette-hidden-surface"
     private let visibleSurfaceToken = "programa-command-palette-visible-surface"
     private let noMatchWorkspaceQuery = "programa-command-palette-no-match"
@@ -187,12 +189,25 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
-        socketPath = "/tmp/programa-ui-test-command-palette-\(UUID().uuidString).sock"
+        // The UI test runner is sandboxed: connect() to a socket under /tmp fails with EPERM,
+        // but its own temporary directory is reachable (the app is not sandboxed and can bind there).
+        socketPath = (NSTemporaryDirectory() as NSString)
+            .appendingPathComponent("pc-\(UUID().uuidString.prefix(8).lowercased()).sock")
+        diagnosticsPath = "/tmp/programa-ui-test-command-palette-\(UUID().uuidString).json"
+        launchTag = "ui-tests-command-palette-\(UUID().uuidString.prefix(8).lowercased())"
         try? FileManager.default.removeItem(atPath: socketPath)
+        try? FileManager.default.removeItem(atPath: diagnosticsPath)
+        // A test that turns on all-surfaces search persists it in the app's defaults; start clean.
+        let reset = Process()
+        reset.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
+        reset.arguments = ["delete", "com.darkroom.programa.debug", "commandPalette.switcherSearchAllSurfaces"]
+        try? reset.run()
+        reset.waitUntilExit()
     }
 
     override func tearDown() {
         try? FileManager.default.removeItem(atPath: socketPath)
+        try? FileManager.default.removeItem(atPath: diagnosticsPath)
         super.tearDown()
     }
 
@@ -206,6 +221,11 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
         app.launchEnvironment["PROGRAMA_SOCKET_PATH"] = socketPath
         app.launchEnvironment["PROGRAMA_SOCKET_ENABLE"] = "1"
         app.launchEnvironment["PROGRAMA_SOCKET_MODE"] = "allowAll"
+        // Debug launches need a tag, and a tagged launch honors PROGRAMA_SOCKET_PATH only with the override.
+        app.launchEnvironment["PROGRAMA_TAG"] = launchTag
+        app.launchEnvironment["PROGRAMA_ALLOW_SOCKET_OVERRIDE"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_SOCKET_SANITY"] = "1"
+        app.launchEnvironment["PROGRAMA_UI_TEST_DIAGNOSTICS_PATH"] = diagnosticsPath
         if showSettingsWindow {
             app.launchEnvironment["PROGRAMA_UI_TEST_SHOW_SETTINGS"] = "1"
         }
@@ -222,7 +242,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
             },
             "Expected the main window to be visible"
         )
-        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath)")
+        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath). client=\(ControlSocketClient.lastFailure) diagnostics=\(loadDiagnostics(at: diagnosticsPath) ?? [:])")
 
         let mainWindowId = try XCTUnwrap(currentWindowId(), "Expected window.current to return a window id")
 
@@ -274,10 +294,15 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
             firstWorkspaceRow["title"] as? String,
             "Expected the restored workspace row to include a title. snapshot=\(switcherSnapshot)"
         )
-        let workspaceLabel = app.staticTexts[workspaceTitle].firstMatch
+        // The sidebar row can share the workspace's title (and sits behind the palette), so look
+        // the palette row up by its own identifier and compare the command it represents.
+        let workspaceCommandId = try XCTUnwrap(firstWorkspaceRow["command_id"] as? String)
+        let workspaceRow = app.descendants(matching: .any)
+            .matching(identifier: "CommandPaletteResultRow.0")
+            .firstMatch
         XCTAssertTrue(
             sidebarHelpPollUntil(timeout: 2.0) {
-                workspaceLabel.exists && workspaceLabel.isHittable
+                workspaceRow.exists && workspaceRow.isHittable && (workspaceRow.value as? String) == workspaceCommandId
             },
             "Expected the restored workspace row to be visibly rendered. title=\(workspaceTitle) snapshot=\(switcherSnapshot)"
         )
@@ -335,7 +360,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
             },
             "Expected the main window and Settings window to be visible"
         )
-        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath)")
+        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath). client=\(ControlSocketClient.lastFailure) diagnostics=\(loadDiagnostics(at: diagnosticsPath) ?? [:])")
 
         let mainWindowId = try XCTUnwrap(currentWindowId(), "Expected window.current to return a window id")
         let secondaryWorkspaceId = try XCTUnwrap(createWorkspaceId(), "Expected workspace.create to return a workspace ID")
@@ -400,7 +425,8 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
                     let trailingLabel = row["trailing_label"] as? String ?? ""
                     return commandId.hasPrefix("switcher.surface.") && trailingLabel == "Terminal"
                 }
-            }
+            },
+            "Expected a hidden terminal row. snapshot=\(String(describing: commandPaletteSnapshot(windowId: mainWindowId)))"
         )
 
         XCTAssertTrue(
@@ -492,7 +518,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
             },
             "Expected the main window and Settings window to be visible"
         )
-        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath)")
+        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath). client=\(ControlSocketClient.lastFailure) diagnostics=\(loadDiagnostics(at: diagnosticsPath) ?? [:])")
 
         let mainWindowId = try XCTUnwrap(currentWindowId(), "Expected window.current to return a window id")
 
@@ -580,7 +606,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
             },
             "Expected the main window to be visible"
         )
-        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath)")
+        XCTAssertTrue(waitForSocketPong(timeout: 12.0), "Expected control socket at \(socketPath). client=\(ControlSocketClient.lastFailure) diagnostics=\(loadDiagnostics(at: diagnosticsPath) ?? [:])")
 
         let mainWindowId = try XCTUnwrap(currentWindowId(), "Expected window.current to return a window id")
         try seedWorkspaceSwitcherCorpus(workspaceCount: 96)
@@ -619,7 +645,8 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
                 return (snapshot["query"] as? String) == String(repeating: "z", count: 8)
                     && self.commandPaletteResultRows(from: snapshot).isEmpty
             },
-            "Expected the switcher to reach a visible no-results state before refining the query"
+            "Expected the switcher to reach a visible no-results state before refining the query. " +
+                "labelExists=\(emptyLabel.exists) snapshot=\(String(describing: commandPaletteSnapshot(windowId: mainWindowId)))"
         )
 
         try debugTypeText("z")
@@ -980,6 +1007,7 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
     }
 
     private final class ControlSocketClient {
+        nonisolated(unsafe) static var lastFailure = ""
         private let path: String
         private let responseTimeout: TimeInterval
 
@@ -1044,7 +1072,10 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
                     connect(fd, sa, addrLen)
                 }
             }
-            guard connected == 0 else { return nil }
+            guard connected == 0 else {
+                Self.lastFailure = "connect errno=\(errno) \(String(cString: strerror(errno)))"
+                return nil
+            }
 
             let payload = line + "\n"
             let wrote: Bool = payload.withCString { cString in

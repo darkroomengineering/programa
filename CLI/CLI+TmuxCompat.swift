@@ -709,22 +709,27 @@ extension ProgramaCLI {
         context["pane_width"] = String(columns)
         context["pane_height"] = String(rows)
 
-        let cellW = pane["cell_width_px"] as? Int ?? 0
-        let cellH = pane["cell_height_px"] as? Int ?? 0
+        // Frames are in layout points, so divide by the point cell size (`cell_width_px` is
+        // device pixels and would halve every column on a Retina display).
+        let cellW = (pane["cell_width"] as? NSNumber)?.doubleValue ?? 0
+        let cellH = (pane["cell_height"] as? NSNumber)?.doubleValue ?? 0
         guard cellW > 0, cellH > 0 else { return }
 
+        // pixel_frame is in window coordinates; tmux positions are relative to the window area.
+        let originX = (containerFrame?["x"] as? NSNumber)?.doubleValue ?? 0
+        let originY = (containerFrame?["y"] as? NSNumber)?.doubleValue ?? 0
         if let frame = pane["pixel_frame"] as? [String: Any] {
-            let px = frame["x"] as? Double ?? 0
-            let py = frame["y"] as? Double ?? 0
-            context["pane_left"] = String(Int(px) / cellW)
-            context["pane_top"] = String(Int(py) / cellH)
+            let px = (frame["x"] as? NSNumber)?.doubleValue ?? 0
+            let py = (frame["y"] as? NSNumber)?.doubleValue ?? 0
+            context["pane_left"] = String(max(Int(((px - originX) / cellW).rounded()), 0))
+            context["pane_top"] = String(max(Int(((py - originY) / cellH).rounded()), 0))
         }
 
         if let cf = containerFrame {
-            let cw = cf["width"] as? Double ?? 0
-            let ch = cf["height"] as? Double ?? 0
-            context["window_width"] = String(max(Int(cw) / cellW, 1))
-            context["window_height"] = String(max(Int(ch) / cellH, 1))
+            let cw = (cf["width"] as? NSNumber)?.doubleValue ?? 0
+            let ch = (cf["height"] as? NSNumber)?.doubleValue ?? 0
+            context["window_width"] = String(max(Int(cw / cellW), 1))
+            context["window_height"] = String(max(Int(ch / cellH), 1))
         }
     }
 

@@ -4436,7 +4436,7 @@ struct ContentView: View {
             mode = "workspace_description_input"
         }
 
-        let rows = Array(commandPaletteController.commandPaletteVisibleResults.prefix(20)).map { result in
+        let rows = Array(commandPaletteController.commandPaletteVisibleResults.prefix(100)).map { result in
                 CommandPaletteDebugResultRow(
                     commandId: result.command.id,
                     title: result.command.title,

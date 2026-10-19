@@ -52,6 +52,9 @@ printf '\\n✻ Thinking… (esc to interrupt)\\n'
 sleep 8
 printf '\\nDo you want to proceed?\\n❯ 1. Yes\\n'
 sleep 8
+# Clear the screen like a real approval box closing: blocked outranks idle while its text is
+# still within the last 12 lines.
+printf '\\033[2J\\033[H'
 printf '\\n❯ '
 sleep 30
 """

@@ -78,6 +78,8 @@ extension TerminalController {
                 "window_ref": v2Ref(kind: .window, uuid: windowId)
             ]
             payload["container_frame"] = [
+                "x": snapshot.containerFrame.x,
+                "y": snapshot.containerFrame.y,
                 "width": snapshot.containerFrame.width,
                 "height": snapshot.containerFrame.height
             ]
