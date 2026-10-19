@@ -216,16 +216,7 @@ struct VerticalTabsSidebar: View {
             // lights float over its leading side, controls sit trailing, and the
             // whole strip drags/double-clicks like a titlebar.
             HStack(spacing: 0) {
-                // Only the empty strip is a titlebar drag/double-click surface. The
-                // controls are SwiftUI-drawn, so a drag handle behind them would
-                // claim their clicks (the hit-test walk finds no sibling views).
-                Color.clear
-                    .contentShape(Rectangle())
-                    .background(
-                        // onDoubleClick replaces the standard zoom/minimize titlebar
-                        // action here — double-click on the header strip opens a tab.
-                        WindowDragHandleView(onDoubleClick: { tabManager.addTab() })
-                    )
+                Spacer(minLength: 0)
                 // Right-aligned: the controls view carries its own ~18pt trailing
                 // inset (shortcut-hint clearance), which serves as the edge padding.
                 HiddenTitlebarSidebarControlsView(
@@ -237,6 +228,12 @@ struct VerticalTabsSidebar: View {
             // Flush sidebar (no panel inset): keep the header aligned with
             // AppKit's native titlebar controls.
             .padding(.top, usesBackdropSidebar ? WindowGlassEffect.sidebarPanelInset : 0)
+            .contentShape(Rectangle())
+            .background(
+                // onDoubleClick replaces the standard zoom/minimize titlebar
+                // action here — double-click on the header strip opens a tab.
+                WindowDragHandleView(onDoubleClick: { tabManager.addTab() })
+            )
 
             GeometryReader { proxy in
                 ScrollViewReader { scrollProxy in
