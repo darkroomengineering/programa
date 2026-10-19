@@ -421,8 +421,14 @@ class GhosttyApp {
         completion: @escaping (String) -> Void
     ) {
         let identity = surface.map { UInt(bitPattern: $0) }
-        if let identity {
-            clipboardConfirmations[identity]?.finish(allow: false)
+        if let identity, let pending = clipboardConfirmations[identity] {
+            // A program can send OSC 52 in a loop; replacing the sheet on every request would
+            // keep it out from under the user's click, so later requests are denied instead.
+            if kind == GHOSTTY_CLIPBOARD_REQUEST_OSC_52_WRITE || kind == GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ {
+                completion("")
+                return
+            }
+            pending.finish(allow: false)
         }
         guard let window, let kind,
               kind == GHOSTTY_CLIPBOARD_REQUEST_PASTE || kind == GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ

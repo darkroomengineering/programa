@@ -249,6 +249,35 @@ final class ConfigFixSweepRegressionTests: XCTestCase {
         XCTAssertEqual(keys, ["filter.lfs.clean", "filter.lfs.smudge", "filter.lfs.process", "filter.lfs.required"])
     }
 
+    func testMixedCaseLFSExtensionStillNeutralizesFilterLFS() {
+        let output = ["local", "lfs.Extension.x.clean\ntouch x"].joined(separator: "\0") + "\0"
+
+        let keys = CanonicalSubprocessRunner.untrustedFilterDriverConfig(fromShowScopeOutput: output)
+            .map(\.key)
+
+        XCTAssertEqual(keys, ["filter.lfs.clean", "filter.lfs.smudge", "filter.lfs.process", "filter.lfs.required"])
+    }
+
+    /// A non-repository directory's cached "no filters" answer must not outlive a repository
+    /// appearing in it, or the next probe runs git there without the filter overrides.
+    func testRepositoryConfigFingerprintChangesWhenARepositoryAppears() throws {
+        let parent = FileManager.default.temporaryDirectory
+            .appendingPathComponent("fingerprint-\(UUID().uuidString)")
+        let directory = parent.appendingPathComponent("work")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: parent) }
+
+        let before = CanonicalSubprocessRunner.repositoryConfigFingerprint(directory: directory.path)
+        XCTAssertEqual(before, CanonicalSubprocessRunner.repositoryConfigFingerprint(directory: directory.path))
+
+        try configFixtureGit(["init", "-q"], in: directory)
+        let afterInit = CanonicalSubprocessRunner.repositoryConfigFingerprint(directory: directory.path)
+        XCTAssertNotEqual(before, afterInit)
+
+        try configFixtureGit(["config", "filter.x.clean", "cat"], in: directory)
+        XCTAssertNotEqual(afterInit, CanonicalSubprocessRunner.repositoryConfigFingerprint(directory: directory.path))
+    }
+
     func testGlobalLFSExtensionLeavesTheGlobalLFSFilterAlone() {
         let output = [
             "global", "filter.lfs.clean\ngit-lfs clean -- %f",

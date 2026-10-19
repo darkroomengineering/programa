@@ -530,7 +530,8 @@ extension CanonicalSubprocessRunner {
                 key = record
                 value = nil
             }
-            if key.hasPrefix(lfsExtensionPrefix), isRepositoryLocal(scope) {
+            // Older git-lfs releases lowercase the whole key, so the subsection's case is not trusted.
+            if key.lowercased().hasPrefix(lfsExtensionPrefix), isRepositoryLocal(scope) {
                 hasRepositoryLocalLFSExtension = true
             }
             guard key.hasPrefix(prefix),
@@ -569,7 +570,10 @@ extension CanonicalSubprocessRunner {
         directory: String,
         executableURL: URL?
     ) -> [(key: String, value: String)]? {
-        if let cached = filterOverridesCache.value(for: directory, now: Date()) { return cached }
+        let fingerprint = repositoryConfigFingerprint(directory: directory)
+        if let cached = filterOverridesCache.value(for: directory, fingerprint: fingerprint, now: Date()) {
+            return cached
+        }
         let result = run(
             executable: "git",
             arguments: automaticGitArguments(["config", "-z", "--show-scope", "--get-regexp", "^(filter|lfs)\\."]),
@@ -581,15 +585,39 @@ extension CanonicalSubprocessRunner {
             environmentOverrides: automaticGitEnvironment
         )
         // Exit 1: no filter keys. 128: not a repository; the command that follows fails on its own.
-        // Neither is cached: a repository can appear in the directory (an extracted archive)
-        // right after a probe saw none, and it must not inherit the empty answer.
         guard result.outcome == .exited,
               let status = result.exitStatus,
               status == 0 || status == 1 || status == 128 else { return nil }
-        guard status == 0 else { return [] }
-        let overrides = untrustedFilterDriverConfig(fromShowScopeOutput: result.stdout ?? "")
-        filterOverridesCache.store(overrides, for: directory, now: Date())
+        let overrides = status == 0 ? untrustedFilterDriverConfig(fromShowScopeOutput: result.stdout ?? "") : []
+        filterOverridesCache.store(overrides, for: directory, fingerprint: fingerprint, now: Date())
         return overrides
+    }
+
+    /// Identity of every file git's repository discovery could read config from, walking up from
+    /// `directory` to the nearest `.git`: each level's `.git` and `config` (a bare repository).
+    /// A cached answer is reused only while this is unchanged, so a repository that appears in
+    /// or above the directory (an extracted archive) right after a probe saw none is read fresh.
+    static func repositoryConfigFingerprint(directory: String) -> String {
+        func identity(_ path: String) -> String? {
+            var info = stat()
+            guard stat(path, &info) == 0 else { return nil }
+            return "\(path):\(info.st_ino):\(info.st_ctimespec.tv_sec).\(info.st_ctimespec.tv_nsec)"
+        }
+        var parts: [String] = []
+        var path = URL(fileURLWithPath: directory).standardizedFileURL.path
+        while true {
+            if let config = identity((path as NSString).appendingPathComponent("config")) { parts.append(config) }
+            let dotGit = (path as NSString).appendingPathComponent(".git")
+            if let dotGitIdentity = identity(dotGit) {
+                parts.append(dotGitIdentity)
+                if let config = identity(dotGit + "/config") { parts.append(config) }
+                break
+            }
+            let parent = (path as NSString).deletingLastPathComponent
+            if parent.isEmpty || parent == path { break }
+            path = parent
+        }
+        return parts.joined(separator: "\n")
     }
 
     /// One `git config` read serves the several git calls a single probe cycle makes in the
@@ -600,22 +628,24 @@ extension CanonicalSubprocessRunner {
         private static let lifetime: TimeInterval = 10
         private static let limit = 64
         private let lock = NSLock()
-        private var entries: [String: (storedAt: Date, overrides: [(key: String, value: String)])] = [:]
+        private var entries: [String: (storedAt: Date, fingerprint: String, overrides: [(key: String, value: String)])] = [:]
 
-        func value(for directory: String, now: Date) -> [(key: String, value: String)]? {
+        func value(for directory: String, fingerprint: String, now: Date) -> [(key: String, value: String)]? {
             lock.lock()
             defer { lock.unlock() }
-            guard let entry = entries[directory], now.timeIntervalSince(entry.storedAt) < Self.lifetime else {
+            guard let entry = entries[directory],
+                  entry.fingerprint == fingerprint,
+                  now.timeIntervalSince(entry.storedAt) < Self.lifetime else {
                 return nil
             }
             return entry.overrides
         }
 
-        func store(_ overrides: [(key: String, value: String)], for directory: String, now: Date) {
+        func store(_ overrides: [(key: String, value: String)], for directory: String, fingerprint: String, now: Date) {
             lock.lock()
             defer { lock.unlock() }
             if entries.count >= Self.limit { entries.removeAll() }
-            entries[directory] = (now, overrides)
+            entries[directory] = (now, fingerprint, overrides)
         }
     }
 
