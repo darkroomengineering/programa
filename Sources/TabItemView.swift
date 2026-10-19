@@ -869,12 +869,10 @@ struct TabItemView: View, Equatable {
         // those closures alive after the row was gone: closed Workspace
         // objects stayed resident (7 live for 1 open workspace in a heap dump).
         .background(SidebarRowHoverProbe(isHovering: $isHovering))
-        .modifier(SidebarRowAccessibility(
-            label: accessibilityTitle,
-            value: accessibilityDescription,
-            hint: accessibilityHintText,
-            identifier: "sidebarWorkspace.\(tab.id.uuidString)"
-        ))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(accessibilityTitle))
+        .accessibilityIdentifier("sidebarWorkspace.\(tab.id.uuidString)")
+        .accessibilityHint(Text(accessibilityHintText))
         .accessibilityAction(named: Text(moveUpActionText)) {
             moveBy(-1)
         }
@@ -1214,15 +1212,13 @@ struct TabItemView: View, Equatable {
         return tabManager.tabs[currentIndex - 1].id == indicator.tabId
     }
 
+    /// `.combine` hides the description's own accessibility element, so the row label carries
+    /// the description (markdown rendered to plain text, line breaks kept) after the position.
     private var accessibilityTitle: String {
-        String(localized: "accessibility.workspacePosition", defaultValue: "\(tab.title), workspace \(index + 1) of \(accessibilityWorkspaceCount)")
-    }
-
-    /// `.combine` hides the description's own accessibility element, so the row exposes the
-    /// description (markdown rendered to plain text, line breaks kept) as its value.
-    private var accessibilityDescription: String {
-        guard let description = tab.customDescription else { return "" }
-        return SidebarMarkdownRenderer.renderWorkspaceDescription(description).map { String($0.characters) } ?? description
+        let position = String(localized: "accessibility.workspacePosition", defaultValue: "\(tab.title), workspace \(index + 1) of \(accessibilityWorkspaceCount)")
+        guard let description = tab.customDescription else { return position }
+        let plain = SidebarMarkdownRenderer.renderWorkspaceDescription(description).map { String($0.characters) } ?? description
+        return "\(position), \(plain)"
     }
 
     private func moveBy(_ delta: Int) {
@@ -1904,23 +1900,6 @@ private final class SidebarRowContextMenuCaptureView: NSView {
         guard let menu = buildMenu?() else { return false }
         menu.popUp(positioning: nil, at: NSPoint(x: bounds.midX, y: bounds.midY), in: self)
         return true
-    }
-}
-
-/// Kept out of `TabItemView.body`: that expression is already near the type checker's limit.
-private struct SidebarRowAccessibility: ViewModifier {
-    let label: String
-    let value: String
-    let hint: String
-    let identifier: String
-
-    func body(content: Content) -> some View {
-        content
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(Text(label))
-            .accessibilityValue(Text(value))
-            .accessibilityIdentifier(identifier)
-            .accessibilityHint(Text(hint))
     }
 }
 
