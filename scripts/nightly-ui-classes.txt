@@ -15,6 +15,8 @@ TerminalCmdClickUITests
 !BonsplitTabDragUITests/testMinimalModeKeepsTabReorderWorking
 # The second app launch of this class often has no configured main window (passes when run alone), so the second-launched method fails.
 !BonsplitTabDragUITests/testMinimalModeCollapsedSidebarKeepsWorkspaceControlsSuppressed
+# The header toggle is hittable (the toolbar no longer covers it) but an XCUI click on it does not hide the sidebar on macOS 26; passes on macOS 15.
+!SidebarHelpMenuUITests/testVisibleSidebarHeaderToggleHidesItsOwningSidebar
 !TerminalCmdClickUITests/testCmdClickAltScreenDashPrefixedLogPathOpensFullConsultantAgreementDocx
 !TerminalCmdClickUITests/testCmdClickAltScreenDashPrefixedLogPathOpensFullNintendoMkv
 !TerminalCmdClickUITests/testCmdClickDashPrefixedLogPathOpensFullConsultantAgreementDocx
