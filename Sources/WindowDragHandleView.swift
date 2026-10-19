@@ -347,7 +347,7 @@ func windowDragHandleShouldCaptureHit(
     }
 
     #if DEBUG
-    dlog("titlebar.dragHandle.hitTest capture=true point=\(windowDragHandleFormatPoint(point)) siblingCount=\(siblingCount) frameInWindow=\(NSStringFromRect(dragHandleView.convert(dragHandleView.bounds, to: nil)))")
+    dlog("titlebar.dragHandle.hitTest capture=true point=\(windowDragHandleFormatPoint(point)) siblingCount=\(siblingCount)")
     #endif
     return true
 }
