@@ -107,6 +107,21 @@ extension NSWindow {
             ? Self.programaHitViewForEventDispatch(in: self, event: event)
             : nil
 #if DEBUG
+        if event.type == .leftMouseDown {
+            let hit = programaFirstResponderGuardHitViewContext
+            var chain: [String] = []
+            var cursor = hit
+            while let view = cursor, chain.count < 6 {
+                chain.append("\(type(of: view))@\(NSStringFromRect(view.convert(view.bounds, to: nil)))")
+                cursor = view.superview
+            }
+            dlog(
+                "window.mouseDown point=(\(Int(event.locationInWindow.x)),\(Int(event.locationInWindow.y))) " +
+                "clickCount=\(event.clickCount) hit=\(hit.map { String(describing: type(of: $0)) } ?? "nil") " +
+                "axId=\(hit?.accessibilityIdentifier() ?? "") " +
+                "hitFrameInWindow=\(hit.map { NSStringFromRect($0.convert($0.bounds, to: nil)) } ?? "nil") chain=\(chain.joined(separator: "<"))"
+            )
+        }
         if event.type == .keyDown {
             contextSetupMs = (ProcessInfo.processInfo.systemUptime - contextSetupStart) * 1000.0
         }
