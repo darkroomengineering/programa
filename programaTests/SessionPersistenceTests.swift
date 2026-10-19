@@ -2074,9 +2074,8 @@ final class SessionPersistenceTests: XCTestCase {
                 [.modificationDate: now.addingTimeInterval(-age)], ofItemAtPath: url.path
             )
         }
-        let ownFile = try XCTUnwrap(SessionPersistenceStore.defaultSnapshotFileURL(
-            bundleIdentifier: "dev.own", appSupportDirectory: root
-        ))
+        // Snapshots sit next to `sessions/`, where the sweep scans for them.
+        let ownFile = root.appendingPathComponent("session-dev.own.json")
         // The running bundle's own snapshot pins its ids however old it is.
         try writeSnapshot(ownID, to: ownFile, age: 60 * day)
         try writeSnapshot(freshForeignID, to: root.appendingPathComponent("session-app.debug.fresh-tag.json"), age: 13 * day)

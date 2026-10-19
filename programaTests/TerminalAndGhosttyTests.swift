@@ -44,11 +44,11 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
         var oldContents: [String] = []
         var newContents: [String] = []
         GhosttyApp.handleClipboardConfirmation(
-            contents: "old private clipboard", kind: GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ,
+            contents: "old paste", kind: GHOSTTY_CLIPBOARD_REQUEST_PASTE,
             window: oldWindow, surface: surface
         ) { oldContents.append($0) }
         GhosttyApp.handleClipboardConfirmation(
-            contents: "new private clipboard", kind: GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ,
+            contents: "new paste", kind: GHOSTTY_CLIPBOARD_REQUEST_PASTE,
             window: newWindow, surface: surface
         ) { newContents.append($0) }
 
@@ -63,6 +63,34 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
         XCTAssertEqual(newContents, [""], "Stale presentation callbacks must not disclose or complete either request twice")
         XCTAssertNil(oldWindow.attachedSheet)
         XCTAssertNil(newWindow.attachedSheet)
+    }
+
+    /// A program can send OSC 52 in a loop. Replacing the open prompt on every request would
+    /// keep it out from under the user's click, so a request arriving while one is open is denied.
+    func testOSC52RequestWhilePromptIsOpenIsDeniedAndKeepsTheOpenPrompt() async {
+        let window = NSWindow(contentRect: .zero, styleMask: [], backing: .buffered, defer: true)
+        let surface = UnsafeMutableRawPointer.allocate(byteCount: 1, alignment: 1)
+        defer { surface.deallocate() }
+        var firstContents: [String] = []
+        var secondContents: [String] = []
+        GhosttyApp.handleClipboardConfirmation(
+            contents: "first write", kind: GHOSTTY_CLIPBOARD_REQUEST_OSC_52_WRITE,
+            window: window, surface: surface
+        ) { firstContents.append($0) }
+        GhosttyApp.handleClipboardConfirmation(
+            contents: "second write", kind: GHOSTTY_CLIPBOARD_REQUEST_OSC_52_WRITE,
+            window: window, surface: surface
+        ) { secondContents.append($0) }
+
+        XCTAssertEqual(secondContents, [""], "A request arriving while a prompt is open must be denied")
+        XCTAssertTrue(firstContents.isEmpty, "The open prompt must stay pending")
+        GhosttyApp.cancelConfirmationsBeforeFree(surface)
+        XCTAssertEqual(firstContents, [""], "The open prompt must remain registered for native teardown")
+
+        await drainClipboardPresentationQueue()
+        XCTAssertEqual(firstContents, [""])
+        XCTAssertEqual(secondContents, [""])
+        XCTAssertNil(window.attachedSheet)
     }
 
     func testClipboardWindowCloseDeniesPendingReadAndRemovesTeardownCompletion() async {

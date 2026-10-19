@@ -140,12 +140,14 @@ final class ConfigFixSweepRegressionTests: XCTestCase {
 
     /// A repo whose tracked `a.txt` is modified and whose `.gitattributes` routes `*.txt` to
     /// the filter driver `driver`. The driver is configured last so the fixture's own commands
-    /// never run it; `configure` receives the repo to set the driver up.
+    /// never run it; `configure` receives the repo to set the driver up. The edit keeps the
+    /// file's size: a size change lets `git status` mark it modified from the index alone,
+    /// without reading the content through the clean filter.
     private func makeFilterRepo(driver: String, configure: (URL) throws -> Void) throws -> URL {
         let repo = try makeRepo(branch: "feature-x", fileName: "a.txt")
         try "*.txt filter=\(driver)\n".write(
             to: repo.appendingPathComponent(".gitattributes"), atomically: true, encoding: .utf8)
-        try "one\nchanged\n".write(
+        try "two\n".write(
             to: repo.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
         try configure(repo)
         return repo
