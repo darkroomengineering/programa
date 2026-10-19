@@ -118,7 +118,8 @@ extension NSWindow {
             dlog(
                 "window.mouseDown point=(\(Int(event.locationInWindow.x)),\(Int(event.locationInWindow.y))) " +
                 "clickCount=\(event.clickCount) hit=\(hit.map { String(describing: type(of: $0)) } ?? "nil") " +
-                "axId=\(hit?.accessibilityIdentifier() ?? "") chain=\(chain.joined(separator: "<"))"
+                "axId=\(hit?.accessibilityIdentifier() ?? "") " +
+                "hitFrameInWindow=\(hit.map { NSStringFromRect($0.convert($0.bounds, to: nil)) } ?? "nil") chain=\(chain.joined(separator: "<"))"
             )
         }
         if event.type == .keyDown {

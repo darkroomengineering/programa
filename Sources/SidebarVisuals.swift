@@ -868,10 +868,19 @@ enum SidebarSelection {
 }
 
 struct ClearScrollBackground: ViewModifier {
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content
+        let cleared = content
             .scrollContentBackground(.hidden)
             .background(ScrollBackgroundClearer())
+        if #available(macOS 26.0, *) {
+            // The scroll-edge effect adds a hit-testable BackdropView to the scroll view on
+            // macOS 26. It won the mouse-down for the header toggle above the list, so the
+            // click never reached the button.
+            cleared.scrollEdgeEffectHidden()
+        } else {
+            cleared
+        }
     }
 }
 
