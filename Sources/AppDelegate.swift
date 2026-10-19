@@ -74,40 +74,21 @@ final class ThemeReloadCoalescer {
 private var mainWindowToolbarDelegateAssociationKey: UInt8 = 0
 let mainWindowToolbarIdentifier = NSToolbar.Identifier("programa.main.titlebar")
 
-/// Supplies a single invisible spacer item so the main window's otherwise-empty
+/// Supplies a single system space item so the main window's otherwise-empty
 /// unified toolbar reports a non-zero height, growing the titlebar so AppKit
 /// re-centers the traffic lights on `WindowGlassEffect.sidebarHeaderCenterFromWindowTop`.
+/// The system space has no item view, so the toolbar never owns a hit region over
+/// the sidebar header controls; a custom sized item view does (about 44pt wide at
+/// the leading edge, which overlaps the sidebar toggle at the minimum sidebar width).
 /// See the call site in `configureMainWindow` for why this is a toolbar item and
 /// not an empty toolbar or a `.top` titlebar accessory (both measured as no-ops).
 private final class MainWindowToolbarDelegate: NSObject, NSToolbarDelegate {
-    static let spacerItemIdentifier = NSToolbarItem.Identifier("programa.titlebarSpacer")
-
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Self.spacerItemIdentifier]
+        [.space]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Self.spacerItemIdentifier]
-    }
-
-    func toolbar(
-        _ toolbar: NSToolbar,
-        itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
-        willBeInsertedIntoToolbar flag: Bool
-    ) -> NSToolbarItem? {
-        guard itemIdentifier == Self.spacerItemIdentifier else { return nil }
-        let item = NSToolbarItem(itemIdentifier: itemIdentifier)
-        let spacer = NSView()
-        spacer.translatesAutoresizingMaskIntoConstraints = false
-        spacer.widthAnchor.constraint(equalToConstant: 1).isActive = true
-        spacer.heightAnchor.constraint(
-            equalToConstant: WindowGlassEffect.mainWindowTitlebarSpacerHeight
-        ).isActive = true
-        item.view = spacer
-        item.isEnabled = false
-        item.isBordered = false
-        item.visibilityPriority = .user
-        return item
+        [.space]
     }
 }
 
@@ -8018,7 +7999,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             // (confirmed against the AppKit header: `.top` only replaces what's
             // drawn within the existing titlebar area, it doesn't grow it; an
             // empty toolbar reports zero height). Give the toolbar a single
-            // invisible spacer item -- the same mechanism sidebar apps (Mail,
+            // system space item -- the same mechanism sidebar apps (Mail,
             // Notes, Finder) use -- so AppKit re-centers the traffic lights on
             // WindowGlassEffect.sidebarHeaderCenterFromWindowTop. Guarded on
             // `window.toolbar == nil` because this function runs on every

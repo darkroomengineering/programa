@@ -220,7 +220,7 @@ final class BonsplitTabDragUITests: XCTestCase {
 
         let controls = sidebarHeaderControls(in: app)
         XCTAssertTrue(
-            waitForCondition(timeout: 5.0) { controls.allSatisfy { $0.exists } },
+            waitForCondition(timeout: 5.0) { controls.allSatisfy { $0.exists && $0.isHittable } },
             "Expected standard mode to show the workspace controls in the sidebar header. \(describe(controls))"
         )
         for control in controls {
@@ -269,7 +269,7 @@ final class BonsplitTabDragUITests: XCTestCase {
         )
 
         XCTAssertTrue(
-            waitForCondition(timeout: 5.0) { controls.allSatisfy { $0.exists } },
+            waitForCondition(timeout: 5.0) { controls.allSatisfy { $0.exists && $0.isHittable } },
             "Expected minimal-mode sidebar controls to stay in the sidebar header without hovering. \(describe(controls))"
         )
         for control in controls {
@@ -281,7 +281,7 @@ final class BonsplitTabDragUITests: XCTestCase {
 
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8)).hover()
         XCTAssertTrue(
-            controls.allSatisfy { $0.exists },
+            waitForCondition(timeout: 2.0) { controls.allSatisfy { $0.exists && $0.isHittable } },
             "Expected minimal-mode sidebar controls to stay visible while the pointer is over the pane. \(describe(controls))"
         )
     }
@@ -358,7 +358,7 @@ final class BonsplitTabDragUITests: XCTestCase {
 
         let controls = sidebarHeaderControls(in: app)
         XCTAssertTrue(
-            waitForCondition(timeout: 5.0) { controls.allSatisfy { $0.exists } },
+            waitForCondition(timeout: 5.0) { controls.allSatisfy { $0.exists && $0.isHittable } },
             "Expected minimal-mode sidebar controls to start visible. \(describe(controls))"
         )
 
@@ -371,7 +371,7 @@ final class BonsplitTabDragUITests: XCTestCase {
 
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8)).hover()
         XCTAssertTrue(
-            waitForCondition(timeout: 2.0) { controls.allSatisfy { $0.exists } },
+            waitForCondition(timeout: 2.0) { controls.allSatisfy { $0.exists && $0.isHittable } },
             "Expected minimal-mode sidebar controls to remain visible while the notifications popover is open. \(describe(controls))"
         )
     }
@@ -407,13 +407,13 @@ final class BonsplitTabDragUITests: XCTestCase {
         // beside the pane tab strip; it does not depend on hover.
         let newTerminalButton = app.buttons["New Terminal Tab"]
         XCTAssertTrue(
-            newTerminalButton.waitForExistence(timeout: 5.0),
+            waitForCondition(timeout: 5.0) { newTerminalButton.exists && newTerminalButton.isHittable },
             "Expected the pane tab bar controls to be visible in collapsed-sidebar minimal mode. window=\(window.frame) alphaTab=\(alphaTab.frame) betaTab=\(betaTab.frame) button=\(newTerminalButton.debugDescription)"
         )
 
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8)).hover()
         XCTAssertTrue(
-            newTerminalButton.exists,
+            waitForCondition(timeout: 2.0) { newTerminalButton.exists && newTerminalButton.isHittable },
             "Expected pane tab bar controls to stay visible away from the pane tab bar. button=\(newTerminalButton.debugDescription)"
         )
     }
