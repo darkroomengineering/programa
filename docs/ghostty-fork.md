@@ -13,9 +13,9 @@ When we change the fork, update this document and the parent submodule SHA.
 
 ## Current fork changes
 
-The pinned fork head is `617aac442` on the fork branch `idle-park-display-link`, which is
-fork `main`'s `bccfc8333fecf707dd918d46e3849fc8ed72cca0` plus the OSC 7501 patch group and the
-idle display link park. Never delete that branch: the pin and its xcframework release point at it. It is built on
+The pinned fork head is `a6d95cc23` on the fork branch `programa/kitty-osc99`, which is
+fork `main`'s `bccfc8333fecf707dd918d46e3849fc8ed72cca0` plus the OSC 7501 patch group, the
+idle display link park and the OSC 99 dispatch. Never delete that branch: the pin and its xcframework release point at it. It is built on
 `ghostty-org/ghostty` `main` at `c8634f3fce12f8189ed058e018195eb693f8562b` and Zig 0.16.0, and
 carries the twelve patch groups below: display-link restart, resize stale-frame mitigation, OSC 99
 notifications, theme picker hooks, color scheme mode 2031, keyboard copy mode selection API,
@@ -61,13 +61,17 @@ tend to conflict together during rebases.
 - Commits:
   - `2033ffebc` (Add OSC 99 notification parser)
   - `a75615992` (Fix OSC 99 parser for upstream API changes)
+  - `a6d95cc23` (terminal: dispatch OSC 99 kitty notifications to the parser)
 - Files:
   - `src/terminal/osc.zig`
   - `src/terminal/osc/parsers.zig`
   - `src/terminal/osc/parsers/kitty_notification.zig`
 - Summary:
-  - Adds a parser for kitty OSC 99 notifications and wires it into the OSC dispatcher.
-  - Adapts the parser to upstream's newer capture API so the Programa OSC 99 hook survives the March 30 upstream sync.
+  - Parses kitty OSC 99 notifications (title and body, chunked with `d=0`, optional base64) and emits
+    `show_desktop_notification`, the same command OSC 9 and OSC 777 produce.
+  - The dispatch is the `99` parser state in `Parser.next`/`Parser.end`, the `kitty_notification_pending`
+    field on `Parser` (it outlives `reset` so chunks can span sequences), and the `parsers.zig` export.
+    The parser reads its payload through the `capture`/`captureTrailing()` API.
 
 ### 4) Programa theme picker helper hooks (unused)
 
@@ -241,8 +245,9 @@ When syncing with upstream, re-check these areas.
 These files change frequently upstream; be careful when rebasing the fork:
 
 - `src/terminal/osc.zig`
-  - OSC dispatch logic moves often. Re-check the integration points for the OSC 99 parser and keep
-    the newer `capture`/`captureTrailing()` API usage intact.
+  - OSC dispatch logic moves often. Re-check the integration points for the OSC 99 parser (the `99`
+    state, `kitty_notification_pending`, the `end` prong) and keep the `capture`/`captureTrailing()`
+    API usage intact. A sync that drops them leaves `kitty_notification.zig` compiled but unreachable.
 
 - `src/terminal/osc/parsers.zig`
   - Ensure `kitty_notification` stays imported after upstream parser reorganizations.
