@@ -33,6 +33,7 @@ test_nested_split_panel_routing.py
 test_nested_split_preserves_existing_split.py
 test_new_claude_workspace_shortcut.py
 test_new_tab_interactive_after_splits.py
+test_notifications.py
 test_pane_break_swap_preserve_focus.py
 test_pane_resize_preserves_ls_scrollback.py
 test_pane_resize_preserves_visible_content.py
