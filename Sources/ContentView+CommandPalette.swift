@@ -1,14 +1,8 @@
-// Command palette orchestration.
-//
-// Conservative extraction: only pure/computation functions and already-`static`
-// helpers are moved here (fuzzy-search corpus building, result fingerprinting/
-// diffing, shortcut resolution, switcher entry construction, context-snapshot
-// building). None of them mutate `@State` directly. The `@State`/
-// `@ObservedObject` properties, the SwiftUI view body, and the @State-mutating
-// activation-dispatch / rename / edit-description flow orchestration all
-// remain on the `ContentView` struct in ContentView.swift, since SwiftUI's
-// `@State` cannot be split across files without a larger controller-based
-// rewrite (tracked as a follow-up).
+// Command palette pure helpers: fuzzy-search corpus building, result
+// fingerprinting and diffing, shortcut resolution, switcher entries and
+// context snapshots. None of them mutate `@State`. The overlay view, the
+// command list and the @State-mutating flows live in the sibling
+// ContentView+CommandPalette{Overlay,Commands,Flows}.swift files.
 
 import AppKit
 import SwiftUI
