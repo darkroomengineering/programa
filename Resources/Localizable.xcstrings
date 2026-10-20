@@ -12428,36 +12428,19 @@
         }
       }
     },
-    "sidebar.port.label": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": ":%lld"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": ":%lld"
-          }
-        }
-      }
-    },
     "sidebar.port.openTooltip": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Open localhost:%lld"
+            "value": "Open localhost:%@"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "localhost:%lldを開く"
+            "value": "localhost:%@を開く"
           }
         }
       }
@@ -16718,13 +16701,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stop %@ on port %lld?"
+            "value": "Stop %@ on port %@?"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ポート%2$lldの%1$@を停止しますか?"
+            "value": "ポート%2$@の%1$@を停止しますか?"
           }
         }
       }
@@ -16735,13 +16718,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Programa asks process %lld to quit, and force-stops it if it is still running after 3 seconds."
+            "value": "Programa asks process %@ to quit, and force-stops it if it is still running after 3 seconds."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Programaはプロセス%lldに終了を要求し、3秒後も動作している場合は強制終了します。"
+            "value": "Programaはプロセス%@に終了を要求し、3秒後も動作している場合は強制終了します。"
           }
         }
       }
