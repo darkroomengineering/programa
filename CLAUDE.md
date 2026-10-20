@@ -138,7 +138,7 @@ tail -f "$(cat /tmp/programa-last-debug-log-path 2>/dev/null || echo /tmp/progra
 - Entire file is `#if DEBUG`; all call sites must be wrapped in `#if DEBUG` / `#endif`
 - 500-entry ring buffer; `DebugEventLog.shared.dump()` writes full buffer to file
 - Key events logged in `AppDelegate.swift` (monitor, performKeyEquivalent)
-- Mouse/UI events logged inline in views (ContentView, BrowserPanelView, etc.)
+- Mouse/UI events logged inline in views (ContentView, TabItemView, etc.)
 - Focus events: `focus.panel`, `focus.bonsplit`, `focus.firstResponder`, `focus.moveFocus`
 - Bonsplit events: `tab.select`, `tab.close`, `tab.dragStart`, `tab.drop`, `pane.focus`, `pane.drop`, `divider.dragStart`
 - `GhosttyApp.logBackground` background events log to a separate companion file with `-bg` inserted before `.log`, e.g. `/tmp/programa-debug-<tag>-bg.log` (override with `PROGRAMA_DEBUG_BG_LOG`)
@@ -207,7 +207,7 @@ These run in CI; run the relevant one before pushing:
 ## Socket focus policy
 
 - Socket/CLI commands must not steal macOS app focus (no app activation/window raising side effects).
-- Only explicit focus-intent commands may mutate in-app focus/selection (`window.focus`, `workspace.select/next/previous/last`, `surface.focus`, `pane.focus/last`, browser focus commands).
+- Only explicit focus-intent commands may mutate in-app focus/selection (`window.focus`, `workspace.select/next/previous/last`, `surface.focus`, `pane.focus/last`).
 - All non-focus commands should preserve current user focus context while still applying data/model changes.
 
 ## Testing policy

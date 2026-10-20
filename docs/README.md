@@ -5,8 +5,10 @@
 - [keyboard-shortcuts.md](keyboard-shortcuts.md): default shortcuts, action ids and chord syntax for custom bindings.
 - [settings-json.md](settings-json.md): every key in `~/.config/programa/settings.json`.
 - [programa-json.md](programa-json.md): `programa.json` commands and recipes, the layout schema, and saved layouts.
+- [workspace-interface.md](workspace-interface.md): the pane tab bar, agent logos on tabs, edge fades, and the ports panel.
 - [terminal-themes.md](terminal-themes.md): terminal themes, opacity, blur and font.
 - [notifications.md](notifications.md): notifications, the sidebar agent indicator, and agent hook examples.
+- [program-status.md](program-status.md): the OSC 7501 program status protocol for reporting what a program is doing.
 - [troubleshooting.md](troubleshooting.md): log locations, finding the socket, and what to put in a bug report.
 - [diagnostics.md](diagnostics.md): the always-on local diagnostics log.
 - [environment-variables.md](environment-variables.md): every `PROGRAMA_*` and `PROGRAMAD_*` variable.
@@ -44,6 +46,7 @@ Design and planning documents. Most start with a `Status:` line.
 - [plans/detached-sessions.md](plans/detached-sessions.md): sessions that survive quit and crash.
 - [plans/diff-review-panel.md](plans/diff-review-panel.md): the agent diff review panel.
 - [plans/dual-platform-rolling-release-2026-09-16.md](plans/dual-platform-rolling-release-2026-09-16.md): macOS and Windows assets on one rolling release.
+- [plans/local-attention-classification.md](plans/local-attention-classification.md): optional local classification of which workspace needs attention.
 - [plans/main-window-appkit-ownership.md](plans/main-window-appkit-ownership.md): moving main window ownership to AppKit.
 - [plans/native-frontends-shared-core-2026-09-16.md](plans/native-frontends-shared-core-2026-09-16.md): native frontends over one shared core.
 - [plans/native-sidebar-owner-experiment.md](plans/native-sidebar-owner-experiment.md): the native sidebar owner experiment and its no-go result.

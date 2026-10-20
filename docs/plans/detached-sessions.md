@@ -75,8 +75,8 @@ still apply.
 ## 1. Problem Statement
 
 Today, quitting or crashing Programa kills every terminal child process. `README.md` says it
-plainly: relaunch "restores layout, directories, scrollback, and browser state — not live
-processes (yet)" (`README.md:51`). Session persistence
+plainly: relaunch "restores layout, directories, and scrollback — not live
+processes (yet)". Session persistence
 (`Sources/SessionPersistence.swift`, `Sources/TabManager+SessionPersistence.swift`,
 `Sources/Workspace+Layout.swift`) captures layout/cwd/scrollback-as-text and replays it into
 **brand-new** shell processes on next launch (`SessionScrollbackReplayStore`,
