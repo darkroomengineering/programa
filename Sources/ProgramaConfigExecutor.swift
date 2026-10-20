@@ -41,6 +41,7 @@ struct ProgramaConfigExecutor {
             confirmFlag: command.confirm == true,
             detail: describeForConfirmation(command, resolvedCommand: resolvedCommand),
             configSourcePath: configSourcePath,
+            loadedDigest: command.sourceDigest,
             globalConfigPath: globalConfigPath
         ) else { return }
 
@@ -76,6 +77,7 @@ struct ProgramaConfigExecutor {
             confirmFlag: false,
             detail: describeForConfirmation(recipe, resolvedPrompt: resolvedPrompt),
             configSourcePath: configSourcePath,
+            loadedDigest: recipe.sourceDigest,
             globalConfigPath: globalConfigPath
         ) else { return }
 
@@ -182,11 +184,18 @@ struct ProgramaConfigExecutor {
         confirmFlag: Bool,
         detail: String,
         configSourcePath: String?,
+        loadedDigest: String?,
         globalConfigPath: String
     ) -> Bool {
         // No source path means the global config in ~/.config/programa, written by the user.
+        // `loadedDigest` pins trust to the bytes the entry was parsed from; the file is not
+        // re-read to decide what the user approved.
         let trustState: ProgramaDirectoryTrust.TrustState = configSourcePath.map {
-            ProgramaDirectoryTrust.shared.trustState(configPath: $0, globalConfigPath: globalConfigPath)
+            ProgramaDirectoryTrust.shared.trustState(
+                configPath: $0,
+                globalConfigPath: globalConfigPath,
+                loadedDigest: loadedDigest
+            )
         } ?? .trusted
         let trusted = trustState == .trusted
         let configChanged = trustState == .changed
@@ -236,13 +245,15 @@ struct ProgramaConfigExecutor {
         // dropped on the next reapply, so the checkbox is only offered for a config whose root the
         // file already trusts (recording its digest survives the reapply).
         let trustIsFileManaged = KeyboardShortcutSettings.settingsFileStore.isTrustedDirectoriesManagedByFile()
-        let offerTrust = !trusted && !(trustIsFileManaged && trustState == .untrusted)
+        let offerTrust = !trusted && loadedDigest != nil
+            && !(trustIsFileManaged && trustState == .untrusted)
         return showConfirmDialog(
             title: title,
             messageFormat: messageFormat,
             affirmativeButtonTitle: affirmativeButtonTitle,
             detail: detail,
             configPath: offerTrust ? configSourcePath : nil,
+            configDigest: loadedDigest,
             configChanged: configChanged,
             configNeverDigested: configNeverDigested
         )
@@ -356,6 +367,7 @@ struct ProgramaConfigExecutor {
         affirmativeButtonTitle: String,
         detail: String,
         configPath: String?,
+        configDigest: String?,
         configChanged: Bool = false,
         configNeverDigested: Bool = false
     ) -> Bool {
@@ -400,8 +412,8 @@ struct ProgramaConfigExecutor {
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else { return false }
 
-        if let configPath, checkbox?.state == .on {
-            ProgramaDirectoryTrust.shared.trust(configPath: configPath)
+        if let configPath, let configDigest, checkbox?.state == .on {
+            ProgramaDirectoryTrust.shared.trust(configPath: configPath, digest: configDigest)
         }
 
         return true

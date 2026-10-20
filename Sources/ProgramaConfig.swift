@@ -31,6 +31,14 @@ struct ProgramaCommandDefinition: Codable, Sendable, Identifiable, Equatable {
     var command: String?
     var confirm: Bool?
     var parameters: [ProgramaParameterDefinition]?
+    /// Trust digest of the exact config bytes this entry was decoded from, set by
+    /// `ProgramaConfigStore`. The trust gate checks this, never a fresh read of the file, so
+    /// what runs is always what was approved. Not part of the file format.
+    var sourceDigest: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case name, description, keywords, restart, workspace, command, confirm, parameters
+    }
 
     var id: String {
         "programa.config.command." + (name.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? name)
@@ -44,7 +52,8 @@ struct ProgramaCommandDefinition: Codable, Sendable, Identifiable, Equatable {
         workspace: ProgramaWorkspaceDefinition? = nil,
         command: String? = nil,
         confirm: Bool? = nil,
-        parameters: [ProgramaParameterDefinition]? = nil
+        parameters: [ProgramaParameterDefinition]? = nil,
+        sourceDigest: String? = nil
     ) {
         self.name = name
         self.description = description
@@ -54,6 +63,7 @@ struct ProgramaCommandDefinition: Codable, Sendable, Identifiable, Equatable {
         self.command = command
         self.confirm = confirm
         self.parameters = parameters
+        self.sourceDigest = sourceDigest
     }
 
     init(from decoder: Decoder) throws {
@@ -115,6 +125,12 @@ struct ProgramaRecipeDefinition: Codable, Sendable, Identifiable, Equatable {
     var keywords: [String]?
     var prompt: String
     var parameters: [ProgramaParameterDefinition]?
+    /// Same contract as `ProgramaCommandDefinition.sourceDigest`.
+    var sourceDigest: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case name, description, keywords, prompt, parameters
+    }
 
     var id: String {
         "programa.config.recipe." + (name.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? name)
@@ -125,13 +141,15 @@ struct ProgramaRecipeDefinition: Codable, Sendable, Identifiable, Equatable {
         description: String? = nil,
         keywords: [String]? = nil,
         prompt: String,
-        parameters: [ProgramaParameterDefinition]? = nil
+        parameters: [ProgramaParameterDefinition]? = nil,
+        sourceDigest: String? = nil
     ) {
         self.name = name
         self.description = description
         self.keywords = keywords
         self.prompt = prompt
         self.parameters = parameters
+        self.sourceDigest = sourceDigest
     }
 
     init(from decoder: Decoder) throws {
@@ -546,7 +564,18 @@ final class ProgramaConfigStore: ObservableObject {
         }
 
         do {
-            return try JSONDecoder().decode(ProgramaConfigFile.self, from: sanitized)
+            var config = try JSONDecoder().decode(ProgramaConfigFile.self, from: sanitized)
+            let digest = ProgramaDirectoryTrust.executableDigest(forSanitizedConfig: sanitized)
+            for index in config.commands.indices {
+                config.commands[index].sourceDigest = digest
+            }
+            if var recipes = config.recipes {
+                for index in recipes.indices {
+                    recipes[index].sourceDigest = digest
+                }
+                config.recipes = recipes
+            }
+            return config
         } catch {
             NSLog("[ProgramaConfig] parse error at %@: %@", path, String(describing: error))
             return nil
