@@ -1954,7 +1954,7 @@ class GhosttyApp {
                         tabId: tabId,
                         surfaceId: surfaceId,
                         title: command,
-                        subtitle: "",
+                        subtitle: TerminalNotificationStore.terminalOutputSubtitle(tabTitle: tabTitle),
                         body: body
                     )
                     return true
@@ -2407,7 +2407,7 @@ class GhosttyApp {
                     tabId: tabId,
                     surfaceId: surfaceId,
                     title: command,
-                    subtitle: "",
+                    subtitle: TerminalNotificationStore.terminalOutputSubtitle(tabTitle: tabTitle),
                     body: body
                 )
             }

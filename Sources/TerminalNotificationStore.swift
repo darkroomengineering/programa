@@ -136,6 +136,20 @@ final class TerminalNotificationStore: ObservableObject {
 
     static let categoryIdentifier = "com.darkroom.programa.userNotification"
     static let actionShowIdentifier = "com.darkroom.programa.userNotification.show"
+
+    /// Subtitle for notifications that a program requested through terminal output (OSC 9,
+    /// 777, 99). It names the source so a program can never pass its text off as a
+    /// notification from Programa itself; keep it non-empty.
+    nonisolated static func terminalOutputSubtitle(tabTitle: String) -> String {
+        String(
+            format: String(
+                localized: "notification.terminalOutput.subtitle",
+                defaultValue: "Terminal output · %@"
+            ),
+            tabTitle
+        )
+    }
+
     private enum AuthorizationRequestOrigin: String {
         case notificationDelivery = "notification_delivery"
         case settingsButton = "settings_button"
