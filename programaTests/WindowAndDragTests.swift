@@ -276,6 +276,171 @@ final class WindowGlassEffectTests: XCTestCase {
         throw XCTSkip("Native Liquid Glass requires the macOS 26 SDK and runtime")
     }
 
+    /// A focused pane whose strip is hidden must hide the new-tab and split controls. Lending
+    /// them to another visible pane would make them create tabs and splits in a pane the user
+    /// is not working in.
+    func testFocusedPaneWithHiddenStripHidesControlsInsteadOfLendingThem() throws {
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *) {
+            _ = NSApplication.shared
+            let root = NSView(frame: NSRect(x: 0, y: 0, width: 640, height: 320))
+            let terminalHost = WindowTerminalHostView(frame: root.bounds)
+            let focusedAnchor = NSView(frame: NSRect(x: 0, y: 270, width: 300, height: 40))
+            let otherAnchor = NSView(frame: NSRect(x: 320, y: 270, width: 300, height: 40))
+            root.addSubview(focusedAnchor)
+            root.addSubview(otherAnchor)
+            root.addSubview(terminalHost, positioned: .above, relativeTo: otherAnchor)
+            let window = NSWindow(
+                contentRect: root.bounds,
+                styleMask: [.titled, .closable, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            defer { window.orderOut(nil) }
+            window.contentView = root
+
+            let bridge = WindowPaneChromePortalRegistry.bridge(for: window)
+            let focusedPane = PaneID()
+            let otherPane = PaneID()
+            var newTabPanes: [PaneID] = []
+            func publish(_ paneID: PaneID, anchor: NSView, focused: Bool, visible: Bool) {
+                let tabs = [BonsplitPaneChromeTabDescriptor(
+                    id: TabID(), title: "Tab", icon: "terminal", iconImageData: nil,
+                    isSelected: true, isPinned: false, isDirty: false,
+                    showsNotificationBadge: false, accessibilityValue: "", menuItems: []
+                )]
+                bridge.updatePaneChrome(BonsplitPaneChromeDescriptor(
+                    paneID: paneID, anchorView: anchor, tabs: tabs, isFocused: focused,
+                    isVisible: visible, leadingInset: 0, showsSplitButtons: true,
+                    onSelect: { _ in }, onClose: { _ in }, onContextAction: { _, _ in },
+                    dragPasteboardData: { _ in nil }, onDragStateChanged: { _, _ in },
+                    validatedDropIndex: { _ in nil }, onDropTab: { _ in false },
+                    onNewTab: { newTabPanes.append(paneID) }, onSplitRight: {}, onSplitDown: {}
+                ))
+                root.layoutSubtreeIfNeeded()
+            }
+            // The clusters' glass carries a plain button container; tab pills carry an NSControl.
+            func visibleControlGlass() -> [NSGlassEffectView] {
+                bridge.nativeGlassViewsForTesting().filter {
+                    !($0.contentView is NSControl) && !$0.isHiddenOrHasHiddenAncestor
+                }
+            }
+
+            publish(otherPane, anchor: otherAnchor, focused: false, visible: true)
+            publish(focusedPane, anchor: focusedAnchor, focused: true, visible: false)
+            XCTAssertTrue(
+                visibleControlGlass().isEmpty,
+                "Controls must hide with the focused pane's strip, not move to the unfocused pane"
+            )
+
+            publish(focusedPane, anchor: focusedAnchor, focused: true, visible: true)
+            let shown = visibleControlGlass()
+            XCTAssertEqual(shown.count, 2, "New-tab and split controls return with the focused strip")
+            for glass in shown {
+                let frame = bridge.hostViewForTesting.convert(glass.bounds, from: glass)
+                XCTAssertLessThanOrEqual(frame.maxX, focusedAnchor.frame.maxX + 0.5,
+                                         "Controls sit on the focused pane's strip")
+            }
+            return
+        }
+        #endif
+
+        throw XCTSkip("Native Liquid Glass requires the macOS 26 SDK and runtime")
+    }
+
+    /// The only pane of a workspace hides its tab strip while it has one tab (nothing to switch
+    /// between) and shows it again at two tabs. Once split, every pane keeps its strip because it
+    /// carries the controls that undo the split. A strip that doubles as the titlebar row
+    /// (nonzero leading inset) stays so the window remains draggable beside the traffic lights.
+    func testSinglePaneTabStripHidesAtOneTabAndReturnsAtTwoOrAfterSplit() throws {
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *) {
+            @MainActor final class RecordingBridge: BonsplitPaneChromePortalBridge {
+                let supportsNativePaneChrome = true
+                var latest: [PaneID: BonsplitPaneChromeDescriptor] = [:]
+                func updatePaneChrome(_ descriptor: BonsplitPaneChromeDescriptor) {
+                    latest[descriptor.paneID] = descriptor
+                }
+                func removePaneChrome(for paneID: PaneID, anchorView: NSView) {
+                    if latest[paneID]?.anchorView === anchorView { latest[paneID] = nil }
+                }
+            }
+
+            _ = NSApplication.shared
+            func host(leadingInset: CGFloat) -> (BonsplitController, RecordingBridge, NSWindow) {
+                var configuration = BonsplitConfiguration.default
+                configuration.appearance.tabBarLiquidGlassEnabled = true
+                configuration.appearance.tabBarLeadingInset = leadingInset
+                let controller = BonsplitController(configuration: configuration)
+                let bridge = RecordingBridge()
+                controller.setPaneChromePortalBridge(bridge)
+                let hostingView = NSHostingView(
+                    rootView: BonsplitView(controller: controller) { _, _ in Color.clear }
+                )
+                let window = NSWindow(
+                    contentRect: NSRect(x: 0, y: 0, width: 800, height: 500),
+                    styleMask: [.titled, .closable, .resizable],
+                    backing: .buffered,
+                    defer: false
+                )
+                window.contentView = hostingView
+                hostingView.frame = window.contentLayoutRect
+                return (controller, bridge, window)
+            }
+            func settle(until condition: () -> Bool) -> Bool {
+                let deadline = Date().addingTimeInterval(2)
+                while Date() < deadline {
+                    RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+                    if condition() { return true }
+                }
+                return condition()
+            }
+
+            let (controller, bridge, window) = host(leadingInset: 0)
+            defer { window.orderOut(nil) }
+            XCTAssertTrue(controller.isInteractive)
+            let pane = try XCTUnwrap(controller.allPaneIds.first)
+            XCTAssertEqual(controller.tabs(inPane: pane).count, 1)
+            XCTAssertTrue(
+                settle { bridge.latest[pane]?.isVisible == false },
+                "A lone pane with one tab hides its strip; got isVisible=\(String(describing: bridge.latest[pane]?.isVisible))"
+            )
+
+            let second = try XCTUnwrap(controller.createTab(title: "Second", inPane: pane))
+            XCTAssertTrue(settle { bridge.latest[pane]?.isVisible == true },
+                          "The strip returns when the pane gets a second tab")
+            XCTAssertEqual(bridge.latest[pane]?.tabs.count, 2)
+
+            XCTAssertTrue(controller.closeTab(second, inPane: pane))
+            XCTAssertTrue(settle { bridge.latest[pane]?.isVisible == false },
+                          "Back to one tab hides the strip again")
+
+            let newPane = try XCTUnwrap(controller.splitPane(pane, orientation: .horizontal))
+            XCTAssertNotNil(controller.createTab(title: "Right", inPane: newPane))
+            XCTAssertTrue(
+                settle {
+                    controller.tabs(inPane: newPane).count == 1
+                        && bridge.latest[pane]?.isVisible == true
+                        && bridge.latest[newPane]?.isVisible == true
+                },
+                "After a split, each single-tab pane keeps its strip and the controls that undo the split"
+            )
+
+            let (insetController, insetBridge, insetWindow) = host(leadingInset: 80)
+            defer { insetWindow.orderOut(nil) }
+            let insetPane = try XCTUnwrap(insetController.allPaneIds.first)
+            XCTAssertEqual(insetController.tabs(inPane: insetPane).count, 1)
+            XCTAssertTrue(
+                settle { insetBridge.latest[insetPane]?.isVisible == true },
+                "A strip that doubles as the titlebar row stays at one tab"
+            )
+            return
+        }
+        #endif
+
+        throw XCTSkip("Native Liquid Glass requires the macOS 26 SDK and runtime")
+    }
+
     func testNativePaneTabInsertionIndicatorStaysInsideDocumentBounds() throws {
         #if compiler(>=6.2)
         let bounds = NSRect(x: 0, y: 0, width: 240, height: 28)
