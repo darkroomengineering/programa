@@ -132,6 +132,118 @@ def _test_subscription_scoped_to_requested_surface(socket_path: str, workspace_i
         _must(seen_watched, "expected to see the watched surface's working event within 10s")
 
 
+def _read_frame_matching(client: ProgramaClient, what: str, predicate) -> dict:
+    deadline = time.time() + 10.0
+    while time.time() < deadline:
+        frame = _read_event(client, timeout_s=max(0.5, deadline - time.time()))
+        if predicate(frame):
+            return frame
+    raise ProgramaClientError(f"expected {what} within 10s")
+
+
+def _read_needs_input(client: ProgramaClient, surface_id: str) -> dict:
+    return _read_frame_matching(
+        client,
+        f"a needs_input frame for {surface_id}",
+        lambda f: f.get("event") == "needs_input" and f.get("surface_id") == surface_id,
+    )
+
+
+def _call_needs_input(socket_path: str, workspace_id: str, surface_id: str, kind: str, body: str) -> None:
+    with ProgramaClient(socket_path) as driver:
+        driver._call(
+            "agent.needs_input",
+            {
+                "workspace_id": workspace_id,
+                "surface_id": surface_id,
+                "provider": "claude-code",
+                "title": "Claude Code",
+                "subtitle": "",
+                "body": body,
+                "kind": kind,
+                "session_id": "needs-input-event-test",
+            },
+        )
+
+
+def _surface_program_status(client: ProgramaClient, workspace_id: str, surface_id: str) -> object:
+    listed = client._call("surface.list", {"workspace_id": workspace_id}) or {}
+    for row in listed.get("surfaces") or []:
+        if str(row.get("id")) == surface_id:
+            return row.get("program_status")
+    raise ProgramaClientError(f"surface {surface_id} not in surface.list: {listed}")
+
+
+def _test_needs_input_event(socket_path: str, workspace_id: str, surface_id: str, program_surface_id: str) -> None:
+    """Every agent.needs_input call pushes one needs_input frame carrying the notification's
+    kind, provider, title and body, even when the agent-state write it makes is a no-op
+    (already blocked) or is outranked by an OSC 7501 program-owned presence. Plain state
+    reports push no needs_input frame."""
+    with ProgramaClient(socket_path) as driver:
+        driver._call("surface.clear_agent_state", {"workspace_id": workspace_id, "surface_id": surface_id})
+
+    with ProgramaClient(socket_path) as sub_client:
+        ack = sub_client._call("subscribe", {"classes": ["agent_state", "needs_input"]}, timeout_s=10.0) or {}
+        _must(ack.get("classes") == ["agent_state", "needs_input"], f"expected both classes echoed back, got {ack}")
+
+        # Frames for one subscription are delivered in publish order, so if `working` pushed a
+        # needs_input frame it would arrive before the first question's frame and fail below.
+        _report_agent_state(socket_path, workspace_id, surface_id, "working")
+        _read_frame_matching(
+            sub_client,
+            "the working agent_state frame",
+            lambda f: f.get("event") == "agent_state" and f.get("surface_id") == surface_id and f.get("state") == "working",
+        )
+
+        first_question = f"Which branch should I rebase onto? {time.time_ns()}"
+        _call_needs_input(socket_path, workspace_id, surface_id, "question", first_question)
+        first = _read_needs_input(sub_client, surface_id)
+        _must(first.get("body") == first_question, f"working report must not push needs_input; first frame: {first}")
+        _must(first.get("workspace_id") == workspace_id, f"expected workspace_id={workspace_id}, got {first}")
+        _must(first.get("kind") == "question", f"expected kind=question, got {first}")
+        _must(first.get("provider") == "claude-code", f"expected provider=claude-code, got {first}")
+        _must(str(first.get("title") or "").startswith("Claude Code"), f"expected the notification title, got {first}")
+        _must("subtitle" not in first, f"an empty subtitle must be omitted, got {first}")
+        _must(isinstance(first.get("ts"), (int, float)), f"expected a numeric ts, got {first}")
+
+        second_question = f"Allow running the migration? {time.time_ns()}"
+        _call_needs_input(socket_path, workspace_id, surface_id, "permission", second_question)
+        second = _read_needs_input(sub_client, surface_id)
+        _must(second.get("body") == second_question, f"already-blocked surface must still push needs_input, got {second}")
+        _must(second.get("kind") == "permission", f"expected kind=permission, got {second}")
+
+        # Program-owned presence: OSC 7501 `working` outranks the hooks `blocked` write, so no
+        # blocked agent_state frame follows, but the needs_input frame must still arrive.
+        with ProgramaClient(socket_path) as driver:
+            driver._call(
+                "surface.send_text",
+                {"surface_id": program_surface_id, "text": "printf '\\033]7501;state=working:app=test\\033\\\\'; sleep 12\n"},
+            )
+        _read_frame_matching(
+            sub_client,
+            "a program-owned working agent_state frame",
+            lambda f: f.get("event") == "agent_state" and f.get("surface_id") == program_surface_id
+            and f.get("state") == "working" and f.get("source") == "program",
+        )
+        program_question = f"Proceed while a program owns the state? {time.time_ns()}"
+        _call_needs_input(socket_path, workspace_id, program_surface_id, "question", program_question)
+        program_frame = _read_needs_input(sub_client, program_surface_id)
+        _must(program_frame.get("body") == program_question, f"expected the program-owned surface's question, got {program_frame}")
+
+        _report_agent_state(socket_path, workspace_id, surface_id, "idle")
+        _call_while_events_may_be_pending(sub_client, "unsubscribe")
+
+    with ProgramaClient(socket_path) as driver:
+        driver._call("surface.send_key", {"surface_id": program_surface_id, "key": "ctrl+c"})
+        driver._call("surface.send_text", {"surface_id": program_surface_id, "text": "printf '\\033c'\n"})
+        _wait_for(
+            lambda: _surface_program_status(driver, workspace_id, program_surface_id) is None,
+            timeout_s=10.0,
+        )
+        driver._call("surface.clear_agent_state", {"workspace_id": workspace_id, "surface_id": program_surface_id})
+        driver._call("notification.clear", {"workspace_id": workspace_id})
+
+
 def _test_workspace_lifecycle_rename_event(socket_path: str, workspace_id: str) -> None:
     """workspace_lifecycle 'renamed' fires from the explicit rename entry point."""
     with ProgramaClient(socket_path) as sub_client:
@@ -239,6 +351,7 @@ def _run_once(socket_path: str) -> int:
 
             _test_agent_state_events_without_polling(socket_path, workspace_id, surface_id)
             _test_subscription_scoped_to_requested_surface(socket_path, workspace_id, surface_id, other_surface_id)
+            _test_needs_input_event(socket_path, workspace_id, surface_id, other_surface_id)
             _test_workspace_lifecycle_rename_event(socket_path, workspace_id)
             _test_output_subscription_can_stop_and_restart(socket_path, workspace_id, surface_id)
 
