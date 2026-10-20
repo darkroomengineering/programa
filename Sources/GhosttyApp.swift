@@ -229,7 +229,8 @@ class GhosttyApp {
             return baseURL.deletingLastPathComponent().appendingPathComponent(bgName)
         }
 
-        return URL(fileURLWithPath: "/tmp/programa-bg.log")
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/Programa/programa-bg.log", isDirectory: false)
     }
 
     @MainActor
