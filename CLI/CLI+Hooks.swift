@@ -25,6 +25,10 @@ struct ClaudeHookSessionRecord: Codable, Equatable {
     var pid: Int?
     var lastSubtitle: String?
     var lastBody: String?
+    /// The open AskUserQuestion, from its PreToolUse until Claude resumes. Claude Code
+    /// reports that dialog as a generic `permission_prompt`, so this is the only way to
+    /// tell a question from a tool-approval prompt.
+    var pendingQuestion: String? = nil
     var startedAt: TimeInterval
     var updatedAt: TimeInterval
 }
@@ -74,7 +78,8 @@ final class ClaudeHookSessionStore {
         cwd: String?,
         pid: Int? = nil,
         lastSubtitle: String? = nil,
-        lastBody: String? = nil
+        lastBody: String? = nil,
+        pendingQuestion: String? = nil
     ) throws {
         let normalized = normalizeSessionId(sessionId)
         guard !normalized.isEmpty else { return }
@@ -107,8 +112,20 @@ final class ClaudeHookSessionStore {
             if let body = normalizeOptional(lastBody) {
                 record.lastBody = body
             }
+            if let pendingQuestion = normalizeOptional(pendingQuestion) {
+                record.pendingQuestion = pendingQuestion
+            }
             record.updatedAt = now
             state.sessions[normalized] = record
+        }
+    }
+
+    func clearPendingQuestion(sessionId: String) throws {
+        let normalized = normalizeSessionId(sessionId)
+        guard !normalized.isEmpty else { return }
+        try withLockedState { state in
+            guard state.sessions[normalized] != nil else { return }
+            state.sessions[normalized]?.pendingQuestion = nil
         }
     }
 
@@ -466,14 +483,16 @@ extension ProgramaCLI {
         )
     }
 
-    /// A generic "needs your attention" notification takes the question or message the
-    /// session store saved from the preceding hook, when there is one.
+    /// An open AskUserQuestion wins over whatever the notification says. Otherwise a generic
+    /// "needs your attention" notification takes the message the preceding hook saved.
     private func savedBodyNotification(
         _ summary: (subtitle: String, body: String),
         session: ClaudeHookSessionRecord?
     ) -> AgentHookNotification {
         var summary = summary
-        if let session,
+        if let question = session?.pendingQuestion {
+            summary = (subtitle: "Waiting", body: question)
+        } else if let session,
            let savedBody = session.lastBody, !savedBody.isEmpty,
            summary.body.contains("needs your attention") || summary.body.contains("needs your input") {
             summary = (subtitle: session.lastSubtitle ?? summary.subtitle, body: savedBody)
@@ -555,6 +574,7 @@ extension ProgramaCLI {
 
     private func agentHookPromptSubmit(_ hook: AgentHookProvider, _ ctx: AgentHookContext) throws {
         let mapped = ctx.parsed.sessionId.flatMap { ctx.store.lookup(sessionId: $0) }
+        clearPendingQuestion(ctx, mapped)
         let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
             preferred: mapped?.workspaceId, fallback: ctx.workspaceArg, client: ctx.client
         )
@@ -584,6 +604,7 @@ extension ProgramaCLI {
         // The turn ended, not the agent: keep the session and its pid. The Notification
         // hook handles user-facing attention; SessionEnd handles cleanup.
         let mapped = ctx.parsed.sessionId.flatMap { ctx.store.lookup(sessionId: $0) }
+        clearPendingQuestion(ctx, mapped)
         let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
             preferred: mapped?.workspaceId, fallback: ctx.workspaceArg, client: ctx.client
         )
@@ -709,6 +730,13 @@ extension ProgramaCLI {
         }
     }
 
+    /// Claude resumed (next tool, prompt, or turn end), so its question dialog is closed
+    /// and a later `permission_prompt` is a real tool approval.
+    private func clearPendingQuestion(_ ctx: AgentHookContext, _ session: ClaudeHookSessionRecord?) {
+        guard session?.pendingQuestion != nil, let sessionId = ctx.parsed.sessionId else { return }
+        try? ctx.store.clearPendingQuestion(sessionId: sessionId)
+    }
+
     private func setAgentPid(
         _ hook: AgentHookProvider,
         _ ctx: AgentHookContext,
@@ -771,12 +799,14 @@ extension ProgramaCLI {
                 surfaceId: existingSurfaceId,
                 cwd: ctx.parsed.cwd,
                 lastSubtitle: "Waiting",
-                lastBody: question
+                lastBody: question,
+                pendingQuestion: question
             )
             // Don't clear notifications or set status here.
             // The Notification hook fires right after and will use the saved question.
             return
         }
+        clearPendingQuestion(ctx, mappedSession)
 
         // Best-effort, and deliberately not `try`: a throw here aborted the whole hook
         // before any of the three clears below, stranding the red "blocked" badge lit
