@@ -152,6 +152,7 @@ extension AppDelegate {
         guard env["PROGRAMA_UI_TEST_BONSPLIT_TAB_DRAG_SETUP"] == "1" else { return }
         guard tabManager != nil else { return }
         let startWithHiddenSidebar = env["PROGRAMA_UI_TEST_BONSPLIT_START_WITH_HIDDEN_SIDEBAR"] == "1"
+        let splitPanes = env["PROGRAMA_UI_TEST_BONSPLIT_SPLIT_PANES"] == "1"
 
         let deadline = Date().addingTimeInterval(20.0)
         func hasMainTerminalWindow() -> Bool {
@@ -204,7 +205,11 @@ extension AppDelegate {
             let betaTitle = "UITest Beta"
             tabManager.setCustomTitle(tabId: workspace.id, title: workspaceTitle)
             workspace.setPanelCustomTitle(panelId: alphaPanelId, title: alphaTitle)
-            tabManager.newSurface()
+            if splitPanes {
+                tabManager.createSplit(direction: .right)
+            } else {
+                tabManager.newSurface()
+            }
 
             guard let betaPanelId = workspace.focusedPanelId, betaPanelId != alphaPanelId else {
                 self.writeBonsplitTabDragUITestData(["setupError": "Failed to create second surface"])

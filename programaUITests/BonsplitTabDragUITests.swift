@@ -418,6 +418,42 @@ final class BonsplitTabDragUITests: XCTestCase {
         )
     }
 
+    func testSplitPanesWithOneTabEachKeepTheirTabBars() {
+        let (app, dataPath) = launchConfiguredApp(splitPanes: true)
+
+        XCTAssertTrue(
+            ensureForegroundAfterLaunch(app, timeout: launchTimeout),
+            "Expected app to launch for split-pane tab bar UI test. state=\(app.state.rawValue)"
+        )
+        XCTAssertTrue(waitForAnyJSON(atPath: dataPath, timeout: setupTimeout), "Expected tab-drag setup data at \(dataPath)")
+        guard let ready = waitForJSONKey("ready", equals: "1", atPath: dataPath, timeout: setupTimeout) else {
+            XCTFail("Timed out waiting for ready=1. data=\(loadJSON(atPath: dataPath) ?? [:])")
+            return
+        }
+
+        if let setupError = ready["setupError"], !setupError.isEmpty {
+            XCTFail("Setup failed: \(setupError)")
+            return
+        }
+
+        let window = app.windows.element(boundBy: 0)
+        XCTAssertTrue(window.waitForExistence(timeout: 5.0), "Expected main window to exist")
+
+        // Each pane holds a single tab. Its tab bar still has to show, since that bar
+        // carries the close and new-tab controls that undo the split.
+        let alphaTab = app.buttons[ready["alphaTitle"] ?? "UITest Alpha"]
+        let betaTab = app.buttons[ready["betaTitle"] ?? "UITest Beta"]
+        XCTAssertTrue(
+            waitForCondition(timeout: 5.0) { alphaTab.exists && alphaTab.isHittable },
+            "Expected the left pane's tab bar to show its only tab. window=\(window.frame) alpha=\(alphaTab.debugDescription)"
+        )
+        XCTAssertTrue(
+            waitForCondition(timeout: 5.0) { betaTab.exists && betaTab.isHittable },
+            "Expected the right pane's tab bar to show its only tab. window=\(window.frame) beta=\(betaTab.debugDescription)"
+        )
+        XCTAssertLessThan(alphaTab.frame.midX, betaTab.frame.midX, "Expected alpha and beta in side-by-side panes")
+    }
+
     private enum WorkspacePresentationMode: String {
         case standard
         case minimal
@@ -425,6 +461,7 @@ final class BonsplitTabDragUITests: XCTestCase {
 
     private func launchConfiguredApp(
         startWithHiddenSidebar: Bool = false,
+        splitPanes: Bool = false,
         presentationMode: WorkspacePresentationMode = .minimal
     ) -> (XCUIApplication, String) {
         let app = XCUIApplication()
@@ -435,6 +472,9 @@ final class BonsplitTabDragUITests: XCTestCase {
         app.launchEnvironment["PROGRAMA_UI_TEST_BONSPLIT_TAB_DRAG_PATH"] = dataPath
         if startWithHiddenSidebar {
             app.launchEnvironment["PROGRAMA_UI_TEST_BONSPLIT_START_WITH_HIDDEN_SIDEBAR"] = "1"
+        }
+        if splitPanes {
+            app.launchEnvironment["PROGRAMA_UI_TEST_BONSPLIT_SPLIT_PANES"] = "1"
         }
         app.launchArguments += ["-workspacePresentationMode", presentationMode.rawValue]
         app.launch()
