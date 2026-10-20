@@ -98,20 +98,34 @@ final class ProgramaDirectoryTrust: @unchecked Sendable {
     /// is present but holds no digest for this exact config, or a digest that differs, is
     /// `.changed`; an unreadable config is `.untrusted`. Nothing is ever adopted silently.
     func trustState(configPath: String, globalConfigPath: String) -> TrustState {
+        trustState(
+            configPath: configPath,
+            globalConfigPath: globalConfigPath,
+            loadedDigest: Self.executableDigest(forConfigAt: configPath)
+        )
+    }
+
+    /// Trust query for entries parsed earlier, where `loadedDigest` is the digest of the exact
+    /// bytes they were decoded from (`executableDigest(forSanitizedConfig:)`). The entries are
+    /// trusted only when that digest is the approved one and the file on disk still matches it,
+    /// so an edit between parsing and running can never ride on the earlier approval.
+    func trustState(configPath: String, globalConfigPath: String, loadedDigest: String?) -> TrustState {
         if configPath == globalConfigPath { return .trusted }
 
+        guard let loadedDigest else { return .untrusted }
         let trustKey = Self.trustKey(for: configPath)
-        guard let currentDigest = Self.executableDigest(forConfigAt: configPath) else {
-            return .untrusted
-        }
         let configKey = Self.configKey(for: configPath)
 
         stateLock.lock()
-        defer { stateLock.unlock() }
-        guard let digests = trustedDirectories[trustKey] else {
+        let digests = trustedDirectories[trustKey]
+        stateLock.unlock()
+        guard let digests else { return .untrusted }
+
+        guard digests[configKey] == loadedDigest else { return .changed }
+        guard let currentDigest = Self.executableDigest(forConfigAt: configPath) else {
             return .untrusted
         }
-        return digests[configKey] == currentDigest ? .trusted : .changed
+        return currentDigest == loadedDigest ? .trusted : .changed
     }
 
     /// Trust the directory containing a programa.json. If the programa.json is inside a git
@@ -121,6 +135,12 @@ final class ProgramaDirectoryTrust: @unchecked Sendable {
     func trust(configPath: String) {
         // An unreadable config has no digest and must not create or widen a trusted entry.
         guard let digest = Self.executableDigest(forConfigAt: configPath) else { return }
+        trust(configPath: configPath, digest: digest)
+    }
+
+    /// Records `digest` as the approved content of the config at `configPath`. Callers pass the
+    /// digest of the content the user actually reviewed, not a fresh read of the file.
+    func trust(configPath: String, digest: String) {
         let trustKey = Self.trustKey(for: configPath)
         let configKey = Self.configKey(for: configPath)
         stateLock.lock()
@@ -189,6 +209,12 @@ final class ProgramaDirectoryTrust: @unchecked Sendable {
     static func executableDigest(forConfigAt path: String) -> String? {
         guard let data = FileManager.default.contents(atPath: path), !data.isEmpty else { return nil }
         guard let sanitized = try? JSONCParser.preprocess(data: data) else { return nil }
+        return executableDigest(forSanitizedConfig: sanitized)
+    }
+
+    /// Digest of config bytes already passed through `JSONCParser.preprocess`, so a parser that
+    /// decoded those bytes can pin trust to exactly what it decoded.
+    static func executableDigest(forSanitizedConfig sanitized: Data) -> String? {
         // A config with a repeated key never gets a digest, so it can never be trusted: the
         // digest and the command decoder could disagree about which value is real.
         guard !JSONCParser.containsDuplicateObjectKeys(sanitized) else { return nil }

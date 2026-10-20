@@ -77,13 +77,69 @@ struct SocketAuthFailureLimiter {
     }
 }
 
+/// Counts failed `auth.login` attempts across every connection, so reconnecting does not
+/// reset the attempt budget. The first `freeFailures` consecutive failures cost nothing;
+/// each one after that locks password checks for `initialLockout`, doubling up to
+/// `maxLockout`. A successful login resets it. Never sleeps: callers reject during a lockout.
+///
+/// `beginAttempt` counts each attempt as a failure up front, so a burst of parallel
+/// connections cannot all slip past the check before the first failure is recorded.
+final class SocketAuthBackoff: @unchecked Sendable {
+    static let shared = SocketAuthBackoff()
+
+    static let freeFailures = 5
+    static let initialLockout: TimeInterval = 1
+    static let maxLockout: TimeInterval = 60
+
+    private let lock = NSLock()
+    private let now: () -> TimeInterval
+    private var consecutiveFailures = 0
+    private var lockedUntil: TimeInterval = 0
+
+    /// `now` must be monotonic; tests inject a fake clock.
+    init(now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
+        self.now = now
+    }
+
+    /// False while locked out; the caller must reject without checking the password.
+    /// Otherwise records the attempt as failed until `recordSuccess` says it was not.
+    func beginAttempt() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        let current = now()
+        guard current >= lockedUntil else { return false }
+        consecutiveFailures += 1
+        let excess = consecutiveFailures - Self.freeFailures
+        if excess >= 0 {
+            lockedUntil = current + min(Self.maxLockout, Self.initialLockout * pow(2, Double(min(excess, 16))))
+        }
+        return true
+    }
+
+    func recordSuccess() {
+        lock.lock()
+        defer { lock.unlock() }
+        consecutiveFailures = 0
+        lockedUntil = 0
+    }
+}
+
 /// Parses one `auth.login` request and checks it against the configured password.
 enum SocketPasswordLogin {
     enum Outcome {
         case invalidParams
         case unconfigured
         case failed
+        /// Rejected without checking the password because of `SocketAuthBackoff`.
+        case rateLimited
         case succeeded
+
+        /// Wire message for the `auth_failed` error that `.failed` and `.rateLimited` return.
+        var rejectionMessage: String {
+            self == .rateLimited
+                ? "Too many failed login attempts. Wait a moment and try again."
+                : "Invalid password"
+        }
     }
 
     /// Returns nil when `command` is not an `auth.login` request. `credentials` is read only
@@ -91,7 +147,8 @@ enum SocketPasswordLogin {
     static func evaluate(
         _ command: String,
         credentials: () -> TerminalController.SocketPasswordCredentialSource,
-        limiter: inout SocketAuthFailureLimiter
+        limiter: inout SocketAuthFailureLimiter,
+        backoff: SocketAuthBackoff = .shared
     ) -> (id: Any?, outcome: Outcome)? {
         guard command.hasPrefix("{"),
               let data = command.data(using: .utf8),
@@ -106,10 +163,15 @@ enum SocketPasswordLogin {
         }
         let source = credentials()
         guard source.hasConfiguredPassword() else { return (id, .unconfigured) }
+        guard backoff.beginAttempt() else {
+            limiter.recordFailure()
+            return (id, .rateLimited)
+        }
         guard source.verify(provided) else {
             limiter.recordFailure()
             return (id, .failed)
         }
+        backoff.recordSuccess()
         return (id, .succeeded)
     }
 }

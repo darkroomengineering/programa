@@ -74,7 +74,7 @@ Read by the app, the CLI and `programa-mcp`. Modes and discovery are described i
 | `PROGRAMA_DIAGNOSTICS_LOG` | Overrides the diagnostics log path. The default is `~/Library/Logs/Programa/diagnostics.log`. See [troubleshooting.md](troubleshooting.md). |
 | `PROGRAMA_DEBUG_LOG` | Debug builds. Path of the debug event log. Also turns on the background event log. |
 | `PROGRAMA_DEBUG_BG` | Debug builds. `1` turns on the background event log. |
-| `PROGRAMA_DEBUG_BG_LOG` | Debug builds. Path of the background event log. The default sits next to the debug log with `-bg` before `.log`. |
+| `PROGRAMA_DEBUG_BG_LOG` | Debug builds. Path of the background event log. The default sits next to the debug log with `-bg` before `.log`, or at `~/Library/Logs/Programa/programa-bg.log` when `PROGRAMA_DEBUG_LOG` is unset. The log is not opened through a symlink or when another user owns the file. |
 | `PROGRAMA_TYPING_TIMING_LOGS` | Debug builds. `1` logs typing-path timings. |
 | `PROGRAMA_KEY_LATENCY_PROBE` | Debug builds. `1` turns on the verbose key latency probe (and the typing timing logs). |
 | `PROGRAMA_FOCUS_DEBUG` | `1` logs focus changes. |

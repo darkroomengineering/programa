@@ -229,7 +229,8 @@ class GhosttyApp {
             return baseURL.deletingLastPathComponent().appendingPathComponent(bgName)
         }
 
-        return URL(fileURLWithPath: "/tmp/programa-bg.log")
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/Programa/programa-bg.log", isDirectory: false)
     }
 
     @MainActor
@@ -1953,7 +1954,7 @@ class GhosttyApp {
                         tabId: tabId,
                         surfaceId: surfaceId,
                         title: command,
-                        subtitle: "",
+                        subtitle: TerminalNotificationStore.terminalOutputSubtitle(tabTitle: tabTitle),
                         body: body
                     )
                     return true
@@ -2406,7 +2407,7 @@ class GhosttyApp {
                     tabId: tabId,
                     surfaceId: surfaceId,
                     title: command,
-                    subtitle: "",
+                    subtitle: TerminalNotificationStore.terminalOutputSubtitle(tabTitle: tabTitle),
                     body: body
                 )
             }

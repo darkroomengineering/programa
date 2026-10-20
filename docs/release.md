@@ -49,6 +49,11 @@ The appcast must point at `rolling`, not at a candidate. GitHub serves no assets
 so a candidate URL returns 404 for every auto-updating client. dSYMs and the versioned EXE
 live only on the candidate draft.
 
+The app sets `SURequireSignedFeed`, and `generate_appcast` signs the whole `appcast.xml` with
+`SPARKLE_PRIVATE_KEY`. Never edit a published appcast by hand: any change breaks the feed
+signature and installed apps stop updating. Regenerate it with
+`scripts/sparkle_generate_appcast.sh` instead.
+
 The README download button points at `releases/latest/download/programa-macos.dmg`.
 
 ## Required GitHub secrets

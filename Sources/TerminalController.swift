@@ -1298,8 +1298,8 @@ class TerminalController {
                 code: "auth_unconfigured",
                 message: "Password mode is enabled but no socket password is configured in Settings."
             )
-        case .failed:
-            return v2Error(id: id, code: "auth_failed", message: "Invalid password")
+        case .failed, .rateLimited:
+            return v2Error(id: id, code: "auth_failed", message: outcome.rejectionMessage)
         case .succeeded:
             authenticated = true
             return v2Ok(id: id, result: ["authenticated": true])
