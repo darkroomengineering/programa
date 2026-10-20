@@ -48,7 +48,8 @@ final class FileBackgroundLogLineSink: BackgroundLogLineSink {
 
     /// The log path can sit in a shared directory such as /tmp, so the open refuses a symlink
     /// at the final component, anything that is not a regular file, and a file another user
-    /// owns; otherwise another user could aim the log at a file of ours or read what we write.
+    /// owns, and resets an existing file to 0600; otherwise another user could aim the log at a
+    /// file of ours or read what we write.
     private static func openHandle(at url: URL) -> FileHandle? {
         try? FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
@@ -57,7 +58,8 @@ final class FileBackgroundLogLineSink: BackgroundLogLineSink {
         let fd = open(url.path, O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0o600)
         guard fd >= 0 else { return nil }
         var info = stat()
-        guard fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG, info.st_uid == getuid() else {
+        guard fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG, info.st_uid == getuid(),
+              fchmod(fd, 0o600) == 0 else {
             close(fd)
             return nil
         }
