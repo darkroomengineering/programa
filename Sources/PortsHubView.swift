@@ -43,11 +43,11 @@ enum PortsHubActions {
         alert.alertStyle = .warning
         alert.messageText = String(
             localized: "dialog.stopPort.title",
-            defaultValue: "Stop \(command) on port \(port)?"
+            defaultValue: "Stop \(command) on port \(String(port))?"
         )
         alert.informativeText = String(
             localized: "dialog.stopPort.message",
-            defaultValue: "Programa asks process \(pid) to quit, and force-stops it if it is still running after 3 seconds."
+            defaultValue: "Programa asks process \(String(pid)) to quit, and force-stops it if it is still running after 3 seconds."
         )
         alert.addButton(withTitle: String(localized: "dialog.stopPort.cancel", defaultValue: "Cancel"))
         alert.addButton(withTitle: String(localized: "dialog.stopPort.confirm", defaultValue: "Stop"))

@@ -699,11 +699,11 @@ struct TabItemView: View, Equatable {
                         Button(action: {
                             openPortLink(port)
                         }) {
-                            Text(String(localized: "sidebar.port.label", defaultValue: ":\(port)"))
+                            Text(verbatim: ":\(port)")
                                 .underline()
                         }
                         .buttonStyle(.plain)
-                        .safeHelp(String(localized: "sidebar.port.openTooltip", defaultValue: "Open localhost:\(port)"))
+                        .safeHelp(String(localized: "sidebar.port.openTooltip", defaultValue: "Open localhost:\(String(port))"))
                     }
                     Spacer(minLength: 0)
                 }
