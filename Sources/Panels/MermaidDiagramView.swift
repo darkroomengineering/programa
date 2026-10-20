@@ -82,7 +82,7 @@ struct MermaidWebView: NSViewRepresentable {
     @Binding var didFail: Bool
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(height: $height, didFail: $didFail)
+        Coordinator(height: $height, didFail: $didFail, baseURL: scriptURL.deletingLastPathComponent())
     }
 
     func makeNSView(context: Context) -> WKWebView {
@@ -116,7 +116,7 @@ struct MermaidWebView: NSViewRepresentable {
         guard context.coordinator.lastLoadedKey != key else { return }
         context.coordinator.lastLoadedKey = key
         let html = Self.html(source: source, isDark: isDark, scriptFileName: scriptURL.lastPathComponent)
-        webView.loadHTMLString(html, baseURL: scriptURL.deletingLastPathComponent())
+        webView.loadHTMLString(html, baseURL: context.coordinator.baseURL)
     }
 
     /// Builds the HTML document loaded into the web view. `internal` (not
@@ -188,11 +188,13 @@ struct MermaidWebView: NSViewRepresentable {
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         private let height: Binding<CGFloat>
         private let didFail: Binding<Bool>
+        let baseURL: URL
         var lastLoadedKey: String = ""
 
-        init(height: Binding<CGFloat>, didFail: Binding<Bool>) {
+        init(height: Binding<CGFloat>, didFail: Binding<Bool>, baseURL: URL) {
             self.height = height
             self.didFail = didFail
+            self.baseURL = baseURL
         }
 
         func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -210,21 +212,30 @@ struct MermaidWebView: NSViewRepresentable {
 
         /// The only navigation this view is ever supposed to perform is the
         /// single `loadHTMLString` document built by `MermaidWebView.html`,
-        /// whose main-frame navigation carries type `.other` and a `nil` or
-        /// `about:blank` URL (or the local `baseURL` we pass alongside it).
-        /// Everything else — a link click, a form submit, or a script-driven
+        /// whose main-frame navigation carries type `.other` and either
+        /// `about:blank` or exactly the `baseURL` we pass alongside it.
+        /// Everything else — a link click, a form submit, a script-driven
         /// `window.location` change reachable if a Mermaid source ever
-        /// escapes into executable markup — is cancelled, so the web view can
-        /// never navigate away from the diagram it was given.
+        /// escapes into executable markup, or any other `file://` URL — is
+        /// cancelled, so the web view can never navigate away from the diagram
+        /// it was given.
         func webView(
             _ webView: WKWebView,
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
         ) {
-            let url = navigationAction.request.url
             let isInitialDocumentLoad = navigationAction.navigationType == .other
-                && (url == nil || url?.absoluteString == "about:blank" || url?.isFileURL == true)
+                && navigationAction.request.url.map(isAllowedDocumentURL) == true
             decisionHandler(isInitialDocumentLoad ? .allow : .cancel)
+        }
+
+        private func isAllowedDocumentURL(_ url: URL) -> Bool {
+            if url.absoluteString == "about:blank" { return true }
+            // `.path` drops a trailing slash, which WebKit may or may not keep on the base URL.
+            return url.isFileURL
+                && url.query == nil
+                && url.fragment == nil
+                && url.standardizedFileURL.path == baseURL.standardizedFileURL.path
         }
     }
 }
