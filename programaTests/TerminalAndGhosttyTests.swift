@@ -1950,32 +1950,6 @@ final class WindowTerminalHostViewTests: XCTestCase {
     }
 }
 
-@discardableResult
-private func startOrFocusTerminalSearch(
-    _ terminalSurface: TerminalSurface,
-    searchFocusNotifier: @escaping (TerminalSurface) -> Void = {
-        NotificationCenter.default.post(name: .ghosttySearchFocus, object: $0)
-    }
-) -> Bool {
-    if terminalSurface.searchState != nil {
-        searchFocusNotifier(terminalSurface)
-        return true
-    }
-
-    if terminalSurface.performBindingAction("start_search") {
-        DispatchQueue.main.async { [weak terminalSurface] in
-            guard let terminalSurface, terminalSurface.searchState == nil else { return }
-            terminalSurface.searchState = TerminalSurface.SearchState()
-            searchFocusNotifier(terminalSurface)
-        }
-        return true
-    }
-
-    terminalSurface.searchState = TerminalSurface.SearchState()
-    searchFocusNotifier(terminalSurface)
-    return true
-}
-
 @MainActor
 final class GhosttySurfaceOverlayTests: XCTestCase {
     private final class ScrollProbeSurfaceView: GhosttyNSView {
@@ -2531,31 +2505,6 @@ final class GhosttySurfaceOverlayTests: XCTestCase {
 #if DEBUG
         surface.releaseSurfaceForTesting()
 #endif
-    }
-
-    func testStartOrFocusTerminalSearchReusesExistingSearchState() {
-        let surface = TerminalSurface(
-            tabId: UUID(),
-            context: GHOSTTY_SURFACE_CONTEXT_SPLIT,
-            configTemplate: nil,
-            workingDirectory: nil
-        )
-        let existingSearchState = TerminalSurface.SearchState(needle: "existing")
-        surface.searchState = existingSearchState
-
-        var focusNotificationCount = 0
-        XCTAssertTrue(
-            startOrFocusTerminalSearch(surface) { _ in
-                focusNotificationCount += 1
-            }
-        )
-
-        XCTAssertTrue(surface.searchState === existingSearchState)
-        XCTAssertEqual(
-            focusNotificationCount,
-            1,
-            "Re-triggering terminal Find should refocus the existing overlay without recreating state"
-        )
     }
 
     func testEscapeDismissingFindOverlayDoesNotLeakEscapeKeyUpToTerminal() {
