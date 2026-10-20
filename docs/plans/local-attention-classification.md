@@ -13,7 +13,7 @@ Status: queued; implementation and measurements pending.
 
 Make it easier to identify which workspace needs attention. This is a repository-owned backlog for Codex, Claude Code, and other contributors; no conversation history or private agent memory is required. Pick up the first incomplete task, read the referenced implementation before editing, and record evidence beside completed items. Do not mark research claims as locally verified.
 
-Reuse the evaluation principles from the [cc-settings skill-routing evaluation](../../../cc-settings/docs/audits/skill-routing-2026-09-21.md) in a sibling checkout; that experiment ended in no-go. The projects share evaluation principles, not a runtime dependency. Session recovery reliability takes priority over shipping this feature.
+Session recovery reliability takes priority over shipping this feature.
 
 ## Research basis
 

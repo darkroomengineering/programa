@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="./docs/assets/main-first-image.png" alt="Programa: workspace sidebar with agent status, a Claude Code session waiting for input, and a browser split" width="900" />
+  <img src="./docs/assets/main-first-image.png" alt="Programa: workspace sidebar with agent status, a Claude Code session waiting for input" width="900" />
 </p>
 
 Run many coding agents in parallel and always know which one needs you.
@@ -77,7 +77,7 @@ Windows can run x64 executables through emulation. See the
 
 ## Why not tmux, or cmux?
 
-**tmux** multiplexes shells inside any terminal and keeps them alive when you disconnect. It knows nothing about what runs in them. With six agents in six panes, every one looks the same until you click through. There is no notification, no sidebar, no browser, no diff, and the whole UI is keyboard chords inside a text grid.
+**tmux** multiplexes shells inside any terminal and keeps them alive when you disconnect. It knows nothing about what runs in them. With six agents in six panes, every one looks the same until you click through. There is no notification, no sidebar, no diff, and the whole UI is keyboard chords inside a text grid.
 
 Programa keeps what tmux is good at and adds what agents need:
 
