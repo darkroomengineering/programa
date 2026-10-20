@@ -2537,8 +2537,7 @@
           }
         },
         "required": [
-          "classes",
-          "surface_ids"
+          "classes"
         ],
         "type": "object"
       },

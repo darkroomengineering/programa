@@ -596,9 +596,9 @@ pending comments is a no-op (`sent_count: 0`), not an error.
 ## Socket Event Subscriptions (#167)
 
 `subscribe` upgrades the calling connection to receive pushed events — agent state changes
-(#164), coalesced surface output, and workspace lifecycle changes — instead of the caller
-polling `surface.list`/`workspace.list`. Written before implementation, per the issue's ask that
-backpressure/disconnect semantics be specified up front.
+(#164), coalesced surface output, workspace lifecycle changes, and agent prompts for user
+input — instead of the caller polling `surface.list`/`workspace.list`. Written before
+implementation, per the issue's ask that backpressure/disconnect semantics be specified up front.
 
 **This is not the front door.** `surface.wait` (one-shot conditions) and `agent.prompt` (submit +
 wait) cover the common "wait for one thing" case in a single request/response round trip with no
@@ -611,7 +611,7 @@ as the advanced path, not the default way to wait for something).
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `classes` | array of string | yes | Any of `agent_state`, `output`, `workspace_lifecycle`. Non-empty. |
+| `classes` | array of string | yes | Any of `agent_state`, `output`, `workspace_lifecycle`, `needs_input`. Non-empty. |
 | `surface_ids` | array of string (id or ref) | required iff `classes` includes `output` | `output` is opt-in per surface — broadcasting every surface's output to every subscriber by default would be prohibitively expensive. |
 
 Response (`ok: true`): `{"subscription_id": "...", "classes": [...], "surface_ids": [...],
@@ -632,6 +632,7 @@ request they're a response to) — each is its own single-line JSON object with 
 {"event": "agent_state", "workspace_id": "...", "surface_id": "...", "state": "working", "source": "hooks", "ts": 1737590400.123}
 {"event": "output", "workspace_id": "...", "surface_id": "...", "text": "new terminal output...", "ts": 1737590400.223}
 {"event": "workspace_lifecycle", "kind": "renamed", "workspace_id": "...", "title": "new title", "ts": 1737590400.323}
+{"event": "needs_input", "workspace_id": "...", "surface_id": "...", "kind": "question", "provider": "claude-code", "title": "Claude Code", "body": "Which branch should I rebase onto?", "ts": 1737590400.423}
 {"event": "dropped", "count": 7}
 ```
 
@@ -641,6 +642,16 @@ request they're a response to) — each is its own single-line JSON object with 
   under `surface.wait`'s `agent_state` condition above (screen-manifest detection,
   docs/plans/screen-manifest-detection.md) — `null` iff `state` is `null`.
 - `agent_state.program_status` is present only when `source` is `"program"`, with the same object `surface.list` returns. Frames fire when the presence changes, so a `done` to `error` change is delivered although both read `agent_state: "idle"`.
+- `needs_input` fires once per `agent.needs_input` call, after its notification is posted, so
+  `notification.list` already holds the matching entry. It fires whatever the agent-state
+  precedence decides: also while OSC 7501 owns the surface's presence, and also when the
+  surface is already `blocked`. `kind` and `provider` echo the call's params, and `title`,
+  `subtitle`, and `body` are the posted notification's text (`title` includes the surface's
+  custom title suffix, as in `notification.list`). A key whose value is empty or absent is
+  omitted. The text comes from the hook's call and never from OSC 7501 record contents.
+- The `agent_state` `"blocked"` frame for the same prompt may come from `source: "program"`
+  (OSC 7501) or `"hooks"`, or not at all when the presence does not change, so pair
+  `needs_input` with `agent_state` by `surface_id` rather than by order or source.
 - `output.text` is the *newly appended* tail since the last tick for that surface, capped at
   4000 characters — never the full buffer, and never per-byte (see Backpressure below).
 - `workspace_lifecycle.kind` is `created`, `closed`, or `renamed`. `renamed` fires only from the
