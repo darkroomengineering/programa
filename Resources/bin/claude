@@ -79,41 +79,28 @@ fi
 # Find real claude.
 REAL_CLAUDE="$(find_real_claude)" || { echo "Error: claude not found in PATH" >&2; exit 127; }
 
-ensure_node_options_restore_module() {
-    local guard_dir="${TMPDIR:-/tmp}"
-    guard_dir="${guard_dir%/}/programa-claude-node-options"
-    local guard_path="$guard_dir/restore-node-options.cjs"
-    mkdir -p "$guard_dir" || return 1
-    local temp_path
-    temp_path="$(mktemp "$guard_dir/restore-node-options.XXXXXX.cjs")" || return 1
-    cat >"$temp_path" <<'EOF'
-const hadOriginalNodeOptions = process.env.PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT === "1";
-if (hadOriginalNodeOptions) {
-  process.env.NODE_OPTIONS = process.env.PROGRAMA_ORIGINAL_NODE_OPTIONS ?? "";
-} else {
-  delete process.env.NODE_OPTIONS;
-}
-delete process.env.PROGRAMA_ORIGINAL_NODE_OPTIONS;
-delete process.env.PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT;
-EOF
-    chmod 0644 "$temp_path" || {
-        rm -f "$temp_path"
-        return 1
-    }
-    if [[ -f "$guard_path" ]] && cmp -s "$temp_path" "$guard_path"; then
-        rm -f "$temp_path" || return 1
-    else
-        mv -f "$temp_path" "$guard_path" || {
-            rm -f "$temp_path"
-            return 1
-        }
-    fi
+# The restore module ships in the app bundle next to this wrapper, so nothing
+# another user can write is ever loaded through --require.
+node_options_restore_module() {
+    local self_dir guard_path
+    self_dir="$(cd "$(dirname "$0")" && pwd)" || return 1
+    guard_path="$self_dir/restore-node-options.cjs"
+    [[ -f "$guard_path" ]] || return 1
     printf '%s' "$guard_path"
+}
+
+# Node splits NODE_OPTIONS on spaces outside double quotes and honors backslash
+# escapes inside them, so the bundle path (which may contain spaces) is quoted.
+quote_node_option_value() {
+    local value="$1"
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    printf '"%s"' "$value"
 }
 
 merge_node_options() {
     local guard_path="$1"
-    local require_flag="--require=$guard_path"
+    local require_flag="--require=$(quote_node_option_value "$guard_path")"
     local memory_flag="--max-old-space-size=4096"
     local existing="${NODE_OPTIONS:-}"
     local -a filtered=()
@@ -175,7 +162,7 @@ done
 # the actual claude process PID, which hooks use for stale-session detection.
 export PROGRAMA_CLAUDE_PID=$$
 export PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN="$(resolve_hook_programa_bin)"
-if GUARD_PATH="$(ensure_node_options_restore_module)"; then
+if GUARD_PATH="$(node_options_restore_module)"; then
     if [[ ${NODE_OPTIONS+x} ]]; then
         export PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT=1
         export PROGRAMA_ORIGINAL_NODE_OPTIONS="$NODE_OPTIONS"
