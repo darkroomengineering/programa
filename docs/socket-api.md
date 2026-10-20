@@ -149,7 +149,9 @@ A client authenticates once per connection:
 
 Until it succeeds, every other method returns `auth_required`. A wrong password returns
 `auth_failed` and a missing one returns `invalid_params`. After five failed `auth.login`
-attempts the server closes the connection. Changing the password in Settings
+attempts the server closes the connection. Failures also count across connections: after
+five in a row, `auth.login` returns `auth_failed` without checking the password for 1
+second, doubling with each further failure up to 60 seconds, until a login succeeds. Changing the password in Settings
 invalidates existing authenticated connections. Outside password mode, `auth.login` succeeds
 with `"required": false` and nothing else is needed.
 
