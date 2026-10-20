@@ -440,15 +440,16 @@ final class BonsplitTabDragUITests: XCTestCase {
         XCTAssertTrue(window.waitForExistence(timeout: 5.0), "Expected main window to exist")
 
         // Each pane holds a single tab. Its tab bar still has to show, since that bar
-        // carries the close and new-tab controls that undo the split.
+        // carries the close and new-tab controls that undo the split. `isHittable` is
+        // not usable here: XCUI cannot hit-test through the macOS 26 glass tab pills.
         let alphaTab = app.buttons[ready["alphaTitle"] ?? "UITest Alpha"]
         let betaTab = app.buttons[ready["betaTitle"] ?? "UITest Beta"]
         XCTAssertTrue(
-            waitForCondition(timeout: 5.0) { alphaTab.exists && alphaTab.isHittable },
+            waitForCondition(timeout: 5.0) { alphaTab.exists && window.frame.contains(alphaTab.frame) },
             "Expected the left pane's tab bar to show its only tab. window=\(window.frame) alpha=\(alphaTab.debugDescription)"
         )
         XCTAssertTrue(
-            waitForCondition(timeout: 5.0) { betaTab.exists && betaTab.isHittable },
+            waitForCondition(timeout: 5.0) { betaTab.exists && window.frame.contains(betaTab.frame) },
             "Expected the right pane's tab bar to show its only tab. window=\(window.frame) beta=\(betaTab.debugDescription)"
         )
         XCTAssertLessThan(alphaTab.frame.midX, betaTab.frame.midX, "Expected alpha and beta in side-by-side panes")
