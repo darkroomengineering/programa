@@ -3,3 +3,4 @@
 "contextMenu.tabColor" = "Tab Color";
 "contextMenu.clearColor" = "Clear Color";
 "contextMenu.chooseCustomColor" = "Choose Custom Color…";
+"tabBar.newTab" = "New Tab";

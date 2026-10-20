@@ -3,3 +3,4 @@
 "contextMenu.tabColor" = "タブの色";
 "contextMenu.clearColor" = "色をクリア";
 "contextMenu.chooseCustomColor" = "カスタムカラーを選択…";
+"tabBar.newTab" = "新規タブ";

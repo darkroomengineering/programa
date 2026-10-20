@@ -418,6 +418,77 @@ final class BonsplitTabDragUITests: XCTestCase {
         )
     }
 
+    func testSplitPanesWithOneTabEachKeepTheirTabBars() {
+        let (app, dataPath) = launchConfiguredApp(splitPanes: true)
+
+        XCTAssertTrue(
+            ensureForegroundAfterLaunch(app, timeout: launchTimeout),
+            "Expected app to launch for split-pane tab bar UI test. state=\(app.state.rawValue)"
+        )
+        XCTAssertTrue(waitForAnyJSON(atPath: dataPath, timeout: setupTimeout), "Expected tab-drag setup data at \(dataPath)")
+        guard let ready = waitForJSONKey("ready", equals: "1", atPath: dataPath, timeout: setupTimeout) else {
+            XCTFail("Timed out waiting for ready=1. data=\(loadJSON(atPath: dataPath) ?? [:])")
+            return
+        }
+
+        if let setupError = ready["setupError"], !setupError.isEmpty {
+            XCTFail("Setup failed: \(setupError)")
+            return
+        }
+
+        let window = app.windows.element(boundBy: 0)
+        XCTAssertTrue(window.waitForExistence(timeout: 5.0), "Expected main window to exist")
+
+        // Each pane holds a single tab. Its tab bar still has to show, since that bar
+        // carries the close and new-tab controls that undo the split. `isHittable` is
+        // not usable here: XCUI cannot hit-test through the macOS 26 glass tab pills.
+        let alphaTab = app.buttons[ready["alphaTitle"] ?? "UITest Alpha"]
+        let betaTab = app.buttons[ready["betaTitle"] ?? "UITest Beta"]
+        XCTAssertTrue(
+            waitForCondition(timeout: 5.0) { alphaTab.exists && window.frame.contains(alphaTab.frame) },
+            "Expected the left pane's tab bar to show its only tab. window=\(window.frame) alpha=\(alphaTab.debugDescription)"
+        )
+        XCTAssertTrue(
+            waitForCondition(timeout: 5.0) { betaTab.exists && window.frame.contains(betaTab.frame) },
+            "Expected the right pane's tab bar to show its only tab. window=\(window.frame) beta=\(betaTab.debugDescription)"
+        )
+        XCTAssertLessThan(alphaTab.frame.midX, betaTab.frame.midX, "Expected alpha and beta in side-by-side panes")
+    }
+
+    func testSingleTabFloatingNewTabButtonOpensATab() {
+        let (app, dataPath) = launchConfiguredApp(singleTab: true)
+
+        XCTAssertTrue(
+            ensureForegroundAfterLaunch(app, timeout: launchTimeout),
+            "Expected app to launch for floating new-tab button UI test. state=\(app.state.rawValue)"
+        )
+        XCTAssertTrue(waitForAnyJSON(atPath: dataPath, timeout: setupTimeout), "Expected tab-drag setup data at \(dataPath)")
+        guard let ready = waitForJSONKey("ready", equals: "1", atPath: dataPath, timeout: setupTimeout) else {
+            XCTFail("Timed out waiting for ready=1. data=\(loadJSON(atPath: dataPath) ?? [:])")
+            return
+        }
+        if let setupError = ready["setupError"], !setupError.isEmpty {
+            XCTFail("Setup failed: \(setupError)")
+            return
+        }
+
+        let window = app.windows.element(boundBy: 0)
+        XCTAssertTrue(window.waitForExistence(timeout: 5.0), "Expected main window to exist")
+
+        // A single tab hides its tab bar, so the strip left in its place carries the "+".
+        let alphaTab = app.buttons[ready["alphaTitle"] ?? "UITest Alpha"]
+        let newTabButton = app.descendants(matching: .any).matching(identifier: "paneFloatingNewTabButton").firstMatch
+        XCTAssertTrue(newTabButton.waitForExistence(timeout: 5.0), "Expected the floating new-tab button with a single tab")
+        XCTAssertFalse(alphaTab.exists, "Expected the single tab's tab bar to be hidden")
+
+        newTabButton.click()
+
+        XCTAssertTrue(
+            waitForCondition(timeout: 5.0) { alphaTab.exists && !newTabButton.exists },
+            "Expected the click to open a second tab and bring the tab bar back. alpha=\(alphaTab.debugDescription)"
+        )
+    }
+
     private enum WorkspacePresentationMode: String {
         case standard
         case minimal
@@ -425,6 +496,8 @@ final class BonsplitTabDragUITests: XCTestCase {
 
     private func launchConfiguredApp(
         startWithHiddenSidebar: Bool = false,
+        splitPanes: Bool = false,
+        singleTab: Bool = false,
         presentationMode: WorkspacePresentationMode = .minimal
     ) -> (XCUIApplication, String) {
         let app = XCUIApplication()
@@ -435,6 +508,12 @@ final class BonsplitTabDragUITests: XCTestCase {
         app.launchEnvironment["PROGRAMA_UI_TEST_BONSPLIT_TAB_DRAG_PATH"] = dataPath
         if startWithHiddenSidebar {
             app.launchEnvironment["PROGRAMA_UI_TEST_BONSPLIT_START_WITH_HIDDEN_SIDEBAR"] = "1"
+        }
+        if splitPanes {
+            app.launchEnvironment["PROGRAMA_UI_TEST_BONSPLIT_SPLIT_PANES"] = "1"
+        }
+        if singleTab {
+            app.launchEnvironment["PROGRAMA_UI_TEST_BONSPLIT_SINGLE_TAB"] = "1"
         }
         app.launchArguments += ["-workspacePresentationMode", presentationMode.rawValue]
         app.launch()
