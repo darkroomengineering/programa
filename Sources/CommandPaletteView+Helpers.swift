@@ -1,13 +1,13 @@
 // Command palette pure helpers: fuzzy-search corpus building, result
 // fingerprinting and diffing, shortcut resolution, switcher entries and
-// context snapshots. None of them mutate `@State`. The overlay view, the
-// command list and the @State-mutating flows live in the sibling
-// ContentView+CommandPalette{Overlay,Commands,Flows}.swift files.
+// context snapshots. None of them mutate palette state. The view and its
+// overlay UI live in CommandPaletteView.swift; the command list and the
+// state-mutating flows live in CommandPaletteView+{Commands,Flows}.swift.
 
 import AppKit
 import SwiftUI
 
-extension ContentView {
+extension CommandPaletteView {
     nonisolated static let commandPaletteCommandsPrefix = ">"
     static let commandPaletteVisiblePreviewResultLimit = 48
     static let commandPaletteVisiblePreviewCandidateLimit = 192

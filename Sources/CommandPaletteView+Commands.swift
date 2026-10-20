@@ -2,7 +2,7 @@ import AppKit
 import Bonsplit
 import SwiftUI
 
-extension ContentView {
+extension CommandPaletteView {
     func focusCommandPaletteSwitcherTarget(
         windowId: UUID,
         tabManager: TabManager,
@@ -722,7 +722,7 @@ extension ContentView {
             AppDelegate.shared?.openNewMainWindow(nil)
         }
         registry.register(commandId: "palette.sendFeedback") {
-            presentFeedbackComposer()
+            onSendFeedback()
         }
         registry.register(commandId: "palette.reloadConfiguration") {
             GhosttyApp.shared.reloadConfiguration(source: "palette.reloadConfiguration")
@@ -1001,7 +1001,46 @@ extension ContentView {
         }
     }
 
+    private func selectedWorkspaceIndex() -> Int? {
+        guard let workspace = tabManager.selectedWorkspace else { return nil }
+        return tabManager.tabs.firstIndex { $0.id == workspace.id }
+    }
+
+    func moveSelectedWorkspace(by delta: Int) {
+        guard let workspace = tabManager.selectedWorkspace else { return }
+        tabManager.moveWorkspaceAmongSiblings(tabId: workspace.id, by: delta)
+        tabManager.selectWorkspace(workspace)
+    }
+
+    private func closeWorkspaceIds(_ workspaceIds: [UUID], allowPinned: Bool) {
+        tabManager.closeWorkspacesWithConfirmation(workspaceIds, allowPinned: allowPinned)
+    }
+
+    func closeOtherSelectedWorkspaces() {
+        guard let workspace = tabManager.selectedWorkspace else { return }
+        let workspaceIds = tabManager.tabs.compactMap { $0.id == workspace.id ? nil : $0.id }
+        closeWorkspaceIds(workspaceIds, allowPinned: true)
+    }
+
+    func closeSelectedWorkspacesBelow() {
+        guard tabManager.selectedWorkspace != nil,
+              let anchorIndex = selectedWorkspaceIndex() else { return }
+        let workspaceIds = tabManager.tabs.suffix(from: anchorIndex + 1).map(\.id)
+        closeWorkspaceIds(workspaceIds, allowPinned: true)
+    }
+
+    func closeSelectedWorkspacesAbove() {
+        guard tabManager.selectedWorkspace != nil,
+              let anchorIndex = selectedWorkspaceIndex() else { return }
+        let workspaceIds = tabManager.tabs.prefix(upTo: anchorIndex).map(\.id)
+        closeWorkspaceIds(workspaceIds, allowPinned: true)
+    }
+
     var focusedPanelContext: (workspace: Workspace, panelId: UUID, panel: any Panel)? {
+        Self.focusedPanelContext(in: tabManager)
+    }
+
+    static func focusedPanelContext(in tabManager: TabManager) -> (workspace: Workspace, panelId: UUID, panel: any Panel)? {
         guard let workspace = tabManager.selectedWorkspace,
               let panelId = workspace.focusedPanelId,
               let panel = workspace.panels[panelId] else {

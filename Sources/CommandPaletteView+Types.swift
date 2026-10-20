@@ -1,6 +1,6 @@
 import SwiftUI
 
-extension ContentView {
+extension CommandPaletteView {
     enum CommandPaletteMode {
         case commands
         case renameInput(CommandPaletteRenameTarget)
@@ -160,7 +160,7 @@ extension ContentView {
         }
 
         func fingerprint() -> Int {
-            ContentView.commandPaletteContextFingerprint(
+            CommandPaletteView.commandPaletteContextFingerprint(
                 boolValues: boolValues,
                 stringValues: stringValues
             )

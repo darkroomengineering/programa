@@ -301,7 +301,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
         }
         let corpusByID = Dictionary(uniqueKeysWithValues: corpus.map { ($0.payload, $0) })
 
-        let previewCommandIDs = ContentView.commandPaletteCommandPreviewMatchCommandIDsForTests(
+        let previewCommandIDs = CommandPaletteView.commandPaletteCommandPreviewMatchCommandIDsForTests(
             searchCorpus: corpus,
             candidateCommandIDs: ["command.find"],
             searchCorpusByID: corpusByID,
@@ -370,7 +370,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
         let resultIDs = ["command.0", "command.1", "command.2"]
 
         XCTAssertEqual(
-            ContentView.commandPaletteResolvedSelectionIndex(
+            CommandPaletteView.commandPaletteResolvedSelectionIndex(
                 preferredCommandID: "command.2",
                 fallbackSelectedIndex: 0,
                 resultIDs: resultIDs
@@ -378,7 +378,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
             2
         )
         XCTAssertEqual(
-            ContentView.commandPaletteResolvedSelectionIndex(
+            CommandPaletteView.commandPaletteResolvedSelectionIndex(
                 preferredCommandID: "missing",
                 fallbackSelectedIndex: 9,
                 resultIDs: resultIDs
@@ -386,7 +386,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
             2
         )
         XCTAssertEqual(
-            ContentView.commandPaletteResolvedSelectionIndex(
+            CommandPaletteView.commandPaletteResolvedSelectionIndex(
                 preferredCommandID: nil,
                 fallbackSelectedIndex: 1,
                 resultIDs: []
@@ -399,7 +399,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
         let resultIDs = ["command.0", "command.1", "command.2"]
 
         XCTAssertEqual(
-            ContentView.commandPaletteResolvedPendingActivation(
+            CommandPaletteView.commandPaletteResolvedPendingActivation(
                 .selected(requestID: 41, fallbackSelectedIndex: 0, preferredCommandID: "command.2"),
                 requestID: 41,
                 resultIDs: resultIDs
@@ -407,7 +407,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
             .selected(index: 2)
         )
         XCTAssertEqual(
-            ContentView.commandPaletteResolvedPendingActivation(
+            CommandPaletteView.commandPaletteResolvedPendingActivation(
                 .command(requestID: 41, commandID: "command.1"),
                 requestID: 41,
                 resultIDs: resultIDs
@@ -415,14 +415,14 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
             .command(commandID: "command.1")
         )
         XCTAssertNil(
-            ContentView.commandPaletteResolvedPendingActivation(
+            CommandPaletteView.commandPaletteResolvedPendingActivation(
                 .command(requestID: 41, commandID: "missing"),
                 requestID: 41,
                 resultIDs: resultIDs
             )
         )
         XCTAssertNil(
-            ContentView.commandPaletteResolvedPendingActivation(
+            CommandPaletteView.commandPaletteResolvedPendingActivation(
                 .selected(requestID: 40, fallbackSelectedIndex: 0, preferredCommandID: nil),
                 requestID: 41,
                 resultIDs: resultIDs
@@ -432,13 +432,13 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
 
     func testSelectionAnchorTracksVisiblePendingSelection() {
         let resultIDs = ["command.0", "command.1", "command.2"]
-        let visibleAnchor = ContentView.commandPaletteSelectionAnchorCommandID(
+        let visibleAnchor = CommandPaletteView.commandPaletteSelectionAnchorCommandID(
             selectedIndex: 2,
             resultIDs: resultIDs
         )
 
         XCTAssertEqual(
-            ContentView.commandPaletteResolvedPendingActivation(
+            CommandPaletteView.commandPaletteResolvedPendingActivation(
                 .selected(
                     requestID: 41,
                     fallbackSelectedIndex: 0,
@@ -454,7 +454,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
     func testPreviewCandidateCommandIDsAreBounded() {
         let resultIDs = (0..<500).map { "command.\($0)" }
 
-        let previewCandidateIDs = ContentView.commandPalettePreviewCandidateCommandIDs(
+        let previewCandidateIDs = CommandPaletteView.commandPalettePreviewCandidateCommandIDs(
             resultIDs: resultIDs,
             limit: 192
         )
@@ -466,12 +466,12 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
 
     func testSynchronousSeedRunsOnlyWhenScopeChanges() {
         XCTAssertTrue(
-            ContentView.commandPaletteShouldSynchronouslySeedResults(
+            CommandPaletteView.commandPaletteShouldSynchronouslySeedResults(
                 hasVisibleResultsForScope: false
             )
         )
         XCTAssertFalse(
-            ContentView.commandPaletteShouldSynchronouslySeedResults(
+            CommandPaletteView.commandPaletteShouldSynchronouslySeedResults(
                 hasVisibleResultsForScope: true
             )
         )
@@ -479,7 +479,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
 
     func testPendingEmptyStateIsNotPreservedWhileSearchIsStillPending() {
         XCTAssertFalse(
-            ContentView.commandPaletteShouldPreserveEmptyStateWhileSearchPending(
+            CommandPaletteView.commandPaletteShouldPreserveEmptyStateWhileSearchPending(
                 isSearchPending: true,
                 visibleResultsScopeMatches: true,
                 resolvedSearchScopeMatches: true,
@@ -493,7 +493,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
 
     func testPendingEmptyStateIsPreservedForSameResolvedNoMatchQuery() {
         XCTAssertTrue(
-            ContentView.commandPaletteShouldPreserveEmptyStateWhileSearchPending(
+            CommandPaletteView.commandPaletteShouldPreserveEmptyStateWhileSearchPending(
                 isSearchPending: true,
                 visibleResultsScopeMatches: true,
                 resolvedSearchScopeMatches: true,
@@ -507,7 +507,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
 
     func testPendingEmptyStateIsNotPreservedWhenQueryDoesNotRefineResolvedNoMatch() {
         XCTAssertFalse(
-            ContentView.commandPaletteShouldPreserveEmptyStateWhileSearchPending(
+            CommandPaletteView.commandPaletteShouldPreserveEmptyStateWhileSearchPending(
                 isSearchPending: true,
                 visibleResultsScopeMatches: true,
                 resolvedSearchScopeMatches: true,
@@ -521,7 +521,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
 
     func testPendingEmptyStateIsNotPreservedWhenResolvedResultsMayBeStale() {
         XCTAssertFalse(
-            ContentView.commandPaletteShouldPreserveEmptyStateWhileSearchPending(
+            CommandPaletteView.commandPaletteShouldPreserveEmptyStateWhileSearchPending(
                 isSearchPending: true,
                 visibleResultsScopeMatches: true,
                 resolvedSearchScopeMatches: true,
@@ -532,7 +532,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
             )
         )
         XCTAssertFalse(
-            ContentView.commandPaletteShouldPreserveEmptyStateWhileSearchPending(
+            CommandPaletteView.commandPaletteShouldPreserveEmptyStateWhileSearchPending(
                 isSearchPending: true,
                 visibleResultsScopeMatches: true,
                 resolvedSearchScopeMatches: true,
@@ -546,28 +546,28 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
 
     func testVisibleResultsResetWhenQueryChangesCommandPaletteScope() {
         XCTAssertTrue(
-            ContentView.commandPaletteShouldResetVisibleResultsForQueryTransition(
+            CommandPaletteView.commandPaletteShouldResetVisibleResultsForQueryTransition(
                 oldQuery: ">",
                 newQuery: "",
                 hasVisibleResults: true
             )
         )
         XCTAssertTrue(
-            ContentView.commandPaletteShouldResetVisibleResultsForQueryTransition(
+            CommandPaletteView.commandPaletteShouldResetVisibleResultsForQueryTransition(
                 oldQuery: "",
                 newQuery: ">",
                 hasVisibleResults: true
             )
         )
         XCTAssertFalse(
-            ContentView.commandPaletteShouldResetVisibleResultsForQueryTransition(
+            CommandPaletteView.commandPaletteShouldResetVisibleResultsForQueryTransition(
                 oldQuery: ">rename",
                 newQuery: ">renam",
                 hasVisibleResults: true
             )
         )
         XCTAssertFalse(
-            ContentView.commandPaletteShouldResetVisibleResultsForQueryTransition(
+            CommandPaletteView.commandPaletteShouldResetVisibleResultsForQueryTransition(
                 oldQuery: ">",
                 newQuery: "",
                 hasVisibleResults: false
@@ -576,7 +576,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
     }
 
     func testRefreshInputsPreferObservedQueryOverStaleState() {
-        let inputs = ContentView.commandPaletteRefreshInputsForTests(
+        let inputs = CommandPaletteView.commandPaletteRefreshInputsForTests(
             stateQuery: ">",
             observedQuery: "",
             searchAllSurfaces: true
@@ -588,7 +588,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
     }
 
     func testRefreshInputsIncludeSurfacesOnlyForNonEmptySwitcherQuery() {
-        let switcherInputs = ContentView.commandPaletteRefreshInputsForTests(
+        let switcherInputs = CommandPaletteView.commandPaletteRefreshInputsForTests(
             stateQuery: "",
             observedQuery: "  feature/search  ",
             searchAllSurfaces: true
@@ -597,7 +597,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
         XCTAssertEqual(switcherInputs.matchingQuery, "feature/search")
         XCTAssertTrue(switcherInputs.includesSurfaces)
 
-        let commandInputs = ContentView.commandPaletteRefreshInputsForTests(
+        let commandInputs = CommandPaletteView.commandPaletteRefreshInputsForTests(
             stateQuery: "",
             observedQuery: ">feature/search",
             searchAllSurfaces: true
@@ -606,7 +606,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
         XCTAssertEqual(commandInputs.matchingQuery, "feature/search")
         XCTAssertFalse(commandInputs.includesSurfaces)
 
-        let workspaceOnlyInputs = ContentView.commandPaletteRefreshInputsForTests(
+        let workspaceOnlyInputs = CommandPaletteView.commandPaletteRefreshInputsForTests(
             stateQuery: "",
             observedQuery: "feature/search",
             searchAllSurfaces: false
@@ -617,7 +617,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
     }
 
     func testCommandContextFingerprintTracksExactContextValues() {
-        let base = ContentView.commandPaletteContextFingerprint(
+        let base = CommandPaletteView.commandPaletteContextFingerprint(
             boolValues: [
                 "workspace.hasPullRequests": true,
                 "panel.hasUnread": false,
@@ -628,7 +628,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
                 "panel.name": "Main",
             ]
         )
-        let unreadChanged = ContentView.commandPaletteContextFingerprint(
+        let unreadChanged = CommandPaletteView.commandPaletteContextFingerprint(
             boolValues: [
                 "workspace.hasPullRequests": true,
                 "panel.hasUnread": true,
@@ -639,7 +639,7 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
                 "panel.name": "Main",
             ]
         )
-        let renamed = ContentView.commandPaletteContextFingerprint(
+        let renamed = CommandPaletteView.commandPaletteContextFingerprint(
             boolValues: [
                 "workspace.hasPullRequests": true,
                 "panel.hasUnread": false,
@@ -658,14 +658,14 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
     func testSwitcherFingerprintTracksMetadataValuesAtSameCardinality() {
         let windowID = UUID()
         let workspaceID = UUID()
-        let base = ContentView.commandPaletteSwitcherFingerprint(
+        let base = CommandPaletteView.commandPaletteSwitcherFingerprint(
             windowContexts: [
-                ContentView.CommandPaletteSwitcherFingerprintContext(
+                CommandPaletteView.CommandPaletteSwitcherFingerprintContext(
                     windowId: windowID,
                     windowLabel: "Window 2",
                     selectedWorkspaceId: workspaceID,
                     workspaces: [
-                        ContentView.CommandPaletteSwitcherFingerprintWorkspace(
+                        CommandPaletteView.CommandPaletteSwitcherFingerprintWorkspace(
                             id: workspaceID,
                             displayName: "Workspace Alpha",
                             metadata: CommandPaletteSwitcherSearchMetadata(
@@ -679,14 +679,14 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
                 )
             ]
         )
-        let changedMetadata = ContentView.commandPaletteSwitcherFingerprint(
+        let changedMetadata = CommandPaletteView.commandPaletteSwitcherFingerprint(
             windowContexts: [
-                ContentView.CommandPaletteSwitcherFingerprintContext(
+                CommandPaletteView.CommandPaletteSwitcherFingerprintContext(
                     windowId: windowID,
                     windowLabel: "Window 2",
                     selectedWorkspaceId: workspaceID,
                     workspaces: [
-                        ContentView.CommandPaletteSwitcherFingerprintWorkspace(
+                        CommandPaletteView.CommandPaletteSwitcherFingerprintWorkspace(
                             id: workspaceID,
                             displayName: "Workspace Alpha",
                             metadata: CommandPaletteSwitcherSearchMetadata(
@@ -700,14 +700,14 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
                 )
             ]
         )
-        let changedDisplayName = ContentView.commandPaletteSwitcherFingerprint(
+        let changedDisplayName = CommandPaletteView.commandPaletteSwitcherFingerprint(
             windowContexts: [
-                ContentView.CommandPaletteSwitcherFingerprintContext(
+                CommandPaletteView.CommandPaletteSwitcherFingerprintContext(
                     windowId: windowID,
                     windowLabel: "Window 2",
                     selectedWorkspaceId: workspaceID,
                     workspaces: [
-                        ContentView.CommandPaletteSwitcherFingerprintWorkspace(
+                        CommandPaletteView.CommandPaletteSwitcherFingerprintWorkspace(
                             id: workspaceID,
                             displayName: "Workspace Beta",
                             metadata: CommandPaletteSwitcherSearchMetadata(
@@ -731,19 +731,19 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
         let workspaceID = UUID()
         let surfaceID = UUID()
 
-        let base = ContentView.commandPaletteSwitcherFingerprint(
+        let base = CommandPaletteView.commandPaletteSwitcherFingerprint(
             windowContexts: [
-                ContentView.CommandPaletteSwitcherFingerprintContext(
+                CommandPaletteView.CommandPaletteSwitcherFingerprintContext(
                     windowId: windowID,
                     windowLabel: nil,
                     selectedWorkspaceId: workspaceID,
                     workspaces: [
-                        ContentView.CommandPaletteSwitcherFingerprintWorkspace(
+                        CommandPaletteView.CommandPaletteSwitcherFingerprintWorkspace(
                             id: workspaceID,
                             displayName: "Workspace Alpha",
                             metadata: CommandPaletteSwitcherSearchMetadata(),
                             surfaces: [
-                                ContentView.CommandPaletteSwitcherFingerprintSurface(
+                                CommandPaletteView.CommandPaletteSwitcherFingerprintSurface(
                                     id: surfaceID,
                                     displayName: "Terminal",
                                     kindLabel: "Terminal",
@@ -759,19 +759,19 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
                 )
             ]
         )
-        let changedSurfaceMetadata = ContentView.commandPaletteSwitcherFingerprint(
+        let changedSurfaceMetadata = CommandPaletteView.commandPaletteSwitcherFingerprint(
             windowContexts: [
-                ContentView.CommandPaletteSwitcherFingerprintContext(
+                CommandPaletteView.CommandPaletteSwitcherFingerprintContext(
                     windowId: windowID,
                     windowLabel: nil,
                     selectedWorkspaceId: workspaceID,
                     workspaces: [
-                        ContentView.CommandPaletteSwitcherFingerprintWorkspace(
+                        CommandPaletteView.CommandPaletteSwitcherFingerprintWorkspace(
                             id: workspaceID,
                             displayName: "Workspace Alpha",
                             metadata: CommandPaletteSwitcherSearchMetadata(),
                             surfaces: [
-                                ContentView.CommandPaletteSwitcherFingerprintSurface(
+                                CommandPaletteView.CommandPaletteSwitcherFingerprintSurface(
                                     id: surfaceID,
                                     displayName: "Terminal",
                                     kindLabel: "Terminal",
@@ -787,19 +787,19 @@ final class CommandPaletteSearchEngineTests: XCTestCase {
                 )
             ]
         )
-        let changedSurfaceKind = ContentView.commandPaletteSwitcherFingerprint(
+        let changedSurfaceKind = CommandPaletteView.commandPaletteSwitcherFingerprint(
             windowContexts: [
-                ContentView.CommandPaletteSwitcherFingerprintContext(
+                CommandPaletteView.CommandPaletteSwitcherFingerprintContext(
                     windowId: windowID,
                     windowLabel: nil,
                     selectedWorkspaceId: workspaceID,
                     workspaces: [
-                        ContentView.CommandPaletteSwitcherFingerprintWorkspace(
+                        CommandPaletteView.CommandPaletteSwitcherFingerprintWorkspace(
                             id: workspaceID,
                             displayName: "Workspace Alpha",
                             metadata: CommandPaletteSwitcherSearchMetadata(),
                             surfaces: [
-                                ContentView.CommandPaletteSwitcherFingerprintSurface(
+                                CommandPaletteView.CommandPaletteSwitcherFingerprintSurface(
                                     id: surfaceID,
                                     displayName: "Terminal",
                                     kindLabel: "Markdown",
