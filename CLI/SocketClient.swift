@@ -31,7 +31,6 @@ final class SocketClient {
     private let path: String
     private var socketFD: Int32 = -1
     private static let defaultResponseTimeoutSeconds: TimeInterval = 15.0
-    private static let multilineResponseIdleTimeoutSeconds: TimeInterval = 0.12
     private static let maxSocketTimeoutSeconds: TimeInterval = 9_007_199_254_740_991
     private static let responseTimeoutSeconds: TimeInterval = {
         let env = ProcessInfo.processInfo.environment
@@ -101,26 +100,23 @@ final class SocketClient {
         }
     }
 
+    /// Writes one request line and reads exactly one newline-terminated response line;
+    /// bytes after that newline are a protocol error.
+    ///
     /// - Parameter minimumReceiveTimeout: overrides the default response-wait timeout when
     ///   larger than it, for commands that legitimately hold the connection open longer than
     ///   `PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC`'s default (e.g. `surface.wait` with a caller-chosen
     ///   `--timeout`). Ignored (falls back to the default) when `nil` or smaller.
-    func send(
-        command: String,
-        minimumReceiveTimeout: TimeInterval? = nil,
-        singleLine: Bool = false
-    ) throws -> String {
+    func send(command: String, minimumReceiveTimeout: TimeInterval? = nil) throws -> String {
         guard socketFD >= 0 else { throw CLIError(message: "Not connected") }
 
-        let payload = command + "\n"
         try writeAll(
-            Data(payload.utf8),
+            Data((command + "\n").utf8),
             timeoutMessage: "Command timed out",
             failureMessage: "Failed to write to socket"
         )
 
         var data = Data()
-        var sawNewline = false
         let initialReceiveTimeout: TimeInterval = {
             guard let minimumReceiveTimeout, minimumReceiveTimeout > Self.responseTimeoutSeconds else {
                 return Self.responseTimeoutSeconds
@@ -132,46 +128,31 @@ final class SocketClient {
         )
 
         while true {
-            let receiveTimeout: TimeInterval
-            if singleLine {
-                receiveTimeout = responseDeadline - ProcessInfo.processInfo.systemUptime
-                guard receiveTimeout > 0 else { throw CLIError(message: "Command timed out") }
-            } else {
-                receiveTimeout = sawNewline ? Self.multilineResponseIdleTimeoutSeconds : initialReceiveTimeout
-            }
+            let receiveTimeout = responseDeadline - ProcessInfo.processInfo.systemUptime
+            guard receiveTimeout > 0 else { throw CLIError(message: "Command timed out") }
             try configureReceiveTimeout(receiveTimeout)
 
             var buffer = [UInt8](repeating: 0, count: 8192)
             let count = Darwin.read(socketFD, &buffer, buffer.count)
             if count < 0 {
-                if errno == EINTR {
+                // A receive-timeout wakeup loops back to the deadline check above.
+                if errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK {
                     continue
-                }
-                if errno == EAGAIN || errno == EWOULDBLOCK {
-                    if singleLine { continue }
-                    if sawNewline {
-                        break
-                    }
-                    throw CLIError(message: "Command timed out")
                 }
                 throw CLIError(message: "Socket read error")
             }
             if count == 0 {
-                if singleLine { throw CLIError(message: "Socket closed before terminating response newline") }
-                break
+                throw CLIError(message: "Socket closed before terminating response newline")
             }
             data.append(buffer, count: count)
-            if singleLine, ProcessInfo.processInfo.systemUptime >= responseDeadline {
+            if ProcessInfo.processInfo.systemUptime >= responseDeadline {
                 throw CLIError(message: "Command timed out")
             }
             if let newline = data.firstIndex(of: UInt8(0x0A)) {
-                if singleLine {
-                    guard data.index(after: newline) == data.endIndex else {
-                        throw CLIError(message: "Unexpected trailing bytes after v2 response")
-                    }
-                    break
+                guard data.index(after: newline) == data.endIndex else {
+                    throw CLIError(message: "Unexpected trailing bytes after v2 response")
                 }
-                sawNewline = true
+                break
             }
         }
 
@@ -184,7 +165,23 @@ final class SocketClient {
         return response
     }
 
+    /// `sockaddr_un.sun_path` holds at most this many path bytes plus a NUL. A longer path
+    /// would be truncated and connect to (or fail on) a different file, so it is refused.
+    static let maxSocketPathBytes = MemoryLayout.size(ofValue: sockaddr_un().sun_path) - 1
+
+    static func validateSocketPathLength(_ path: String) throws {
+        let byteCount = path.utf8.count
+        guard byteCount <= maxSocketPathBytes else {
+            throw CLIError(
+                message: "Socket path is too long (\(byteCount) bytes; Unix socket paths are limited to \(maxSocketPathBytes) bytes): \(path)"
+            )
+        }
+    }
+
     private func connectOnce() throws {
+        // Checked before `stat`, which reports an over-long path as missing.
+        try Self.validateSocketPathLength(path)
+
         // Verify the path is a socket (never a symlink) owned by the current user to prevent
         // fake-socket attacks; the peer uid is checked again after connecting.
         switch CLISocketSafety.checkPath(path) {
@@ -213,11 +210,10 @@ final class SocketClient {
 
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
-        let maxLength = MemoryLayout.size(ofValue: addr.sun_path)
         path.withCString { ptr in
             withUnsafeMutablePointer(to: &addr.sun_path) { pathPtr in
                 let buf = UnsafeMutableRawPointer(pathPtr).assumingMemoryBound(to: CChar.self)
-                strncpy(buf, ptr, maxLength - 1)
+                strncpy(buf, ptr, Self.maxSocketPathBytes)
             }
         }
 
@@ -330,6 +326,7 @@ final class SocketClient {
     }
 
     static func waitForConnectableSocket(path: String, timeout: TimeInterval) throws -> SocketClient {
+        try validateSocketPathLength(path)
         let client = SocketClient(path: path)
         if (try? client.connect()) != nil {
             return client
@@ -399,22 +396,25 @@ final class SocketClient {
         return nil
     }
 
-    func sendV2(method: String, params: [String: Any] = [:], minimumReceiveTimeout: TimeInterval? = nil) throws -> [String: Any] {
+    /// Encodes one v2 request envelope (`{"id","method","params"}`) as a single JSON line,
+    /// without the trailing newline. The one encoder for the CLI and `programa-mcp`.
+    static func encodeV2RequestLine(method: String, params: [String: Any]) throws -> String {
         let request: [String: Any] = [
             "id": UUID().uuidString,
             "method": method,
             "params": params
         ]
-        guard JSONSerialization.isValidJSONObject(request) else {
+        guard JSONSerialization.isValidJSONObject(request),
+              let requestData = try? JSONSerialization.data(withJSONObject: request, options: []),
+              let requestLine = String(data: requestData, encoding: .utf8) else {
             throw CLIError(message: "Failed to encode v2 request")
         }
+        return requestLine
+    }
 
-        let requestData = try JSONSerialization.data(withJSONObject: request, options: [])
-        guard let requestLine = String(data: requestData, encoding: .utf8) else {
-            throw CLIError(message: "Failed to encode v2 request")
-        }
-
-        let raw = try send(command: requestLine, minimumReceiveTimeout: minimumReceiveTimeout, singleLine: true)
+    func sendV2(method: String, params: [String: Any] = [:], minimumReceiveTimeout: TimeInterval? = nil) throws -> [String: Any] {
+        let requestLine = try Self.encodeV2RequestLine(method: method, params: params)
+        let raw = try send(command: requestLine, minimumReceiveTimeout: minimumReceiveTimeout)
 
         // The server may return plain-text errors (e.g., "ERROR: Access denied ...")
         // before the JSON protocol starts. Surface these directly instead of letting
@@ -449,18 +449,7 @@ final class SocketClient {
     /// frames for a connection that keeps receiving events indefinitely.
     func sendV2RequestOnly(method: String, params: [String: Any] = [:]) throws {
         guard socketFD >= 0 else { throw CLIError(message: "Not connected") }
-        let request: [String: Any] = [
-            "id": UUID().uuidString,
-            "method": method,
-            "params": params
-        ]
-        guard JSONSerialization.isValidJSONObject(request) else {
-            throw CLIError(message: "Failed to encode v2 request")
-        }
-        let requestData = try JSONSerialization.data(withJSONObject: request, options: [])
-        guard let requestLine = String(data: requestData, encoding: .utf8) else {
-            throw CLIError(message: "Failed to encode v2 request")
-        }
+        let requestLine = try Self.encodeV2RequestLine(method: method, params: params)
         try writeAll(
             Data((requestLine + "\n").utf8),
             timeoutMessage: "Command timed out",
