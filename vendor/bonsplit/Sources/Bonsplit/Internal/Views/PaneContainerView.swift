@@ -559,7 +559,7 @@ struct PaneContainerView<Content: View, EmptyContent: View>: View {
     }
 
     /// The only pane of a workspace with exactly one tab has nothing to switch
-    /// between, so its strip is hidden. Once the workspace is split, every pane keeps
+    /// between, so its strip is hidden and an empty drag band takes its place. Once the workspace is split, every pane keeps
     /// its strip: it carries the close, new-tab and split controls that undo the split.
     /// A nonzero `leadingInset` means the strip doubles as the titlebar row beside the
     /// traffic lights (minimal mode, sidebar hidden); it stays so the terminal does not
@@ -593,6 +593,13 @@ struct PaneContainerView<Content: View, EmptyContent: View>: View {
                     isFocused: isFocused,
                     showSplitButtons: showSplitButtons
                 )
+            }
+            if !showsTabStrip {
+                // The hidden strip's pane sits at the window top, so this band stands
+                // in for the titlebar: without it nothing up there drags the window.
+                TabBarDragZoneView()
+                    .frame(height: usesNativePaneChrome ? TabBarGlassStyling.barHeight : TabBarMetrics.barHeight)
+                    .accessibilityHidden(true)
             }
 
             // Content area with drop zones
