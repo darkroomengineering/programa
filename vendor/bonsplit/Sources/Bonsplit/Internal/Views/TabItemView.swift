@@ -149,6 +149,7 @@ struct TabItemView: View {
                 Text(tab.title)
                     .font(.system(size: TabBarMetrics.titleFontSize))
                     .lineLimit(1)
+                    .safeHelp(tab.title)
                     .foregroundStyle(
                         isSelected
                             ? TabBarColors.activeText(for: appearance)
@@ -182,7 +183,7 @@ struct TabItemView: View {
                         isZoomHovered = hovering
                     }
                     .saturation(saturation)
-                    .accessibilityLabel("Exit zoom")
+                    .accessibilityLabel(BonsplitStrings.exitZoomButton)
                 }
             }
 
@@ -372,11 +373,11 @@ struct TabItemView: View {
 
     private var accessibilityValue: String {
         var parts: [String] = []
-        if tab.isLoading { parts.append("Loading") }
-        if tab.isPinned { parts.append("Pinned") }
-        if tab.showsNotificationBadge { parts.append("Unread") }
-        if tab.isDirty { parts.append("Modified") }
-        if showsZoomIndicator { parts.append("Zoomed") }
+        if tab.isLoading { parts.append(BonsplitStrings.tabLoading) }
+        if tab.isPinned { parts.append(BonsplitStrings.tabPinned) }
+        if tab.showsNotificationBadge { parts.append(BonsplitStrings.tabUnread) }
+        if tab.isDirty { parts.append(BonsplitStrings.tabModified) }
+        if showsZoomIndicator { parts.append(BonsplitStrings.tabZoomed) }
         return parts.joined(separator: ", ")
     }
 
@@ -679,10 +680,6 @@ private struct TabContextMenuHostView: NSViewRepresentable {
             return flags
         }
 
-        private static func localized(_ key: String, defaultValue: String) -> String {
-            Bundle.module.localizedString(forKey: key, value: defaultValue, table: nil)
-        }
-
         private static func buildMenu(
             tab: TabItem,
             state: TabContextMenuState,
@@ -705,27 +702,27 @@ private struct TabContextMenuHostView: NSViewRepresentable {
                 )
             }
 
-            add("Rename Tab…", .rename)
+            add(BonsplitStrings.renameTab, .rename)
 
             if state.hasCustomTitle {
-                add("Remove Custom Tab Name", .clearName)
+                add(BonsplitStrings.removeCustomTabName, .clearName)
             }
 
             menu.addItem(.separator())
 
-            add("Close Tabs to Left", .closeToLeft, enabled: state.canCloseToLeft)
-            add("Close Tabs to Right", .closeToRight, enabled: state.canCloseToRight)
-            add("Close Other Tabs", .closeOthers, enabled: state.canCloseOthers)
-            add("Move Tab…", .move)
+            add(BonsplitStrings.closeTabsToLeft, .closeToLeft, enabled: state.canCloseToLeft)
+            add(BonsplitStrings.closeTabsToRight, .closeToRight, enabled: state.canCloseToRight)
+            add(BonsplitStrings.closeOtherTabs, .closeOthers, enabled: state.canCloseOthers)
+            add(BonsplitStrings.moveTab, .move)
 
             if state.isTerminal {
                 add(
-                    localized("command.moveTabToLeftPane.title", defaultValue: "Move to Left Pane"),
+                    BonsplitStrings.moveToLeftPane,
                     .moveToLeftPane,
                     enabled: state.canMoveToLeftPane
                 )
                 add(
-                    localized("command.moveTabToRightPane.title", defaultValue: "Move to Right Pane"),
+                    BonsplitStrings.moveToRightPane,
                     .moveToRightPane,
                     enabled: state.canMoveToRightPane
                 )
@@ -733,20 +730,20 @@ private struct TabContextMenuHostView: NSViewRepresentable {
 
             menu.addItem(.separator())
 
-            add("New Terminal Tab to Right", .newTerminalToRight)
+            add(BonsplitStrings.newTerminalTabToRight, .newTerminalToRight)
 
             menu.addItem(.separator())
 
             if state.hasSplits {
-                add(state.isZoomed ? "Exit Zoom" : "Zoom Pane", .toggleZoom)
+                add(state.isZoomed ? BonsplitStrings.exitZoom : BonsplitStrings.zoomPane, .toggleZoom)
             }
 
-            add(state.isPinned ? "Unpin Tab" : "Pin Tab", .togglePin)
+            add(state.isPinned ? BonsplitStrings.unpinTab : BonsplitStrings.pinTab, .togglePin)
 
             if state.isUnread {
-                add("Mark Tab as Read", .markAsRead, enabled: state.canMarkAsRead)
+                add(BonsplitStrings.markTabAsRead, .markAsRead, enabled: state.canMarkAsRead)
             } else {
-                add("Mark Tab as Unread", .markAsUnread, enabled: state.canMarkAsUnread)
+                add(BonsplitStrings.markTabAsUnread, .markAsUnread, enabled: state.canMarkAsUnread)
             }
 
             menu.addItem(.separator())
@@ -767,7 +764,7 @@ private struct TabContextMenuHostView: NSViewRepresentable {
             retaining targets: inout [ClosureMenuItemTarget]
         ) -> NSMenuItem {
             let submenuItem = NSMenuItem(
-                title: localized("contextMenu.tabColor", defaultValue: "Tab Color"),
+                title: BonsplitStrings.tabColor,
                 action: nil,
                 keyEquivalent: ""
             )
@@ -777,7 +774,7 @@ private struct TabContextMenuHostView: NSViewRepresentable {
             if state.hasCustomColor {
                 addItem(
                     to: submenu,
-                    title: localized("contextMenu.clearColor", defaultValue: "Clear Color"),
+                    title: BonsplitStrings.clearColor,
                     action: .clearTabColor,
                     enabled: true,
                     shortcut: nil,
@@ -788,7 +785,7 @@ private struct TabContextMenuHostView: NSViewRepresentable {
 
             addItem(
                 to: submenu,
-                title: localized("contextMenu.chooseCustomColor", defaultValue: "Choose Custom Color…"),
+                title: BonsplitStrings.chooseCustomColor,
                 action: .chooseCustomTabColor,
                 enabled: true,
                 shortcut: nil,

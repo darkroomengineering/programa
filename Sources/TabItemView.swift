@@ -439,12 +439,14 @@ struct TabItemView: View, Equatable {
                 }
                 .frame(minWidth: SidebarRowMetrics.leadingIconSlotWidth, alignment: .center)
 
-                Text(sidebarDisplayTitle)
+                let displayTitle = sidebarDisplayTitle
+                Text(displayTitle)
                     .font(.system(size: rowMetrics.titleFontSize, weight: titleFontWeight))
                     .foregroundColor(activePrimaryTextColor)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .layoutPriority(1)
+                    .safeHelp(displayTitle)
 
                 Spacer(minLength: 0)
 

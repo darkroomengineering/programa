@@ -139,20 +139,13 @@ public final class BonsplitController {
             return nil
         }
 
-        // Calculate insertion index based on configuration
+        // Insert after the currently selected tab, or append when nothing is selected.
         let insertIndex: Int?
-        switch configuration.newTabPosition {
-        case .current:
-            // Insert after the currently selected tab
-            if let paneState = internalController.rootNode.findPane(PaneID(id: targetPane.id)),
-               let selectedTabId = paneState.selectedTabId,
-               let currentIndex = paneState.tabs.firstIndex(where: { $0.id == selectedTabId }) {
-                insertIndex = currentIndex + 1
-            } else {
-                // No selected tab, append to end
-                insertIndex = nil
-            }
-        case .end:
+        if let paneState = internalController.rootNode.findPane(PaneID(id: targetPane.id)),
+           let selectedTabId = paneState.selectedTabId,
+           let currentIndex = paneState.tabs.firstIndex(where: { $0.id == selectedTabId }) {
+            insertIndex = currentIndex + 1
+        } else {
             insertIndex = nil
         }
 
@@ -390,8 +383,6 @@ public final class BonsplitController {
         orientation: SplitOrientation,
         withTab tab: Tab? = nil
     ) -> PaneID? {
-        guard configuration.allowSplits else { return nil }
-
         let targetPaneId = paneId ?? focusedPaneId
         guard let targetPaneId else { return nil }
 
@@ -443,8 +434,6 @@ public final class BonsplitController {
         withTab tab: Tab,
         insertFirst: Bool
     ) -> PaneID? {
-        guard configuration.allowSplits else { return nil }
-
         let targetPaneId = paneId ?? focusedPaneId
         guard let targetPaneId else { return nil }
 
@@ -492,8 +481,6 @@ public final class BonsplitController {
         movingTab tabId: TabID,
         insertFirst: Bool
     ) -> PaneID? {
-        guard configuration.allowSplits else { return nil }
-
         // Find the existing tab and its source pane.
         guard let (sourcePane, tabIndex) = findTabInternal(tabId) else { return nil }
         let tabItem = sourcePane.tabs[tabIndex]
@@ -514,7 +501,7 @@ public final class BonsplitController {
                 // Keep a placeholder tab so the original pane isn't left "tabless".
                 // This makes the empty side closable via tab close, and avoids apps
                 // needing to special-case empty panes.
-                sourcePane.addTab(TabItem(title: "Empty", icon: nil), select: true)
+                sourcePane.addTab(TabItem(title: BonsplitStrings.emptyTabTitle, icon: nil), select: true)
             } else if internalController.rootNode.allPaneIds.count > 1 {
                 // If the source pane is now empty, close it (unless it's also the split target).
                 internalController.closePane(sourcePane.id)
@@ -544,8 +531,8 @@ public final class BonsplitController {
     /// - Returns: true if the pane was closed, false if vetoed by delegate
     @discardableResult
     public func closePane(_ paneId: PaneID) -> Bool {
-        // Don't close if it's the last pane and not allowed
-        if !configuration.allowCloseLastPane && internalController.rootNode.allPaneIds.count <= 1 {
+        // The last pane never closes.
+        if internalController.rootNode.allPaneIds.count <= 1 {
             return false
         }
 

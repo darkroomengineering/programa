@@ -46,13 +46,9 @@ public struct BonsplitView<Content: View, EmptyContent: View>: View {
                 emptyPaneBuilder(PaneID(id: internalPaneId.id))
             },
             appearance: controller.configuration.appearance,
-            showSplitButtons: controller.configuration.allowSplits && controller.configuration.appearance.showSplitButtons,
-            contentViewLifecycle: controller.configuration.contentViewLifecycle,
             onGeometryChange: { [weak controller] isDragging in
                 controller?.notifyGeometryChange(isDragging: isDragging)
-            },
-            enableAnimations: controller.configuration.appearance.enableAnimations,
-            animationDuration: controller.configuration.appearance.animationDuration
+            }
         )
         .environment(controller)
         .environment(controller.internalController)
@@ -86,7 +82,7 @@ public struct DefaultEmptyPaneView: View {
                 .font(.system(size: 48))
                 .foregroundStyle(.tertiary)
 
-            Text("No Open Tabs")
+            Text(BonsplitStrings.noOpenTabs)
                 .font(.headline)
                 .foregroundStyle(.secondary)
         }

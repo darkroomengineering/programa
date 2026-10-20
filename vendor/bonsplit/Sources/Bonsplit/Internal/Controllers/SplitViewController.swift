@@ -57,7 +57,7 @@ final class SplitViewController {
             self.rootNode = rootNode
         } else {
             // Initialize with a single pane containing a welcome tab
-            let welcomeTab = TabItem(title: "Welcome", icon: "star")
+            let welcomeTab = TabItem(title: BonsplitStrings.welcomeTabTitle, icon: "star")
             let initialPane = PaneState(tabs: [welcomeTab])
             self.rootNode = .pane(initialPane)
             self.focusedPaneId = initialPane.id

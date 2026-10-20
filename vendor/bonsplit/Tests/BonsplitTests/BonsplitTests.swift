@@ -138,8 +138,7 @@ final class BonsplitTests: XCTestCase {
     @MainActor
     func testCloseSelectedTabKeepsIndexStableWhenPossible() {
         do {
-            let config = BonsplitConfiguration(newTabPosition: .end)
-            let controller = BonsplitController(configuration: config)
+            let controller = BonsplitController()
 
             let tab0 = controller.createTab(title: "0")!
             let tab1 = controller.createTab(title: "1")!
@@ -158,8 +157,7 @@ final class BonsplitTests: XCTestCase {
         }
 
         do {
-            let config = BonsplitConfiguration(newTabPosition: .end)
-            let controller = BonsplitController(configuration: config)
+            let controller = BonsplitController()
 
             let tab0 = controller.createTab(title: "0")!
             let tab1 = controller.createTab(title: "1")!
@@ -176,18 +174,6 @@ final class BonsplitTests: XCTestCase {
             XCTAssertEqual(controller.selectedTab(inPane: pane)?.id, tab1)
             XCTAssertNotNil(controller.tab(tab0))
         }
-    }
-
-    @MainActor
-    func testConfiguration() {
-        let config = BonsplitConfiguration(
-            allowSplits: false,
-            allowCloseTabs: true
-        )
-        let controller = BonsplitController(configuration: config)
-
-        XCTAssertFalse(controller.configuration.allowSplits)
-        XCTAssertTrue(controller.configuration.allowCloseTabs)
     }
 
     func testDefaultSplitButtonTooltips() {
@@ -521,15 +507,13 @@ final class BonsplitTests: XCTestCase {
 
     @MainActor
     func testDoubleClickingEmptyTrailingTabBarSpaceDoesNotRequestNewTab() {
-        let appearance = BonsplitConfiguration.Appearance(showSplitButtons: false)
-        let configuration = BonsplitConfiguration(appearance: appearance)
-        let controller = BonsplitController(configuration: configuration)
+        let controller = BonsplitController()
         let pane = controller.internalController.rootNode.allPanes.first!
         let spy = NewTabRequestDelegateSpy()
         controller.delegate = spy
 
         let hostingView = NSHostingView(
-            rootView: TabBarView(pane: pane, isFocused: true, showSplitButtons: false)
+            rootView: TabBarView(pane: pane, isFocused: true)
                 .environment(controller)
                 .environment(controller.internalController)
         )
@@ -554,7 +538,9 @@ final class BonsplitTests: XCTestCase {
         RunLoop.current.run(until: Date().addingTimeInterval(0.05))
         contentView.layoutSubtreeIfNeeded()
 
-        let clickPoint = NSPoint(x: hostingView.bounds.maxX - 12, y: hostingView.bounds.midY)
+        // Past the single tab (at most `tabMaxWidth` wide) and clear of the trailing
+        // split-action buttons.
+        let clickPoint = NSPoint(x: hostingView.bounds.maxX - 120, y: hostingView.bounds.midY)
         guard let event = try? makeLeftMouseDownEvent(in: hostingView, at: clickPoint, clickCount: 2) else {
             XCTFail("Expected mouse event")
             return
@@ -817,7 +803,6 @@ final class BonsplitTests: XCTestCase {
     @MainActor
     func testTranslucentSplitWrappersStayClear() {
         let appearance = BonsplitConfiguration.Appearance(
-            enableAnimations: false,
             chromeColors: .init(backgroundHex: "#11223380")
         )
         let configuration = BonsplitConfiguration(appearance: appearance)
@@ -890,7 +875,6 @@ final class BonsplitTests: XCTestCase {
     @MainActor
     func testSplitContentAlphaMatchesSinglePane() {
         let appearance = BonsplitConfiguration.Appearance(
-            enableAnimations: false,
             chromeColors: .init(backgroundHex: "#11223380")
         )
         let expectedAlpha = CGFloat(128.0 / 255.0)

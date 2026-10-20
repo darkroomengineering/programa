@@ -3548,7 +3548,7 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
         }
 
         // newTerminalSurface(focus: false) inserts each new tab right after the pane's current
-        // tab (bonsplit's `newTabPosition: .current`), not appended at the end -- so pin down a
+        // tab, not appended at the end -- so pin down a
         // deterministic left-to-right order explicitly instead of relying on insertion order.
         XCTAssertTrue(workspace.reorderSurface(panelId: firstPanelId, toIndex: 0))
         XCTAssertTrue(workspace.reorderSurface(panelId: secondPanel.id, toIndex: 1))
