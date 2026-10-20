@@ -5,10 +5,9 @@
 // search corpus/results, rename/workspace-description drafts, focus-restore
 // targets, usage history, etc.). ContentView holds a single
 // `@StateObject private var commandPaletteController` and exposes each
-// property back to its existing (unqualified) call sites in its body via
-// thin computed proxies — this keeps the ~4000 lines of palette orchestration
-// code that reads/writes these properties unchanged while genuinely moving
-// storage ownership onto the controller (no more @State duplicated per-view).
+// property to the palette code in the ContentView+CommandPalette*.swift
+// extensions through thin computed proxies, so that code reads and writes
+// unqualified names while storage lives on the controller.
 //
 // The two @FocusState properties (isCommandPaletteSearchFocused,
 // isCommandPaletteRenameFocused) stay on ContentView: @FocusState is a

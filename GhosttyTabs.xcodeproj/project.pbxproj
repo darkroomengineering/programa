@@ -75,6 +75,12 @@
 			NRSP0010A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0009A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift */; };
 			NRSP0008A1B2C3D4E5F60719 /* ColorSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0007A1B2C3D4E5F60719 /* ColorSupport.swift */; };
 			A5FF0005 /* ContentView+CommandPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0015 /* ContentView+CommandPalette.swift */; };
+			A2CV0000000000000000000C /* ContentView+CommandPaletteCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2CV0000000000000000000D /* ContentView+CommandPaletteCommands.swift */; };
+			A2CV0000000000000000000A /* ContentView+CommandPaletteOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2CV0000000000000000000B /* ContentView+CommandPaletteOverlay.swift */; };
+			A2CV00000000000000000008 /* ContentView+CommandPaletteFlows.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2CV00000000000000000009 /* ContentView+CommandPaletteFlows.swift */; };
+			A2CV00000000000000000006 /* ContentView+CommandPaletteTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2CV00000000000000000007 /* ContentView+CommandPaletteTypes.swift */; };
+			A2CV00000000000000000004 /* NotificationBurstCoalescer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2CV00000000000000000005 /* NotificationBurstCoalescer.swift */; };
+			A2CV00000000000000000002 /* TabManagerSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2CV00000000000000000003 /* TabManagerSettings.swift */; };
 			NRCV00000000000000000005 /* TabItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRCV00000000000000000006 /* TabItemView.swift */; };
 			NRCV00000000000000000003 /* FileDropOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRCV00000000000000000004 /* FileDropOverlayView.swift */; };
 			NRCV00000000000000000001 /* CommandPaletteSearchEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRCV00000000000000000002 /* CommandPaletteSearchEngine.swift */; };
@@ -468,6 +474,12 @@
 			NRSP0009A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+SidebarResizer.swift"; sourceTree = "<group>"; };
 			NRSP0007A1B2C3D4E5F60719 /* ColorSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorSupport.swift; sourceTree = "<group>"; };
 			A5FF0015 /* ContentView+CommandPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+CommandPalette.swift"; sourceTree = "<group>"; };
+			A2CV0000000000000000000D /* ContentView+CommandPaletteCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+CommandPaletteCommands.swift"; sourceTree = "<group>"; };
+			A2CV0000000000000000000B /* ContentView+CommandPaletteOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+CommandPaletteOverlay.swift"; sourceTree = "<group>"; };
+			A2CV00000000000000000009 /* ContentView+CommandPaletteFlows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+CommandPaletteFlows.swift"; sourceTree = "<group>"; };
+			A2CV00000000000000000007 /* ContentView+CommandPaletteTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+CommandPaletteTypes.swift"; sourceTree = "<group>"; };
+			A2CV00000000000000000005 /* NotificationBurstCoalescer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationBurstCoalescer.swift; sourceTree = "<group>"; };
+			A2CV00000000000000000003 /* TabManagerSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabManagerSettings.swift; sourceTree = "<group>"; };
 		NRCV00000000000000000006 /* TabItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabItemView.swift; sourceTree = "<group>"; };
 		NRCV00000000000000000004 /* FileDropOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileDropOverlayView.swift; sourceTree = "<group>"; };
 		NRCV00000000000000000002 /* CommandPaletteSearchEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteSearchEngine.swift; sourceTree = "<group>"; };
@@ -907,6 +919,12 @@
 					NRSP0009A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift */,
 					NRSP0007A1B2C3D4E5F60719 /* ColorSupport.swift */,
 					A5FF0015 /* ContentView+CommandPalette.swift */,
+					A2CV0000000000000000000D /* ContentView+CommandPaletteCommands.swift */,
+					A2CV0000000000000000000B /* ContentView+CommandPaletteOverlay.swift */,
+					A2CV00000000000000000009 /* ContentView+CommandPaletteFlows.swift */,
+					A2CV00000000000000000007 /* ContentView+CommandPaletteTypes.swift */,
+					A2CV00000000000000000005 /* NotificationBurstCoalescer.swift */,
+					A2CV00000000000000000003 /* TabManagerSettings.swift */,
 					NRCV00000000000000000006 /* TabItemView.swift */,
 					NRCV00000000000000000004 /* FileDropOverlayView.swift */,
 					NRCV00000000000000000002 /* CommandPaletteSearchEngine.swift */,
@@ -1442,6 +1460,12 @@
 					NRSP0010A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift in Sources */,
 					NRSP0008A1B2C3D4E5F60719 /* ColorSupport.swift in Sources */,
 					A5FF0005 /* ContentView+CommandPalette.swift in Sources */,
+					A2CV0000000000000000000C /* ContentView+CommandPaletteCommands.swift in Sources */,
+					A2CV0000000000000000000A /* ContentView+CommandPaletteOverlay.swift in Sources */,
+					A2CV00000000000000000008 /* ContentView+CommandPaletteFlows.swift in Sources */,
+					A2CV00000000000000000006 /* ContentView+CommandPaletteTypes.swift in Sources */,
+					A2CV00000000000000000004 /* NotificationBurstCoalescer.swift in Sources */,
+					A2CV00000000000000000002 /* TabManagerSettings.swift in Sources */,
 					NRCV00000000000000000005 /* TabItemView.swift in Sources */,
 					NRCV00000000000000000003 /* FileDropOverlayView.swift in Sources */,
 					NRCV00000000000000000001 /* CommandPaletteSearchEngine.swift in Sources */,
