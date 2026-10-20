@@ -66,24 +66,10 @@ xcodebuild \
   CODE_SIGNING_ALLOWED=NO \
   build >/dev/null
 
-echo "Building Sparkle sign_update tool..."
-xcodebuild \
-  -project "$work_dir/Sparkle/Sparkle.xcodeproj" \
-  -scheme sign_update \
-  -configuration Release \
-  -derivedDataPath "$work_dir/build" \
-  CODE_SIGNING_ALLOWED=NO \
-  build >/dev/null
-
 generate_appcast="$work_dir/build/Build/Products/Release/generate_appcast"
-sign_update="$work_dir/build/Build/Products/Release/sign_update"
 
 if [[ ! -x "$generate_appcast" ]]; then
   echo "generate_appcast binary not found at $generate_appcast" >&2
-  exit 1
-fi
-if [[ ! -x "$sign_update" ]]; then
-  echo "sign_update binary not found at $sign_update" >&2
   exit 1
 fi
 
@@ -122,41 +108,25 @@ if [[ ! -f "$generated_appcast_path" ]]; then
   exit 1
 fi
 
-# Check if generate_appcast added the edSignature. If not, use sign_update
-# to sign the DMG and inject the signature. generate_appcast silently skips
-# signing when the public key derived from the private key doesn't match the
-# SUPublicEDKey in the app's Info.plist.
-if ! grep -q 'sparkle:edSignature' "$generated_appcast_path"; then
-  echo "Warning: generate_appcast did not add edSignature. Using sign_update fallback..."
-  SIGNATURE=$("$sign_update" -p --ed-key-file "$key_file" "$DMG_PATH")
-  DMG_LENGTH=$(stat -f%z "$DMG_PATH")
-  echo "  EdDSA signature: ${SIGNATURE:0:20}..."
-  echo "  DMG length: $DMG_LENGTH"
-
-  # Inject sparkle:edSignature and correct length into the enclosure element
-  python3 -c "
-import sys
-xml = open('$generated_appcast_path').read()
-sig = '$SIGNATURE'
-length = '$DMG_LENGTH'
-# Add edSignature to enclosure
-xml = xml.replace(
-    'type=\"application/octet-stream\"',
-    'sparkle:edSignature=\"' + sig + '\" length=\"' + length + '\" type=\"application/octet-stream\"'
-)
-open('$generated_appcast_path', 'w').write(xml)
-print('  Injected edSignature into appcast.xml')
-"
-fi
-
 cp "$generated_appcast_path" "$OUT_PATH"
 echo "Generated appcast at $OUT_PATH"
 
-# Verify the appcast has a signature
+# generate_appcast signs the enclosure only when the private key matches the app's
+# SUPublicEDKey. Never patch a signature in afterwards: the feed signature below covers
+# the whole document, so any edit after generation makes Sparkle reject the feed.
 if grep -q 'sparkle:edSignature' "$OUT_PATH"; then
   echo "Verified: appcast contains sparkle:edSignature"
 else
-  echo "ERROR: appcast is missing sparkle:edSignature!" >&2
+  echo "ERROR: appcast is missing sparkle:edSignature (does SPARKLE_PRIVATE_KEY match SUPublicEDKey?)" >&2
+  exit 1
+fi
+
+# The app sets SURequireSignedFeed, so an unsigned feed would stop every install from
+# updating. generate_appcast signs the feed when the archive's Info.plist requires it.
+if grep -q '<!-- sparkle-signatures:' "$OUT_PATH"; then
+  echo "Verified: appcast carries a feed signature"
+else
+  echo "ERROR: appcast has no feed signature (is SURequireSignedFeed missing from the app's Info.plist?)" >&2
   exit 1
 fi
 
