@@ -2,7 +2,48 @@ import AppKit
 import Bonsplit
 import SwiftUI
 
-extension ContentView {
+/// The command palette of one main window. ContentView mounts it as a background so
+/// its state (including the two `@FocusState`s) lives in the main window's view
+/// graph and its handlers receive palette requests while the palette is hidden.
+/// The visible UI (`commandPaletteOverlay`) renders in the window's AppKit overlay
+/// layer: the overlay's hosting view does not observe anything, so this view pushes
+/// a fresh root into `WindowCommandPaletteOverlayController` on every update. That is
+/// why it observes every object the overlay content reads. The `onSendFeedback`
+/// closure also makes SwiftUI re-evaluate this view whenever ContentView updates,
+/// which refreshes the switcher for workspace changes no observed object publishes.
+struct CommandPaletteView: View {
+    @ObservedObject var commandPaletteController: CommandPaletteController
+    @ObservedObject var updateViewModel: UpdateViewModel
+    let windowId: UUID
+    let observedWindow: NSWindow?
+    let onSendFeedback: () -> Void
+    @EnvironmentObject var tabManager: TabManager
+    @EnvironmentObject var notificationStore: TerminalNotificationStore
+    @EnvironmentObject var sidebarState: SidebarState
+    @EnvironmentObject var programaConfigStore: ProgramaConfigStore
+    @ObservedObject var programaLayoutStore = ProgramaLayoutStore.shared
+    @AppStorage(WorkspacePresentationModeSettings.modeKey)
+    var workspacePresentationMode = WorkspacePresentationModeSettings.defaultMode.rawValue
+    @FocusState var isCommandPaletteSearchFocused: Bool
+    @FocusState var isCommandPaletteRenameFocused: Bool
+
+    var isMinimalMode: Bool {
+        WorkspacePresentationModeSettings.mode(for: workspacePresentationMode) == .minimal
+    }
+
+    var body: some View {
+        let handlers = attachCommandPaletteFocusHandlers(to: Color.clear.allowsHitTesting(false))
+        return attachCommandPaletteRequestHandlers(to: handlers)
+            .background(WindowAccessor(dedupeByWindow: false) { window in
+                MainActor.assumeIsolated {
+                    let overlayController = commandPaletteWindowOverlayController(for: window)
+                    overlayController.update(rootView: AnyView(commandPaletteOverlay), isVisible: commandPaletteController.isCommandPalettePresented)
+                }
+            })
+    }
+}
+
+extension CommandPaletteView {
     var commandPaletteOverlay: some View {
         GeometryReader { proxy in
             let maxAllowedWidth = max(340, proxy.size.width - 260)
@@ -114,7 +155,7 @@ extension ContentView {
                         ForEach(Array(visibleResults.enumerated()), id: \.element.id) { index, result in
                             let isSelected = index == selectedIndex
                             let isHovered = commandPaletteController.commandPaletteHoveredResultIndex == index
-                            let trailingLabel = commandPaletteTrailingLabel(for: result.command)
+                            let trailingLabel = Self.commandPaletteTrailingLabel(for: result.command)
                             let rowBackground: Color = isSelected
                                 ? programaAccentColor().opacity(0.12)
                                 : (isHovered ? Color.primary.opacity(0.08) : .clear)
@@ -1267,7 +1308,7 @@ extension ContentView {
         }
     }
 
-    func commandPaletteTrailingLabel(for command: CommandPaletteCommand) -> CommandPaletteTrailingLabel? {
+    static func commandPaletteTrailingLabel(for command: CommandPaletteCommand) -> CommandPaletteTrailingLabel? {
         if let shortcutHint = command.shortcutHint {
             return CommandPaletteTrailingLabel(text: shortcutHint, style: .shortcut)
         }
