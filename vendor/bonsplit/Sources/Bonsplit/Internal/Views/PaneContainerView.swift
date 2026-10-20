@@ -600,6 +600,16 @@ struct PaneContainerView<Content: View, EmptyContent: View>: View {
                 TabBarDragZoneView()
                     .frame(height: usesNativePaneChrome ? TabBarGlassStyling.barHeight : TabBarMetrics.barHeight)
                     .accessibilityHidden(true)
+                    .overlay(alignment: .trailing) {
+                        FloatingNewTabButton(
+                            title: Bundle.module.localizedString(forKey: "tabBar.newTab", value: "New Tab", table: nil)
+                        ) { [weak pane, weak bonsplitController] in
+                            guard let pane, let bonsplitController else { return }
+                            bonsplitController.requestNewTab(kind: "terminal", inPane: pane.id)
+                        }
+                        .frame(width: 24, height: 22)
+                        .padding(.trailing, 8)
+                    }
             }
 
             // Content area with drop zones
@@ -1018,5 +1028,53 @@ struct UnifiedPaneDropDelegate: DropDelegate {
             return decodeTransfer(from: raw)
         }
         return nil
+    }
+}
+
+/// The "+" that opens a new tab from the empty strip a single tab leaves behind.
+/// It is an AppKit button on purpose: the window's titlebar-drag routing in
+/// `programa_sendEvent` turns a click on plain SwiftUI content there into a window drag.
+private struct FloatingNewTabButton: NSViewRepresentable {
+    let title: String
+    let action: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(action: action) }
+
+    func makeNSView(context: Context) -> NSView {
+        let button = NSButton(frame: .zero)
+        button.image = NSImage(systemSymbolName: "plus", accessibilityDescription: title)
+        button.isBordered = false
+        button.contentTintColor = .secondaryLabelColor
+        button.toolTip = title
+        button.setAccessibilityLabel(title)
+        button.setAccessibilityIdentifier("paneFloatingNewTabButton")
+        button.target = context.coordinator
+        button.action = #selector(Coordinator.pressed)
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *) {
+            let glass = NSGlassEffectView(frame: .zero)
+            glass.style = .regular
+            glass.cornerRadius = 11
+            glass.contentView = button
+            return glass
+        }
+        #endif
+        return button
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.action = action
+    }
+
+    final class Coordinator: NSObject {
+        var action: () -> Void
+
+        init(action: @escaping () -> Void) {
+            self.action = action
+        }
+
+        @objc func pressed() {
+            action()
+        }
     }
 }
