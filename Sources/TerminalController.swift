@@ -5,6 +5,7 @@ import Bonsplit
 
 extension Notification.Name {
     static let socketListenerDidStart = Notification.Name("programa.socketListenerDidStart")
+    static let socketListenerDidFail = Notification.Name("programa.socketListenerDidFail")
     static let terminalSurfaceDidBecomeReady = Notification.Name("programa.terminalSurfaceDidBecomeReady")
     static let terminalSurfaceHostedViewDidMoveToWindow = Notification.Name("programa.terminalSurfaceHostedViewDidMoveToWindow")
     static let mainWindowContextsDidChange = Notification.Name("programa.mainWindowContextsDidChange")
@@ -983,11 +984,9 @@ class TerminalController {
             }
         }
 
-        // Create socket
         let newServerSocket = socket(AF_UNIX, SOCK_STREAM, 0)
         guard newServerSocket >= 0 else {
-            NSLog("TerminalController: Failed to create socket")
-            return
+            return reportListenerStartFailure(path: activeSocketPath, stage: "socket", errnoCode: errno)
         }
 
         var bindAttempt = Self.bindListenerSocket(newServerSocket, path: activeSocketPath)
@@ -1011,25 +1010,20 @@ class TerminalController {
             withListenerState {
                 self.socketPath = activeSocketPath
             }
-        case .pathTooLong:
+        case .pathTooLong(let failedPath):
             close(newServerSocket)
-            return
+            return reportListenerStartFailure(path: failedPath, stage: "path_too_long", errnoCode: ENAMETOOLONG)
         case .failure(let failedPath, let failedStage, let failedErrnoCode):
-            NSLog(
-                "TerminalController: Failed to bind socket path=%@ stage=%@ errno=%d",
-                failedPath, failedStage, failedErrnoCode
-            )
             close(newServerSocket)
-            return
+            return reportListenerStartFailure(path: failedPath, stage: failedStage, errnoCode: failedErrnoCode)
         }
 
         applySocketPermissions()
 
-        // Listen
         guard listen(newServerSocket, Self.socketListenBacklog) >= 0 else {
-            NSLog("TerminalController: Failed to listen on socket")
+            let listenErrno = errno
             close(newServerSocket)
-            return
+            return reportListenerStartFailure(path: activeSocketPath, stage: "listen", errnoCode: listenErrno)
         }
 
         SocketControlSettings.recordLastSocketPath(activeSocketPath)
@@ -1091,6 +1085,12 @@ class TerminalController {
         Thread.detachNewThread { [weak self] in
             self?.acceptLoop(listenerSocket: listenerSocket, generation: generation)
         }
+    }
+
+    private func reportListenerStartFailure(path: String, stage: String, errnoCode: Int32) {
+        NSLog("TerminalController: socket listener failed path=%@ stage=%@ errno=%d", path, stage, errnoCode)
+        let error = "\(stage): \(String(cString: strerror(errnoCode)))"
+        NotificationCenter.default.post(name: .socketListenerDidFail, object: self, userInfo: ["path": path, "error": error])
     }
 
     nonisolated func socketListenerHealth(expectedSocketPath: String) -> SocketListenerHealth {
