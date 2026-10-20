@@ -4,6 +4,7 @@ name: Extended tests
 # gate every PR, run nightly against main:
 #   - the tests_v2 files listed in tests_v2/nightly_subset.txt
 #   - the XCUITest classes listed in scripts/nightly-ui-classes.txt
+#   - tests_v2/test_idle_cpu.py, the idle CPU budget of one focused quiet terminal
 # Failures here do not block merges; read the job summaries each morning.
 #
 # On-demand runs take explicit lists, which is also how a new test is triaged
@@ -37,6 +38,10 @@ on:
         default: true
       run_ui:
         description: Run the UI test job
+        type: boolean
+        default: true
+      run_idle_cpu:
+        description: Run the idle CPU measurement job
         type: boolean
         default: true
       v2_attempts:
@@ -279,6 +284,77 @@ jobs:
           path: ${{ runner.temp }}/v2-results-shard${{ matrix.shard }}.txt
           if-no-files-found: ignore
           retention-days: 14
+
+      - name: Cleanup virtual display
+        if: always()
+        run: |
+          if [ -n "${VDISPLAY_PID:-}" ]; then
+            kill "$VDISPLAY_PID" >/dev/null 2>&1 || true
+          fi
+          rm -f /tmp/create-virtual-display
+
+  # Its own job, not a nightly_subset.txt line: a measurement must run once, alone on
+  # the runner, with no retry that would hide a slow first attempt.
+  # Informational while the budget is calibrated against runner numbers (Debug build,
+  # shared runner); drop continue-on-error once a few nights show a stable range.
+  idle-cpu:
+    needs: build-app
+    if: github.event_name != 'workflow_dispatch' || inputs.run_idle_cpu
+    runs-on: macos-26
+    timeout-minutes: 20
+    continue-on-error: true
+    env:
+      PROGRAMA_DERIVED_DATA_DIR: ${{ github.workspace }}/.ci-derived-data-idle-cpu
+      # Lets the app honor the socket path the runner script hands it in any build.
+      PROGRAMA_ALLOW_SOCKET_OVERRIDE: "1"
+      PROGRAMA_IDLE_CPU_BUDGET_PCT: "8.0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Download build artifact
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: programa-app-build
+          path: .
+
+      - name: Extract build artifact
+        run: |
+          set -euo pipefail
+          mkdir -p "$PROGRAMA_DERIVED_DATA_DIR"
+          tar -xzf app-build.tar.gz -C "$PROGRAMA_DERIVED_DATA_DIR"
+
+      - name: Create virtual display
+        run: |
+          set -euo pipefail
+          clang -framework Foundation -framework CoreGraphics \
+            -o /tmp/create-virtual-display scripts/create-virtual-display.m
+          /tmp/create-virtual-display &
+          VDISPLAY_PID=$!
+          echo "VDISPLAY_PID=$VDISPLAY_PID" >> "$GITHUB_ENV"
+          sleep 3
+          kill -0 "$VDISPLAY_PID"
+
+      - name: Measure idle CPU
+        env:
+          PROGRAMA_TESTS_V2_SUBSET_FILE: ${{ runner.temp }}/idle-cpu-subset.txt
+          PROGRAMA_TESTS_V2_ATTEMPTS: "1"
+          PROGRAMA_TESTS_V2_TEST_TIMEOUT: "180"
+          PROGRAMA_IDLE_CPU_RESULT_FILE: ${{ runner.temp }}/idle-cpu-result.txt
+        run: |
+          set -euo pipefail
+          echo "test_idle_cpu.py" > "$PROGRAMA_TESTS_V2_SUBSET_FILE"
+          ./scripts/run-tests-v2-ci.sh
+
+      - name: Summarize measurement
+        if: always()
+        run: |
+          {
+            echo "### Idle CPU (focused quiet terminal, Debug build)"
+            echo '```'
+            cat "$RUNNER_TEMP/idle-cpu-result.txt" 2>/dev/null || echo "no measurement recorded"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Cleanup virtual display
         if: always()
