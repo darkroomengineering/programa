@@ -486,6 +486,7 @@ extension TerminalController {
         }
 
         let sessionKey = AgentSessionKey(provider: provider, sessionId: sessionId, pid: reportedPid)
+        let needsInputFields = ["kind": kind ?? "", "provider": rawProvider ?? "", "subtitle": subtitle, "body": body]
 
         v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { [weak self] tabManager, tab, sid in
             tabManager.updateSurfaceAgentState(tabId: workspaceId, surfaceId: sid, state: .blocked, source: .hooks, sessionKey: sessionKey)
@@ -497,6 +498,11 @@ extension TerminalController {
                 title: resolvedTitle,
                 subtitle: subtitle,
                 body: body
+            )
+            SocketEventBroadcaster.shared.publishNeedsInput(
+                workspaceId: workspaceId,
+                surfaceId: sid,
+                payload: needsInputFields.merging(["title": resolvedTitle]) { $1 }
             )
 
             _ = try? AgentSupervisionRegistry.shared.updateActiveSurface(
