@@ -16779,6 +16779,40 @@
           }
         }
       }
+    },
+    "socketListener.failed.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Programa could not start its control socket"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Programa のコントロールソケットを起動できませんでした"
+          }
+        }
+      }
+    },
+    "socketListener.failed.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The programa CLI and agent hooks cannot reach this app until the socket starts. Run Restart CLI Listener from the command palette, or relaunch Programa.\n\nSocket: %@\nError: %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ソケットが起動するまで、programa CLI とエージェントフックはこのアプリに接続できません。コマンドパレットから「CLIリスナーを再起動」を実行するか、Programa を再起動してください。\n\nソケット: %@\nエラー: %@"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

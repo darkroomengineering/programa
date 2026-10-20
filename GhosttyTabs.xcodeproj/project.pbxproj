@@ -174,6 +174,11 @@
 			A5FF0031 /* AppDelegate+UITestCmdClick.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0021 /* AppDelegate+UITestCmdClick.swift */; };
 			A5FF0032 /* AppDelegate+UITestStressWorkspaces.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0022 /* AppDelegate+UITestStressWorkspaces.swift */; };
 			A5FF0033 /* AppDelegate+UITestHarnesses.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0023 /* AppDelegate+UITestHarnesses.swift */; };
+			A1AD00010000000000000002 /* AppDelegate+ShortcutPredicates.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1AD00010000000000000001 /* AppDelegate+ShortcutPredicates.swift */; };
+			A1AD00020000000000000002 /* AppDelegate+MainWindowContexts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1AD00020000000000000001 /* AppDelegate+MainWindowContexts.swift */; };
+			A1AD00030000000000000002 /* AppDelegate+Debug.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1AD00030000000000000001 /* AppDelegate+Debug.swift */; };
+			A1AD00040000000000000002 /* AppDelegate+ShortcutActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1AD00040000000000000001 /* AppDelegate+ShortcutActions.swift */; };
+			A1AD00050000000000000002 /* AppDelegate+SocketListenerNotice.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1AD00050000000000000001 /* AppDelegate+SocketListenerNotice.swift */; };
 			A5001094 /* NotificationsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001091 /* NotificationsPage.swift */; };
 			A5001095 /* TerminalNotificationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001092 /* TerminalNotificationStore.swift */; };
 			NRTM00000006 /* NotificationSoundStaging.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTM00000005 /* NotificationSoundStaging.swift */; };
@@ -569,6 +574,11 @@
 		A5FF0021 /* AppDelegate+UITestCmdClick.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+UITestCmdClick.swift"; sourceTree = "<group>"; };
 		A5FF0022 /* AppDelegate+UITestStressWorkspaces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+UITestStressWorkspaces.swift"; sourceTree = "<group>"; };
 		A5FF0023 /* AppDelegate+UITestHarnesses.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+UITestHarnesses.swift"; sourceTree = "<group>"; };
+		A1AD00010000000000000001 /* AppDelegate+ShortcutPredicates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+ShortcutPredicates.swift"; sourceTree = "<group>"; };
+		A1AD00020000000000000001 /* AppDelegate+MainWindowContexts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+MainWindowContexts.swift"; sourceTree = "<group>"; };
+		A1AD00030000000000000001 /* AppDelegate+Debug.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+Debug.swift"; sourceTree = "<group>"; };
+		A1AD00040000000000000001 /* AppDelegate+ShortcutActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+ShortcutActions.swift"; sourceTree = "<group>"; };
+		A1AD00050000000000000001 /* AppDelegate+SocketListenerNotice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+SocketListenerNotice.swift"; sourceTree = "<group>"; };
 		A5001091 /* NotificationsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsPage.swift; sourceTree = "<group>"; };
 		A5001092 /* TerminalNotificationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalNotificationStore.swift; sourceTree = "<group>"; };
 		NRTM00000005 /* NotificationSoundStaging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSoundStaging.swift; sourceTree = "<group>"; };
@@ -988,6 +998,11 @@
 				A5FF0021 /* AppDelegate+UITestCmdClick.swift */,
 				A5FF0022 /* AppDelegate+UITestStressWorkspaces.swift */,
 				A5FF0023 /* AppDelegate+UITestHarnesses.swift */,
+				A1AD00010000000000000001 /* AppDelegate+ShortcutPredicates.swift */,
+				A1AD00020000000000000001 /* AppDelegate+MainWindowContexts.swift */,
+				A1AD00030000000000000001 /* AppDelegate+Debug.swift */,
+				A1AD00040000000000000001 /* AppDelegate+ShortcutActions.swift */,
+				A1AD00050000000000000001 /* AppDelegate+SocketListenerNotice.swift */,
 				A5001091 /* NotificationsPage.swift */,
 				A5001092 /* TerminalNotificationStore.swift */,
 				NRTM00000005 /* NotificationSoundStaging.swift */,
@@ -1522,6 +1537,11 @@
 				A5FF0031 /* AppDelegate+UITestCmdClick.swift in Sources */,
 				A5FF0032 /* AppDelegate+UITestStressWorkspaces.swift in Sources */,
 				A5FF0033 /* AppDelegate+UITestHarnesses.swift in Sources */,
+				A1AD00010000000000000002 /* AppDelegate+ShortcutPredicates.swift in Sources */,
+				A1AD00020000000000000002 /* AppDelegate+MainWindowContexts.swift in Sources */,
+				A1AD00030000000000000002 /* AppDelegate+Debug.swift in Sources */,
+				A1AD00040000000000000002 /* AppDelegate+ShortcutActions.swift in Sources */,
+				A1AD00050000000000000002 /* AppDelegate+SocketListenerNotice.swift in Sources */,
 				A5001094 /* NotificationsPage.swift in Sources */,
 				A5001095 /* TerminalNotificationStore.swift in Sources */,
 				NRTM00000006 /* NotificationSoundStaging.swift in Sources */,

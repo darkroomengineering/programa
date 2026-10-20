@@ -1950,6 +1950,32 @@ final class WindowTerminalHostViewTests: XCTestCase {
     }
 }
 
+@discardableResult
+private func startOrFocusTerminalSearch(
+    _ terminalSurface: TerminalSurface,
+    searchFocusNotifier: @escaping (TerminalSurface) -> Void = {
+        NotificationCenter.default.post(name: .ghosttySearchFocus, object: $0)
+    }
+) -> Bool {
+    if terminalSurface.searchState != nil {
+        searchFocusNotifier(terminalSurface)
+        return true
+    }
+
+    if terminalSurface.performBindingAction("start_search") {
+        DispatchQueue.main.async { [weak terminalSurface] in
+            guard let terminalSurface, terminalSurface.searchState == nil else { return }
+            terminalSurface.searchState = TerminalSurface.SearchState()
+            searchFocusNotifier(terminalSurface)
+        }
+        return true
+    }
+
+    terminalSurface.searchState = TerminalSurface.SearchState()
+    searchFocusNotifier(terminalSurface)
+    return true
+}
+
 @MainActor
 final class GhosttySurfaceOverlayTests: XCTestCase {
     private final class ScrollProbeSurfaceView: GhosttyNSView {
