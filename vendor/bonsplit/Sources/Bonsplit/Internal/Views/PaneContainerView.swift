@@ -558,12 +558,14 @@ struct PaneContainerView<Content: View, EmptyContent: View>: View {
             : 0
     }
 
-    /// A pane with exactly one tab has nothing to switch between, so its strip is
-    /// hidden. A nonzero `leadingInset` means the strip doubles as the titlebar row
-    /// beside the traffic lights (minimal mode, sidebar hidden); it stays so the
-    /// terminal does not slide under them and the window remains draggable there.
+    /// The only pane of a workspace with exactly one tab has nothing to switch
+    /// between, so its strip is hidden. Once the workspace is split, every pane keeps
+    /// its strip: it carries the close, new-tab and split controls that undo the split.
+    /// A nonzero `leadingInset` means the strip doubles as the titlebar row beside the
+    /// traffic lights (minimal mode, sidebar hidden); it stays so the terminal does not
+    /// slide under them and the window remains draggable there.
     private var showsTabStrip: Bool {
-        pane.tabs.count != 1 || leadingInset > 0
+        pane.tabs.count != 1 || leadingInset > 0 || controller.rootNode.allPaneIds.count > 1
     }
 
     var body: some View {
