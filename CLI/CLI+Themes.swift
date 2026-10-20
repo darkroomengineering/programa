@@ -110,19 +110,6 @@ extension ProgramaCLI {
         }
     }
 
-    private func extractFlag(_ args: [String], name: String) -> (Bool, [String]) {
-        var found = false
-        var remaining: [String] = []
-        for arg in args {
-            if arg == name {
-                found = true
-            } else {
-                remaining.append(arg)
-            }
-        }
-        return (found, remaining)
-    }
-
     private func runThemesSet(args: [String], jsonOutput: Bool) throws {
         let (lightOpt, rem0) = parseOption(args, name: "--light")
         let (darkOpt, rem1) = parseOption(rem0, name: "--dark")

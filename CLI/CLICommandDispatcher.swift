@@ -32,13 +32,10 @@ struct CLICommandDispatcher {
     var index = 1
     while index < args.count {
         let arg = args[index]
-        if arg == "--socket" {
-            guard index + 1 < args.count else {
-                throw CLIError(message: "--socket requires a path")
-            }
-            socketPath = args[index + 1]
+        if let (value, width) = try cli.globalOptionValue(args, at: index, name: "--socket", missingMessage: "--socket requires a path") {
+            socketPath = value
             socketPathSource = .explicitFlag
-            index += 2
+            index += width
             continue
         }
         if arg == "--json" {
@@ -46,28 +43,19 @@ struct CLICommandDispatcher {
             index += 1
             continue
         }
-        if arg == "--id-format" {
-            guard index + 1 < args.count else {
-                throw CLIError(message: "--id-format requires a value (refs|uuids|both)")
-            }
-            idFormatArg = args[index + 1]
-            index += 2
+        if let (value, width) = try cli.globalOptionValue(args, at: index, name: "--id-format", missingMessage: "--id-format requires a value (refs|uuids|both)") {
+            idFormatArg = value
+            index += width
             continue
         }
-        if arg == "--window" {
-            guard index + 1 < args.count else {
-                throw CLIError(message: "--window requires a window id")
-            }
-            windowId = args[index + 1]
-            index += 2
+        if let (value, width) = try cli.globalOptionValue(args, at: index, name: "--window", missingMessage: "--window requires a window id") {
+            windowId = value
+            index += width
             continue
         }
-        if arg == "--password" {
-            guard index + 1 < args.count else {
-                throw CLIError(message: "--password requires a value")
-            }
-            socketPasswordArg = args[index + 1]
-            index += 2
+        if let (value, width) = try cli.globalOptionValue(args, at: index, name: "--password", missingMessage: "--password requires a value", allowsDashValue: true) {
+            socketPasswordArg = value
+            index += width
             continue
         }
         if arg == "-v" || arg == "--version" {
@@ -108,7 +96,7 @@ struct CLICommandDispatcher {
     }
 
     if descriptor.helpPolicy == .programa,
-       commandArgs.contains(where: { $0 == "--help" || $0 == "-h" }) {
+       cli.hasFlag(commandArgs, name: "--help") || cli.hasFlag(commandArgs, name: "-h") {
         guard cli.dispatchSubcommandHelp(command: command, commandArgs: commandArgs) else {
             throw CLIError(message: "No help is available for command: \(command)")
         }

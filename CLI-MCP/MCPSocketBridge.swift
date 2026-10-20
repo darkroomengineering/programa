@@ -46,8 +46,8 @@ extension MCPSocketBridgeError: CustomStringConvertible {
 ///
 /// Socket connect/write/read is the CLI's `SocketClient` (`CLI/SocketClient.swift`,
 /// compiled into both targets), so the two stay consistent on the path/peer-uid
-/// checks, transient-connect retry, and timeouts. This type adds only the v2
-/// envelope handling and the mapping into `MCPSocketBridgeError`. A v2 response is
+/// checks, transient-connect retry, timeouts, and request encoding. This type adds
+/// only v2 response decoding and the mapping into `MCPSocketBridgeError`. A v2 response is
 /// one line, so each call returns as soon as its newline arrives.
 ///
 /// Connects fresh per call and closes afterward -- matches the CLI's
@@ -151,13 +151,17 @@ struct MCPSocketBridge {
         params: [String: Any],
         client: SocketClient
     ) throws -> [String: Any] {
-        let requestLine = try encodeRequest(method: method, params: params)
+        let requestLine: String
+        do {
+            requestLine = try SocketClient.encodeV2RequestLine(method: method, params: params)
+        } catch {
+            throw MCPSocketBridgeError.invalidResponse(String(describing: error))
+        }
         let raw: String
         do {
             raw = try client.send(
                 command: requestLine,
-                minimumReceiveTimeout: responseTimeout(method: method, params: params),
-                singleLine: true
+                minimumReceiveTimeout: responseTimeout(method: method, params: params)
             )
         } catch {
             throw bridgeError(from: error)
@@ -221,24 +225,6 @@ struct MCPSocketBridge {
             return Int(value.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         return nil
-    }
-
-    // MARK: - Request encoding
-
-    private static func encodeRequest(method: String, params: [String: Any]) throws -> String {
-        let request: [String: Any] = [
-            "id": UUID().uuidString,
-            "method": method,
-            "params": params,
-        ]
-        guard JSONSerialization.isValidJSONObject(request) else {
-            throw MCPSocketBridgeError.invalidResponse("Failed to encode v2 request")
-        }
-        let requestData = try JSONSerialization.data(withJSONObject: request, options: [])
-        guard let requestLine = String(data: requestData, encoding: .utf8) else {
-            throw MCPSocketBridgeError.invalidResponse("Failed to encode v2 request")
-        }
-        return requestLine
     }
 }
 

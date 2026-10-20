@@ -252,6 +252,7 @@
 		7501C0000000000000000001 /* CLI+ProgramStatusEmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7501C0000000000000000002 /* CLI+ProgramStatusEmitter.swift */; };
 		H1HC0002 /* CLI+HookCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1HC0001 /* CLI+HookCommands.swift */; };
 		H1CL0002 /* CLICommandDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1CL0001 /* CLICommandDispatcher.swift */; };
+		A3CL00000000000000000002 /* CLIArgumentParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3CL00000000000000000001 /* CLIArgumentParser.swift */; };
 		H1HK0002 /* HookInstallationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1HK0001 /* HookInstallationCoordinator.swift */; };
 		B900000BA1B2C3D4E5F60719 /* programa in Copy CLI */ = {isa = PBXBuildFile; fileRef = B9000004A1B2C3D4E5F60719 /* programa */; };
 		C1ADE00002A1B2C3D4E5F719 /* claude in Copy CLI */ = {isa = PBXBuildFile; fileRef = C1ADE00001A1B2C3D4E5F719 /* claude */; };
@@ -653,6 +654,7 @@
 		7501C0000000000000000002 /* CLI+ProgramStatusEmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+ProgramStatusEmitter.swift"; sourceTree = "<group>"; };
 		H1HC0001 /* CLI+HookCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+HookCommands.swift"; sourceTree = "<group>"; };
 		H1CL0001 /* CLICommandDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLICommandDispatcher.swift; sourceTree = "<group>"; };
+		A3CL00000000000000000001 /* CLIArgumentParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIArgumentParser.swift; sourceTree = "<group>"; };
 		H1HK0001 /* HookInstallationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookInstallationCoordinator.swift; sourceTree = "<group>"; };
 		B9000004A1B2C3D4E5F60719 /* programa */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = programa; sourceTree = BUILT_PRODUCTS_DIR; };
 		0AC9A9E0A68EF163F87A0C83 /* programa-mcp */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "programa-mcp"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -1067,6 +1069,7 @@
 				7501C0000000000000000002 /* CLI+ProgramStatusEmitter.swift */,
 				H1HC0001 /* CLI+HookCommands.swift */,
 				H1CL0001 /* CLICommandDispatcher.swift */,
+				A3CL00000000000000000001 /* CLIArgumentParser.swift */,
 				C7A10001 /* V2MethodNames.swift */,
 				H1HK0001 /* HookInstallationCoordinator.swift */,
 				RVPN0000000000000000000F /* CLI+Review.swift */,
@@ -1708,6 +1711,7 @@
 				7501C0000000000000000001 /* CLI+ProgramStatusEmitter.swift in Sources */,
 				H1HC0002 /* CLI+HookCommands.swift in Sources */,
 				H1CL0002 /* CLICommandDispatcher.swift in Sources */,
+				A3CL00000000000000000002 /* CLIArgumentParser.swift in Sources */,
 				C7A10002 /* V2MethodNames.swift in Sources */,
 				H1HK0002 /* HookInstallationCoordinator.swift in Sources */,
 				F796E92ACEB543370DEF3E6A /* SocketPathResolution.swift in Sources */,

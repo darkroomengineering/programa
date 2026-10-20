@@ -1452,7 +1452,7 @@ struct ProgramaCLI {
                 """,
                 execute: { ctx in
                     let workspaceArg = self.workspaceFromArgsOrEnv(ctx.commandArgs, windowOverride: ctx.windowId)
-                    guard let paneRaw = self.optionValue(ctx.commandArgs, name: "--pane") ?? ctx.commandArgs.first else {
+                    guard let paneRaw = self.optionOrFirstPositional(ctx.commandArgs, name: "--pane") else {
                         throw CLIError(message: "focus-pane requires --pane <id|ref>")
                     }
                     var params: [String: Any] = [:]
@@ -3925,7 +3925,7 @@ struct ProgramaCLI {
         jsonOutput: Bool,
         idFormat: CLIIDFormat
     ) throws {
-        let surfaceRaw = optionValue(commandArgs, name: "--surface") ?? commandArgs.first
+        let surfaceRaw = optionOrFirstPositional(commandArgs, name: "--surface")
         guard let surfaceRaw else {
             throw CLIError(message: "move-surface requires --surface <id|ref>")
         }
@@ -3975,7 +3975,7 @@ struct ProgramaCLI {
         jsonOutput: Bool,
         idFormat: CLIIDFormat
     ) throws {
-        let surfaceRaw = optionValue(commandArgs, name: "--surface") ?? commandArgs.first
+        let surfaceRaw = optionOrFirstPositional(commandArgs, name: "--surface")
         guard let surfaceRaw else {
             throw CLIError(message: "reorder-surface requires --surface <id|ref>")
         }
@@ -4011,7 +4011,7 @@ struct ProgramaCLI {
         jsonOutput: Bool,
         idFormat: CLIIDFormat
     ) throws {
-        let workspaceRaw = optionValue(commandArgs, name: "--workspace") ?? commandArgs.first
+        let workspaceRaw = optionOrFirstPositional(commandArgs, name: "--workspace")
         guard let workspaceRaw else {
             throw CLIError(message: "reorder-workspace requires --workspace <id|ref>")
         }
@@ -4934,59 +4934,6 @@ struct ProgramaCLI {
         return true
     }
 
-    /// Shared scan loop for `parseOption`/`parseRepeatedOption`: walks `args`,
-    /// collecting every value that follows `name` (honoring a `--` terminator)
-    /// and returning the leftover args with those option/value pairs removed.
-    private func scanOption(_ args: [String], name: String) -> ([String], [String]) {
-        var remaining: [String] = []
-        var values: [String] = []
-        var skipNext = false
-        var pastTerminator = false
-        for (idx, arg) in args.enumerated() {
-            if skipNext {
-                skipNext = false
-                continue
-            }
-            if arg == "--" {
-                pastTerminator = true
-                remaining.append(arg)
-                continue
-            }
-            if !pastTerminator, arg == name, idx + 1 < args.count {
-                values.append(args[idx + 1])
-                skipNext = true
-                continue
-            }
-            if !pastTerminator, arg.hasPrefix(name + "=") {
-                values.append(String(arg.dropFirst(name.count + 1)))
-                continue
-            }
-            remaining.append(arg)
-        }
-        return (values, remaining)
-    }
-
-    func parseOption(_ args: [String], name: String) -> (String?, [String]) {
-        let (values, remaining) = scanOption(args, name: name)
-        return (values.last, remaining)
-    }
-
-    private func parseRepeatedOption(_ args: [String], name: String) -> ([String], [String]) {
-        scanOption(args, name: name)
-    }
-
-    func optionValue(_ args: [String], name: String) -> String? {
-        for (index, arg) in args.enumerated() {
-            if arg == name { return index + 1 < args.count ? args[index + 1] : nil }
-            if arg.hasPrefix(name + "=") { return String(arg.dropFirst(name.count + 1)) }
-        }
-        return nil
-    }
-
-    func hasFlag(_ args: [String], name: String) -> Bool {
-        args.contains(name)
-    }
-
     /// Unescape CLI escape sequences for send behavior.
     /// \n and \r → carriage return (Enter), \t → tab.
     private func unescapeSendText(_ text: String) -> String {
@@ -5003,78 +4950,6 @@ struct ProgramaCLI {
         return ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"]
     }
 
-    /// Validates contracts whose failures can be determined without opening
-    /// the socket. Handlers retain their checks as a defensive boundary, but
-    /// malformed invocations now fail before they can affect a running app.
-    private func preflightFlagArguments(
-        _ args: [String],
-        command: String,
-        valueFlags: Set<String>,
-        booleanFlags: Set<String> = []
-    ) throws -> (positional: [String], options: [String: String]) {
-        var positional: [String] = []
-        var options: [String: String] = [:]
-        var pastTerminator = false
-        var index = 0
-
-        while index < args.count {
-            let token = args[index]
-            if pastTerminator {
-                positional.append(token)
-                index += 1
-                continue
-            }
-            if token == "--" {
-                pastTerminator = true
-                index += 1
-                continue
-            }
-            guard token.hasPrefix("--") else {
-                positional.append(token)
-                index += 1
-                continue
-            }
-
-            let body = String(token.dropFirst(2))
-            let parts = body.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
-            let name = String(parts[0])
-            let hasEqualsValue = parts.count == 2
-
-            guard valueFlags.contains(name) || booleanFlags.contains(name) else {
-                throw CLIError(message: "\(command): unknown option --\(name)")
-            }
-            guard options[name] == nil else {
-                throw CLIError(message: "\(command): duplicate option --\(name)")
-            }
-
-            if booleanFlags.contains(name) {
-                guard !hasEqualsValue else {
-                    throw CLIError(message: "\(command): --\(name) does not take a value")
-                }
-                options[name] = "true"
-                index += 1
-                continue
-            }
-
-            if hasEqualsValue {
-                let value = String(parts[1])
-                guard !value.isEmpty else {
-                    throw CLIError(message: "\(command): --\(name) requires a value")
-                }
-                options[name] = value
-                index += 1
-                continue
-            }
-
-            guard index + 1 < args.count, !args[index + 1].hasPrefix("--") else {
-                throw CLIError(message: "\(command): --\(name) requires a value")
-            }
-            options[name] = args[index + 1]
-            index += 2
-        }
-        return (positional, options)
-    }
-
     /// Exhaustive grammar table for commands that use the shared registry
     /// contract. Keeping this switch total makes a newly registered command
     /// fail closed before socket acquisition until its grammar is declared.
@@ -5082,14 +4957,18 @@ struct ProgramaCLI {
         func parse(
             values: Set<String> = [],
             booleans: Set<String> = [],
+            shortFlags: Set<String> = [],
             minPositionals: Int = 0,
             maxPositionals: Int? = 0
         ) throws -> (positional: [String], options: [String: String]) {
+            // Unbounded positionals are free text (`send`, `log`), where `-x` is a word.
             let parsed = try preflightFlagArguments(
                 args,
                 command: command,
                 valueFlags: values,
-                booleanFlags: booleans
+                booleanFlags: booleans,
+                shortFlags: shortFlags,
+                rejectOptionLikePositionals: maxPositionals != nil
             )
             guard parsed.positional.count >= minPositionals else {
                 throw CLIError(message: "\(command): missing required argument")
@@ -5136,9 +5015,11 @@ struct ProgramaCLI {
             }
 
         case "reorder-workspace":
-            let parsed = try parse(values: ["workspace", "index", "before", "after", "window"])
-            try require(["workspace"], in: parsed.options)
-            let anchors = ["index", "before", "after"].filter { parsed.options[$0] != nil }
+            let parsed = try parse(values: ["workspace", "index", "before", "before-workspace", "after", "after-workspace", "window"], maxPositionals: 1)
+            guard (parsed.options["workspace"] != nil) != (parsed.positional.count == 1) else {
+                throw CLIError(message: "reorder-workspace requires --workspace <id|ref> or one positional <id|ref>")
+            }
+            let anchors = ["index", "before", "before-workspace", "after", "after-workspace"].filter { parsed.options[$0] != nil }
             guard anchors.count == 1 else {
                 throw CLIError(message: "reorder-workspace requires exactly one of --index, --before, or --after")
             }
@@ -5447,7 +5328,7 @@ struct ProgramaCLI {
                 throw CLIError(message: "capture-pane: --lines must be greater than 0")
             }
         case "resize-pane":
-            let parsed = try parse(values: ["pane", "workspace", "amount"], minPositionals: 1, maxPositionals: 1)
+            let parsed = try parse(values: ["pane", "workspace", "amount"], shortFlags: ["-L", "-R", "-U", "-D"], minPositionals: 1, maxPositionals: 1)
             try require(["pane"], in: parsed.options)
             guard ["-L", "-R", "-U", "-D"].contains(parsed.positional[0]) else {
                 throw CLIError(message: "resize-pane requires -L, -R, -U, or -D")
@@ -5461,7 +5342,7 @@ struct ProgramaCLI {
                 throw CLIError(message: "pipe-pane requires --command <shell-command>")
             }
         case "wait-for":
-            let parsed = try parse(values: ["timeout"], booleans: ["signal"], minPositionals: 1, maxPositionals: 2)
+            let parsed = try parse(values: ["timeout"], booleans: ["signal"], shortFlags: ["-S"], minPositionals: 1, maxPositionals: 2)
             let positionals = parsed.positional.filter { $0 != "-S" }
             guard positionals.count == 1 else { throw CLIError(message: "wait-for requires one name") }
             if let timeout = parsed.options["timeout"] {
@@ -5491,7 +5372,7 @@ struct ProgramaCLI {
             return
         case "codex", "claude", "opencode":
             // `-y` is a single-dash token, so it arrives as a positional after the subcommand.
-            let parsed = try parse(booleans: ["yes", "y"], minPositionals: 1, maxPositionals: 2)
+            let parsed = try parse(booleans: ["yes", "y"], shortFlags: ["-y"], minPositionals: 1, maxPositionals: 2)
             guard parsed.positional.count == 1 || parsed.positional[1] == "-y" else {
                 throw CLIError(message: "\(command): unexpected arguments: \(parsed.positional[1])")
             }
@@ -5623,48 +5504,6 @@ struct ProgramaCLI {
                 }
             }
         }
-    }
-
-    /// Parses CLI-style flags (`--name value` or `--name=value`) into positional args + an
-    /// options dict, mirroring the v1 server-side `parseOptions`/`parseOptionsNoStop` grammar
-    /// so v2-backed sidebar commands can rebuild the same structured params client-side.
-    /// `stopAtDashDash: true` matches `parseOptions` (a bare `--` ends flag parsing, remaining
-    /// tokens are positional); `false` matches `parseOptionsNoStop` (a bare `--` is skipped,
-    /// used by `report_meta_block`-style commands where `--` separates key/options from markdown
-    /// body but the caller already split that out).
-    private func parseFlagArgs(_ args: [String], stopAtDashDash: Bool = true) -> (positional: [String], options: [String: String]) {
-        var positional: [String] = []
-        var options: [String: String] = [:]
-        var stopParsingOptions = false
-        var i = 0
-        while i < args.count {
-            let token = args[i]
-            if stopParsingOptions {
-                positional.append(token)
-            } else if token == "--" {
-                if stopAtDashDash {
-                    stopParsingOptions = true
-                }
-            } else if token.hasPrefix("--") {
-                if let eqIndex = token.firstIndex(of: "=") {
-                    let key = String(token[token.index(token.startIndex, offsetBy: 2)..<eqIndex])
-                    let value = String(token[token.index(after: eqIndex)...])
-                    options[key] = value
-                } else {
-                    let key = String(token.dropFirst(2))
-                    if i + 1 < args.count, !args[i + 1].hasPrefix("--") {
-                        options[key] = args[i + 1]
-                        i += 1
-                    } else {
-                        options[key] = ""
-                    }
-                }
-            } else {
-                positional.append(token)
-            }
-            i += 1
-        }
-        return (positional, options)
     }
 
     private func normalizedFlagValue(_ value: String?) -> String? {
