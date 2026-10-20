@@ -9,11 +9,7 @@ struct SplitNodeView<Content: View, EmptyContent: View>: View {
     let contentBuilder: (TabItem, PaneID) -> Content
     let emptyPaneBuilder: (PaneID) -> EmptyContent
     let appearance: BonsplitConfiguration.Appearance
-    var showSplitButtons: Bool = true
-    var contentViewLifecycle: ContentViewLifecycle = .recreateOnSwitch
     var onGeometryChange: ((_ isDragging: Bool) -> Void)?
-    var enableAnimations: Bool = true
-    var animationDuration: Double = 0.15
 
     var body: some View {
         switch node {
@@ -22,9 +18,7 @@ struct SplitNodeView<Content: View, EmptyContent: View>: View {
             SinglePaneWrapper(
                 pane: paneState,
                 contentBuilder: contentBuilder,
-                emptyPaneBuilder: emptyPaneBuilder,
-                showSplitButtons: showSplitButtons,
-                contentViewLifecycle: contentViewLifecycle
+                emptyPaneBuilder: emptyPaneBuilder
             )
 
         case .split(let splitState):
@@ -34,11 +28,7 @@ struct SplitNodeView<Content: View, EmptyContent: View>: View {
                 appearance: appearance,
                 contentBuilder: contentBuilder,
                 emptyPaneBuilder: emptyPaneBuilder,
-                showSplitButtons: showSplitButtons,
-                contentViewLifecycle: contentViewLifecycle,
-                onGeometryChange: onGeometryChange,
-                enableAnimations: enableAnimations,
-                animationDuration: animationDuration
+                onGeometryChange: onGeometryChange
             )
         }
     }
@@ -56,17 +46,13 @@ struct SinglePaneWrapper<Content: View, EmptyContent: View>: NSViewRepresentable
     let pane: PaneState
     let contentBuilder: (TabItem, PaneID) -> Content
     let emptyPaneBuilder: (PaneID) -> EmptyContent
-    var showSplitButtons: Bool = true
-    var contentViewLifecycle: ContentViewLifecycle = .recreateOnSwitch
 
     func makeNSView(context: Context) -> NSView {
         let paneView = PaneContainerView(
             pane: pane,
             controller: controller,
             contentBuilder: contentBuilder,
-            emptyPaneBuilder: emptyPaneBuilder,
-            showSplitButtons: showSplitButtons,
-            contentViewLifecycle: contentViewLifecycle
+            emptyPaneBuilder: emptyPaneBuilder
         )
         let hostingController = NSHostingController(rootView: paneView)
         hostingController.view.translatesAutoresizingMaskIntoConstraints = false
@@ -108,9 +94,7 @@ struct SinglePaneWrapper<Content: View, EmptyContent: View>: NSViewRepresentable
             pane: pane,
             controller: controller,
             contentBuilder: contentBuilder,
-            emptyPaneBuilder: emptyPaneBuilder,
-            showSplitButtons: showSplitButtons,
-            contentViewLifecycle: contentViewLifecycle
+            emptyPaneBuilder: emptyPaneBuilder
         )
         context.coordinator.hostingController?.rootView = paneView
     }

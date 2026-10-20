@@ -6,11 +6,11 @@ A native macOS tab bar library with split pane support for SwiftUI applications.
 
 - Native macOS look and feel using system colors
 - Drag-and-drop tab reordering within and between panes
-- Horizontal and vertical split panes with smooth 120fps animations
-- Configurable appearance and behavior
+- Horizontal and vertical split panes
+- Configurable appearance
 - Delegate callbacks for all tab and pane events
 - Keyboard navigation between panes
-- Optional macOS-like tab state preservation (scroll position, focus, @State)
+- macOS-like tab state preservation (scroll position, focus, @State)
 
 ## Requirements
 
@@ -286,123 +286,22 @@ func splitTabBar(_ controller: BonsplitController,
 
 ### BonsplitConfiguration
 
-Configure behavior and appearance.
-
-```swift
-let config = BonsplitConfiguration(
-    allowSplits: true,           // Enable split buttons and drag-to-split
-    allowCloseTabs: true,        // Show close buttons on tabs
-    allowCloseLastPane: false,   // Prevent closing the last pane
-    allowTabReordering: true,    // Enable drag-to-reorder
-    allowCrossPaneTabMove: true, // Enable moving tabs between panes
-    autoCloseEmptyPanes: true,   // Close panes when last tab is closed
-    contentViewLifecycle: .recreateOnSwitch,  // How tab views are managed
-    newTabPosition: .current,    // Where new tabs are inserted
-    appearance: .default
-)
-
-let controller = BonsplitController(configuration: config)
-```
-
-#### Content View Lifecycle
-
-Controls how tab content views are managed when switching between tabs:
-
-```swift
-// Memory efficient (default) - only selected tab is rendered
-// Loses scroll position, @State, focus when switching tabs
-contentViewLifecycle: .recreateOnSwitch
-
-// macOS-like behavior - all tab views stay in memory
-// Preserves scroll position, @State, focus, text selection, etc.
-contentViewLifecycle: .keepAllAlive
-```
-
-| Mode | Memory | State Preservation | Use Case |
-|------|--------|-------------------|----------|
-| `.recreateOnSwitch` | Low | None | Simple content, external state management |
-| `.keepAllAlive` | Higher | Full | Complex views, scroll positions, form inputs |
-
-#### New Tab Position
-
-Controls where new tabs are inserted in the tab list:
-
-```swift
-// Insert after currently focused tab (default)
-newTabPosition: .current
-
-// Always insert at the end of the tab list
-newTabPosition: .end
-```
-
-| Mode | Behavior |
-|------|----------|
-| `.current` | Insert after the currently focused tab, or at the end if no tab is focused |
-| `.end` | Always insert at the end of the tab list |
-
-#### Appearance Configuration
+Bonsplit's behavior is fixed: splits, tab reordering, and cross-pane tab moves are always on, the last pane never closes, new tabs open after the selected tab, and every tab's content view stays alive while hidden, so scroll position, `@State`, focus, and text selection survive tab switches. The configuration covers appearance only.
 
 ```swift
 let appearance = BonsplitConfiguration.Appearance(
-    tabBarHeight: 33,
-    tabSpacing: 0,
-    minimumPaneWidth: 100,
-    minimumPaneHeight: 100,
-    showSplitButtons: true,
-    animationDuration: 0.15,
-    enableAnimations: true
+    tabBarLeadingInset: 0,
+    tabBarLiquidGlassEnabled: false,
+    overlayLiquidGlassEnabled: false,
+    splitButtonTooltips: .default,
+    chromeColors: .init(backgroundHex: "#272822")
 )
 
 let config = BonsplitConfiguration(appearance: appearance)
-```
-
-#### Configuration Presets
-
-```swift
-// Default configuration
-BonsplitConfiguration.default
-
-// Single pane mode (no splits)
-BonsplitConfiguration.singlePane
-
-// Read-only mode (no modifications)
-BonsplitConfiguration.readOnly
+let controller = BonsplitController(configuration: config)
 ```
 
 ## Examples
-
-### Preserving Tab State
-
-Use `.keepAllAlive` to preserve scroll position, focus, and `@State` when switching tabs:
-
-```swift
-struct EditorApp: View {
-    @State private var controller: BonsplitController
-
-    init() {
-        let config = BonsplitConfiguration(
-            contentViewLifecycle: .keepAllAlive  // Preserve state across tab switches
-        )
-        _controller = State(initialValue: BonsplitController(configuration: config))
-    }
-
-    var body: some View {
-        BonsplitView(controller: controller) { tab, paneId in
-            ScrollView {
-                // Scroll position is preserved when switching tabs!
-                LongDocumentView(tabId: tab.id)
-            }
-        }
-    }
-}
-```
-
-With `.keepAllAlive`:
-- Scroll positions are preserved
-- Text selections remain intact
-- `@State` variables keep their values
-- Focus stays where you left it
-- Form inputs don't reset
 
 ### Document Editor
 

@@ -285,17 +285,7 @@ final class Workspace: Identifiable, ObservableObject {
             from: GhosttyApp.shared.defaultBackgroundColor,
             backgroundOpacity: GhosttyApp.shared.defaultBackgroundOpacity
         )
-        let config = BonsplitConfiguration(
-            allowSplits: true,
-            allowCloseTabs: true,
-            allowCloseLastPane: false,
-            allowTabReordering: true,
-            allowCrossPaneTabMove: true,
-            autoCloseEmptyPanes: true,
-            contentViewLifecycle: .keepAllAlive,
-            newTabPosition: .current,
-            appearance: appearance
-        )
+        let config = BonsplitConfiguration(appearance: appearance)
         let controller = BonsplitController(configuration: config)
         controller.contextMenuShortcuts = buildContextMenuShortcuts()
         return controller
@@ -322,8 +312,6 @@ final class Workspace: Identifiable, ObservableObject {
             ? trimmedWorkingDirectory
             : FileManager.default.homeDirectoryForCurrentUser.path
 
-        // Configure bonsplit with keepAllAlive to preserve terminal state
-        // and keep split entry instantaneous.
         // Avoid re-reading/parsing Ghostty config on every new workspace; this hot path
         // runs for socket/CLI workspace creation and can cause visible typing lag.
         self.bonsplitController = Self.makeBonsplitController()

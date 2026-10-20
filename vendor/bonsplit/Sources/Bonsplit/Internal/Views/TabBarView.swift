@@ -64,7 +64,6 @@ struct TabBarView: View {
     
     @Bindable var pane: PaneState
     let isFocused: Bool
-    var showSplitButtons: Bool = true
 
     @AppStorage("workspacePresentationMode") private var presentationMode = "standard"
     @State private var isHoveringTabBar = false
@@ -155,9 +154,7 @@ struct TabBarView: View {
                             // window-drag background and silently swallows clicks
                             // (#window-drag-areas). A fully transparent drag-capture view makes
                             // window drag work in this strip as it does in the 30pt zone before it.
-                            if showSplitButtons {
-                                splitButtonsGutterDragZone
-                            }
+                            splitButtonsGutterDragZone
                         }
                         .padding(.horizontal, TabBarMetrics.barPadding)
                         .animation(nil, value: pane.tabs.map(\.id))
@@ -217,15 +214,13 @@ struct TabBarView: View {
                 // the mask hides scroll content and the tab bar's own
                 // background shows through naturally.
                     .overlay(alignment: .trailing) {
-                        if showSplitButtons {
-                            let shouldShow = presentationMode != "minimal" || isHoveringTabBar
-                            splitButtons
-                                .saturation(tabBarSaturation)
-                                .padding(.bottom, 1)
-                                .opacity(shouldShow ? 1 : 0)
-                                .allowsHitTesting(shouldShow)
-                                .animation(.easeOut(duration: 0.14), value: shouldShow)
-                        }
+                        let shouldShow = presentationMode != "minimal" || isHoveringTabBar
+                        splitButtons
+                            .saturation(tabBarSaturation)
+                            .padding(.bottom, 1)
+                            .opacity(shouldShow ? 1 : 0)
+                            .allowsHitTesting(shouldShow)
+                            .animation(.easeOut(duration: 0.14), value: shouldShow)
                     }
                 }
             }
@@ -522,7 +517,6 @@ struct TabBarView: View {
             .safeHelp(tooltips.newTerminal)
 
             Button {
-                // 120fps animation handled by SplitAnimator
                 controller.splitPane(pane.id, orientation: .horizontal)
             } label: {
                 Image(systemName: "square.split.2x1")
@@ -532,7 +526,6 @@ struct TabBarView: View {
             .safeHelp(tooltips.splitRight)
 
             Button {
-                // 120fps animation handled by SplitAnimator
                 controller.splitPane(pane.id, orientation: .vertical)
             } label: {
                 Image(systemName: "square.split.1x2")
@@ -550,7 +543,7 @@ struct TabBarView: View {
     @ViewBuilder
     private var combinedMask: some View {
         let fadeWidth: CGFloat = 24
-        let shouldShowButtons = showSplitButtons && (presentationMode != "minimal" || isHoveringTabBar)
+        let shouldShowButtons = presentationMode != "minimal" || isHoveringTabBar
         let buttonClearWidth: CGFloat = shouldShowButtons ? 90 : 0
 
         HStack(spacing: 0) {

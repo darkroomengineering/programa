@@ -199,7 +199,6 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
     let isFocused: Bool
     let isVisible: Bool
     let leadingInset: CGFloat
-    let showsSplitButtons: Bool
 
     final class Coordinator {
         weak var bridge: (any BonsplitPaneChromePortalBridge)?
@@ -296,8 +295,8 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
         }
 
         let nativeDropTarget: (Int) -> (tab: TabItem, sourcePaneID: PaneID, targetIndex: Int)? = {
-            [weak pane, weak splitController, weak bonsplitController] requestedIndex in
-            guard let pane, let splitController, let bonsplitController,
+            [weak pane, weak splitController] requestedIndex in
+            guard let pane, let splitController,
                   requestedIndex >= 0, requestedIndex <= pane.tabs.count,
                   let draggedTab = splitController.activeDragTab ?? splitController.draggingTab,
                   let sourcePaneID = splitController.activeDragSourcePaneId ?? splitController.dragSourcePaneId,
@@ -305,12 +304,6 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
                   let sourceIndex = sourcePane.tabs.firstIndex(where: { $0.id == draggedTab.id }) else {
                 return nil
             }
-            if sourcePaneID == pane.id {
-                guard bonsplitController.configuration.allowTabReordering else { return nil }
-            } else {
-                guard bonsplitController.configuration.allowCrossPaneTabMove else { return nil }
-            }
-
             // PaneState keeps pinned tabs in one leading run. Normalize the visual
             // insertion marker to the same boundary that insertTab/moveTab enforce.
             let pinnedCount = pane.tabs.lazy.filter(\.isPinned).count
@@ -331,7 +324,7 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
             isFocused: isFocused,
             isVisible: isVisible,
             leadingInset: leadingInset,
-            showsSplitButtons: showsSplitButtons,
+            showsSplitButtons: true,
             onSelect: { [weak pane, weak bonsplitController] tabID in
                 guard let pane, let bonsplitController,
                       pane.tabs.contains(where: { $0.id == tabID.id }) else { return }
@@ -422,10 +415,10 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
 
     private func accessibilityValue(for tab: TabItem) -> String {
         var values: [String] = []
-        if tab.isLoading { values.append(localized("Loading")) }
-        if tab.isPinned { values.append(localized("Pinned")) }
-        if tab.showsNotificationBadge { values.append(localized("Unread")) }
-        if tab.isDirty { values.append(localized("Modified")) }
+        if tab.isLoading { values.append(BonsplitStrings.tabLoading) }
+        if tab.isPinned { values.append(BonsplitStrings.tabPinned) }
+        if tab.showsNotificationBadge { values.append(BonsplitStrings.tabUnread) }
+        if tab.isDirty { values.append(BonsplitStrings.tabModified) }
         return values.joined(separator: ", ")
     }
 
@@ -444,43 +437,43 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
         let isZoomed = splitController.zoomedPaneId == pane?.id
 
         var items: [BonsplitPaneChromeMenuItem] = [
-            .action(title: localized("Rename Tab…"), action: .rename, isEnabled: true),
+            .action(title: BonsplitStrings.renameTab, action: .rename, isEnabled: true),
         ]
         if tab.hasCustomTitle {
-            items.append(.action(title: localized("Remove Custom Tab Name"), action: .clearName, isEnabled: true))
+            items.append(.action(title: BonsplitStrings.removeCustomTabName, action: .clearName, isEnabled: true))
         }
         items.append(contentsOf: [
             .separator,
-            .action(title: localized("Close Tabs to Left"), action: .closeToLeft, isEnabled: canCloseToLeft),
-            .action(title: localized("Close Tabs to Right"), action: .closeToRight, isEnabled: canCloseToRight),
-            .action(title: localized("Close Other Tabs"), action: .closeOthers, isEnabled: canCloseOthers),
-            .action(title: localized("Move Tab…"), action: .move, isEnabled: true),
+            .action(title: BonsplitStrings.closeTabsToLeft, action: .closeToLeft, isEnabled: canCloseToLeft),
+            .action(title: BonsplitStrings.closeTabsToRight, action: .closeToRight, isEnabled: canCloseToRight),
+            .action(title: BonsplitStrings.closeOtherTabs, action: .closeOthers, isEnabled: canCloseOthers),
+            .action(title: BonsplitStrings.moveTab, action: .move, isEnabled: true),
         ])
         if tab.kind == "terminal" {
             items.append(contentsOf: [
-                .action(title: localized("Move to Left Pane"), action: .moveToLeftPane, isEnabled: canMoveLeft),
-                .action(title: localized("Move to Right Pane"), action: .moveToRightPane, isEnabled: canMoveRight),
+                .action(title: BonsplitStrings.moveToLeftPane, action: .moveToLeftPane, isEnabled: canMoveLeft),
+                .action(title: BonsplitStrings.moveToRightPane, action: .moveToRightPane, isEnabled: canMoveRight),
             ])
         }
         items.append(contentsOf: [
             .separator,
-            .action(title: localized("New Terminal Tab to Right"), action: .newTerminalToRight, isEnabled: true),
+            .action(title: BonsplitStrings.newTerminalTabToRight, action: .newTerminalToRight, isEnabled: true),
         ])
         items.append(.separator)
         if hasSplits {
             items.append(.action(
-                title: localized(isZoomed ? "Exit Zoom" : "Zoom Pane"),
+                title: isZoomed ? BonsplitStrings.exitZoom : BonsplitStrings.zoomPane,
                 action: .toggleZoom,
                 isEnabled: true
             ))
         }
         items.append(.action(
-            title: localized(tab.isPinned ? "Unpin Tab" : "Pin Tab"),
+            title: tab.isPinned ? BonsplitStrings.unpinTab : BonsplitStrings.pinTab,
             action: .togglePin,
             isEnabled: true
         ))
         items.append(.action(
-            title: localized(tab.showsNotificationBadge ? "Mark Tab as Read" : "Mark Tab as Unread"),
+            title: tab.showsNotificationBadge ? BonsplitStrings.markTabAsRead : BonsplitStrings.markTabAsUnread,
             action: tab.showsNotificationBadge ? .markAsRead : .markAsUnread,
             isEnabled: true
         ))
@@ -493,13 +486,13 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
         var items: [BonsplitPaneChromeMenuItem] = []
         if tab.customColorHex != nil {
             items.append(.action(
-                title: localized("contextMenu.clearColor", defaultValue: "Clear Color"),
+                title: BonsplitStrings.clearColor,
                 action: .clearTabColor,
                 isEnabled: true
             ))
         }
         items.append(.action(
-            title: localized("contextMenu.chooseCustomColor", defaultValue: "Choose Custom Color…"),
+            title: BonsplitStrings.chooseCustomColor,
             action: .chooseCustomTabColor,
             isEnabled: true
         ))
@@ -509,17 +502,9 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
             items.append(.tabColor(title: swatch.name, hex: swatch.hex, swatch: swatch.swatchColor))
         }
         return .submenu(
-            title: localized("contextMenu.tabColor", defaultValue: "Tab Color"),
+            title: BonsplitStrings.tabColor,
             items: items
         )
-    }
-
-    private func localized(_ key: String, defaultValue: String) -> String {
-        Bundle.module.localizedString(forKey: key, value: defaultValue, table: nil)
-    }
-
-    private func localized(_ value: String) -> String {
-        Bundle.module.localizedString(forKey: value, value: value, table: nil)
     }
 }
 
@@ -531,8 +516,6 @@ struct PaneContainerView<Content: View, EmptyContent: View>: View {
     @Bindable var controller: SplitViewController
     let contentBuilder: (TabItem, PaneID) -> Content
     let emptyPaneBuilder: (PaneID) -> EmptyContent
-    var showSplitButtons: Bool = true
-    var contentViewLifecycle: ContentViewLifecycle = .recreateOnSwitch
 
     @State private var activeDropZone: DropZone?
     @State private var dropLifecycle: PaneDropLifecycle = .idle
@@ -580,8 +563,7 @@ struct PaneContainerView<Content: View, EmptyContent: View>: View {
                     selectedTabID: pane.selectedTabId,
                     isFocused: isFocused,
                     isVisible: bonsplitController.isInteractive && showsTabStrip,
-                    leadingInset: leadingInset,
-                    showsSplitButtons: showSplitButtons
+                    leadingInset: leadingInset
                 )
                 .frame(height: showsTabStrip ? TabBarGlassStyling.barHeight : 0)
                 .allowsHitTesting(false)
@@ -590,8 +572,7 @@ struct PaneContainerView<Content: View, EmptyContent: View>: View {
                 // macOS 14–25 and bridge-unavailable windows retain the flat SwiftUI strip.
                 TabBarView(
                     pane: pane,
-                    isFocused: isFocused,
-                    showSplitButtons: showSplitButtons
+                    isFocused: isFocused
                 )
             }
             if !showsTabStrip {
@@ -602,7 +583,7 @@ struct PaneContainerView<Content: View, EmptyContent: View>: View {
                     .accessibilityHidden(true)
                     .overlay(alignment: .trailing) {
                         FloatingNewTabButton(
-                            title: Bundle.module.localizedString(forKey: "tabBar.newTab", value: "New Tab", table: nil)
+                            title: BonsplitStrings.newTab
                         ) { [weak pane, weak bonsplitController] in
                             guard let pane, let bonsplitController else { return }
                             bonsplitController.requestNewTab(kind: "terminal", inPane: pane.id)
@@ -684,45 +665,25 @@ struct PaneContainerView<Content: View, EmptyContent: View>: View {
             if pane.tabs.isEmpty {
                 emptyPaneView
             } else {
-                switch contentViewLifecycle {
-                case .recreateOnSwitch:
-                    // Original behavior: only render selected tab
-                    //
-                    // `selectedTabId` can be transiently nil (or point at a tab that is being moved/closed)
-                    // during rapid split/tab mutations. Rendering nothing for a single SwiftUI update causes
-                    // a visible blank flash. If we have tabs, always render a stable fallback.
-                    if let selectedTab = pane.selectedTab ?? pane.tabs.first {
-                        contentBuilder(selectedTab, pane.id)
+                // Every tab's view stays in the hierarchy so terminal state survives tab
+                // switches; only the selected one is visible and hit-testable.
+                // `selectedTabId` can be transiently nil during rapid split/tab mutations;
+                // fall back to the first tab so the pane never renders blank.
+                let effectiveSelectedTabId = pane.selectedTabId ?? pane.tabs.first?.id
+                ZStack {
+                    ForEach(pane.tabs) { tab in
+                        contentBuilder(tab, pane.id)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            // When the content is an NSViewRepresentable , it can
-                            // sit above SwiftUI overlays and swallow drop events. During tab drags,
-                            // disable hit testing for the content so our dropZonesLayer reliably
-                            // receives the drag/drop interaction.
-                            .allowsHitTesting(!isTabDragActive)
-                            // Tab selection is often driven by `withAnimation` in the tab bar;
-                            // don't crossfade the content when switching tabs.
-                            .transition(.identity)
-                            .transaction { tx in
-                                tx.animation = nil
-                            }
+                            .opacity(tab.id == effectiveSelectedTabId ? 1 : 0)
+                            // During tab drags, content (often an NSViewRepresentable) must not
+                            // swallow drop events meant for dropZonesLayer.
+                            .allowsHitTesting(!isTabDragActive && tab.id == effectiveSelectedTabId)
                     }
-
-                case .keepAllAlive:
-                    // macOS-like behavior: keep all tab views in hierarchy
-                    let effectiveSelectedTabId = pane.selectedTabId ?? pane.tabs.first?.id
-                    ZStack {
-                        ForEach(pane.tabs) { tab in
-                            contentBuilder(tab, pane.id)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                .opacity(tab.id == effectiveSelectedTabId ? 1 : 0)
-                                .allowsHitTesting(!isTabDragActive && tab.id == effectiveSelectedTabId)
-                        }
-                    }
-                    // Prevent SwiftUI from animating Metal-backed views during tab moves.
-                    // This avoids blank content when GhosttyKit terminals are snapshotted.
-                    .transaction { tx in
-                        tx.disablesAnimations = true
-                    }
+                }
+                // Prevent SwiftUI from animating Metal-backed views during tab moves.
+                // This avoids blank content when GhosttyKit terminals are snapshotted.
+                .transaction { tx in
+                    tx.disablesAnimations = true
                 }
             }
         }

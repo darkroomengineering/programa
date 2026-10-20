@@ -104,7 +104,6 @@ extension Workspace {
                 persistedValue: UserDefaults.standard.bool(forKey: ProgramaGlassSettings.overlaysEnabledKey)
             ),
             splitButtonTooltips: Self.currentSplitButtonTooltips(),
-            enableAnimations: false,
             chromeColors: .init(
                 backgroundHex: chromeHex,
                 borderHex: Self.bonsplitDividerHex(fromChromeHex: chromeHex)
