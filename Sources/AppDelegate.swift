@@ -769,9 +769,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         if startupSnapshot?.cleanShutdown == false {
             // The previous run's last snapshot was a periodic autosave, meaning the
             // process died without walking applicationWillTerminate — a crash or a
-            // force kill. Until 2026-08-19 this flag was write-only: crashes were
-            // invisible unless the user noticed on their own, and escrow revived
-            // sessions silently. Say what happened.
+            // force kill. Escrow revives the sessions without any sign of the crash,
+            // so tell the user what happened.
             notifyUncleanShutdownRecovery()
         }
         // Windows flagged closed in the snapshot are not shown again: their escrowed shells
