@@ -134,13 +134,16 @@ enum ReviewCheckpointStore {
             return .failure(error)
         }
 
-        // Deletes first, so a path that turns from a directory back into a file is free.
-        for change in changes where change.deletesPath {
-            removeFile(repoRoot: repoRoot, path: change.path)
-        }
+        // Deletes first, so a path that turns from a directory back into a file is free. A failed
+        // delete still lets the writes land, then fails the restore: the pre-revert checkpoint
+        // above can undo the partial result.
+        let undeleted = changes.filter(\.deletesPath).map(\.path).filter { !removeFile(repoRoot: repoRoot, path: $0) }
         let writes = changes.filter { !$0.deletesPath }.map(\.path)
         if !writes.isEmpty, case .failure(let error) = checkout(repoRoot: repoRoot, tree: targetTree, paths: writes) {
             return .failure(error)
+        }
+        if !undeleted.isEmpty {
+            return .failure(.commandFailed("could not remove \(undeleted.joined(separator: ", "))"))
         }
 #if DEBUG
         dlog("review.checkpoint.restore surface=\(surfaceId.uuidString.prefix(5)) ref=\(ref) changes=\(changes.count)")
@@ -374,18 +377,21 @@ enum ReviewCheckpointStore {
 
     /// Removes a file or symlink the checkpoint does not have, then any parent directories it
     /// leaves empty, stopping at the repo root. Directories are never removed recursively.
-    private static func removeFile(repoRoot: String, path: String) {
+    /// Returns false when the path is still there afterwards; an already-missing path is success.
+    private static func removeFile(repoRoot: String, path: String) -> Bool {
         let fileManager = FileManager.default
         let fullPath = (repoRoot as NSString).appendingPathComponent(path)
-        guard let type = (try? fileManager.attributesOfItem(atPath: fullPath))?[.type] as? FileAttributeType,
-              type != .typeDirectory else { return }
-        try? fileManager.removeItem(atPath: fullPath)
+        guard let type = (try? fileManager.attributesOfItem(atPath: fullPath))?[.type] as? FileAttributeType else {
+            return true
+        }
+        guard type != .typeDirectory, (try? fileManager.removeItem(atPath: fullPath)) != nil else { return false }
         var parent = (fullPath as NSString).deletingLastPathComponent
         while parent.count > repoRoot.count, parent.hasPrefix(repoRoot + "/"),
               (try? fileManager.contentsOfDirectory(atPath: parent))?.isEmpty == true {
             try? fileManager.removeItem(atPath: parent)
             parent = (parent as NSString).deletingLastPathComponent
         }
+        return true
     }
 
     // MARK: - Process plumbing
