@@ -48,6 +48,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - The `programa omo`, `omx` and `omc` wrappers for oh-my-openagent, Oh My Codex and Oh My Claude Code. The `programa claude`, `codex` and `opencode` integrations are unchanged. See `docs/removed/omo-omx-omc-wrappers.md` to restore them.
 
 ### Fixed
+- `programa handoff` pastes into a pane whose terminal has not started yet instead of failing.
 - With dozens of tabs in a pane, each tab keeps a width that shows its title instead of shrinking to one letter. The tab bar scrolls with a regular mouse wheel and keeps the selected tab in view.
 - Renaming a tab, or a program changing its title, updates the tab bar right away.
 - Launching a second build of Programa no longer cuts the running app's command line tool and agent hooks off. The new copy used to delete the running app's socket and take it over.

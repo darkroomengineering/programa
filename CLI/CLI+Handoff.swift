@@ -55,29 +55,44 @@ extension ProgramaCLI {
             throw CLIError(message: "handoff: no target pane; pass --to <id|ref> or run inside a Programa pane")
         }
 
-        // A one-line read resolves the target to its UUID (handles may be refs or UUIDs) and
-        // fails early when it is missing or not a terminal, before the source is read.
-        let targetPayload = try ctx.client.sendV2(
-            method: V2MethodNames.surfaceReadText, params: ["surface_id": target, "lines": 1]
-        )
-        let sourcePayload = try ctx.client.sendV2(
-            method: V2MethodNames.surfaceReadText, params: ["surface_id": source, "lines": lineCount]
-        )
-        let targetId = targetPayload["surface_id"] as? String
-        let sourceId = sourcePayload["surface_id"] as? String
-        if let targetId, let sourceId, UUID(uuidString: targetId) == UUID(uuidString: sourceId) {
+        // Resolved from surface.list, not a read: a pane whose terminal is not attached yet
+        // cannot be read, but surface.send_paste still queues text for it.
+        let targetList: [String: Any]
+        do {
+            targetList = try ctx.client.sendV2(method: V2MethodNames.surfaceList, params: ["surface_id": target])
+        } catch let error as CLIError where error.message.hasPrefix("not_found:") {
+            throw CLIError(message: "handoff: target pane \(target) not found")
+        }
+        let targetUUID = UUID(uuidString: target)
+        guard let targetRow = (targetList["surfaces"] as? [[String: Any]])?.first(where: { row in
+            if let targetUUID { return (row["id"] as? String).flatMap(UUID.init(uuidString:)) == targetUUID }
+            return (row["ref"] as? String)?.lowercased() == target.lowercased()
+        }), let targetId = targetRow["id"] as? String else {
+            throw CLIError(message: "handoff: target pane \(target) not found")
+        }
+        guard (targetRow["type"] as? String) == "terminal" else {
+            throw CLIError(message: "handoff: target pane \(target) is not a terminal")
+        }
+        let sourceIsTarget = UUID(uuidString: source).map { $0 == UUID(uuidString: targetId) }
+            ?? ((targetRow["ref"] as? String)?.lowercased() == source.lowercased())
+        if sourceIsTarget {
             throw CLIError(message: "handoff: --from and the target are the same pane; pick another pane with --from")
         }
 
+        let sourcePayload = try ctx.client.sendV2(
+            method: V2MethodNames.surfaceReadText, params: ["surface_id": source, "lines": lineCount]
+        )
+
         let sourceRef = (sourcePayload["surface_ref"] as? String) ?? source
-        let label = handoffSourceTitle(sourcePayload: sourcePayload, client: ctx.client).map { "\($0) (\(sourceRef))" } ?? sourceRef
+        let label = handoffSourceTitle(sourcePayload: sourcePayload, targetList: targetList, client: ctx.client)
+            .map { "\($0) (\(sourceRef))" } ?? sourceRef
         let text = PaneHandoffFormatter.format(
             sourceLabel: label,
             text: (sourcePayload["text"] as? String) ?? "",
             note: noteArg
         )
         let payload = try ctx.client.sendV2(
-            method: V2MethodNames.surfaceSendPaste, params: ["surface_id": targetId ?? target, "text": text]
+            method: V2MethodNames.surfaceSendPaste, params: ["surface_id": targetId, "text": text]
         )
         if ctx.jsonOutput {
             print(jsonString(formatIDs(payload, mode: ctx.idFormat)))
@@ -87,11 +102,15 @@ extension ProgramaCLI {
     }
 
     /// The source pane's title from `surface.list`, or nil when it is unavailable or empty.
-    private func handoffSourceTitle(sourcePayload: [String: Any], client: SocketClient) -> String? {
+    /// Reuses the target's listing when both panes are in the same workspace.
+    private func handoffSourceTitle(sourcePayload: [String: Any], targetList: [String: Any], client: SocketClient) -> String? {
         guard let workspaceId = sourcePayload["workspace_id"] as? String,
-              let sourceId = sourcePayload["surface_id"] as? String,
-              let listed = try? client.sendV2(method: V2MethodNames.surfaceList, params: ["workspace_id": workspaceId]),
-              let surfaces = listed["surfaces"] as? [[String: Any]],
+              let sourceId = sourcePayload["surface_id"] as? String else { return nil }
+        let sameWorkspace = (targetList["workspace_id"] as? String).flatMap(UUID.init(uuidString:)) == UUID(uuidString: workspaceId)
+        let listed = sameWorkspace
+            ? targetList
+            : (try? client.sendV2(method: V2MethodNames.surfaceList, params: ["workspace_id": workspaceId]))
+        guard let surfaces = listed?["surfaces"] as? [[String: Any]],
               let match = surfaces.first(where: { ($0["id"] as? String) == sourceId }),
               let title = (match["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
               !title.isEmpty else { return nil }

@@ -136,7 +136,8 @@ extension ProgramaCLI {
             default:
                 let message = ["message", "body", "text", "reason", "description"]
                     .lazy.compactMap { parsed.object?[$0] as? String }.first { !$0.isEmpty }
-                (subtitle, body) = ("Permission", message ?? "OpenCode needs your attention")
+                let fallback = command == "opencode-hook" ? "OpenCode needs your attention" : "Agent needs your attention"
+                (subtitle, body) = ("Permission", message ?? fallback)
             }
             emitProgramStatusForNotification(app: app, classifiedSubtitle: subtitle, body: body)
         default:
