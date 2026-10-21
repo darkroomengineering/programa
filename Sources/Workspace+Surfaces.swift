@@ -499,7 +499,7 @@ extension Workspace {
         // Veto at the pane cap before constructing a panel.
         guard canAddSplitPane else { return nil }
 
-        guard let directory = normalizedSidebarDirectory(panelDirectories[panelId] ?? currentDirectory) else {
+        guard let directory = sidebarResolvedDirectory(for: panelId) else {
             return nil
         }
         let reviewPanel = ReviewPanel(

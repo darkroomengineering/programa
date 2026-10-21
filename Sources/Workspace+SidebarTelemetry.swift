@@ -377,7 +377,7 @@ extension Workspace {
     private func runReviewNudgeProbe(panelId: UUID, kind: ReviewNudgeProbeKind) {
         // An open review panel already refreshes itself on these same edges.
         guard !panels.values.contains(where: { $0 is ReviewPanel }),
-              let directory = normalizedSidebarDirectory(panelDirectories[panelId] ?? currentDirectory) else {
+              let directory = sidebarResolvedDirectory(for: panelId) else {
             return
         }
         reviewNudgeProbeGenerations[panelId, default: 0] &+= 1
