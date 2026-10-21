@@ -274,6 +274,31 @@ final class ReviewPanelRowPlannerTests: XCTestCase {
         )
     }
 
+    func testChangeFingerprintSeesContentEditsToAlreadyDirtyFiles() throws {
+        let repoRoot = try makeCommittedTempGitRepo()
+        defer { try? FileManager.default.removeItem(atPath: repoRoot) }
+        let committedPath = (repoRoot as NSString).appendingPathComponent("committed.txt")
+        try "changed".write(toFile: committedPath, atomically: true, encoding: .utf8)
+        try "new".write(toFile: (repoRoot as NSString).appendingPathComponent("untracked.txt"), atomically: true, encoding: .utf8)
+
+        let before = try XCTUnwrap(ReviewDiffProber.uncommittedChangeFingerprint(directory: repoRoot))
+        XCTAssertEqual(before.paths, ["committed.txt", "untracked.txt"])
+        XCTAssertEqual(before.contentHashes?.count, 2)
+        let unchanged = try XCTUnwrap(ReviewDiffProber.uncommittedChangeFingerprint(directory: repoRoot))
+        XCTAssertFalse(unchanged.differs(from: before))
+
+        try "changed again".write(toFile: committedPath, atomically: true, encoding: .utf8)
+        let after = try XCTUnwrap(ReviewDiffProber.uncommittedChangeFingerprint(directory: repoRoot))
+        XCTAssertEqual(after.paths, before.paths)
+        XCTAssertTrue(after.differs(from: before))
+
+        // A deleted tracked file still fingerprints instead of failing the hash call.
+        try FileManager.default.removeItem(atPath: committedPath)
+        let deleted = try XCTUnwrap(ReviewDiffProber.uncommittedChangeFingerprint(directory: repoRoot))
+        XCTAssertEqual(deleted.contentHashes?["committed.txt"], "")
+        XCTAssertTrue(deleted.differs(from: after))
+    }
+
     func testUncommittedFileCountIsNilOutsideGitRepository() throws {
         let directory = try makeTempDirectory()
         defer { try? FileManager.default.removeItem(atPath: directory) }
@@ -294,7 +319,7 @@ final class ReviewPanelRowPlannerTests: XCTestCase {
 
         // Turn 1 on a clean tree edits two files.
         workspace.updatePanelAgentState(panelId: agentId, state: .working)
-        XCTAssertTrue(pollMainRunLoop { workspace.reviewNudgeBaselines[agentId] == [] })
+        XCTAssertTrue(pollMainRunLoop { workspace.reviewNudgeBaselines[agentId]?.paths == [] })
         try "changed".write(toFile: (repoRoot as NSString).appendingPathComponent("committed.txt"), atomically: true, encoding: .utf8)
         try "new".write(toFile: (repoRoot as NSString).appendingPathComponent("untracked.txt"), atomically: true, encoding: .utf8)
         workspace.updatePanelAgentState(panelId: agentId, state: .idle)
@@ -307,7 +332,7 @@ final class ReviewPanelRowPlannerTests: XCTestCase {
         // Turn 2 on the now-dirty tree changes nothing.
         workspace.updatePanelAgentState(panelId: agentId, state: .working)
         XCTAssertNil(workspace.panelReviewNudges[agentId], "A new turn clears the nudge")
-        XCTAssertTrue(pollMainRunLoop { workspace.reviewNudgeBaselines[agentId]?.count == 2 })
+        XCTAssertTrue(pollMainRunLoop { workspace.reviewNudgeBaselines[agentId]?.paths.count == 2 })
         let settledBeforeQuietTurn = workspace.reviewNudgeTurnEndsSettled
         workspace.updatePanelAgentState(panelId: agentId, state: .idle)
         XCTAssertTrue(pollMainRunLoop { workspace.reviewNudgeTurnEndsSettled > settledBeforeQuietTurn })
@@ -315,13 +340,21 @@ final class ReviewPanelRowPlannerTests: XCTestCase {
 
         // Turn 3 adds one file, across a permission prompt that must keep the turn's baseline.
         workspace.updatePanelAgentState(panelId: agentId, state: .working)
-        XCTAssertTrue(pollMainRunLoop { workspace.reviewNudgeBaselines[agentId]?.count == 2 })
+        XCTAssertTrue(pollMainRunLoop { workspace.reviewNudgeBaselines[agentId]?.paths.count == 2 })
         workspace.updatePanelAgentState(panelId: agentId, state: .blocked)
         try "added".write(toFile: (repoRoot as NSString).appendingPathComponent("during-turn.txt"), atomically: true, encoding: .utf8)
         workspace.updatePanelAgentState(panelId: agentId, state: .working)
-        XCTAssertEqual(workspace.reviewNudgeBaselines[agentId]?.count, 2, "Resuming after a prompt keeps the turn-start baseline")
+        XCTAssertEqual(workspace.reviewNudgeBaselines[agentId]?.paths.count, 2, "Resuming after a prompt keeps the turn-start baseline")
         workspace.updatePanelAgentState(panelId: agentId, state: .idle)
         XCTAssertTrue(pollMainRunLoop { workspace.panelReviewNudges[agentId] == 3 })
+
+        // Turn 4 edits a file that was already dirty: same paths, new content.
+        workspace.updatePanelAgentState(panelId: agentId, state: .working)
+        XCTAssertNil(workspace.panelReviewNudges[agentId])
+        XCTAssertTrue(pollMainRunLoop { workspace.reviewNudgeBaselines[agentId]?.paths.count == 3 })
+        try "changed again".write(toFile: (repoRoot as NSString).appendingPathComponent("committed.txt"), atomically: true, encoding: .utf8)
+        workspace.updatePanelAgentState(panelId: agentId, state: .idle)
+        XCTAssertTrue(pollMainRunLoop { workspace.panelReviewNudges[agentId] == 3 }, "Re-editing a dirty file is a change")
 
         // A blocked -> idle turn end on a now-clean tree removes the nudge.
         try runGit(["add", "-A"], in: repoRoot)

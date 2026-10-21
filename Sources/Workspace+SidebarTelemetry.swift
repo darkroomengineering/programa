@@ -335,7 +335,7 @@ extension Workspace {
     // MARK: - Review nudge
 
     /// An agent turn ending (working/blocked -> idle, from hooks, OSC 7501 or screen inference)
-    /// probes the surface's repo once and nudges only if the changed-path set moved since the
+    /// probes the surface's repo once and nudges only if its change fingerprint moved since the
     /// turn started; a new turn (-> working) drops that surface's nudge and records the baseline.
     /// Never opens or focuses anything: the sidebar only offers the review.
     func noteReviewNudgeTurnEdge(panelId: UUID, previous: AgentActivityState?, next: AgentActivityState) {
@@ -371,7 +371,7 @@ extension Workspace {
         case baseline
         /// `baseline == nil` (its probe failed, was superseded, or the turn began before the app
         /// saw it) nudges on any non-empty diff.
-        case turnEnd(baseline: Set<String>?)
+        case turnEnd(baseline: ReviewChangeFingerprint?)
     }
 
     private func runReviewNudgeProbe(panelId: UUID, kind: ReviewNudgeProbeKind) {
@@ -383,18 +383,19 @@ extension Workspace {
         reviewNudgeProbeGenerations[panelId, default: 0] &+= 1
         let generation = reviewNudgeProbeGenerations[panelId]
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            let paths = ReviewDiffProber.uncommittedChangedPaths(directory: directory)
+            let fingerprint = ReviewDiffProber.uncommittedChangeFingerprint(directory: directory)
             DispatchQueue.main.async {
                 guard let self,
                       self.reviewNudgeProbeGenerations[panelId] == generation,
                       self.panels[panelId] != nil,
-                      let paths else { return }
+                      let fingerprint else { return }
                 switch kind {
                 case .baseline:
-                    self.reviewNudgeBaselines[panelId] = paths
+                    self.reviewNudgeBaselines[panelId] = fingerprint
                 case .turnEnd(let baseline):
                     self.reviewNudgeTurnEndsSettled &+= 1
-                    let count = paths != baseline ? paths.count : 0
+                    let changed = baseline.map { fingerprint.differs(from: $0) } ?? true
+                    let count = changed ? fingerprint.paths.count : 0
                     if count > 0 {
                         if self.panelReviewNudges[panelId] != count {
                             self.panelReviewNudges[panelId] = count
@@ -405,8 +406,8 @@ extension Workspace {
 #if DEBUG
                     dlog(
                         "review.nudge workspace=\(self.id.uuidString.prefix(5)) " +
-                        "panel=\(panelId.uuidString.prefix(5)) files=\(paths.count) " +
-                        "baseline=\(baseline.map { String($0.count) } ?? "none") nudge=\(count)"
+                        "panel=\(panelId.uuidString.prefix(5)) files=\(fingerprint.paths.count) " +
+                        "baseline=\(baseline.map { String($0.paths.count) } ?? "none") nudge=\(count)"
                     )
 #endif
                 }
