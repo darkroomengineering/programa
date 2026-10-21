@@ -11,7 +11,7 @@ final class ReviewMergeReadinessTests: XCTestCase {
 
     func testGreenOpenPullRequestIsReadyToMerge() throws {
         let pullRequestJSON = """
-        {"isDraft":false,"state":"OPEN","statusCheckRollup":[
+        {"isDraft":false,"state":"OPEN","mergeable":"MERGEABLE","reviewDecision":"","statusCheckRollup":[
           {"__typename":"CheckRun","conclusion":"SUCCESS","name":"change-detection","status":"COMPLETED","workflowName":"CI"},
           {"__typename":"CheckRun","conclusion":"SKIPPED","name":"windows-build","status":"COMPLETED","workflowName":"CI"},
           {"__typename":"StatusContext","context":"vercel","state":"SUCCESS"}
@@ -24,6 +24,65 @@ final class ReviewMergeReadinessTests: XCTestCase {
         XCTAssertEqual(readiness.passingCheckCount, 3)
         XCTAssertEqual(readiness.unresolvedThreadCount, 0)
         XCTAssertTrue(readiness.isReadyToMerge)
+    }
+
+    func testUnrecognizedCheckValuesFailClosed() throws {
+        let pullRequestJSON = """
+        {"isDraft":false,"state":"OPEN","mergeable":"MERGEABLE","reviewDecision":"APPROVED","statusCheckRollup":[
+          {"__typename":"CheckRun","conclusion":"STALE","name":"old-run","status":"COMPLETED"},
+          {"__typename":"CheckRun","conclusion":"","name":"no-conclusion","status":"COMPLETED"},
+          {"__typename":"StatusContext","context":"future","state":"SOMETHING_NEW"},
+          {"__typename":"CheckRun","conclusion":"SUCCESS","name":"lint","status":"COMPLETED"}
+        ]}
+        """
+        let readiness = try XCTUnwrap(ReviewMergeReadinessProber.parse(pullRequestJSON: pullRequestJSON, reviewThreadsJSON: noThreads))
+        XCTAssertEqual(readiness.failingCheckNames, ["old-run", "no-conclusion", "future"])
+        XCTAssertEqual(readiness.passingCheckCount, 1)
+        XCTAssertFalse(readiness.isReadyToMerge)
+    }
+
+    func testMergeConflictsBlockReadinessAndOutrankReviewState() throws {
+        let readiness = try XCTUnwrap(ReviewMergeReadinessProber.parse(
+            pullRequestJSON: #"{"isDraft":false,"state":"OPEN","mergeable":"CONFLICTING","reviewDecision":"REVIEW_REQUIRED","statusCheckRollup":[]}"#,
+            reviewThreadsJSON: noThreads
+        ))
+        XCTAssertEqual(readiness.mergeable, .conflicting)
+        XCTAssertEqual(readiness.mergeBlocker, .conflicts)
+        XCTAssertFalse(readiness.isReadyToMerge)
+    }
+
+    func testReviewRequiredAndChangesRequestedBlockReadiness() throws {
+        let reviewRequired = try XCTUnwrap(ReviewMergeReadinessProber.parse(
+            pullRequestJSON: #"{"isDraft":false,"state":"OPEN","mergeable":"MERGEABLE","reviewDecision":"REVIEW_REQUIRED","statusCheckRollup":[]}"#,
+            reviewThreadsJSON: noThreads
+        ))
+        XCTAssertEqual(reviewRequired.mergeBlocker, .reviewRequired)
+        XCTAssertFalse(reviewRequired.isReadyToMerge)
+
+        let changesRequested = try XCTUnwrap(ReviewMergeReadinessProber.parse(
+            pullRequestJSON: #"{"isDraft":false,"state":"OPEN","mergeable":"MERGEABLE","reviewDecision":"CHANGES_REQUESTED","statusCheckRollup":[]}"#,
+            reviewThreadsJSON: noThreads
+        ))
+        XCTAssertEqual(changesRequested.mergeBlocker, .changesRequested)
+        XCTAssertFalse(changesRequested.isReadyToMerge)
+
+        let approved = try XCTUnwrap(ReviewMergeReadinessProber.parse(
+            pullRequestJSON: #"{"isDraft":false,"state":"OPEN","mergeable":"MERGEABLE","reviewDecision":"APPROVED","statusCheckRollup":[]}"#,
+            reviewThreadsJSON: noThreads
+        ))
+        XCTAssertNil(approved.mergeBlocker)
+        XCTAssertTrue(approved.isReadyToMerge)
+    }
+
+    func testUnknownMergeabilityIsNotReadyButHasNoBlockerRow() throws {
+        let readiness = try XCTUnwrap(ReviewMergeReadinessProber.parse(
+            pullRequestJSON: #"{"isDraft":false,"state":"OPEN","mergeable":"UNKNOWN","reviewDecision":null,"statusCheckRollup":[]}"#,
+            reviewThreadsJSON: noThreads
+        ))
+        XCTAssertEqual(readiness.mergeable, .unknown)
+        XCTAssertEqual(readiness.reviewDecision, .none)
+        XCTAssertNil(readiness.mergeBlocker)
+        XCTAssertFalse(readiness.isReadyToMerge)
     }
 
     func testFailingAndPendingChecksAreCountedAndNamedOnce() throws {

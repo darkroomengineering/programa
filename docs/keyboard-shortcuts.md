@@ -112,7 +112,7 @@ were open at quit from session data.
 The agent diff review panel (`programa review open`, or the command palette) shows the
 worktree diff for a terminal surface, with line comments you can send back into the agent's
 input. When the workspace has a GitHub pull request, the top of the panel shows its state, failing
-and pending checks, and unresolved review conversations, read with `gh` when the panel opens or
+and pending checks, unresolved review conversations, and merge conflicts or a missing review, read with `gh` when the panel opens or
 you press a refresh button. No default keyboard shortcut ships for v1 to avoid colliding with existing bindings
 (⌘⇧R is already Rename Workspace) — bind one yourself if you want a shortcut.
 

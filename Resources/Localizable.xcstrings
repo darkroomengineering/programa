@@ -15681,13 +15681,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Checks pass and no conversations are unresolved. Approvals and merge conflicts are not checked."
+            "value": "Checks pass, there are no merge conflicts, the review requirement is met, and no conversations are unresolved."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "チェックはすべて成功し、未解決の会話はありません。承認とマージの競合は確認していません。"
+            "value": "チェックはすべて成功し、マージの競合はなく、レビュー要件を満たし、未解決の会話はありません。"
           }
         }
       }
@@ -15977,6 +15977,57 @@
           "stringUnit": {
             "state": "translated",
             "value": "未解決の会話 %lld 件"
+          }
+        }
+      }
+    },
+    "review.readiness.blocker.conflicts": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merge conflicts"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "マージの競合"
+          }
+        }
+      }
+    },
+    "review.readiness.blocker.changesRequested": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changes requested"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "変更が要求されています"
+          }
+        }
+      }
+    },
+    "review.readiness.blocker.reviewRequired": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review required"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "レビューが必要です"
           }
         }
       }

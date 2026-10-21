@@ -339,7 +339,7 @@ struct ReviewPanelView: View {
                             .foregroundColor(.green)
                             .safeHelp(String(
                                 localized: "review.readiness.ready.help",
-                                defaultValue: "Checks pass and no conversations are unresolved. Approvals and merge conflicts are not checked."
+                                defaultValue: "Checks pass, there are no merge conflicts, the review requirement is met, and no conversations are unresolved."
                             ))
                     }
                 }
@@ -364,6 +364,9 @@ struct ReviewPanelView: View {
             case .loaded(let loaded) where loaded.state == .open || loaded.state == .draft:
                 mergeReadinessChecksRow(loaded)
                 mergeReadinessThreadsRow(loaded, number: readiness.number, url: readiness.url)
+                if loaded.state == .open, let blocker = loaded.mergeBlocker {
+                    mergeReadinessBlockerRow(blocker)
+                }
             case .unavailable:
                 Text(String(
                     localized: "review.readiness.unavailable",
@@ -445,6 +448,25 @@ struct ReviewPanelView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private func mergeReadinessBlockerRow(_ blocker: ReviewMergeReadiness.MergeBlocker) -> some View {
+        let label: String
+        switch blocker {
+        case .conflicts:
+            label = String(localized: "review.readiness.blocker.conflicts", defaultValue: "Merge conflicts")
+        case .changesRequested:
+            label = String(localized: "review.readiness.blocker.changesRequested", defaultValue: "Changes requested")
+        case .reviewRequired:
+            label = String(localized: "review.readiness.blocker.reviewRequired", defaultValue: "Review required")
+        }
+        return HStack(spacing: 6) {
+            Image(systemName: "exclamationmark.triangle")
+                .foregroundColor(.orange)
+                .accessibilityHidden(true)
+            Text(label)
+        }
+        .font(.system(size: 11))
     }
 
     private func mergeReadinessThreadsLabel(_ count: Int) -> String {

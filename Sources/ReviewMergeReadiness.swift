@@ -17,10 +17,52 @@ struct ReviewMergeReadiness: Equatable, Sendable {
     let passingCheckCount: Int
     /// nil when the review-thread query failed.
     let unresolvedThreadCount: Int?
+    /// `gh`'s `mergeable`; `.unknown` while GitHub is still computing it, or for an unrecognized value.
+    let mergeable: Mergeable
+    /// `gh`'s `reviewDecision`; `.none` when the repository requires no review.
+    let reviewDecision: ReviewDecision
 
-    /// Approvals and merge conflicts are not fetched, so this covers checks and threads only.
+    enum Mergeable: Equatable, Sendable {
+        case mergeable
+        case conflicting
+        case unknown
+    }
+
+    enum ReviewDecision: Equatable, Sendable {
+        case approved
+        case changesRequested
+        case reviewRequired
+        case none
+        case unknown
+    }
+
+    enum MergeBlocker: Equatable, Sendable {
+        case conflicts
+        case changesRequested
+        case reviewRequired
+    }
+
+    /// The one blocker worth a row of its own. Pending or unrecognized values block readiness
+    /// without a row.
+    var mergeBlocker: MergeBlocker? {
+        if mergeable == .conflicting { return .conflicts }
+        switch reviewDecision {
+        case .changesRequested:
+            return .changesRequested
+        case .reviewRequired:
+            return .reviewRequired
+        case .approved, .none, .unknown:
+            return nil
+        }
+    }
+
     var isReadyToMerge: Bool {
-        state == .open && failingCheckNames.isEmpty && pendingCheckCount == 0 && unresolvedThreadCount == 0
+        state == .open
+            && failingCheckNames.isEmpty
+            && pendingCheckCount == 0
+            && unresolvedThreadCount == 0
+            && mergeable == .mergeable
+            && (reviewDecision == .approved || reviewDecision == .none)
     }
 }
 
@@ -82,7 +124,7 @@ enum ReviewMergeReadinessProber {
               let pullRequestJSON = runGitHubCLI(
                   [
                       "pr", "view", pullRequestURL.absoluteString,
-                      "--json", "state,isDraft,statusCheckRollup",
+                      "--json", "state,isDraft,statusCheckRollup,mergeable,reviewDecision",
                   ],
                   directory: directory
               ) else {
@@ -124,6 +166,8 @@ enum ReviewMergeReadinessProber {
         let state: String
         let isDraft: Bool?
         let statusCheckRollup: [CheckPayload]?
+        let mergeable: String?
+        let reviewDecision: String?
     }
 
     /// `CheckRun` entries carry `name`/`status`/`conclusion`; `StatusContext` entries carry
@@ -152,7 +196,7 @@ enum ReviewMergeReadinessProber {
         case passing
     }
 
-    /// Parses `gh pr view --json state,isDraft,statusCheckRollup` and the review-thread GraphQL
+    /// Parses `gh pr view --json state,isDraft,statusCheckRollup,mergeable,reviewDecision` and the review-thread GraphQL
     /// response. nil when the PR JSON is unusable; a missing or unusable thread response leaves
     /// `unresolvedThreadCount` nil.
     nonisolated static func parse(pullRequestJSON: String, reviewThreadsJSON: String?) -> ReviewMergeReadiness? {
@@ -185,8 +229,6 @@ enum ReviewMergeReadinessProber {
                 pendingCheckCount += 1
             case .passing:
                 passingCheckCount += 1
-            case nil:
-                continue
             }
         }
 
@@ -195,8 +237,36 @@ enum ReviewMergeReadinessProber {
             failingCheckNames: failingCheckNames,
             pendingCheckCount: pendingCheckCount,
             passingCheckCount: passingCheckCount,
-            unresolvedThreadCount: reviewThreadsJSON.flatMap(unresolvedThreadCount(from:))
+            unresolvedThreadCount: reviewThreadsJSON.flatMap(unresolvedThreadCount(from:)),
+            mergeable: mergeable(from: payload.mergeable),
+            reviewDecision: reviewDecision(from: payload.reviewDecision)
         )
+    }
+
+    private nonisolated static func mergeable(from raw: String?) -> ReviewMergeReadiness.Mergeable {
+        switch normalized(raw)?.uppercased() {
+        case "MERGEABLE":
+            return .mergeable
+        case "CONFLICTING":
+            return .conflicting
+        default:
+            return .unknown
+        }
+    }
+
+    private nonisolated static func reviewDecision(from raw: String?) -> ReviewMergeReadiness.ReviewDecision {
+        switch normalized(raw)?.uppercased() {
+        case nil:
+            return .none
+        case "APPROVED":
+            return .approved
+        case "CHANGES_REQUESTED":
+            return .changesRequested
+        case "REVIEW_REQUIRED":
+            return .reviewRequired
+        default:
+            return .unknown
+        }
     }
 
     private nonisolated static func unresolvedThreadCount(from json: String) -> Int? {
@@ -206,33 +276,31 @@ enum ReviewMergeReadinessProber {
         return threads.nodes.compactMap { $0 }.filter { !$0.isResolved }.count
     }
 
-    private nonisolated static func outcome(of check: CheckPayload) -> CheckOutcome? {
+    /// Fails closed: a completed check is passing only for a known passing value, so STALE or
+    /// any value GitHub adds later counts as failing.
+    private nonisolated static func outcome(of check: CheckPayload) -> CheckOutcome {
         if let conclusion = normalized(check.conclusion)?.lowercased() {
             switch conclusion {
-            case "failure", "timed_out", "cancelled", "action_required", "startup_failure":
-                return .failing
             case "success", "neutral", "skipped":
                 return .passing
             default:
-                return nil
+                return .failing
             }
         }
         if let state = normalized(check.state)?.lowercased() {
             switch state {
-            case "failure", "error":
-                return .failing
-            case "pending", "expected":
-                return .pending
             case "success":
                 return .passing
+            case "pending", "expected":
+                return .pending
             default:
-                return nil
+                return .failing
             }
         }
         if let status = normalized(check.status)?.lowercased(), status != "completed" {
             return .pending
         }
-        return nil
+        return .failing
     }
 
     private nonisolated static func normalized(_ value: String?) -> String? {
