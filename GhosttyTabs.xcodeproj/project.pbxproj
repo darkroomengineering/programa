@@ -85,6 +85,7 @@
 			A1D000000000000000000005 /* PaneHandoffFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D000000000000000000003 /* PaneHandoffFormatter.swift */; };
 			A1D000000000000000000004 /* PaneHandoffFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D000000000000000000003 /* PaneHandoffFormatter.swift */; };
 			A1D000000000000000000002 /* TerminalController+SurfacePaste.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D000000000000000000001 /* TerminalController+SurfacePaste.swift */; };
+			B6F200000000000000000002 /* TerminalController+SurfaceConditionalSend.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6F200000000000000000001 /* TerminalController+SurfaceConditionalSend.swift */; };
 			A2CV0000000000000000000A /* CommandPaletteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2CV0000000000000000000B /* CommandPaletteView.swift */; };
 			A2CV00000000000000000008 /* CommandPaletteView+Flows.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2CV00000000000000000009 /* CommandPaletteView+Flows.swift */; };
 			A2CV00000000000000000006 /* CommandPaletteView+Types.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2CV00000000000000000007 /* CommandPaletteView+Types.swift */; };
@@ -508,6 +509,7 @@
 			A1D000000000000000000006 /* CLI+Handoff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Handoff.swift"; sourceTree = "<group>"; };
 			A1D000000000000000000003 /* PaneHandoffFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneHandoffFormatter.swift; sourceTree = "<group>"; };
 			A1D000000000000000000001 /* TerminalController+SurfacePaste.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+SurfacePaste.swift"; sourceTree = "<group>"; };
+			B6F200000000000000000001 /* TerminalController+SurfaceConditionalSend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+SurfaceConditionalSend.swift"; sourceTree = "<group>"; };
 			A2CV0000000000000000000B /* CommandPaletteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteView.swift; sourceTree = "<group>"; };
 			A2CV00000000000000000009 /* CommandPaletteView+Flows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandPaletteView+Flows.swift"; sourceTree = "<group>"; };
 			A2CV00000000000000000007 /* CommandPaletteView+Types.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandPaletteView+Types.swift"; sourceTree = "<group>"; };
@@ -1106,6 +1108,7 @@
 				RVPN0000000000000000000B /* ReviewPanelView.swift */,
 				RVPN0000000000000000000D /* TerminalController+Review.swift */,
 				A1D000000000000000000001 /* TerminalController+SurfacePaste.swift */,
+				B6F200000000000000000001 /* TerminalController+SurfaceConditionalSend.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -1643,6 +1646,7 @@
 				RVPN0000000000000000000C /* ReviewPanelView.swift in Sources */,
 				RVPN0000000000000000000E /* TerminalController+Review.swift in Sources */,
 				A1D000000000000000000002 /* TerminalController+SurfacePaste.swift in Sources */,
+				B6F200000000000000000002 /* TerminalController+SurfaceConditionalSend.swift in Sources */,
 				A5001421 /* MarkdownPanelView.swift in Sources */,
 				MDRD00000000000000000001 /* MarkdownDocumentView.swift in Sources */,
 				MRMD000001 /* MermaidDiagramView.swift in Sources */,

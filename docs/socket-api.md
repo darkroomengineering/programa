@@ -489,6 +489,38 @@ plus `"queued": true` when the terminal was not attached yet. Errors: `invalid_p
 or empty `text` or a non-terminal surface, `not_found` for an unknown workspace or surface. Runs on
 main like `surface.send_text` and changes no focus or selection.
 
+## `surface.send_if_unchanged`
+
+Sends input only if the terminal still shows what the caller last read, so a reply decided from
+one read cannot land on a prompt that replaced it. `surface.read_text` returns a `fingerprint`
+next to `text`: the lowercase hex SHA-256 of the UTF-8 bytes of exactly that `text`. Pass it back
+as `expected_fingerprint` with the same target and read params. The method reads the screen the
+way `surface.read_text` does, compares, and sends in one main-thread pass, so no other socket
+command or terminal update runs between the check and the input.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `expected_fingerprint` | string | yes | The `fingerprint` from `surface.read_text`. Compared case-insensitively. |
+| `text` | string | no | Sent like `surface.send_text` (newlines become Return). |
+| `keys` | array of string | no | Key names `surface.send_key` accepts, sent in order after `text`. |
+| `lines` / `scrollback` | integer / boolean | no | Same meaning and bounds as `surface.read_text`; use the values from the read that produced the fingerprint. |
+| `surface_id` | string | no | Target terminal; defaults to the focused surface of the resolved workspace. |
+| `workspace_id` / `window_id` / `tab_id` | string | no | Same resolution as `surface.send_text`. |
+
+At least one of a non-empty `text` or a non-empty `keys` is required. Returns
+`{"fingerprint", "workspace_id", "workspace_ref", "surface_id", "surface_ref", "window_id",
+"window_ref"}`. Errors:
+
+- `mismatch`: the screen changed. Nothing was sent. `data` is `{"current_fingerprint", "surface_id"}`;
+  read again before deciding what to send.
+- `invalid_params`: missing `expected_fingerprint`, no `text` or `keys`, a wrong-typed `text` or
+  `keys`, `lines` not greater than 0, an unknown key name (`data.key`, checked before anything is
+  sent), or a non-terminal surface.
+- `not_found`: unknown workspace or surface.
+- `internal_error`: the terminal is not attached yet or its text could not be read.
+
+Changes no focus or selection.
+
 ## Text delivery: `queued`
 
 `surface.send_text`, `surface.send_paste` and `agent.prompt` include `"queued": true` in the result when the target
