@@ -690,6 +690,7 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         panelPullRequests.removeValue(forKey: panelId)
         panelReviewNudges.removeValue(forKey: panelId)
         reviewNudgeProbeGenerations.removeValue(forKey: panelId)
+        reviewNudgeBaselines.removeValue(forKey: panelId)
         panelTitles.removeValue(forKey: panelId)
         panelCustomTitles.removeValue(forKey: panelId)
         pinnedPanelIds.remove(panelId)

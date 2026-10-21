@@ -335,18 +335,26 @@ extension Workspace {
     // MARK: - Review nudge
 
     /// An agent turn ending (working/blocked -> idle, from hooks, OSC 7501 or screen inference)
-    /// probes the surface's repo once; a new turn (-> working) drops that surface's nudge.
+    /// probes the surface's repo once and nudges only if the changed-path set moved since the
+    /// turn started; a new turn (-> working) drops that surface's nudge and records the baseline.
     /// Never opens or focuses anything: the sidebar only offers the review.
     func noteReviewNudgeTurnEdge(panelId: UUID, previous: AgentActivityState?, next: AgentActivityState) {
-        if next == .working, previous != .working {
+        if next == .working, previous == .blocked {
+            // Same turn resuming after a prompt: keep its baseline (and any baseline probe in flight).
+            if panelReviewNudges[panelId] != nil {
+                panelReviewNudges.removeValue(forKey: panelId)
+            }
+        } else if next == .working, previous != .working {
             clearReviewNudge(panelId: panelId)
+            runReviewNudgeProbe(panelId: panelId, kind: .baseline)
         } else if next == .idle, previous == .working || previous == .blocked {
-            probeReviewNudge(panelId: panelId)
+            runReviewNudgeProbe(panelId: panelId, kind: .turnEnd(baseline: reviewNudgeBaselines[panelId]))
         }
     }
 
     func clearReviewNudge(panelId: UUID) {
         reviewNudgeProbeGenerations[panelId, default: 0] &+= 1
+        reviewNudgeBaselines.removeValue(forKey: panelId)
         if panelReviewNudges[panelId] != nil {
             panelReviewNudges.removeValue(forKey: panelId)
         }
@@ -359,8 +367,15 @@ extension Workspace {
         }
     }
 
-    private func probeReviewNudge(panelId: UUID) {
-        // An open review panel already refreshes itself on this same edge.
+    private enum ReviewNudgeProbeKind: Sendable {
+        case baseline
+        /// `baseline == nil` (its probe failed, was superseded, or the turn began before the app
+        /// saw it) nudges on any non-empty diff.
+        case turnEnd(baseline: Set<String>?)
+    }
+
+    private func runReviewNudgeProbe(panelId: UUID, kind: ReviewNudgeProbeKind) {
+        // An open review panel already refreshes itself on these same edges.
         guard !panels.values.contains(where: { $0 is ReviewPanel }),
               let directory = normalizedSidebarDirectory(panelDirectories[panelId] ?? currentDirectory) else {
             return
@@ -368,25 +383,33 @@ extension Workspace {
         reviewNudgeProbeGenerations[panelId, default: 0] &+= 1
         let generation = reviewNudgeProbeGenerations[panelId]
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            let count = ReviewDiffProber.uncommittedFileCount(directory: directory)
+            let paths = ReviewDiffProber.uncommittedChangedPaths(directory: directory)
             DispatchQueue.main.async {
                 guard let self,
                       self.reviewNudgeProbeGenerations[panelId] == generation,
                       self.panels[panelId] != nil,
-                      let count else { return }
-                if count > 0 {
-                    if self.panelReviewNudges[panelId] != count {
-                        self.panelReviewNudges[panelId] = count
+                      let paths else { return }
+                switch kind {
+                case .baseline:
+                    self.reviewNudgeBaselines[panelId] = paths
+                case .turnEnd(let baseline):
+                    self.reviewNudgeTurnEndsSettled &+= 1
+                    let count = paths != baseline ? paths.count : 0
+                    if count > 0 {
+                        if self.panelReviewNudges[panelId] != count {
+                            self.panelReviewNudges[panelId] = count
+                        }
+                    } else if self.panelReviewNudges[panelId] != nil {
+                        self.panelReviewNudges.removeValue(forKey: panelId)
                     }
-                } else if self.panelReviewNudges[panelId] != nil {
-                    self.panelReviewNudges.removeValue(forKey: panelId)
-                }
 #if DEBUG
-                dlog(
-                    "review.nudge workspace=\(self.id.uuidString.prefix(5)) " +
-                    "panel=\(panelId.uuidString.prefix(5)) files=\(count)"
-                )
+                    dlog(
+                        "review.nudge workspace=\(self.id.uuidString.prefix(5)) " +
+                        "panel=\(panelId.uuidString.prefix(5)) files=\(paths.count) " +
+                        "baseline=\(baseline.map { String($0.count) } ?? "none") nudge=\(count)"
+                    )
 #endif
+                }
             }
         }
     }
@@ -527,6 +550,9 @@ extension Workspace {
         }
         if reviewNudgeProbeGenerations.keys.contains(where: { !validSurfaceIds.contains($0) }) {
             reviewNudgeProbeGenerations = reviewNudgeProbeGenerations.filter { validSurfaceIds.contains($0.key) }
+        }
+        if reviewNudgeBaselines.keys.contains(where: { !validSurfaceIds.contains($0) }) {
+            reviewNudgeBaselines = reviewNudgeBaselines.filter { validSurfaceIds.contains($0.key) }
         }
         let didPruneListeningPorts = surfaceListeningPorts.keys.contains(where: {
             !validSurfaceIds.contains($0)

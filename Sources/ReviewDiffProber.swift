@@ -70,10 +70,10 @@ struct ReviewDiffProber {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    /// Number of files the `.uncommitted` review would list, without building hunks: tracked
-    /// changes vs `HEAD` plus untracked files. `nil` when `directory` is not in a git repo or a
-    /// git command failed, so a failed probe never reads as "no changes".
-    nonisolated static func uncommittedFileCount(directory: String) -> Int? {
+    /// Paths the `.uncommitted` review would list, without building hunks: tracked changes vs
+    /// `HEAD` plus untracked files. `nil` when `directory` is not in a git repo or a git command
+    /// failed, so a failed probe never reads as "no changes".
+    nonisolated static func uncommittedChangedPaths(directory: String) -> Set<String>? {
         guard let repoRoot = repositoryRoot(directory: directory) else { return nil }
         let diffRangeArgs = headDiffRangeArgs(repoRoot: repoRoot)
         guard case .success(let tracked) = runCommandResult(
@@ -87,7 +87,11 @@ struct ReviewDiffProber {
         ) else {
             return nil
         }
-        return (tracked + untracked).split(separator: "\0").count
+        return Set((tracked + untracked).split(separator: "\0").map(String.init))
+    }
+
+    nonisolated static func uncommittedFileCount(directory: String) -> Int? {
+        uncommittedChangedPaths(directory: directory)?.count
     }
 
     // MARK: - Snapshot modes

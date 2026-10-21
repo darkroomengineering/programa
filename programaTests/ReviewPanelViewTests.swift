@@ -284,8 +284,6 @@ final class ReviewPanelRowPlannerTests: XCTestCase {
     func testAgentTurnEndWithChangesShowsReviewNudgeAndNewTurnClearsIt() throws {
         let repoRoot = try makeCommittedTempGitRepo()
         defer { try? FileManager.default.removeItem(atPath: repoRoot) }
-        try "changed".write(toFile: (repoRoot as NSString).appendingPathComponent("committed.txt"), atomically: true, encoding: .utf8)
-        try "new".write(toFile: (repoRoot as NSString).appendingPathComponent("untracked.txt"), atomically: true, encoding: .utf8)
         let workspace = Workspace()
         let agentId = try XCTUnwrap(workspace.focusedPanelId)
         workspace.updatePanelDirectory(panelId: agentId, directory: repoRoot)
@@ -294,7 +292,11 @@ final class ReviewPanelRowPlannerTests: XCTestCase {
         workspace.updatePanelAgentState(panelId: agentId, state: .idle)
         XCTAssertTrue(workspace.panelReviewNudges.isEmpty)
 
+        // Turn 1 on a clean tree edits two files.
         workspace.updatePanelAgentState(panelId: agentId, state: .working)
+        XCTAssertTrue(pollMainRunLoop { workspace.reviewNudgeBaselines[agentId] == [] })
+        try "changed".write(toFile: (repoRoot as NSString).appendingPathComponent("committed.txt"), atomically: true, encoding: .utf8)
+        try "new".write(toFile: (repoRoot as NSString).appendingPathComponent("untracked.txt"), atomically: true, encoding: .utf8)
         workspace.updatePanelAgentState(panelId: agentId, state: .idle)
         XCTAssertTrue(pollMainRunLoop { workspace.panelReviewNudges[agentId] == 2 })
         XCTAssertEqual(workspace.reviewNudgeTarget?.panelId, agentId)
@@ -302,17 +304,30 @@ final class ReviewPanelRowPlannerTests: XCTestCase {
         XCTAssertEqual(workspace.focusedPanelId, agentId, "The nudge must never move focus")
         XCTAssertFalse(workspace.panels.values.contains { $0 is ReviewPanel }, "The nudge must never open the review panel itself")
 
+        // Turn 2 on the now-dirty tree changes nothing.
         workspace.updatePanelAgentState(panelId: agentId, state: .working)
         XCTAssertNil(workspace.panelReviewNudges[agentId], "A new turn clears the nudge")
-
+        XCTAssertTrue(pollMainRunLoop { workspace.reviewNudgeBaselines[agentId]?.count == 2 })
+        let settledBeforeQuietTurn = workspace.reviewNudgeTurnEndsSettled
         workspace.updatePanelAgentState(panelId: agentId, state: .idle)
-        XCTAssertTrue(pollMainRunLoop { workspace.panelReviewNudges[agentId] == 2 })
+        XCTAssertTrue(pollMainRunLoop { workspace.reviewNudgeTurnEndsSettled > settledBeforeQuietTurn })
+        XCTAssertNil(workspace.panelReviewNudges[agentId], "A turn that changed nothing in a dirty repo shows no nudge")
+
+        // Turn 3 adds one file, across a permission prompt that must keep the turn's baseline.
+        workspace.updatePanelAgentState(panelId: agentId, state: .working)
+        XCTAssertTrue(pollMainRunLoop { workspace.reviewNudgeBaselines[agentId]?.count == 2 })
+        workspace.updatePanelAgentState(panelId: agentId, state: .blocked)
+        try "added".write(toFile: (repoRoot as NSString).appendingPathComponent("during-turn.txt"), atomically: true, encoding: .utf8)
+        workspace.updatePanelAgentState(panelId: agentId, state: .working)
+        XCTAssertEqual(workspace.reviewNudgeBaselines[agentId]?.count, 2, "Resuming after a prompt keeps the turn-start baseline")
+        workspace.updatePanelAgentState(panelId: agentId, state: .idle)
+        XCTAssertTrue(pollMainRunLoop { workspace.panelReviewNudges[agentId] == 3 })
 
         // A blocked -> idle turn end on a now-clean tree removes the nudge.
         try runGit(["add", "-A"], in: repoRoot)
         try runGit(["-c", "user.email=test@example.com", "-c", "user.name=Test", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "agent"], in: repoRoot)
         workspace.updatePanelAgentState(panelId: agentId, state: .blocked)
-        XCTAssertEqual(workspace.panelReviewNudges[agentId], 2, "Blocking mid-turn keeps the nudge")
+        XCTAssertEqual(workspace.panelReviewNudges[agentId], 3, "Blocking keeps the nudge")
         workspace.updatePanelAgentState(panelId: agentId, state: .idle)
         XCTAssertTrue(pollMainRunLoop { workspace.panelReviewNudges[agentId] == nil }, "An empty diff shows no nudge")
     }
@@ -325,6 +340,8 @@ final class ReviewPanelRowPlannerTests: XCTestCase {
         let agentId = try XCTUnwrap(workspace.focusedPanelId)
         workspace.updatePanelDirectory(panelId: agentId, directory: repoRoot)
 
+        // Idle lands before the turn-start probe returns, so there is no baseline and any
+        // non-empty diff nudges.
         workspace.updatePanelAgentState(panelId: agentId, state: .working)
         workspace.updatePanelAgentState(panelId: agentId, state: .idle)
         XCTAssertTrue(pollMainRunLoop { workspace.panelReviewNudges[agentId] == 1 })

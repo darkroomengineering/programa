@@ -143,6 +143,11 @@ final class Workspace: Identifiable, ObservableObject {
     @Published var panelReviewNudges: [UUID: Int] = [:]
     /// Bumped per surface on every turn edge so a probe that finishes after a newer edge is dropped.
     var reviewNudgeProbeGenerations: [UUID: UInt64] = [:]
+    /// Changed paths when the surface's current turn started; a turn that ends with the same set
+    /// changed nothing and gets no nudge.
+    var reviewNudgeBaselines: [UUID: Set<String>] = [:]
+    /// Count of turn-end probes that reached a decision; lets tests observe a "no nudge" outcome.
+    var reviewNudgeTurnEndsSettled: UInt64 = 0
     /// Per-surface agent presence (state, source, timestamp, session key), reported exclusively
     /// through `updatePanelAgentState`/`clearPanelAgentState` (issue #164 v1 hook tier, extended
     /// by the agent-state-unification plan). This is the stored source of truth; `panelAgentStates`
