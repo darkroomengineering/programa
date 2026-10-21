@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 
 #if canImport(Programa_DEV)
@@ -136,6 +137,81 @@ final class AgentSupervisionRegistryTests: XCTestCase {
         XCTAssertEqual(finished.map(\.id), [matching.id])
         XCTAssertEqual(registry.record(id: matching.id)?.state, .cancelled)
         XCTAssertEqual(registry.record(id: other.id)?.state, .working)
+    }
+
+    func testRunningHelperCountsTrackOnlyUnfinishedInProcessHelpers() throws {
+        let registry = AgentSupervisionRegistry(capacity: 8)
+        let workspaceId = UUID()
+        let otherWorkspaceId = UUID()
+        let first = try registry.start(host: "claude", session: "s1", placement: .runsWithParent, workspaceId: workspaceId)
+        _ = try registry.start(host: "claude", session: "s1", placement: .runsWithParent, workspaceId: workspaceId)
+        _ = try registry.start(host: "codex", placement: .nestedWorkspace, workspaceId: workspaceId)
+        _ = try registry.start(host: "claude", session: "s2", placement: .runsWithParent, workspaceId: otherWorkspaceId)
+        XCTAssertEqual(registry.runningHelperCounts, [workspaceId: 2, otherWorkspaceId: 1])
+
+        try registry.finish(id: first.id)
+        XCTAssertEqual(registry.runningHelperCounts[workspaceId], 1)
+
+        _ = try registry.finishSession(host: "claude", session: "s1")
+        XCTAssertNil(registry.runningHelperCounts[workspaceId])
+        XCTAssertEqual(registry.runningHelperCounts, [otherWorkspaceId: 1])
+    }
+
+    func testCountPublishesOnlyWhenItChanges() throws {
+        let registry = AgentSupervisionRegistry(capacity: 4)
+        let workspaceId = UUID()
+        var publishCount = 0
+        let subscription = registry.objectWillChange.sink { publishCount += 1 }
+        defer { subscription.cancel() }
+
+        let helper = try registry.start(host: "claude", placement: .runsWithParent, workspaceId: workspaceId)
+        XCTAssertEqual(publishCount, 1)
+        _ = try registry.update(id: helper.id, state: .blocked)
+        _ = try registry.update(id: helper.id, state: .working)
+        XCTAssertEqual(publishCount, 1, "state changes that keep the helper running must not re-render the sidebar")
+        try registry.finish(id: helper.id)
+        XCTAssertEqual(publishCount, 2)
+    }
+
+    func testDeadParentPidFinishesItsHelpersAndClearsTheCount() throws {
+        let manager = TabManager()
+        guard let workspace = manager.selectedWorkspace else {
+            XCTFail("Expected selected workspace")
+            return
+        }
+        let deadProcess = Process()
+        deadProcess.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+        try deadProcess.run()
+        deadProcess.waitUntilExit()
+        let deadPid = deadProcess.processIdentifier
+        errno = 0
+        XCTAssertEqual(kill(deadPid, 0), -1)
+        XCTAssertEqual(errno, ESRCH, "fixture precondition: deadPid must already be gone")
+
+        let parentPanelId = UUID()
+        workspace.updatePanelAgentState(
+            panelId: parentPanelId,
+            state: .idle,
+            source: .hooks,
+            sessionKey: AgentSessionKey(provider: "claude-code", sessionId: "parent-session", pid: deadPid)
+        )
+        let registry = AgentSupervisionRegistry.shared
+        let helpers = try (0..<2).map { _ in
+            try registry.start(
+                host: "claude",
+                session: "parent-session",
+                placement: .runsWithParent,
+                workspaceId: workspace.id,
+                surfaceId: parentPanelId
+            )
+        }
+        defer { helpers.forEach { registry.discard(id: $0.id) } }
+        XCTAssertEqual(registry.runningHelperCounts[workspace.id], 2)
+
+        manager.sweepStaleAgentPIDsForTesting()
+
+        XCTAssertNil(registry.runningHelperCounts[workspace.id])
+        XCTAssertEqual(helpers.map { registry.record(id: $0.id)?.state }, [.cancelled, .cancelled])
     }
 
     func testSurfaceTeardownFinishesSpawnedHelperButNotSharedHelper() throws {
