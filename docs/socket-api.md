@@ -138,7 +138,7 @@ script run there talks to that app. To drive a different instance, such as a tag
    written by **Settings > Automation**; `automation.socketPassword` in `settings.json`)
 
 The CLI takes `--password <value>` first, then `PROGRAMA_SOCKET_PASSWORD`, then the saved
-password. `programa-mcp` reads only `PROGRAMA_SOCKET_PASSWORD`.
+password. `programa-mcp` takes `PROGRAMA_SOCKET_PASSWORD`, then the saved password.
 
 A client authenticates once per connection:
 

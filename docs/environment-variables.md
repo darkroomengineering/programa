@@ -62,7 +62,7 @@ Read by the app, the CLI and `programa-mcp`. Modes and discovery are described i
 | `PROGRAMA_CLAUDE_HOOK_STATE_PATH` | Overrides where the Claude, Codex and OpenCode hooks keep their session state file. |
 | `PROGRAMA_CLAUDE_PID` | Process id of the Claude Code instance a hook belongs to. Set by the `claude` wrapper. |
 | `PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN` | `programa` binary the `claude` wrapper's hooks call. |
-| `PROGRAMA_CLAUDE_SESSION_ID_CACHE_KEY`, `PROGRAMA_CLAUDE_SESSION_ID_CACHE_VAL` | Session id cache shared between the `claude` wrapper invocations. |
+| `_PROGRAMA_CLAUDE_FLAGS_CACHE_KEY`, `_PROGRAMA_CLAUDE_FLAGS_CACHE_VAL` | Which optional flags (`--session-id`, `--mcp-config`, `--append-system-prompt`) the resolved `claude` binary supports, cached per binary path and mtime by the `claude` wrapper. |
 | `PROGRAMA_ORIGINAL_NODE_OPTIONS`, `PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT` | The caller's `NODE_OPTIONS`, saved so the wrappers can restore it. |
 | `PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN`, `PROGRAMA_CLAUDE_TEAMS_TERM` | `programa` binary and `TERM` for the Claude teams wrapper. |
 

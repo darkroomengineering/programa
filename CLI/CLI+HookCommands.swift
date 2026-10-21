@@ -42,8 +42,10 @@ extension ProgramaCLI {
             Subcommands:
               install-integration     Install programa hooks into ~/.codex/hooks.json,
                                        plus the agent skill into ~/.agents/skills/programa/
+                                       and the programa-mcp server (codex mcp add programa)
               uninstall-integration   Remove programa hooks from ~/.codex/hooks.json,
                                        plus the agent skill if programa-managed
+                                       and the MCP server if it runs programa-mcp
             """
         case "codex-hook":
             return """

@@ -84,8 +84,10 @@ extension ProgramaCLI {
             let skillInstall = install ? agentSkillInstallState(path: skillPath) : nil
             let skillUninstall = install ? nil : agentSkillUninstallState(path: skillPath)
             let skillChanged = skillInstall?.changed == true || skillUninstall != nil
+            let mcpPlan = codexMCPRegistrationPlan(install: install)
 
-            if !hooksChanged && !configChanged && !skillChanged {
+            if !hooksChanged && !configChanged && !skillChanged && mcpPlan.command == nil {
+                if let note = mcpPlan.note { print(note) }
                 print(install ? "programa hooks are already installed. Nothing to change." : "No programa hooks found.")
                 return
             }
@@ -110,6 +112,7 @@ extension ProgramaCLI {
             } else if let skillUninstall {
                 printAgentSkillRemovalDiff(path: skillPath, content: skillUninstall)
             }
+            printCodexMCPPreview(mcpPlan)
 
             try confirmIntegrationChanges()
 
@@ -143,13 +146,14 @@ extension ProgramaCLI {
             } else if !install, skillUninstall != nil {
                 try removeAgentSkillFileIfManaged(path: skillPath)
             }
+            try applyCodexMCPPlan(mcpPlan)
 
             print("")
             if install {
                 print("Installed. Codex trusts programa hooks inside programa; they silently no-op elsewhere.")
                 print("To remove: programa codex uninstall-integration")
             } else {
-                print("Removed programa Codex hooks and their trust entries.")
+                print(mcpPlan.command == nil ? "Removed programa Codex hooks and their trust entries." : "Removed programa Codex hooks, their trust entries and the programa MCP server.")
             }
         }
     }
