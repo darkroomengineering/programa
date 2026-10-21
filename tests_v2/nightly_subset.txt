@@ -49,6 +49,7 @@ test_split_flash_and_layout.py
 test_split_pane_cap.py
 test_splits_focus_close_resize.py
 test_surface_move_reorder_api.py
+test_surface_send_if_unchanged.py
 test_surface_send_paste.py
 test_suspended_subscriber_does_not_block_server.py
 test_tab_workspace_action_naming.py
