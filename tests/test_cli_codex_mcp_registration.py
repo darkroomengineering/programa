@@ -50,7 +50,8 @@ def make_executable(path: Path, text: str) -> None:
 
 class Sandbox:
     def __init__(self, root: str, with_mcp_binary: bool = True, with_codex: bool = True) -> None:
-        self.root = Path(root)
+        # /tmp is a symlink on macOS; the CLI registers the path it was run from.
+        self.root = Path(os.path.realpath(root))
         self.home = self.root / "home"
         self.codex_home = self.home / ".codex"
         self.codex_home.mkdir(parents=True)
