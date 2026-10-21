@@ -656,7 +656,10 @@ wait) cover the common "wait for one thing" case in a single request/response ro
 queue/backpressure/reconnect model to manage. `subscribe` is for consumers that need *many*
 events over time — dashboards, orchestrators, the menu bar of another machine — so a casual
 caller never has to touch subscription machinery. CLI: `programa watch-events` (also positioned
-as the advanced path, not the default way to wait for something).
+as the advanced path, not the default way to wait for something). Its flags pick the classes:
+`--agent-state`, `--workspace-lifecycle`, `--needs-input` and `--output <surface_id,...>`.
+`programa watch-events --needs-input` alone prints only `needs_input` frames (plus any
+`dropped` frame), for bridges that act only on agents waiting for the user.
 
 ### `subscribe`
 
