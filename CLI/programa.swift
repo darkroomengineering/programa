@@ -435,9 +435,12 @@ struct ProgramaCLI {
                 Install or remove Programa's OpenCode plugin in
                 ~/.config/opencode/plugins/programa.js (or $OPENCODE_CONFIG_DIR/plugins/programa.js),
                 and the `programa` agent skill (SKILL.md) into
-                ~/.config/opencode/skills/programa/ (or $OPENCODE_CONFIG_DIR/skills/programa/).
-                OpenCode auto-loads local plugin files, so no opencode.json edit or
-                npm install is needed.
+                ~/.config/opencode/skills/programa/ (or $OPENCODE_CONFIG_DIR/skills/programa/),
+                and the bundled programa-mcp server as `mcp.programa` in
+                ~/.config/opencode/opencode.json (or $OPENCODE_CONFIG_DIR/opencode.json).
+                A JSONC config is never rewritten; the command prints the entry to add.
+                OpenCode auto-loads local plugin files, so no npm install is needed.
+                The MCP registration is untested against a live OpenCode.
                 --yes (-y) applies without asking; without it a non-interactive
                 stdin exits 1 unchanged.
                 """,

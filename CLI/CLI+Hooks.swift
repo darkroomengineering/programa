@@ -3349,32 +3349,26 @@ extension ProgramaCLI {
     /// Identifier used to detect programa-owned plugin files during uninstall.
     private static let openCodePluginMarker = "Managed by `programa opencode install-integration`"
 
-    /// Resolves the target plugins directory, respecting OpenCode's own
-    /// OPENCODE_CONFIG_DIR override.
-    private static func openCodePluginsDir() -> String {
+    /// OpenCode's global config directory, respecting its own OPENCODE_CONFIG_DIR override.
+    static func openCodeConfigDir() -> String {
         if let override = ProcessInfo.processInfo.environment["OPENCODE_CONFIG_DIR"]?
             .trimmingCharacters(in: .whitespacesAndNewlines),
            !override.isEmpty {
-            let expanded = integrationExpandTilde(override)
-            return (expanded as NSString).appendingPathComponent("plugins")
+            return integrationExpandTilde(override)
         }
-        return integrationExpandTilde("~/.config/opencode/plugins")
+        return integrationExpandTilde("~/.config/opencode")
     }
 
-    /// Resolves the target skills directory, respecting the same
-    /// OPENCODE_CONFIG_DIR override as `openCodePluginsDir()`. OpenCode also
-    /// discovers skills globally from `~/.claude/skills` and
+    private static func openCodePluginsDir() -> String {
+        (openCodeConfigDir() as NSString).appendingPathComponent("plugins")
+    }
+
+    /// OpenCode also discovers skills globally from `~/.claude/skills` and
     /// `~/.agents/skills` (installed by the Claude/Codex integrations above),
     /// so this mainly matters when a user runs only `programa opencode
     /// install-integration` and/or sets OPENCODE_CONFIG_DIR.
     private static func openCodeSkillsDir() -> String {
-        if let override = ProcessInfo.processInfo.environment["OPENCODE_CONFIG_DIR"]?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-           !override.isEmpty {
-            let expanded = integrationExpandTilde(override)
-            return (expanded as NSString).appendingPathComponent("skills")
-        }
-        return integrationExpandTilde("~/.config/opencode/skills")
+        (openCodeConfigDir() as NSString).appendingPathComponent("skills")
     }
 
     func runOpenCodeInstallIntegration() throws {
@@ -3392,8 +3386,10 @@ extension ProgramaCLI {
 
         let skillPath = Self.agentSkillFilePath(skillsRoot: Self.openCodeSkillsDir())
         let skillState = agentSkillInstallState(path: skillPath)
+        let mcpPlan = openCodeMCPRegistrationPlan(install: true)
 
-        if !pluginChanged && !skillState.changed {
+        if !pluginChanged && !skillState.changed && mcpPlan.newConfig == nil {
+            if let note = mcpPlan.note { print(note) }
             print("programa OpenCode integration is already installed. Nothing to change.")
             return
         }
@@ -3415,6 +3411,7 @@ extension ProgramaCLI {
         if skillState.changed {
             printAgentSkillDiff(path: skillPath, existing: skillState.existing)
         }
+        printOpenCodeMCPPreview(mcpPlan)
 
         try confirmIntegrationChanges()
 
@@ -3424,9 +3421,10 @@ extension ProgramaCLI {
         if skillState.changed {
             try writeAgentSkillFile(path: skillPath)
         }
+        try applyOpenCodeMCPPlan(mcpPlan)
 
         print("")
-        print("Installed. OpenCode picks up local plugins automatically — no opencode.json edit or npm install needed.")
+        print("Installed. OpenCode picks up local plugins automatically, with no npm install needed.")
         print("To remove: programa opencode uninstall-integration")
     }
 
@@ -3446,8 +3444,10 @@ extension ProgramaCLI {
 
         let skillPath = Self.agentSkillFilePath(skillsRoot: Self.openCodeSkillsDir())
         let skillContent = agentSkillUninstallState(path: skillPath)
+        let mcpPlan = openCodeMCPRegistrationPlan(install: false)
 
-        if existingPluginContent == nil && skillContent == nil {
+        if existingPluginContent == nil && skillContent == nil && mcpPlan.newConfig == nil {
+            if let note = mcpPlan.note { print(note) }
             print("No OpenCode integration found at \(pluginPath)")
             return
         }
@@ -3460,6 +3460,7 @@ extension ProgramaCLI {
         if let skillContent {
             printAgentSkillRemovalDiff(path: skillPath, content: skillContent)
         }
+        printOpenCodeMCPPreview(mcpPlan)
 
         try confirmIntegrationChanges()
 
@@ -3469,6 +3470,7 @@ extension ProgramaCLI {
         if skillContent != nil {
             try removeAgentSkillFileIfManaged(path: skillPath)
         }
+        try applyOpenCodeMCPPlan(mcpPlan)
         print("Removed programa OpenCode integration.")
     }
 

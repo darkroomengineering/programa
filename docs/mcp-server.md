@@ -33,9 +33,17 @@ Agents started inside Programa get the server without any setup:
   instance) rather than the pane's `PROGRAMA_SOCKET_PATH`. To point it at a tagged build, add
   `env_vars = ["PROGRAMA_SOCKET_PATH", "PROGRAMA_SOCKET_PASSWORD"]` under
   `[mcp_servers.programa]` in `~/.codex/config.toml`.
-- **OpenCode.** `programa opencode install-integration` does not register the server. Add
-  `programa-mcp` as a local MCP server by hand, using the binary path below and OpenCode's
-  own MCP config format.
+- **OpenCode.** `programa opencode install-integration` adds
+  `"programa": {"type": "local", "command": ["<bundle>/Contents/Resources/bin/programa-mcp"], "enabled": true}`
+  under `mcp` in `~/.config/opencode/opencode.json` (or `$OPENCODE_CONFIG_DIR/opencode.json`)
+  after you confirm, alongside its plugin and skill, keeping every other key in the file. It
+  leaves an existing `programa` server that runs something other than a bare `programa-mcp`
+  (extra settings, `enabled: false`, another command) unchanged, and
+  `programa opencode uninstall-integration` removes the entry only when it is still that bare
+  form. It never rewrites `opencode.jsonc` or an `opencode.json` that is not strict JSON, since
+  that would drop comments; it prints the entry to add instead. OpenCode merges config files, so
+  a project `opencode.json` can still override the entry. This path is untested against a live
+  OpenCode.
 
 In password mode the automatic server logs in with the password saved in Settings →
 Automation, the same one the `programa` CLI uses.
