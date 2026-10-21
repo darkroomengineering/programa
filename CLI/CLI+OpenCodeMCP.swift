@@ -112,12 +112,23 @@ extension ProgramaCLI {
     func openCodeMCPRegistrationPlan(install: Bool) -> OpenCodeMCPRegistrationPlan {
         let configPath = Self.openCodeConfigFilePath()
         let jsoncPath = (Self.openCodeConfigDir() as NSString).appendingPathComponent("opencode.jsonc")
+        // A file that exists but cannot be read must not look missing, or install would overwrite it.
+        var existing: [String: String] = [:]
+        for path in [configPath, jsoncPath] where FileManager.default.fileExists(atPath: path) {
+            guard let text = try? String(contentsOfFile: path, encoding: .utf8) else {
+                return OpenCodeMCPRegistrationPlan(
+                    newConfig: nil,
+                    note: "\(path) could not be read as UTF-8 text, so Programa leaves the OpenCode MCP server unchanged."
+                )
+            }
+            existing[path] = text
+        }
         return OpenCodeMCPRegistrationPlan.build(
             install: install,
             configPath: configPath,
-            existingConfig: try? String(contentsOfFile: configPath, encoding: .utf8),
+            existingConfig: existing[configPath],
             jsoncPath: jsoncPath,
-            existingJSONC: try? String(contentsOfFile: jsoncPath, encoding: .utf8),
+            existingJSONC: existing[jsoncPath],
             mcpBinary: bundledMCPBinaryPath()
         )
     }
