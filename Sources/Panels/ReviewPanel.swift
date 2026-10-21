@@ -3,8 +3,9 @@ import Bonsplit
 
 /// A panel that shows the git diff for another terminal surface ("the agent's pane"), with
 /// line comments that can be sent back into that surface's input. Modeled directly on
-/// `MarkdownPanel.swift`: read-only w.r.t. git (never mutates worktree/index/branches),
-/// refresh-driven rather than continuously live. See docs/plans/diff-review-panel.md.
+/// `MarkdownPanel.swift`: never mutates the index or branches, and touches worktree files only
+/// when the user confirms a checkpoint revert (`revertToLatestCheckpoint`). Refresh-driven
+/// rather than continuously live. See docs/plans/diff-review-panel.md.
 @MainActor
 final class ReviewPanel: Panel, ObservableObject {
     let id: UUID
@@ -33,6 +34,11 @@ final class ReviewPanel: Panel, ObservableObject {
     @Published private(set) var lastError: ReviewDiffError?
     @Published private(set) var lastRefreshedAt: Date?
     @Published private(set) var displayTitle: String = ""
+    /// Newest file checkpoint of the reviewed surface in this repo (`ReviewCheckpointStore`).
+    @Published private(set) var latestCheckpoint: ReviewCheckpoint?
+    @Published private(set) var isRestoringCheckpoint = false
+    @Published var checkpointRestoreError: String?
+    private var checkpointGeneration: UInt64 = 0
 
     /// Token incremented to trigger the focus flash animation (mirrors `MarkdownPanel`).
     @Published private(set) var focusFlashToken: Int = 0
@@ -145,6 +151,7 @@ final class ReviewPanel: Panel, ObservableObject {
             displayTitle = Self.title(mode: mode, baseBranch: resolvedBaseBranch)
         }
         recomputeStaleComments()
+        reloadLatestCheckpoint()
 #if DEBUG
         dlog("review.refresh panel=\(id.uuidString.prefix(5)) files=\(files.count) diffable=\(snapshot.diffableFileCount) error=\(String(describing: lastError))")
 #endif
@@ -168,6 +175,71 @@ final class ReviewPanel: Panel, ObservableObject {
         let newLineNumbers = file.hunks.flatMap { $0.lines.compactMap(\.newLineNumber) }
         guard let maxLine = newLineNumbers.max() else { return false }
         return endLine <= maxLine
+    }
+
+    // MARK: - Checkpoints
+
+    /// Checkpoints are keyed by the workspace that owned the surface when its turn started; a
+    /// moved review panel's own `workspaceId` can differ, so resolve the surface's current owner.
+    private var checkpointWorkspaceId: UUID {
+        Workspace.workspaceOwning(surfaceId: sourceSurfaceId)?.id ?? workspaceId
+    }
+
+    private func reloadLatestCheckpoint() {
+        checkpointGeneration &+= 1
+        let generation = checkpointGeneration
+        let directory = directory
+        let workspaceId = checkpointWorkspaceId
+        let surfaceId = sourceSurfaceId
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let newest = ReviewCheckpointStore.list(directory: directory, workspaceId: workspaceId, surfaceId: surfaceId).first
+            DispatchQueue.main.async {
+                guard let self, self.checkpointGeneration == generation, self.latestCheckpoint != newest else { return }
+                self.latestCheckpoint = newest
+            }
+        }
+    }
+
+    /// Restores the files to `latestCheckpoint` off-main (the store saves the current files first),
+    /// then refreshes the diff. Failures land in `checkpointRestoreError`.
+    func revertToLatestCheckpoint() {
+        guard let checkpoint = latestCheckpoint, !isRestoringCheckpoint else { return }
+        isRestoringCheckpoint = true
+        let directory = directory
+        let workspaceId = checkpointWorkspaceId
+        let surfaceId = sourceSurfaceId
+        ReviewCheckpointStore.queue.async { [weak self] in
+            let result = ReviewCheckpointStore.restore(
+                ref: checkpoint.ref,
+                directory: directory,
+                workspaceId: workspaceId,
+                surfaceId: surfaceId
+            )
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.isRestoringCheckpoint = false
+                if case .failure(let error) = result {
+                    self.checkpointRestoreError = Self.message(for: error)
+                }
+                self.refresh()
+            }
+        }
+    }
+
+    private static func message(for error: ReviewCheckpointError) -> String {
+        switch error {
+        case .notGitRepository:
+            return String(localized: "review.checkpoint.error.notGitRepository", defaultValue: "This folder is no longer a git repository.")
+        case .checkpointNotFound:
+            return String(localized: "review.checkpoint.error.notFound", defaultValue: "The checkpoint no longer exists.")
+        case .tooLargeToSave:
+            return String(
+                localized: "review.checkpoint.error.tooLarge",
+                defaultValue: "The current files could not be saved first: more than 500 changed files, or an untracked file over 10 MB. Nothing was changed."
+            )
+        case .commandFailed(let detail):
+            return detail
+        }
     }
 
     // MARK: - Comments

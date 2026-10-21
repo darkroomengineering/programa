@@ -148,6 +148,9 @@ final class Workspace: Identifiable, ObservableObject {
     var reviewNudgeBaselines: [UUID: ReviewChangeFingerprint] = [:]
     /// Count of turn-end probes that reached a decision; lets tests observe a "no nudge" outcome.
     var reviewNudgeTurnEndsSettled: UInt64 = 0
+    /// Directories whose repos got a turn checkpoint from this workspace; closing the workspace
+    /// deletes its checkpoints there.
+    var reviewCheckpointDirectories: Set<String> = []
     /// Per-surface agent presence (state, source, timestamp, session key), reported exclusively
     /// through `updatePanelAgentState`/`clearPanelAgentState` (issue #164 v1 hook tier, extended
     /// by the agent-state-unification plan). This is the stored source of truth; `panelAgentStates`

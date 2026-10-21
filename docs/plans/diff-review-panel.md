@@ -292,6 +292,24 @@ If per-language highlighting is wanted later (v1.1+), the two real options to ev
    range are kept but flagged "line range may have shifted" rather than silently dropped — dropping
    user-authored comments on a background refresh would be a bad surprise).
 
+### Turn checkpoints
+
+When an agent turn starts in a terminal (agent state moves to `working` from anything but
+`blocked`), `ReviewCheckpointStore` snapshots that terminal's repo off-main, whether or not a
+review panel is open. The review panel then shows **Revert Files to Before Last Turn**.
+
+- **Where they live**: commits under `refs/programa/checkpoints/<workspace>/<surface>/<seq>`,
+  built through a temporary index file. The real index, `HEAD` and branches are never touched.
+- **What they cover**: files only. Tracked and untracked files are captured, `.gitignore` is
+  respected, and submodule contents are not captured or restored. The agent's conversation is
+  not rewound.
+- **Limits**: a turn with more than 500 changed paths, or an untracked file over 10 MB, gets no
+  checkpoint. Each surface keeps its newest 20; an unchanged tree reuses the newest one.
+- **Revert**: saves the current files first as a "before revert" checkpoint, then rewrites only
+  the paths that differ. After a revert the button becomes **Undo File Revert**.
+- **Cleanup**: closing a workspace deletes its checkpoints in the repos it used during this app
+  run; other workspaces' checkpoints older than 7 days are deleted on the next save.
+
 ## 4. Data model and serialization format
 
 ### `ReviewComment` (`Sources/ReviewComment.swift`)
