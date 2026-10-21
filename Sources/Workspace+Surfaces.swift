@@ -552,6 +552,7 @@ extension Workspace {
         }
 
         installReviewPanelSubscription(reviewPanel)
+        clearAllReviewNudges()
         return reviewPanel
     }
 

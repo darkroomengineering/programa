@@ -258,6 +258,89 @@ final class ReviewPanelRowPlannerTests: XCTestCase {
         XCTAssertEqual(snapshot.error, .notGitRepository)
     }
 
+    func testUncommittedFileCountMatchesTrackedAndUntrackedChanges() throws {
+        let repoRoot = try makeCommittedTempGitRepo()
+        defer { try? FileManager.default.removeItem(atPath: repoRoot) }
+
+        XCTAssertEqual(ReviewDiffProber.uncommittedFileCount(directory: repoRoot), 0)
+
+        try "changed".write(toFile: (repoRoot as NSString).appendingPathComponent("committed.txt"), atomically: true, encoding: .utf8)
+        try "new".write(toFile: (repoRoot as NSString).appendingPathComponent("untracked.txt"), atomically: true, encoding: .utf8)
+
+        XCTAssertEqual(ReviewDiffProber.uncommittedFileCount(directory: repoRoot), 2)
+        XCTAssertEqual(
+            ReviewDiffProber.uncommittedFileCount(directory: repoRoot),
+            ReviewDiffProber.diffSnapshot(directory: repoRoot, mode: .uncommitted, baseBranch: "main").files.count
+        )
+    }
+
+    func testUncommittedFileCountIsNilOutsideGitRepository() throws {
+        let directory = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+
+        XCTAssertNil(ReviewDiffProber.uncommittedFileCount(directory: directory))
+    }
+
+    func testAgentTurnEndWithChangesShowsReviewNudgeAndNewTurnClearsIt() throws {
+        let repoRoot = try makeCommittedTempGitRepo()
+        defer { try? FileManager.default.removeItem(atPath: repoRoot) }
+        try "changed".write(toFile: (repoRoot as NSString).appendingPathComponent("committed.txt"), atomically: true, encoding: .utf8)
+        try "new".write(toFile: (repoRoot as NSString).appendingPathComponent("untracked.txt"), atomically: true, encoding: .utf8)
+        let workspace = Workspace()
+        let agentId = try XCTUnwrap(workspace.focusedPanelId)
+        workspace.updatePanelDirectory(panelId: agentId, directory: repoRoot)
+
+        // An idle report with no turn before it (session start) does not probe.
+        workspace.updatePanelAgentState(panelId: agentId, state: .idle)
+        XCTAssertTrue(workspace.panelReviewNudges.isEmpty)
+
+        workspace.updatePanelAgentState(panelId: agentId, state: .working)
+        workspace.updatePanelAgentState(panelId: agentId, state: .idle)
+        XCTAssertTrue(pollMainRunLoop { workspace.panelReviewNudges[agentId] == 2 })
+        XCTAssertEqual(workspace.reviewNudgeTarget?.panelId, agentId)
+        XCTAssertEqual(workspace.reviewNudgeTarget?.fileCount, 2)
+        XCTAssertEqual(workspace.focusedPanelId, agentId, "The nudge must never move focus")
+        XCTAssertFalse(workspace.panels.values.contains { $0 is ReviewPanel }, "The nudge must never open the review panel itself")
+
+        workspace.updatePanelAgentState(panelId: agentId, state: .working)
+        XCTAssertNil(workspace.panelReviewNudges[agentId], "A new turn clears the nudge")
+
+        workspace.updatePanelAgentState(panelId: agentId, state: .idle)
+        XCTAssertTrue(pollMainRunLoop { workspace.panelReviewNudges[agentId] == 2 })
+
+        // A blocked -> idle turn end on a now-clean tree removes the nudge.
+        try runGit(["add", "-A"], in: repoRoot)
+        try runGit(["-c", "user.email=test@example.com", "-c", "user.name=Test", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "agent"], in: repoRoot)
+        workspace.updatePanelAgentState(panelId: agentId, state: .blocked)
+        XCTAssertEqual(workspace.panelReviewNudges[agentId], 2, "Blocking mid-turn keeps the nudge")
+        workspace.updatePanelAgentState(panelId: agentId, state: .idle)
+        XCTAssertTrue(pollMainRunLoop { workspace.panelReviewNudges[agentId] == nil }, "An empty diff shows no nudge")
+    }
+
+    func testOpeningReviewPanelClearsReviewNudge() throws {
+        let repoRoot = try makeCommittedTempGitRepo()
+        defer { try? FileManager.default.removeItem(atPath: repoRoot) }
+        try "new".write(toFile: (repoRoot as NSString).appendingPathComponent("untracked.txt"), atomically: true, encoding: .utf8)
+        let workspace = Workspace()
+        let agentId = try XCTUnwrap(workspace.focusedPanelId)
+        workspace.updatePanelDirectory(panelId: agentId, directory: repoRoot)
+
+        workspace.updatePanelAgentState(panelId: agentId, state: .working)
+        workspace.updatePanelAgentState(panelId: agentId, state: .idle)
+        XCTAssertTrue(pollMainRunLoop { workspace.panelReviewNudges[agentId] == 1 })
+
+        let reviewPanel = try XCTUnwrap(workspace.openReviewFromNudge(panelId: agentId))
+        XCTAssertEqual(reviewPanel.sourceSurfaceId, agentId)
+        XCTAssertTrue(workspace.panelReviewNudges.isEmpty)
+        XCTAssertNil(workspace.reviewNudgeTarget)
+
+        // While a review panel is open it refreshes itself, so turn ends add no nudge on top.
+        workspace.updatePanelAgentState(panelId: agentId, state: .working)
+        workspace.updatePanelAgentState(panelId: agentId, state: .idle)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+        XCTAssertTrue(workspace.panelReviewNudges.isEmpty)
+    }
+
     func testUnresolvableBaseBranchReportsUnknownBaseBranch() throws {
         let repoRoot = try makeTempGitRepo()
         defer { try? FileManager.default.removeItem(atPath: repoRoot) }
@@ -318,6 +401,23 @@ final class ReviewPanelRowPlannerTests: XCTestCase {
         // to resolve against unless a test creates those refs explicitly.
         try runGit(["init", "-q", "-b", "review-test-initial"], in: directory)
         return directory
+    }
+
+    private func makeCommittedTempGitRepo() throws -> String {
+        let directory = try makeTempGitRepo()
+        try "hello".write(toFile: (directory as NSString).appendingPathComponent("committed.txt"), atomically: true, encoding: .utf8)
+        try runGit(["add", "committed.txt"], in: directory)
+        try runGit(["-c", "user.email=test@example.com", "-c", "user.name=Test", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "initial"], in: directory)
+        return directory
+    }
+
+    /// Spins the main run loop so the off-main probe's main-queue completion can land.
+    private func pollMainRunLoop(timeout: TimeInterval = 10, _ condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition(), Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        }
+        return condition()
     }
 
     @discardableResult

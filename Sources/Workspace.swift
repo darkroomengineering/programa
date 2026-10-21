@@ -137,6 +137,12 @@ final class Workspace: Identifiable, ObservableObject {
     @Published var panelGitBranches: [UUID: SidebarGitBranchState] = [:]
     @Published var pullRequest: SidebarPullRequestState?
     @Published var panelPullRequests: [UUID: SidebarPullRequestState] = [:]
+    /// Changed-file count per agent surface whose last turn ended with a non-empty diff; the
+    /// sidebar shows it as a "Review" affordance. Written only by the review-nudge members in
+    /// Workspace+SidebarTelemetry.swift.
+    @Published var panelReviewNudges: [UUID: Int] = [:]
+    /// Bumped per surface on every turn edge so a probe that finishes after a newer edge is dropped.
+    var reviewNudgeProbeGenerations: [UUID: UInt64] = [:]
     /// Per-surface agent presence (state, source, timestamp, session key), reported exclusively
     /// through `updatePanelAgentState`/`clearPanelAgentState` (issue #164 v1 hook tier, extended
     /// by the agent-state-unification plan). This is the stored source of truth; `panelAgentStates`
@@ -206,6 +212,7 @@ final class Workspace: Identifiable, ObservableObject {
             sidebarObservationSignal($progress),
             sidebarObservationSignal($panelAgentPresence),
             sidebarObservationSignal($listeningPorts),
+            sidebarObservationSignal($panelReviewNudges),
         ]
 
         return Publishers.MergeMany(publishers).eraseToAnyPublisher()

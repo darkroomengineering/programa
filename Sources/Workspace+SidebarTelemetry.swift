@@ -96,6 +96,9 @@ extension Workspace {
             panelGitBranches[panelId] = state
             titleMetadataChanged = true
         }
+        if existing?.isDirty == true, !isDirty {
+            clearReviewNudge(panelId: panelId)
+        }
         if branchChanged {
             if panelPullRequests[panelId] != nil {
                 panelPullRequests.removeValue(forKey: panelId)
@@ -292,6 +295,7 @@ extension Workspace {
             inferredAgent: resolvedInferredAgent,
             programState: programState
         )
+        noteReviewNudgeTurnEdge(panelId: panelId, previous: current?.state, next: state)
         // Event-driven half of surface.wait's `agent_state` condition (#166 task 2) and
         // agent.prompt's internal working/idle watch (#166 task 3) -- see
         // AgentStateWaitRegistry's doc comment in TerminalController+SurfaceWait.swift for why
@@ -326,6 +330,86 @@ extension Workspace {
 #if DEBUG
         dlog("surface.agentState.clear workspace=\(id.uuidString.prefix(5)) panel=\(panelId.uuidString.prefix(5))")
 #endif
+    }
+
+    // MARK: - Review nudge
+
+    /// An agent turn ending (working/blocked -> idle, from hooks, OSC 7501 or screen inference)
+    /// probes the surface's repo once; a new turn (-> working) drops that surface's nudge.
+    /// Never opens or focuses anything: the sidebar only offers the review.
+    func noteReviewNudgeTurnEdge(panelId: UUID, previous: AgentActivityState?, next: AgentActivityState) {
+        if next == .working, previous != .working {
+            clearReviewNudge(panelId: panelId)
+        } else if next == .idle, previous == .working || previous == .blocked {
+            probeReviewNudge(panelId: panelId)
+        }
+    }
+
+    func clearReviewNudge(panelId: UUID) {
+        reviewNudgeProbeGenerations[panelId, default: 0] &+= 1
+        if panelReviewNudges[panelId] != nil {
+            panelReviewNudges.removeValue(forKey: panelId)
+        }
+    }
+
+    /// Opening any review panel covers the workspace's diff, so every nudge in it goes.
+    func clearAllReviewNudges() {
+        for panelId in Array(reviewNudgeProbeGenerations.keys) + Array(panelReviewNudges.keys) {
+            clearReviewNudge(panelId: panelId)
+        }
+    }
+
+    private func probeReviewNudge(panelId: UUID) {
+        // An open review panel already refreshes itself on this same edge.
+        guard !panels.values.contains(where: { $0 is ReviewPanel }),
+              let directory = normalizedSidebarDirectory(panelDirectories[panelId] ?? currentDirectory) else {
+            return
+        }
+        reviewNudgeProbeGenerations[panelId, default: 0] &+= 1
+        let generation = reviewNudgeProbeGenerations[panelId]
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let count = ReviewDiffProber.uncommittedFileCount(directory: directory)
+            DispatchQueue.main.async {
+                guard let self,
+                      self.reviewNudgeProbeGenerations[panelId] == generation,
+                      self.panels[panelId] != nil,
+                      let count else { return }
+                if count > 0 {
+                    if self.panelReviewNudges[panelId] != count {
+                        self.panelReviewNudges[panelId] = count
+                    }
+                } else if self.panelReviewNudges[panelId] != nil {
+                    self.panelReviewNudges.removeValue(forKey: panelId)
+                }
+#if DEBUG
+                dlog(
+                    "review.nudge workspace=\(self.id.uuidString.prefix(5)) " +
+                    "panel=\(panelId.uuidString.prefix(5)) files=\(count)"
+                )
+#endif
+            }
+        }
+    }
+
+    /// The surface the sidebar's review affordance targets: the largest diff, ties broken by id
+    /// so the row does not flip between equal surfaces.
+    var reviewNudgeTarget: (panelId: UUID, fileCount: Int)? {
+        panelReviewNudges
+            .max { lhs, rhs in
+                lhs.value != rhs.value ? lhs.value < rhs.value : lhs.key.uuidString > rhs.key.uuidString
+            }
+            .map { (panelId: $0.key, fileCount: $0.value) }
+    }
+
+    /// User-initiated (sidebar click): opens and focuses a review split beside the agent surface.
+    @discardableResult
+    func openReviewFromNudge(panelId: UUID) -> ReviewPanel? {
+        let sourcePanelId = panels[panelId] != nil ? panelId : focusedPanelId
+        guard let sourcePanelId else {
+            clearAllReviewNudges()
+            return nil
+        }
+        return newReviewSplit(from: sourcePanelId, orientation: .horizontal, focus: true)
     }
 
     func resetSidebarContext(
@@ -364,6 +448,7 @@ extension Workspace {
         surfaceListeningPorts.removeAll()
         listeningPorts.removeAll()
         metadataBlocks.removeAll()
+        clearAllReviewNudges()
     }
 
     @discardableResult
@@ -436,6 +521,12 @@ extension Workspace {
         }
         if manualUnreadMarkedAt.keys.contains(where: { !validSurfaceIds.contains($0) }) {
             manualUnreadMarkedAt = manualUnreadMarkedAt.filter { validSurfaceIds.contains($0.key) }
+        }
+        if panelReviewNudges.keys.contains(where: { !validSurfaceIds.contains($0) }) {
+            panelReviewNudges = panelReviewNudges.filter { validSurfaceIds.contains($0.key) }
+        }
+        if reviewNudgeProbeGenerations.keys.contains(where: { !validSurfaceIds.contains($0) }) {
+            reviewNudgeProbeGenerations = reviewNudgeProbeGenerations.filter { validSurfaceIds.contains($0.key) }
         }
         let didPruneListeningPorts = surfaceListeningPorts.keys.contains(where: {
             !validSurfaceIds.contains($0)

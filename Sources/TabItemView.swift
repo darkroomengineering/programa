@@ -692,6 +692,31 @@ struct TabItemView: View, Equatable {
                 }
             }
 
+            // Review nudge: the last agent turn left uncommitted changes. Click-only, never opens itself.
+            if let reviewNudge = tab.reviewNudgeTarget {
+                Button(action: {
+                    openReviewFromNudge(panelId: reviewNudge.panelId)
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus.forwardslash.minus")
+                            .font(.system(size: 9, weight: .semibold))
+                            .accessibilityHidden(true)
+                        Text(reviewNudgeFileCountLabel(reviewNudge.fileCount))
+                            .lineLimit(1)
+                        Text(verbatim: "·")
+                            .accessibilityHidden(true)
+                        Text(String(localized: "sidebar.reviewNudge.action", defaultValue: "Review"))
+                            .underline()
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(pullRequestForegroundColor)
+                }
+                .buttonStyle(.plain)
+                .safeHelp(String(localized: "sidebar.reviewNudge.tooltip", defaultValue: "Open the review panel for these changes"))
+            }
+
             // Ports row
             if !tab.listeningPorts.isEmpty {
                 HStack(spacing: 4) {
@@ -1457,6 +1482,17 @@ struct TabItemView: View, Equatable {
     private func openPullRequestLink(_ url: URL) {
         updateSelection()
         ExternalOpenPolicy.open(url)
+    }
+
+    private func openReviewFromNudge(panelId: UUID) {
+        updateSelection()
+        tab.openReviewFromNudge(panelId: panelId)
+    }
+
+    private func reviewNudgeFileCountLabel(_ count: Int) -> String {
+        count == 1
+            ? String(localized: "sidebar.reviewNudge.oneFileChanged", defaultValue: "1 file changed")
+            : String(localized: "sidebar.reviewNudge.filesChanged", defaultValue: "\(count) files changed")
     }
 
     private func openPortLink(_ port: Int) {
