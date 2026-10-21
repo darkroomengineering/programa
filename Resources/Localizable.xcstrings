@@ -5152,6 +5152,23 @@
         }
       }
     },
+    "command.resumeAgentSession.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resume Agent Session"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "エージェントセッションを再開"
+          }
+        }
+      }
+    },
     "command.sendFeedback.subtitle": {
       "extractionState": "manual",
       "localizations": {

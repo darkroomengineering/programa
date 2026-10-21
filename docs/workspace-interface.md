@@ -70,3 +70,26 @@ programa stop-port --pid 4242
 `stop-port <port>` fails and lists the processes when more than one listens on that port; pick
 one with `--pid`. Only processes that `list-ports` shows can be stopped. The socket methods are
 `ports.list` and `ports.stop`; see [socket-api.md](socket-api.md).
+
+## Resume an agent session
+
+When an agent exits in a pane, its session-end hook keeps the session id in
+`~/.programa/agent-last-sessions.json`, one entry per pane and per directory, for 7 days.
+`programa resume` types that agent's resume command into the pane's shell and presses Enter:
+
+```sh
+programa resume                      # the pane you run it from
+programa resume --surface surface:3
+programa resume --print              # print the command, type nothing
+programa resume --session <id>       # a specific session id
+```
+
+It takes the newest session that ended in the pane, or else the newest one that ended in the
+pane's current directory. If that session ran in another directory that still exists, the
+command starts with `cd <dir> &&`. Claude Code (`claude --resume <id>`) and Codex
+(`codex resume <id>`) are supported; OpenCode is not. `resume` refuses while an agent is still
+running in the pane, so nothing is typed into a live agent.
+
+After a restart, each terminal pane remembers the last agent session it ran. Focus the pane and
+run **Resume Agent Session** from the command palette (`⌘ ⇧ P`). The action appears only for a
+terminal that has a resumable session and no running agent.

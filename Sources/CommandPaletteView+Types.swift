@@ -189,6 +189,7 @@ extension CommandPaletteView {
         static let hasFocusedPanel = "panel.hasFocus"
         static let panelName = "panel.name"
         static let panelIsTerminal = "panel.isTerminal"
+        static let panelCanResumeAgent = "panel.canResumeAgent"
         static let panelHasCustomName = "panel.hasCustomName"
         static let panelShouldPin = "panel.shouldPin"
         static let panelHasUnread = "panel.hasUnread"

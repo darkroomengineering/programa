@@ -295,6 +295,11 @@ extension Workspace {
             inferredAgent: resolvedInferredAgent,
             programState: programState
         )
+        if let resolvedSessionKey, let sessionId = resolvedSessionKey.sessionId {
+            AgentResumeStore.shared.note(
+                panelId: panelId, provider: resolvedSessionKey.provider, sessionId: sessionId, cwd: panelDirectories[panelId]
+            )
+        }
         noteReviewNudgeTurnEdge(panelId: panelId, previous: current?.state, next: state)
         // Event-driven half of surface.wait's `agent_state` condition (#166 task 2) and
         // agent.prompt's internal working/idle watch (#166 task 3) -- see
