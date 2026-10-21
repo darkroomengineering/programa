@@ -97,9 +97,12 @@ struct MCPSocketBridge {
     static func resolveSocketPassword(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> String? {
-        environment["PROGRAMA_SOCKET_PASSWORD"]?
+        if let password = environment["PROGRAMA_SOCKET_PASSWORD"]?
             .trimmingCharacters(in: .whitespacesAndNewlines)
-            .nilIfEmpty
+            .nilIfEmpty {
+            return password
+        }
+        return SocketPasswordResolver.resolve(explicit: nil, socketPath: resolveSocketPath(environment: environment))
     }
 
     /// Sends one v2 request (`{"id","method","params"}`) and returns the
@@ -190,7 +193,7 @@ struct MCPSocketBridge {
             let message = (error["message"] as? String) ?? "Unknown v2 error"
             if ["auth_required", "auth_failed", "auth_unconfigured"].contains(code) {
                 let guidance = code == "auth_required"
-                    ? "Programa socket authentication is required. Set PROGRAMA_SOCKET_PASSWORD for programa-mcp."
+                    ? "Programa socket authentication is required. Save a password in Settings > Automation or set PROGRAMA_SOCKET_PASSWORD."
                     : "Programa socket authentication failed. Verify PROGRAMA_SOCKET_PASSWORD."
                 throw MCPSocketBridgeError.authentication(guidance)
             }

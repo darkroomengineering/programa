@@ -37,8 +37,8 @@ Agents started inside Programa get the server without any setup:
   `programa-mcp` as a local MCP server by hand, using the binary path below and OpenCode's
   own MCP config format.
 
-In password mode the automatic server fails with `authentication_error`: `programa-mcp` reads
-the password only from `PROGRAMA_SOCKET_PASSWORD`, and Programa panes do not export it.
+In password mode the automatic server logs in with the password saved in Settings →
+Automation, the same one the `programa` CLI uses.
 
 ## Manual setup
 
@@ -75,10 +75,11 @@ instance (a tagged dev build, for example), set `PROGRAMA_SOCKET_PATH`:
 }
 ```
 
-If Settings → Automation uses password-protected socket access, also provide
-`PROGRAMA_SOCKET_PASSWORD` in the MCP server's environment. `programa-mcp` authenticates
-with `auth.login` before sending each tool request and returns an explicit
-`authentication_error` when the password is missing or rejected:
+If Settings → Automation uses password-protected socket access, `programa-mcp` logs in
+with `PROGRAMA_SOCKET_PASSWORD` when it is set, and otherwise with the password saved in
+Settings → Automation. It authenticates with `auth.login` before sending each tool request
+and returns an explicit `authentication_error` when the password is missing or rejected. To
+use a different password, set it in the server's environment:
 
 ```json
 {
@@ -182,9 +183,9 @@ so this only affects hand testing.
 **`transport_error: Socket not found`.** Programa is not running, or the server resolved a
 different instance's socket than you expected. Check `PROGRAMA_SOCKET_PATH`.
 
-**`authentication_error`.** The running app requires socket authentication. Set
-`PROGRAMA_SOCKET_PASSWORD` to the password configured in Settings → Automation, or verify
-that the existing value matches.
+**`authentication_error`.** The running app requires socket authentication. Save a password
+in Settings → Automation, or set `PROGRAMA_SOCKET_PASSWORD` to it and verify that the value
+matches.
 
 **A tool is missing from `tools/list`.** Confirm the method exists in the running build via
 the `system_capabilities` tool. The server and the app can be different versions if you
