@@ -810,12 +810,6 @@ class GhosttyApp {
             }
 
             loadInlineGhosttyConfig(
-                "clipboard-write = ask",
-                into: fallbackConfig,
-                prefix: "programa-clipboard-write",
-                logLabel: "clipboard write default (fallback)"
-            )
-            loadInlineGhosttyConfig(
                 "macos-background-from-layer = true",
                 into: fallbackConfig,
                 prefix: "programa-layer-bg",
@@ -919,15 +913,6 @@ class GhosttyApp {
                 logLabel: "card layout padding default"
             )
         }
-        // Ghostty defaults `clipboard-write` to allow, which lets any program in a pane
-        // replace the clipboard silently. Loaded BEFORE the user's config files so a
-        // user-set `clipboard-write` still wins.
-        loadInlineGhosttyConfig(
-            "clipboard-write = ask",
-            into: config,
-            prefix: "programa-clipboard-write",
-            logLabel: "clipboard write default"
-        )
         ghostty_config_load_default_files(config)
         loadLegacyGhosttyConfigIfNeeded(config)
         ghostty_config_load_recursive_files(config)
