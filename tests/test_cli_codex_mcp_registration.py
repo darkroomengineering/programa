@@ -75,8 +75,9 @@ class Sandbox:
             return None
         return json.loads(self.state_path.read_text(encoding="utf-8"))["transport"]["command"]
 
-    def register(self, command: str) -> None:
-        self.state_path.write_text(json.dumps({"name": "programa", "transport": {"type": "stdio", "command": command}}), encoding="utf-8")
+    def register(self, command: str, **extra: object) -> None:
+        transport = {"type": "stdio", "command": command, **extra}
+        self.state_path.write_text(json.dumps({"name": "programa", "transport": transport}), encoding="utf-8")
 
     def calls(self) -> list[str]:
         log = self.codex_home / "fake-codex-calls.log"
@@ -140,6 +141,18 @@ class CodexMCPRegistrationTests(unittest.TestCase):
         self.assertOK(box.run("uninstall-integration"))
         self.assertEqual(box.registered_command(), "/usr/local/bin/my-own-server")
         self.assertEqual(box.mutating_calls(), [])
+
+    def test_customized_programa_mcp_is_left_alone(self) -> None:
+        for extra in ({"args": ["--verbose"]}, {"env": {"PROGRAMA_SOCKET_PATH": "/tmp/x.sock"}}, {"env_vars": ["HOME"]}):
+            with self.subTest(extra=extra):
+                box = Sandbox(tempfile.mkdtemp(prefix="sub-", dir=self.tmp.name))
+                box.register("/opt/programa/programa-mcp", **extra)
+                proc = box.run("install-integration")
+                self.assertOK(proc)
+                self.assertIn("leaving it unchanged", proc.stdout)
+                self.assertOK(box.run("uninstall-integration"))
+                self.assertEqual(box.registered_command(), "/opt/programa/programa-mcp")
+                self.assertEqual(box.mutating_calls(), [])
 
     def test_without_consent_codex_is_not_changed(self) -> None:
         box = Sandbox(self.tmp.name)

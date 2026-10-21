@@ -14,7 +14,9 @@ struct CodexMCPRegistrationPlan: Equatable {
     let note: String?
 
     /// `registeredCommand` is the command Codex already runs for `programa`: nil when no
-    /// such server exists, "" when one exists without a command (an HTTP server).
+    /// such server exists, "" when one exists without a command (an HTTP server). Only a
+    /// bare `programa-mcp` entry counts as ours; `codexRegisteredMCPCommand` reports one with
+    /// arguments or environment under a different name so uninstall never removes it.
     static func build(
         install: Bool,
         codexExecutable: String?,
@@ -74,7 +76,15 @@ extension ProgramaCLI {
               let data = result.stdout.data(using: .utf8),
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
         let transport = root["transport"] as? [String: Any]
-        return (transport?["command"] as? String) ?? ""
+        let command = (transport?["command"] as? String) ?? ""
+        let customized = ["args", "env", "env_vars"].contains { key in
+            switch transport?[key] {
+            case let list as [Any]: return !list.isEmpty
+            case let map as [String: Any]: return !map.isEmpty
+            default: return false
+            }
+        }
+        return customized ? "\(command) with custom arguments or environment" : command
     }
 
     func printCodexMCPPreview(_ plan: CodexMCPRegistrationPlan) {
