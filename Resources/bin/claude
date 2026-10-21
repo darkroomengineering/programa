@@ -3,8 +3,10 @@
 #
 # When running inside a programa terminal (PROGRAMA_SURFACE_ID is set), this wrapper
 # intercepts `claude` invocations to inject --session-id and --settings flags
-# so that Claude Code hooks fire back into programa for notifications/status.
-# Outside programa, it passes through to the real claude binary unchanged.
+# so that Claude Code hooks fire back into programa for notifications/status,
+# plus the bundled programa-mcp server and a short system prompt pointing the
+# session at the programa skill. Outside programa, it passes through to the
+# real claude binary unchanged.
 
 # Find the real claude binary, skipping our own directory.
 find_real_claude() {
@@ -146,17 +148,45 @@ esac
 # independent sessions even when the parent shell was launched from Claude Code.
 unset CLAUDECODE
 
-# Check if the user already specified a session/resume flag.
-# If so, don't inject our own --session-id (it would conflict).
+# Never inject a flag the user already passed: a second --session-id conflicts,
+# and an explicit MCP or system-prompt choice is the user's to make.
 SKIP_SESSION_ID=false
+SKIP_MCP_CONFIG=false
+SKIP_SYSTEM_PROMPT=false
 for arg in "$@"; do
     case "$arg" in
         --resume|--resume=*|-r|--session-id|--session-id=*|--continue|-c)
             SKIP_SESSION_ID=true
-            break
+            ;;
+        --mcp-config|--mcp-config=*|--strict-mcp-config)
+            SKIP_MCP_CONFIG=true
+            ;;
+        --system-prompt|--system-prompt=*|--system-prompt-file|--system-prompt-file=*|--append-system-prompt|--append-system-prompt=*|--append-system-prompt-file|--append-system-prompt-file=*)
+            SKIP_SYSTEM_PROMPT=true
             ;;
     esac
 done
+
+# programa-mcp ships next to the bundled programa CLI and this wrapper.
+resolve_programa_mcp_bin() {
+    local candidate dir
+    for candidate in "${PROGRAMA_BUNDLED_CLI_PATH:-}" "$0"; do
+        [[ -n "$candidate" ]] || continue
+        dir="$(cd "$(dirname "$candidate")" 2>/dev/null && pwd)" || continue
+        if [[ -x "$dir/programa-mcp" ]]; then
+            printf '%s' "$dir/programa-mcp"
+            return 0
+        fi
+    done
+    return 1
+}
+
+json_escape() {
+    local value="$1"
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    printf '%s' "$value"
+}
 
 # Export the wrapper's PID. Because we exec claude below, this PID becomes
 # the actual claude process PID, which hooks use for stale-session detection.
@@ -182,32 +212,46 @@ fi
 # - SubagentStart/SubagentStop: adds and finishes helpers in Agent Overview
 HOOKS_JSON='{"hooks":{"SessionStart":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook session-start","timeout":10}]}],"Stop":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook stop","timeout":10}]}],"SessionEnd":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook session-end","timeout":1}]}],"Notification":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook notification","timeout":10}]}],"UserPromptSubmit":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook prompt-submit","timeout":10}]}],"PreToolUse":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook pre-tool-use","timeout":5,"async":true}]}],"SubagentStart":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook subagent-start","timeout":5}]}],"SubagentStop":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook subagent-stop","timeout":5}]}]}}'
 
-if [[ "$SKIP_SESSION_ID" == true ]]; then
-    exec "$REAL_CLAUDE" --settings "$HOOKS_JSON" "$@"
+# Detect which optional flags the resolved claude binary supports. Some
+# environments (e.g. nvm not yet initialized in a fresh tab) may resolve to an
+# older binary that rejects them (#1818). Cache the result per binary
+# path+mtime so the --help subprocess only runs once per binary update.
+_claude_real_mtime="$(stat -f '%m' "$REAL_CLAUDE" 2>/dev/null || stat -c '%Y' "$REAL_CLAUDE" 2>/dev/null || echo 0)"
+_claude_cache_key="${REAL_CLAUDE}:${_claude_real_mtime}"
+if [[ "${_PROGRAMA_CLAUDE_FLAGS_CACHE_KEY:-}" == "$_claude_cache_key" ]]; then
+    _claude_flags="$_PROGRAMA_CLAUDE_FLAGS_CACHE_VAL"
 else
-    # Verify that the resolved claude binary supports --session-id.
-    # Some environments (e.g. nvm not yet initialized in a fresh tab)
-    # may resolve to an older binary that rejects this flag (#1818).
-    # Cache the result per binary path+mtime so the --help subprocess
-    # only runs once per shell session or binary update.
-    _claude_real_mtime="$(stat -f '%m' "$REAL_CLAUDE" 2>/dev/null || stat -c '%Y' "$REAL_CLAUDE" 2>/dev/null || echo 0)"
-    _claude_cache_key="${REAL_CLAUDE}:${_claude_real_mtime}"
-    if [[ "${_PROGRAMA_CLAUDE_SESSION_ID_CACHE_KEY:-}" == "$_claude_cache_key" ]]; then
-        _claude_has_session_id="$_PROGRAMA_CLAUDE_SESSION_ID_CACHE_VAL"
-    else
-        if "$REAL_CLAUDE" --help 2>&1 | grep -q -- '--session-id'; then
-            _claude_has_session_id=1
-        else
-            _claude_has_session_id=0
+    _claude_help="$("$REAL_CLAUDE" --help 2>&1)"
+    _claude_flags=" "
+    for _flag in session-id mcp-config append-system-prompt; do
+        if grep -Eq -- "^[[:space:]]*(-[[:alpha:]], )?--${_flag}[[:space:]]" <<<"$_claude_help"; then
+            _claude_flags+="${_flag} "
         fi
-        export _PROGRAMA_CLAUDE_SESSION_ID_CACHE_KEY="$_claude_cache_key"
-        export _PROGRAMA_CLAUDE_SESSION_ID_CACHE_VAL="$_claude_has_session_id"
-    fi
-    if [[ "$_claude_has_session_id" == "1" ]]; then
-        SESSION_ID="$(uuidgen | tr '[:upper:]' '[:lower:]')"
-        exec "$REAL_CLAUDE" --session-id "$SESSION_ID" --settings "$HOOKS_JSON" "$@"
-    else
-        # Fall back: inject hooks but skip session tracking.
-        exec "$REAL_CLAUDE" --settings "$HOOKS_JSON" "$@"
-    fi
+    done
+    export _PROGRAMA_CLAUDE_FLAGS_CACHE_KEY="$_claude_cache_key"
+    export _PROGRAMA_CLAUDE_FLAGS_CACHE_VAL="$_claude_flags"
 fi
+
+INJECTED_ARGS=()
+if [[ "$SKIP_SESSION_ID" == false && "$_claude_flags" == *" session-id "* ]]; then
+    INJECTED_ARGS+=(--session-id "$(uuidgen | tr '[:upper:]' '[:lower:]')")
+fi
+INJECTED_ARGS+=(--settings "$HOOKS_JSON")
+
+# A server passed through --mcp-config replaces a same-named one from the
+# user's own config for this session only, so "programa" always targets the
+# app this pane belongs to. The equals form matters: --mcp-config is variadic
+# and the space form would swallow a following positional prompt.
+if [[ "$SKIP_MCP_CONFIG" == false && "$_claude_flags" == *" mcp-config "* ]] \
+    && PROGRAMA_MCP_BIN="$(resolve_programa_mcp_bin)"; then
+    INJECTED_ARGS+=("--mcp-config={\"mcpServers\":{\"programa\":{\"command\":\"$(json_escape "$PROGRAMA_MCP_BIN")\"}}}")
+fi
+
+if [[ "$SKIP_SYSTEM_PROMPT" == false && "$_claude_flags" == *" append-system-prompt "* ]]; then
+    INJECTED_ARGS+=(--append-system-prompt "You are running inside Programa, a terminal built for running coding agents in parallel.
+Before splitting work, running long jobs, or reviewing a diff, read the programa skill (or run \`programa help\`).
+Prefer what it describes: \`programa worktree create\` or agent_spawn with needs_isolation for conflicting edits, \`programa race\` for competing attempts, \`programa review\` for diffs, and \`programa wait-surface\` for long jobs.
+Do not move the user's focus unless they ask.")
+fi
+
+exec "$REAL_CLAUDE" "${INJECTED_ARGS[@]}" "$@"
