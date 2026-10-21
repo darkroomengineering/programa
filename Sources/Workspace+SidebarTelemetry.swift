@@ -350,10 +350,22 @@ extension Workspace {
                 panelReviewNudges.removeValue(forKey: panelId)
             }
         } else if next == .working, previous != .working {
+            saveTurnCheckpoint(panelId: panelId)
             clearReviewNudge(panelId: panelId)
             runReviewNudgeProbe(panelId: panelId, kind: .baseline)
         } else if next == .idle, previous == .working || previous == .blocked {
             runReviewNudgeProbe(panelId: panelId, kind: .turnEnd(baseline: reviewNudgeBaselines[panelId]))
+        }
+    }
+
+    /// Snapshots the surface's repo files at turn start so the review panel can revert the turn.
+    /// Runs whether or not a review panel is open, unlike the nudge probe.
+    private func saveTurnCheckpoint(panelId: UUID) {
+        guard let directory = sidebarResolvedDirectory(for: panelId) else { return }
+        reviewCheckpointDirectories.insert(directory)
+        let workspaceId = id
+        ReviewCheckpointStore.queue.async {
+            ReviewCheckpointStore.save(directory: directory, workspaceId: workspaceId, surfaceId: panelId)
         }
     }
 

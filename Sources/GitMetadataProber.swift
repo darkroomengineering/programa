@@ -659,18 +659,20 @@ extension CanonicalSubprocessRunner {
     }
 
     /// Runs `git` with `automaticGitOptions` before `arguments` and the repository's
-    /// `automaticGitEnvironment`.
+    /// `automaticGitEnvironment`. `environmentOverrides` are layered on top of that environment.
     static func runAutomaticGit(
         arguments: [String],
         currentDirectory: String,
         timeout: TimeInterval?,
         stdoutLimit: Int,
         stderrLimit: Int,
-        executableURL: URL? = nil
+        executableURL: URL? = nil,
+        environmentOverrides: [String: String] = [:]
     ) -> CanonicalSubprocessResult {
-        guard let environment = automaticGitEnvironment(directory: currentDirectory, executableURL: executableURL) else {
+        guard let baseEnvironment = automaticGitEnvironment(directory: currentDirectory, executableURL: executableURL) else {
             return filterConfigUnavailableResult
         }
+        let environment = baseEnvironment.merging(environmentOverrides) { _, override in override }
         return run(
             executable: "git",
             arguments: automaticGitArguments(arguments),

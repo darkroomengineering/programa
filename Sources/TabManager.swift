@@ -1727,6 +1727,18 @@ class TabManager: ObservableObject {
         workspace.teardownAllPanels()
         unwireTerminalCloseTracking(for: workspace)
         workspace.owningTabManager = nil
+        // SHORTCUT: only repos this app run checkpointed for the workspace are cleaned here.
+        // ceiling: refs left by a previous run (workspace ids are new after restart) wait for the
+        // 7-day stale prune in ReviewCheckpointStore.save. upgrade: persist the directory set in
+        // the session snapshot if users report checkpoint refs piling up.
+        let checkpointDirectories = workspace.reviewCheckpointDirectories
+        if !checkpointDirectories.isEmpty {
+            ReviewCheckpointStore.queue.async {
+                for directory in checkpointDirectories {
+                    ReviewCheckpointStore.deleteAll(workspaceId: closedWorkspaceId, directory: directory)
+                }
+            }
+        }
 
         if let index = tabs.firstIndex(where: { $0.id == workspace.id }) {
             tabs.remove(at: index)

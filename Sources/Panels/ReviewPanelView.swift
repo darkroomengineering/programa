@@ -167,6 +167,7 @@ struct ReviewPanelView: View {
     @State private var composer: InlineComposerState?
     @State private var commentAdmissionError: String?
     @State private var rowPlanner = ReviewPanelRowPlanner()
+    @State private var isConfirmingCheckpointRevert = false
 
     private struct InlineComposerState {
         let filePath: String
@@ -212,6 +213,14 @@ struct ReviewPanelView: View {
         } message: {
             Text(commentAdmissionError ?? "")
         }
+        .alert(String(localized: "review.checkpoint.revertFailed", defaultValue: "Could not revert files"), isPresented: Binding(
+            get: { panel.checkpointRestoreError != nil },
+            set: { if !$0 { panel.checkpointRestoreError = nil } }
+        )) {
+            Button(String(localized: "common.ok", defaultValue: "OK"), role: .cancel) { panel.checkpointRestoreError = nil }
+        } message: {
+            Text(panel.checkpointRestoreError ?? "")
+        }
         .background(Color(nsColor: .textBackgroundColor))
         .background {
             if isVisibleInUI {
@@ -245,9 +254,12 @@ struct ReviewPanelView: View {
                 .font(.system(size: 12, weight: .medium))
                 .lineLimit(1)
             Spacer()
-            if panel.isRefreshing {
+            if panel.isRefreshing || panel.isRestoringCheckpoint {
                 ProgressView()
                     .controlSize(.small)
+            }
+            if let checkpoint = panel.latestCheckpoint {
+                checkpointRevertButton(for: checkpoint)
             }
             Button {
                 panel.refresh()
@@ -257,6 +269,37 @@ struct ReviewPanelView: View {
             .buttonStyle(.plain)
             .safeHelp(String(localized: "review.refresh.help", defaultValue: "Refresh diff"))
             .accessibilityLabel(String(localized: "review.refresh.help", defaultValue: "Refresh diff"))
+        }
+    }
+
+    /// After a revert the newest checkpoint is the pre-revert save, so the same button offers the undo.
+    private func checkpointRevertButton(for checkpoint: ReviewCheckpoint) -> some View {
+        let isUndo = checkpoint.kind == .beforeRevert
+        let title = isUndo
+            ? String(localized: "review.checkpoint.undo.button", defaultValue: "Undo File Revert")
+            : String(localized: "review.checkpoint.revert.button", defaultValue: "Revert Files to Before Last Turn")
+        return Button(title) {
+            isConfirmingCheckpointRevert = true
+        }
+        .buttonStyle(.borderless)
+        .font(.system(size: 11))
+        .lineLimit(1)
+        .disabled(panel.isRestoringCheckpoint)
+        .alert(title, isPresented: $isConfirmingCheckpointRevert) {
+            Button(String(localized: "review.checkpoint.confirm.revert", defaultValue: "Revert"), role: .destructive) {
+                panel.revertToLatestCheckpoint()
+            }
+            Button(String(localized: "review.checkpoint.confirm.cancel", defaultValue: "Cancel"), role: .cancel) {}
+        } message: {
+            Text(isUndo
+                ? String(
+                    localized: "review.checkpoint.undo.message",
+                    defaultValue: "Puts the files in this repository back the way they were before the last revert. The agent's conversation is not changed. Your current files are saved first."
+                )
+                : String(
+                    localized: "review.checkpoint.revert.message",
+                    defaultValue: "Restores the files in this repository to how they were when the agent's last turn started. The agent's conversation is not rewound. Your current files are saved first, so you can undo this."
+                ))
         }
     }
 
