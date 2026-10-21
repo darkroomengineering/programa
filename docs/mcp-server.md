@@ -9,7 +9,38 @@ running app over the same v2 JSON control socket the `programa` CLI uses
 (see [socket-api.md](socket-api.md)). It is not part of the app process,
 so it cannot affect terminal rendering or typing latency.
 
-## Setup
+## Automatic setup
+
+Agents started inside Programa get the server without any setup:
+
+- **Claude Code.** The `claude` wrapper Programa puts on `PATH` in its panes passes the bundled
+  `programa-mcp` to every session as a server named `programa`, through
+  `--mcp-config={"mcpServers":{"programa":{"command":"<bundle>/Contents/Resources/bin/programa-mcp"}}}`.
+  Nothing is written to your Claude Code config. A `programa` server in your own config is
+  replaced by this one for that session, so it always talks to the app the pane belongs to.
+  The wrapper skips this when you pass `--mcp-config` or `--strict-mcp-config` yourself, when
+  the bundle has no `programa-mcp`, or when the installed `claude` does not support the flag.
+  It also appends a short system prompt telling the session it runs inside Programa and to
+  follow the `programa` skill, unless you pass `--system-prompt`, `--append-system-prompt`, or
+  their `-file` forms. `programa claude install-integration` does not register the server,
+  because the wrapper already covers every Claude Code session in a Programa pane.
+- **Codex.** `programa codex install-integration` runs
+  `codex mcp add programa -- <bundle>/Contents/Resources/bin/programa-mcp` after you confirm,
+  alongside its hooks and skill. It leaves an existing `programa` server that runs something
+  other than `programa-mcp` unchanged, and `programa codex uninstall-integration` removes the
+  server only when it still runs `programa-mcp`. Codex starts MCP servers with a filtered
+  environment, so this server finds the socket through discovery (the default Programa
+  instance) rather than the pane's `PROGRAMA_SOCKET_PATH`. To point it at a tagged build, add
+  `env_vars = ["PROGRAMA_SOCKET_PATH", "PROGRAMA_SOCKET_PASSWORD"]` under
+  `[mcp_servers.programa]` in `~/.codex/config.toml`.
+- **OpenCode.** `programa opencode install-integration` does not register the server. Add
+  `programa-mcp` as a local MCP server by hand, using the binary path below and OpenCode's
+  own MCP config format.
+
+In password mode the automatic server fails with `authentication_error`: `programa-mcp` reads
+the password only from `PROGRAMA_SOCKET_PASSWORD`, and Programa panes do not export it.
+
+## Manual setup
 
 Point your MCP client at the binary inside the app bundle:
 
