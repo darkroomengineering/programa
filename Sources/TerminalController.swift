@@ -1895,6 +1895,8 @@ class TerminalController {
             return v2Result(id: id, self.v2SurfaceResolveTTY(params: params))
         case "surface.send_text":
             return v2Result(id: id, self.v2SurfaceSendText(params: params))
+        case "surface.send_paste":
+            return v2Result(id: id, self.v2SurfaceSendPaste(params: params))
         case "surface.send_key":
             return v2Result(id: id, self.v2SurfaceSendKey(params: params))
         case "surface.report_tty":

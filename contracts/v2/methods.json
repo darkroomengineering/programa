@@ -3633,6 +3633,50 @@
       },
       "threading": "main"
     },
+    "surface.send_paste": {
+      "auth_required": true,
+      "debug_only": false,
+      "description": "Terminal surface (pane content) lifecycle and IO. (send paste: one paste, never presses Return).",
+      "errors": [
+        "invalid_params",
+        "not_found",
+        "unavailable"
+      ],
+      "focus_intent": false,
+      "handler": "v2SurfaceSendPaste",
+      "params": {
+        "additionalProperties": false,
+        "properties": {
+          "surface_id": {
+            "format": "surface:N",
+            "type": "string"
+          },
+          "tab_id": {
+            "format": "tab:N",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "window_id": {
+            "format": "window:N",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "workspace:N",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
+      "result": {
+        "type": "object"
+      },
+      "threading": "main"
+    },
     "surface.send_text": {
       "auth_required": true,
       "debug_only": false,

@@ -553,6 +553,16 @@ extension CommandPaletteView {
         )
         contributions.append(
             CommandPaletteCommandContribution(
+                commandId: "palette.pasteContextFromPane",
+                title: constant(String(localized: "command.pasteContextFromPane.title", defaultValue: "Paste Context From Pane…")),
+                subtitle: terminalPanelSubtitle,
+                keywords: ["paste", "context", "handoff", "pane", "output", "agent", "prompt"],
+                dismissOnRun: false,
+                when: { $0.bool(CommandPaletteContextKeys.panelIsTerminal) }
+            )
+        )
+        contributions.append(
+            CommandPaletteCommandContribution(
                 commandId: "palette.terminalFindPrevious",
                 title: constant(String(localized: "command.terminalFindPrevious.title", defaultValue: "Find Previous")),
                 subtitle: terminalPanelSubtitle,
@@ -930,6 +940,9 @@ extension CommandPaletteView {
         }
         registry.register(commandId: "palette.terminalFindNext") {
             tabManager.findNext()
+        }
+        registry.register(commandId: "palette.pasteContextFromPane") {
+            beginPaneHandoffPickFlow()
         }
         registry.register(commandId: "palette.terminalFindPrevious") {
             tabManager.findPrevious()

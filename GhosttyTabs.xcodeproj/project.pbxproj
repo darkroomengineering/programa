@@ -76,6 +76,12 @@
 			NRSP0008A1B2C3D4E5F60719 /* ColorSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0007A1B2C3D4E5F60719 /* ColorSupport.swift */; };
 			A5FF0005 /* CommandPaletteView+Helpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0015 /* CommandPaletteView+Helpers.swift */; };
 			A2CV0000000000000000000C /* CommandPaletteView+Commands.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2CV0000000000000000000D /* CommandPaletteView+Commands.swift */; };
+			A1D00000000000000000000B /* PaneHandoffFormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D00000000000000000000A /* PaneHandoffFormatterTests.swift */; };
+			A1D000000000000000000009 /* CommandPaletteView+PaneHandoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D000000000000000000008 /* CommandPaletteView+PaneHandoff.swift */; };
+			A1D000000000000000000007 /* CLI+Handoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D000000000000000000006 /* CLI+Handoff.swift */; };
+			A1D000000000000000000005 /* PaneHandoffFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D000000000000000000003 /* PaneHandoffFormatter.swift */; };
+			A1D000000000000000000004 /* PaneHandoffFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D000000000000000000003 /* PaneHandoffFormatter.swift */; };
+			A1D000000000000000000002 /* TerminalController+SurfacePaste.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D000000000000000000001 /* TerminalController+SurfacePaste.swift */; };
 			A2CV0000000000000000000A /* CommandPaletteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2CV0000000000000000000B /* CommandPaletteView.swift */; };
 			A2CV00000000000000000008 /* CommandPaletteView+Flows.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2CV00000000000000000009 /* CommandPaletteView+Flows.swift */; };
 			A2CV00000000000000000006 /* CommandPaletteView+Types.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2CV00000000000000000007 /* CommandPaletteView+Types.swift */; };
@@ -488,6 +494,11 @@
 			NRSP0007A1B2C3D4E5F60719 /* ColorSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorSupport.swift; sourceTree = "<group>"; };
 			A5FF0015 /* CommandPaletteView+Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandPaletteView+Helpers.swift"; sourceTree = "<group>"; };
 			A2CV0000000000000000000D /* CommandPaletteView+Commands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandPaletteView+Commands.swift"; sourceTree = "<group>"; };
+			A1D00000000000000000000A /* PaneHandoffFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneHandoffFormatterTests.swift; sourceTree = "<group>"; };
+			A1D000000000000000000008 /* CommandPaletteView+PaneHandoff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandPaletteView+PaneHandoff.swift"; sourceTree = "<group>"; };
+			A1D000000000000000000006 /* CLI+Handoff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Handoff.swift"; sourceTree = "<group>"; };
+			A1D000000000000000000003 /* PaneHandoffFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneHandoffFormatter.swift; sourceTree = "<group>"; };
+			A1D000000000000000000001 /* TerminalController+SurfacePaste.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+SurfacePaste.swift"; sourceTree = "<group>"; };
 			A2CV0000000000000000000B /* CommandPaletteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteView.swift; sourceTree = "<group>"; };
 			A2CV00000000000000000009 /* CommandPaletteView+Flows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandPaletteView+Flows.swift"; sourceTree = "<group>"; };
 			A2CV00000000000000000007 /* CommandPaletteView+Types.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandPaletteView+Types.swift"; sourceTree = "<group>"; };
@@ -890,6 +901,7 @@
 					NRPA00008 /* SettingsComponents.swift */,
 				NRPA00010 /* SettingsView.swift */,
 				THTM0001 /* TerminalThemeStore.swift */,
+				A1D000000000000000000003 /* PaneHandoffFormatter.swift */,
 					REND0001A1B2C3D4E5F60719 /* RendererRealization.swift */,
 					A5FF0017 /* SettingDefinition.swift */,
 					A5001012 /* ContentView.swift */,
@@ -943,6 +955,7 @@
 					NRSP0007A1B2C3D4E5F60719 /* ColorSupport.swift */,
 					A5FF0015 /* CommandPaletteView+Helpers.swift */,
 					A2CV0000000000000000000D /* CommandPaletteView+Commands.swift */,
+					A1D000000000000000000008 /* CommandPaletteView+PaneHandoff.swift */,
 					A2CV0000000000000000000B /* CommandPaletteView.swift */,
 					A2CV00000000000000000009 /* CommandPaletteView+Flows.swift */,
 					A2CV00000000000000000007 /* CommandPaletteView+Types.swift */,
@@ -1076,6 +1089,7 @@
 				RVPN00000000000000000009 /* ReviewPanel.swift */,
 				RVPN0000000000000000000B /* ReviewPanelView.swift */,
 				RVPN0000000000000000000D /* TerminalController+Review.swift */,
+				A1D000000000000000000001 /* TerminalController+SurfacePaste.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -1090,6 +1104,7 @@
 				B9000036A1B2C3D4E5F60719 /* CLI+Themes.swift */,
 				B9000038A1B2C3D4E5F60719 /* CLI+Tree.swift */,
 				7B3F9A10C2D4E5F6A7B80009 /* CLI+Ports.swift */,
+				A1D000000000000000000006 /* CLI+Handoff.swift */,
 				B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */,
 				B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */,
 				B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */,
@@ -1232,6 +1247,7 @@
 					FA000001A1B2C3D4E5F60718 /* WorkspaceStressProfileTests.swift */,
 					A5008382 /* CommandPaletteSearchEngineTests.swift */,
 					RPVW0001 /* ReviewPanelViewTests.swift */,
+					A1D00000000000000000000A /* PaneHandoffFormatterTests.swift */,
 					02FC74F2C27127CC565B3E8C /* TerminalAndGhosttyTests.swift */,
 					71F8ED91A4B55D34BE6A0668 /* WorkspaceUnitTests.swift */,
 					BEE83F8394D90ACACD8E19DD /* WindowAndDragTests.swift */,
@@ -1440,6 +1456,7 @@
 					NRPA00007 /* SettingsComponents.swift in Sources */,
 					NRPA00009 /* SettingsView.swift in Sources */,
 					THTM0002 /* TerminalThemeStore.swift in Sources */,
+					A1D000000000000000000004 /* PaneHandoffFormatter.swift in Sources */,
 					REND0002A1B2C3D4E5F60719 /* RendererRealization.swift in Sources */,
 					A5FF0007 /* SettingDefinition.swift in Sources */,
 					A5001002 /* ContentView.swift in Sources */,
@@ -1494,6 +1511,7 @@
 					NRSP0008A1B2C3D4E5F60719 /* ColorSupport.swift in Sources */,
 					A5FF0005 /* CommandPaletteView+Helpers.swift in Sources */,
 					A2CV0000000000000000000C /* CommandPaletteView+Commands.swift in Sources */,
+					A1D000000000000000000009 /* CommandPaletteView+PaneHandoff.swift in Sources */,
 					A2CV0000000000000000000A /* CommandPaletteView.swift in Sources */,
 					A2CV00000000000000000008 /* CommandPaletteView+Flows.swift in Sources */,
 					A2CV00000000000000000006 /* CommandPaletteView+Types.swift in Sources */,
@@ -1602,6 +1620,7 @@
 				RVPN0000000000000000000A /* ReviewPanel.swift in Sources */,
 				RVPN0000000000000000000C /* ReviewPanelView.swift in Sources */,
 				RVPN0000000000000000000E /* TerminalController+Review.swift in Sources */,
+				A1D000000000000000000002 /* TerminalController+SurfacePaste.swift in Sources */,
 				A5001421 /* MarkdownPanelView.swift in Sources */,
 				MDRD00000000000000000001 /* MarkdownDocumentView.swift in Sources */,
 				MRMD000001 /* MermaidDiagramView.swift in Sources */,
@@ -1688,6 +1707,7 @@
 					FA000000A1B2C3D4E5F60718 /* WorkspaceStressProfileTests.swift in Sources */,
 					A5008383 /* CommandPaletteSearchEngineTests.swift in Sources */,
 					RPVW0002 /* ReviewPanelViewTests.swift in Sources */,
+					A1D00000000000000000000B /* PaneHandoffFormatterTests.swift in Sources */,
 					46F6AC15863EC84DCD3770A2 /* TerminalAndGhosttyTests.swift in Sources */,
 					6B524A0BA34FD46A771335AB /* WorkspaceUnitTests.swift in Sources */,
 					063BC42CEE257D6213A2E30C /* WindowAndDragTests.swift in Sources */,
@@ -1740,8 +1760,10 @@
 				C0DE0C9A0000000000000001 /* CLI+CodexMCP.swift in Sources */,
 					B9000037A1B2C3D4E5F60719 /* CLI+Themes.swift in Sources */,
 					THTM0003 /* TerminalThemeStore.swift in Sources */,
+					A1D000000000000000000005 /* PaneHandoffFormatter.swift in Sources */,
 				B9000039A1B2C3D4E5F60719 /* CLI+Tree.swift in Sources */,
 				7B3F9A10C2D4E5F6A7B8000A /* CLI+Ports.swift in Sources */,
+				A1D000000000000000000007 /* CLI+Handoff.swift in Sources */,
 				B900003BA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift in Sources */,
 				B900003DA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift in Sources */,
 				B900003FA1B2C3D4E5F60719 /* CLI+Hooks.swift in Sources */,

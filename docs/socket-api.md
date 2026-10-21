@@ -470,9 +470,28 @@ Returns `{"workspace_id", "workspace_ref", "surface_id", "surface_ref"}` for the
 terminal surface. Errors: `invalid_params` when `tty` is missing or empty, `not_found` when no
 terminal surface has that tty. The lookup changes no focus or selection.
 
+## `surface.send_paste`
+
+Delivers text to a terminal as one paste and never presses Return, so an agent prompt keeps it as
+a draft. `surface.send_text` instead turns every newline into a Return key, which submits in agent
+TUIs. While the foreground program has bracketed paste on (DEC mode 2004) the newlines are kept
+inside the paste; otherwise they become spaces, so a shell gets one line and runs nothing. CLI:
+`programa handoff`, which reads another pane with `surface.read_text` and pastes it as context.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `text` | string | yes | Must not be empty. |
+| `surface_id` | string | no | Target terminal; defaults to the focused surface of the resolved workspace. |
+| `workspace_id` / `window_id` / `tab_id` | string | no | Same resolution as `surface.send_text`. |
+
+Returns `{"workspace_id", "workspace_ref", "surface_id", "surface_ref", "window_id", "window_ref"}`
+plus `"queued": true` when the terminal was not attached yet. Errors: `invalid_params` for missing
+or empty `text` or a non-terminal surface, `not_found` for an unknown workspace or surface. Runs on
+main like `surface.send_text` and changes no focus or selection.
+
 ## Text delivery: `queued`
 
-`surface.send_text` and `agent.prompt` include `"queued": true` in the result when the target
+`surface.send_text`, `surface.send_paste` and `agent.prompt` include `"queued": true` in the result when the target
 terminal was not attached yet and the text went to its pending queue; it is delivered once the
 terminal attaches. The field is absent or `false` when the text was written directly.
 
