@@ -156,6 +156,7 @@ struct VerticalTabsSidebar: View {
     @StateObject private var dragFailsafeMonitor = SidebarDragFailsafeMonitor()
     @StateObject private var tabItemSettingsStore = SidebarTabItemSettingsStore()
     @ObservedObject private var keyboardShortcutSettingsObserver = KeyboardShortcutSettingsObserver.shared
+    @ObservedObject private var agentSupervision = AgentSupervisionRegistry.shared
     @State private var draggedTabId: UUID?
     @State private var dropIndicator: SidebarDropIndicator?
     @AppStorage(WorkspacePresentationModeSettings.modeKey)
@@ -211,6 +212,7 @@ struct VerticalTabsSidebar: View {
         let orderedSelectedTabs = tabs.filter { selectedTabIds.contains($0.id) }
         let selectedContextTargetIds = orderedSelectedTabs.map(\.id)
         let rowMetrics = SidebarRowMetrics.current
+        let runningHelperCounts = agentSupervision.runningHelperCounts
         let sidebarContent = VStack(spacing: 0) {
             // Single header row shared with the traffic lights (Maps-style): the
             // lights float over its leading side, controls sit trailing, and the
@@ -295,6 +297,7 @@ struct VerticalTabsSidebar: View {
                                         isWorktreeFolder: tab.isWorktreeFolder,
                                         isWorktreeFolderCollapsed: tab.isWorktreeFolderCollapsed,
                                         worktreeChildCount: worktreeChildCount,
+                                        runningHelperCount: runningHelperCounts[tab.id] ?? 0,
                                         rowMetrics: rowMetrics
                                     )
                                     .equatable()

@@ -2774,6 +2774,9 @@ extension ProgramaCLI {
     | A task worth trying several ways, or you are unsure which approach wins | `programa race "<prompt>" --n <count>`, then compare the branches yourself |
     | A diff is ready for review, yours or a helper's | `programa review open`, `review comment add`, `review send` |
     | A build, test run, dev server, or anything over a minute | run it in a split, then `wait-surface` on it |
+    | A long or parallel job the user should be able to watch | `programa new-split` (MCP `surface_split`) or `agent_spawn`, then tell the user which pane it is in |
+    | The work needs a coordinated team of agents | suggest the user restart with `programa claude-teams`; only the user launches it |
+    | A blocking question for the user, from a tool without programa hooks (Claude Code, Codex and OpenCode hooks already send it) | `programa rpc agent.needs_input '{"workspace_id":"…","surface_id":"…","body":"<question>","kind":"question"}'` with your `PROGRAMA_WORKSPACE_ID` and `PROGRAMA_SURFACE_ID`. There is no MCP tool for it; `surface_report_agent_state` with `blocked` only sets the badge |
     | Waiting on another agent | `wait-surface --agent-state idle` or `prompt-agent` |
     | The user asks for the same pane arrangement again | `programa layout save` / `layout apply` |
     | You need output from another pane | `read-screen --surface <ref>` |

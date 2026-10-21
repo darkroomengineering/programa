@@ -255,6 +255,17 @@ extension TabManager {
             }
 
             sweepAgentPresence(for: tab)
+            // The Claude pid key dying without SessionEnd orphans its subagents. Helpers on a
+            // surface, or in a session, that still has agent presence belong to another live
+            // session; keep those.
+            if keysToRemove.contains("claude_code") {
+                let liveSessionIds = Set(tab.panelAgentPresence.values.compactMap { $0.sessionKey?.sessionId })
+                AgentSupervisionRegistry.shared.finishRunningHelpers(workspaceId: tab.id) { record in
+                    guard record.host == "claude" else { return false }
+                    if let surfaceId = record.surfaceId { return tab.panelAgentPresence[surfaceId] == nil }
+                    return record.session.map { !liveSessionIds.contains($0) } ?? true
+                }
+            }
         }
     }
 
@@ -269,6 +280,10 @@ extension TabManager {
                 errno = 0
                 if kill(pid, 0) == -1, POSIXErrorCode(rawValue: errno) == .ESRCH {
                     tab.clearPanelAgentState(panelId: panelId)
+                    let sessionId = presence.sessionKey?.sessionId
+                    AgentSupervisionRegistry.shared.finishRunningHelpers(workspaceId: tab.id) { record in
+                        record.surfaceId == panelId || (sessionId != nil && record.session == sessionId)
+                    }
                     continue
                 }
             }

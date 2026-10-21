@@ -17119,6 +17119,40 @@
           }
         }
       }
+    },
+    "sidebar.helpers.oneRunning": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 helper running"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ヘルパー 1 件が実行中"
+          }
+        }
+      }
+    },
+    "sidebar.helpers.running": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld helpers running"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ヘルパー %lld 件が実行中"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
