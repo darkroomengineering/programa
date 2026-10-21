@@ -2151,7 +2151,7 @@ struct ProgramaCLI {
 
             CommandDescriptor(
                 names: ["watch-events"],
-                helpLines: ["watch-events [--agent-state] [--workspace-lifecycle] [--output <surface_id[,surface_id...]>] [--no-reconnect]"],
+                helpLines: ["watch-events [--agent-state] [--workspace-lifecycle] [--needs-input] [--output <surface_id[,surface_id...]>] [--no-reconnect]"],
                 argumentContract: .watchEvents,
                 detailedUsage: """
                 Usage: programa watch-events [flags]
@@ -2163,9 +2163,11 @@ struct ProgramaCLI {
                 open indefinitely and prints one JSON event per line until interrupted
                 (Ctrl-C) or the process gives up reconnecting.
 
-                Flags (at least one of --agent-state/--workspace-lifecycle/--output required):
+                Flags (at least one of --agent-state/--workspace-lifecycle/--needs-input/--output required):
                   --agent-state                    Agent working/blocked/idle transitions
                   --workspace-lifecycle             Workspace created/closed/renamed
+                  --needs-input                     Agent prompts waiting for the user, with the
+                                                    prompt text (needs_input events)
                   --output <surface_id[,surface_id...]>
                                                     Coalesced output for specific surfaces
                                                     (not available for "all surfaces" -- see docs)
@@ -2188,16 +2190,19 @@ struct ProgramaCLI {
                   programa watch-events --agent-state
                   programa watch-events --output surface:2,surface:3
                   programa watch-events --agent-state --no-reconnect
+                  programa watch-events --needs-input
                 """,
                 execute: { ctx in
                     let agentState = self.hasFlag(ctx.commandArgs, name: "--agent-state")
                     let workspaceLifecycle = self.hasFlag(ctx.commandArgs, name: "--workspace-lifecycle")
+                    let needsInput = self.hasFlag(ctx.commandArgs, name: "--needs-input")
                     let noReconnect = self.hasFlag(ctx.commandArgs, name: "--no-reconnect")
                     let (outputArg, _) = self.parseOption(ctx.commandArgs, name: "--output")
 
                     var classes: [String] = []
                     if agentState { classes.append("agent_state") }
                     if workspaceLifecycle { classes.append("workspace_lifecycle") }
+                    if needsInput { classes.append("needs_input") }
 
                     var params: [String: Any] = [:]
                     if let outputArg {
@@ -5295,16 +5300,17 @@ struct ProgramaCLI {
                 args,
                 command: command,
                 valueFlags: ["output"],
-                booleanFlags: ["agent-state", "workspace-lifecycle", "no-reconnect"]
+                booleanFlags: ["agent-state", "workspace-lifecycle", "needs-input", "no-reconnect"]
             )
             guard parsed.positional.isEmpty else {
                 throw CLIError(message: "watch-events: unexpected arguments: \(parsed.positional.joined(separator: " "))")
             }
             guard parsed.options["agent-state"] != nil
                 || parsed.options["workspace-lifecycle"] != nil
+                || parsed.options["needs-input"] != nil
                 || parsed.options["output"] != nil else {
                 throw CLIError(
-                    message: "watch-events requires at least one of --agent-state, --workspace-lifecycle, --output <surface_id[,surface_id...]>"
+                    message: "watch-events requires at least one of --agent-state, --workspace-lifecycle, --needs-input, --output <surface_id[,surface_id...]>"
                 )
             }
 

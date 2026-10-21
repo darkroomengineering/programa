@@ -1,6 +1,7 @@
 // surface.* command handlers.
 import AppKit
 import Carbon.HIToolbox
+import CryptoKit
 import Foundation
 import Bonsplit
 
@@ -993,20 +994,7 @@ extension TerminalController {
             #if DEBUG
             let sendStart = ProcessInfo.processInfo.systemUptime
             #endif
-            let queued: Bool
-            if let surface = terminalPanel.surface.surface {
-                sendSocketText(text, surface: surface)
-                // Ensure we present a new frame after injecting input so snapshot-based tests (and
-                // socket-driven agents) can observe the updated terminal without requiring a focus
-                // change to trigger a draw.
-                terminalPanel.surface.forceRefresh(reason: "terminalController.v2SurfaceSendText")
-                queued = false
-            } else {
-                // Avoid blocking the main actor waiting for view/surface attachment.
-                terminalPanel.sendText(text)
-                terminalPanel.surface.requestBackgroundSurfaceStartIfNeeded()
-                queued = true
-            }
+            let queued = v2DeliverSocketText(text, to: terminalPanel, reason: "terminalController.v2SurfaceSendText")
 #if DEBUG
             let sendMs = (ProcessInfo.processInfo.systemUptime - sendStart) * 1000.0
             dlog(
@@ -1050,12 +1038,8 @@ extension TerminalController {
             guard let terminalPanel = panel as? TerminalPanel else {
                 return .err(code: "invalid_params", message: "Surface is not a terminal", data: ["surface_id": surfaceId.uuidString])
             }
-            let surfaceWasReady = terminalPanel.surface.surface != nil
-            guard terminalPanel.surface.sendNamedKey(key) else {
+            guard v2DeliverNamedKey(key, to: terminalPanel, reason: "terminalController.v2SurfaceSendKey") else {
                 return .err(code: "invalid_params", message: "Unknown key", data: ["key": key])
-            }
-            if surfaceWasReady {
-                terminalPanel.surface.forceRefresh(reason: "terminalController.v2SurfaceSendKey")
             }
             return .ok(["workspace_id": ws.id.uuidString, "workspace_ref": v2Ref(kind: .workspace, uuid: ws.id), "surface_id": surfaceId.uuidString, "surface_ref": v2Ref(kind: .surface, uuid: surfaceId), "window_id": v2OrNull(v2ResolveWindowId(tabManager: tabManager)?.uuidString), "window_ref": v2Ref(kind: .window, uuid: v2ResolveWindowId(tabManager: tabManager))])
         }
@@ -1112,13 +1096,8 @@ extension TerminalController {
                 return .err(code: "unavailable", message: "TabManager not available", data: nil)
             }
 
-            var includeScrollback = v2Bool(params, "scrollback") ?? false
-            let lineLimit = v2Int(params, "lines")
-            if let lineLimit, lineLimit <= 0 {
+            guard let readOptions = v2ReadTextOptions(params) else {
                 return .err(code: "invalid_params", message: "lines must be greater than 0", data: nil)
-            }
-            if lineLimit != nil {
-                includeScrollback = true
             }
 
             guard let ws = v2ResolveWorkspace(params: params, tabManager: tabManager) else {
@@ -1144,24 +1123,20 @@ extension TerminalController {
                 return .err(code: "invalid_params", message: "Surface is not a terminal", data: ["surface_id": surfaceId.uuidString])
             }
 
-            let response = readTerminalTextBase64(
-                terminalPanel: terminalPanel,
-                includeScrollback: includeScrollback,
-                lineLimit: lineLimit
-            )
-            guard response.hasPrefix("OK ") else {
-                return .err(code: "internal_error", message: response, data: nil)
-            }
-            let base64 = String(response.dropFirst(3)).trimmingCharacters(in: .whitespacesAndNewlines)
-            let decoded = Data(base64Encoded: base64).flatMap { String(data: $0, encoding: .utf8) }
-            guard let text = decoded ?? (base64.isEmpty ? "" : nil) else {
-                return .err(code: "internal_error", message: "Failed to decode terminal text", data: nil)
+            let text: String
+            let base64: String
+            switch v2ReadSurfaceText(terminalPanel: terminalPanel, options: readOptions) {
+            case .success(let read):
+                (text, base64) = read
+            case .failure(let failure):
+                return .err(code: "internal_error", message: failure.message, data: nil)
             }
 
             let windowId = v2ResolveWindowId(tabManager: tabManager)
             return .ok([
                 "text": text,
                 "base64": base64,
+                "fingerprint": Self.v2TextFingerprint(text),
                 "workspace_id": ws.id.uuidString,
                 "workspace_ref": v2Ref(kind: .workspace, uuid: ws.id),
                 "surface_id": surfaceId.uuidString,
@@ -1319,5 +1294,70 @@ extension TerminalController {
             )
         }
 #endif
+    }
+
+    struct V2SurfaceReadFailure: Error {
+        let message: String
+    }
+
+    /// `surface.read_text`'s `scrollback`/`lines` params; nil when `lines` is not positive.
+    func v2ReadTextOptions(_ params: [String: Any]) -> (includeScrollback: Bool, lineLimit: Int?)? {
+        let lineLimit = v2Int(params, "lines")
+        if let lineLimit, lineLimit <= 0 { return nil }
+        return (lineLimit != nil || (v2Bool(params, "scrollback") ?? false), lineLimit)
+    }
+
+    /// The text `surface.read_text` returns. `surface.send_if_unchanged` hashes the same read, so
+    /// its fingerprint matches the one `surface.read_text` reports for the same params.
+    func v2ReadSurfaceText(
+        terminalPanel: TerminalPanel,
+        options: (includeScrollback: Bool, lineLimit: Int?)
+    ) -> Result<(text: String, base64: String), V2SurfaceReadFailure> {
+        let response = readTerminalTextBase64(
+            terminalPanel: terminalPanel,
+            includeScrollback: options.includeScrollback,
+            lineLimit: options.lineLimit
+        )
+        guard response.hasPrefix("OK ") else {
+            return .failure(V2SurfaceReadFailure(message: response))
+        }
+        let base64 = String(response.dropFirst(3)).trimmingCharacters(in: .whitespacesAndNewlines)
+        let decoded = Data(base64Encoded: base64).flatMap { String(data: $0, encoding: .utf8) }
+        guard let text = decoded ?? (base64.isEmpty ? "" : nil) else {
+            return .failure(V2SurfaceReadFailure(message: "Failed to decode terminal text"))
+        }
+        return .success((text, base64))
+    }
+
+    /// Lowercase hex SHA-256 of the UTF-8 bytes of `text`.
+    static func v2TextFingerprint(_ text: String) -> String {
+        SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// `surface.send_text`'s delivery. Returns true when the surface was not attached and the text
+    /// went to the panel's pending queue.
+    func v2DeliverSocketText(_ text: String, to terminalPanel: TerminalPanel, reason: String) -> Bool {
+        if let surface = terminalPanel.surface.surface {
+            sendSocketText(text, surface: surface)
+            // Ensure we present a new frame after injecting input so snapshot-based tests (and
+            // socket-driven agents) can observe the updated terminal without requiring a focus
+            // change to trigger a draw.
+            terminalPanel.surface.forceRefresh(reason: reason)
+            return false
+        }
+        // Avoid blocking the main actor waiting for view/surface attachment.
+        terminalPanel.sendText(text)
+        terminalPanel.surface.requestBackgroundSurfaceStartIfNeeded()
+        return true
+    }
+
+    /// `surface.send_key`'s delivery. Returns false for an unknown key name.
+    func v2DeliverNamedKey(_ key: String, to terminalPanel: TerminalPanel, reason: String) -> Bool {
+        let surfaceWasReady = terminalPanel.surface.surface != nil
+        guard terminalPanel.surface.sendNamedKey(key) else { return false }
+        if surfaceWasReady {
+            terminalPanel.surface.forceRefresh(reason: reason)
+        }
+        return true
     }
 }

@@ -3589,6 +3589,67 @@
       },
       "threading": "main"
     },
+    "surface.send_if_unchanged": {
+      "auth_required": true,
+      "debug_only": false,
+      "description": "Terminal surface (pane content) lifecycle and IO. (send if unchanged: sends text and keys only while the read_text fingerprint still matches).",
+      "errors": [
+        "internal_error",
+        "invalid_params",
+        "mismatch",
+        "not_found",
+        "unavailable"
+      ],
+      "focus_intent": false,
+      "handler": "v2SurfaceSendIfUnchanged",
+      "params": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_fingerprint": {
+            "type": "string"
+          },
+          "keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "lines": {
+            "type": "integer"
+          },
+          "scrollback": {
+            "type": "boolean"
+          },
+          "surface_id": {
+            "format": "surface:N",
+            "type": "string"
+          },
+          "tab_id": {
+            "format": "tab:N",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "window_id": {
+            "format": "window:N",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "workspace:N",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_fingerprint"
+        ],
+        "type": "object"
+      },
+      "result": {
+        "type": "object"
+      },
+      "threading": "main"
+    },
     "surface.send_key": {
       "auth_required": true,
       "debug_only": false,
