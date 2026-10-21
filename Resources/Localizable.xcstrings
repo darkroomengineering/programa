@@ -16881,6 +16881,57 @@
           }
         }
       }
+    },
+    "command.pasteContextFromPane.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste Context From Pane…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ペインのコンテキストを貼り付け…"
+          }
+        }
+      }
+    },
+    "commandPalette.search.paneHandoffPlaceholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick a pane to paste its output"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "出力を貼り付けるペインを選択"
+          }
+        }
+      }
+    },
+    "commandPalette.search.paneHandoffEmpty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No other terminal panes match your search."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "検索に一致する他のターミナルペインはありません。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

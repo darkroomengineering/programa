@@ -191,6 +191,9 @@ extension CommandPaletteView {
         case .commands:
             return String(localized: "commandPalette.search.commandsPlaceholder", defaultValue: "Type a command")
         case .switcher:
+            if paneHandoffTarget != nil {
+                return String(localized: "commandPalette.search.paneHandoffPlaceholder", defaultValue: "Pick a pane to paste its output")
+            }
             return commandPaletteController.commandPaletteSearchAllSurfaces
                 ? String(localized: "commandPalette.search.switcherPlaceholderAllSurfaces", defaultValue: "Search workspaces and surfaces")
                 : String(localized: "commandPalette.search.switcherPlaceholder", defaultValue: "Search workspaces")
@@ -202,6 +205,9 @@ extension CommandPaletteView {
         case .commands:
             return String(localized: "commandPalette.search.commandsEmpty", defaultValue: "No commands match your search.")
         case .switcher:
+            if paneHandoffTarget != nil {
+                return String(localized: "commandPalette.search.paneHandoffEmpty", defaultValue: "No other terminal panes match your search.")
+            }
             return commandPaletteController.commandPaletteSearchAllSurfaces
                 ? String(localized: "commandPalette.search.switcherEmptyAllSurfaces", defaultValue: "No workspaces or surfaces match your search.")
                 : String(localized: "commandPalette.search.switcherEmpty", defaultValue: "No workspaces match your search.")
@@ -717,7 +723,7 @@ extension CommandPaletteView {
         syncCommandPaletteDebugStateForObservedWindow()
     }
 
-    private func resetCommandPaletteListState(initialQuery: String) {
+    func resetCommandPaletteListState(initialQuery: String) {
         commandPaletteController.resetListState(
             initialQuery: initialQuery,
             minimumEditorHeight: CommandPaletteMultilineTextEditorRepresentable.defaultMinimumHeight
@@ -749,6 +755,7 @@ extension CommandPaletteView {
             )
         }
 #endif
+        paneHandoffTarget = nil
         let storedFocusTarget = commandPaletteController.prepareDismissal(
             minimumEditorHeight: CommandPaletteMultilineTextEditorRepresentable.defaultMinimumHeight
         )

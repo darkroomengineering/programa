@@ -117,6 +117,7 @@ enum V2MethodNames {
     static let surfaceReportTty = "surface.report_tty"
     static let surfaceResolveTty = "surface.resolve_tty"
     static let surfaceSendKey = "surface.send_key"
+    static let surfaceSendPaste = "surface.send_paste"
     static let surfaceSendText = "surface.send_text"
     static let surfaceSplit = "surface.split"
     static let surfaceTriggerFlash = "surface.trigger_flash"

@@ -86,6 +86,7 @@ enum V2CommandCatalog {
         "surface.report_tty",
         "surface.resolve_tty",
         "surface.send_key",
+        "surface.send_paste",
         "surface.send_text",
         "surface.split",
         "surface.trigger_flash",
