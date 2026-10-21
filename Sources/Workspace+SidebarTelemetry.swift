@@ -96,6 +96,9 @@ extension Workspace {
             panelGitBranches[panelId] = state
             titleMetadataChanged = true
         }
+        if existing?.isDirty == true, !isDirty {
+            clearReviewNudge(panelId: panelId)
+        }
         if branchChanged {
             if panelPullRequests[panelId] != nil {
                 panelPullRequests.removeValue(forKey: panelId)
@@ -292,6 +295,7 @@ extension Workspace {
             inferredAgent: resolvedInferredAgent,
             programState: programState
         )
+        noteReviewNudgeTurnEdge(panelId: panelId, previous: current?.state, next: state)
         // Event-driven half of surface.wait's `agent_state` condition (#166 task 2) and
         // agent.prompt's internal working/idle watch (#166 task 3) -- see
         // AgentStateWaitRegistry's doc comment in TerminalController+SurfaceWait.swift for why
@@ -326,6 +330,110 @@ extension Workspace {
 #if DEBUG
         dlog("surface.agentState.clear workspace=\(id.uuidString.prefix(5)) panel=\(panelId.uuidString.prefix(5))")
 #endif
+    }
+
+    // MARK: - Review nudge
+
+    /// An agent turn ending (working/blocked -> idle, from hooks, OSC 7501 or screen inference)
+    /// probes the surface's repo once and nudges only if its change fingerprint moved since the
+    /// turn started; a new turn (-> working) drops that surface's nudge and records the baseline.
+    /// Never opens or focuses anything: the sidebar only offers the review.
+    func noteReviewNudgeTurnEdge(panelId: UUID, previous: AgentActivityState?, next: AgentActivityState) {
+        if next == .working, previous == .blocked {
+            // Same turn resuming after a prompt: keep its baseline (and any baseline probe in flight).
+            if panelReviewNudges[panelId] != nil {
+                panelReviewNudges.removeValue(forKey: panelId)
+            }
+        } else if next == .working, previous != .working {
+            clearReviewNudge(panelId: panelId)
+            runReviewNudgeProbe(panelId: panelId, kind: .baseline)
+        } else if next == .idle, previous == .working || previous == .blocked {
+            runReviewNudgeProbe(panelId: panelId, kind: .turnEnd(baseline: reviewNudgeBaselines[panelId]))
+        }
+    }
+
+    func clearReviewNudge(panelId: UUID) {
+        reviewNudgeProbeGenerations[panelId, default: 0] &+= 1
+        reviewNudgeBaselines.removeValue(forKey: panelId)
+        if panelReviewNudges[panelId] != nil {
+            panelReviewNudges.removeValue(forKey: panelId)
+        }
+    }
+
+    /// Opening any review panel covers the workspace's diff, so every nudge in it goes.
+    func clearAllReviewNudges() {
+        for panelId in Array(reviewNudgeProbeGenerations.keys) + Array(panelReviewNudges.keys) {
+            clearReviewNudge(panelId: panelId)
+        }
+    }
+
+    private enum ReviewNudgeProbeKind: Sendable {
+        case baseline
+        /// `baseline == nil` (its probe failed, was superseded, or the turn began before the app
+        /// saw it) nudges on any non-empty diff.
+        case turnEnd(baseline: ReviewChangeFingerprint?)
+    }
+
+    private func runReviewNudgeProbe(panelId: UUID, kind: ReviewNudgeProbeKind) {
+        // An open review panel already refreshes itself on these same edges.
+        guard !panels.values.contains(where: { $0 is ReviewPanel }),
+              let directory = sidebarResolvedDirectory(for: panelId) else {
+            return
+        }
+        reviewNudgeProbeGenerations[panelId, default: 0] &+= 1
+        let generation = reviewNudgeProbeGenerations[panelId]
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let fingerprint = ReviewDiffProber.uncommittedChangeFingerprint(directory: directory)
+            DispatchQueue.main.async {
+                guard let self,
+                      self.reviewNudgeProbeGenerations[panelId] == generation,
+                      self.panels[panelId] != nil,
+                      let fingerprint else { return }
+                switch kind {
+                case .baseline:
+                    self.reviewNudgeBaselines[panelId] = fingerprint
+                case .turnEnd(let baseline):
+                    self.reviewNudgeTurnEndsSettled &+= 1
+                    let changed = baseline.map { fingerprint.differs(from: $0) } ?? true
+                    let count = changed ? fingerprint.paths.count : 0
+                    if count > 0 {
+                        if self.panelReviewNudges[panelId] != count {
+                            self.panelReviewNudges[panelId] = count
+                        }
+                    } else if self.panelReviewNudges[panelId] != nil {
+                        self.panelReviewNudges.removeValue(forKey: panelId)
+                    }
+#if DEBUG
+                    dlog(
+                        "review.nudge workspace=\(self.id.uuidString.prefix(5)) " +
+                        "panel=\(panelId.uuidString.prefix(5)) files=\(fingerprint.paths.count) " +
+                        "baseline=\(baseline.map { String($0.paths.count) } ?? "none") nudge=\(count)"
+                    )
+#endif
+                }
+            }
+        }
+    }
+
+    /// The surface the sidebar's review affordance targets: the largest diff, ties broken by id
+    /// so the row does not flip between equal surfaces.
+    var reviewNudgeTarget: (panelId: UUID, fileCount: Int)? {
+        panelReviewNudges
+            .max { lhs, rhs in
+                lhs.value != rhs.value ? lhs.value < rhs.value : lhs.key.uuidString > rhs.key.uuidString
+            }
+            .map { (panelId: $0.key, fileCount: $0.value) }
+    }
+
+    /// User-initiated (sidebar click): opens and focuses a review split beside the agent surface.
+    @discardableResult
+    func openReviewFromNudge(panelId: UUID) -> ReviewPanel? {
+        let sourcePanelId = panels[panelId] != nil ? panelId : focusedPanelId
+        guard let sourcePanelId else {
+            clearAllReviewNudges()
+            return nil
+        }
+        return newReviewSplit(from: sourcePanelId, orientation: .horizontal, focus: true)
     }
 
     func resetSidebarContext(
@@ -364,6 +472,7 @@ extension Workspace {
         surfaceListeningPorts.removeAll()
         listeningPorts.removeAll()
         metadataBlocks.removeAll()
+        clearAllReviewNudges()
     }
 
     @discardableResult
@@ -436,6 +545,15 @@ extension Workspace {
         }
         if manualUnreadMarkedAt.keys.contains(where: { !validSurfaceIds.contains($0) }) {
             manualUnreadMarkedAt = manualUnreadMarkedAt.filter { validSurfaceIds.contains($0.key) }
+        }
+        if panelReviewNudges.keys.contains(where: { !validSurfaceIds.contains($0) }) {
+            panelReviewNudges = panelReviewNudges.filter { validSurfaceIds.contains($0.key) }
+        }
+        if reviewNudgeProbeGenerations.keys.contains(where: { !validSurfaceIds.contains($0) }) {
+            reviewNudgeProbeGenerations = reviewNudgeProbeGenerations.filter { validSurfaceIds.contains($0.key) }
+        }
+        if reviewNudgeBaselines.keys.contains(where: { !validSurfaceIds.contains($0) }) {
+            reviewNudgeBaselines = reviewNudgeBaselines.filter { validSurfaceIds.contains($0.key) }
         }
         let didPruneListeningPorts = surfaceListeningPorts.keys.contains(where: {
             !validSurfaceIds.contains($0)

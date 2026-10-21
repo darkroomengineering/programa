@@ -258,6 +258,139 @@ final class ReviewPanelRowPlannerTests: XCTestCase {
         XCTAssertEqual(snapshot.error, .notGitRepository)
     }
 
+    func testUncommittedFileCountMatchesTrackedAndUntrackedChanges() throws {
+        let repoRoot = try makeCommittedTempGitRepo()
+        defer { try? FileManager.default.removeItem(atPath: repoRoot) }
+
+        XCTAssertEqual(ReviewDiffProber.uncommittedFileCount(directory: repoRoot), 0)
+
+        try "changed".write(toFile: (repoRoot as NSString).appendingPathComponent("committed.txt"), atomically: true, encoding: .utf8)
+        try "new".write(toFile: (repoRoot as NSString).appendingPathComponent("untracked.txt"), atomically: true, encoding: .utf8)
+
+        XCTAssertEqual(ReviewDiffProber.uncommittedFileCount(directory: repoRoot), 2)
+        XCTAssertEqual(
+            ReviewDiffProber.uncommittedFileCount(directory: repoRoot),
+            ReviewDiffProber.diffSnapshot(directory: repoRoot, mode: .uncommitted, baseBranch: "main").files.count
+        )
+    }
+
+    func testChangeFingerprintSeesContentEditsToAlreadyDirtyFiles() throws {
+        let repoRoot = try makeCommittedTempGitRepo()
+        defer { try? FileManager.default.removeItem(atPath: repoRoot) }
+        let committedPath = (repoRoot as NSString).appendingPathComponent("committed.txt")
+        try "changed".write(toFile: committedPath, atomically: true, encoding: .utf8)
+        try "new".write(toFile: (repoRoot as NSString).appendingPathComponent("untracked.txt"), atomically: true, encoding: .utf8)
+
+        let before = try XCTUnwrap(ReviewDiffProber.uncommittedChangeFingerprint(directory: repoRoot))
+        XCTAssertEqual(before.paths, ["committed.txt", "untracked.txt"])
+        XCTAssertEqual(before.contentHashes?.count, 2)
+        let unchanged = try XCTUnwrap(ReviewDiffProber.uncommittedChangeFingerprint(directory: repoRoot))
+        XCTAssertFalse(unchanged.differs(from: before))
+
+        try "changed again".write(toFile: committedPath, atomically: true, encoding: .utf8)
+        let after = try XCTUnwrap(ReviewDiffProber.uncommittedChangeFingerprint(directory: repoRoot))
+        XCTAssertEqual(after.paths, before.paths)
+        XCTAssertTrue(after.differs(from: before))
+
+        // A deleted tracked file still fingerprints instead of failing the hash call.
+        try FileManager.default.removeItem(atPath: committedPath)
+        let deleted = try XCTUnwrap(ReviewDiffProber.uncommittedChangeFingerprint(directory: repoRoot))
+        XCTAssertEqual(deleted.contentHashes?["committed.txt"], "")
+        XCTAssertTrue(deleted.differs(from: after))
+    }
+
+    func testUncommittedFileCountIsNilOutsideGitRepository() throws {
+        let directory = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+
+        XCTAssertNil(ReviewDiffProber.uncommittedFileCount(directory: directory))
+    }
+
+    func testAgentTurnEndWithChangesShowsReviewNudgeAndNewTurnClearsIt() throws {
+        let repoRoot = try makeCommittedTempGitRepo()
+        defer { try? FileManager.default.removeItem(atPath: repoRoot) }
+        let workspace = Workspace()
+        let agentId = try XCTUnwrap(workspace.focusedPanelId)
+        workspace.updatePanelDirectory(panelId: agentId, directory: repoRoot)
+
+        // An idle report with no turn before it (session start) does not probe.
+        workspace.updatePanelAgentState(panelId: agentId, state: .idle)
+        XCTAssertTrue(workspace.panelReviewNudges.isEmpty)
+
+        // Turn 1 on a clean tree edits two files.
+        workspace.updatePanelAgentState(panelId: agentId, state: .working)
+        XCTAssertTrue(pollMainRunLoop { workspace.reviewNudgeBaselines[agentId]?.paths == [] })
+        try "changed".write(toFile: (repoRoot as NSString).appendingPathComponent("committed.txt"), atomically: true, encoding: .utf8)
+        try "new".write(toFile: (repoRoot as NSString).appendingPathComponent("untracked.txt"), atomically: true, encoding: .utf8)
+        workspace.updatePanelAgentState(panelId: agentId, state: .idle)
+        XCTAssertTrue(pollMainRunLoop { workspace.panelReviewNudges[agentId] == 2 })
+        XCTAssertEqual(workspace.reviewNudgeTarget?.panelId, agentId)
+        XCTAssertEqual(workspace.reviewNudgeTarget?.fileCount, 2)
+        XCTAssertEqual(workspace.focusedPanelId, agentId, "The nudge must never move focus")
+        XCTAssertFalse(workspace.panels.values.contains { $0 is ReviewPanel }, "The nudge must never open the review panel itself")
+
+        // Turn 2 on the now-dirty tree changes nothing.
+        workspace.updatePanelAgentState(panelId: agentId, state: .working)
+        XCTAssertNil(workspace.panelReviewNudges[agentId], "A new turn clears the nudge")
+        XCTAssertTrue(pollMainRunLoop { workspace.reviewNudgeBaselines[agentId]?.paths.count == 2 })
+        let settledBeforeQuietTurn = workspace.reviewNudgeTurnEndsSettled
+        workspace.updatePanelAgentState(panelId: agentId, state: .idle)
+        XCTAssertTrue(pollMainRunLoop { workspace.reviewNudgeTurnEndsSettled > settledBeforeQuietTurn })
+        XCTAssertNil(workspace.panelReviewNudges[agentId], "A turn that changed nothing in a dirty repo shows no nudge")
+
+        // Turn 3 adds one file, across a permission prompt that must keep the turn's baseline.
+        workspace.updatePanelAgentState(panelId: agentId, state: .working)
+        XCTAssertTrue(pollMainRunLoop { workspace.reviewNudgeBaselines[agentId]?.paths.count == 2 })
+        workspace.updatePanelAgentState(panelId: agentId, state: .blocked)
+        try "added".write(toFile: (repoRoot as NSString).appendingPathComponent("during-turn.txt"), atomically: true, encoding: .utf8)
+        workspace.updatePanelAgentState(panelId: agentId, state: .working)
+        XCTAssertEqual(workspace.reviewNudgeBaselines[agentId]?.paths.count, 2, "Resuming after a prompt keeps the turn-start baseline")
+        workspace.updatePanelAgentState(panelId: agentId, state: .idle)
+        XCTAssertTrue(pollMainRunLoop { workspace.panelReviewNudges[agentId] == 3 })
+
+        // Turn 4 edits a file that was already dirty: same paths, new content.
+        workspace.updatePanelAgentState(panelId: agentId, state: .working)
+        XCTAssertNil(workspace.panelReviewNudges[agentId])
+        XCTAssertTrue(pollMainRunLoop { workspace.reviewNudgeBaselines[agentId]?.paths.count == 3 })
+        try "changed again".write(toFile: (repoRoot as NSString).appendingPathComponent("committed.txt"), atomically: true, encoding: .utf8)
+        workspace.updatePanelAgentState(panelId: agentId, state: .idle)
+        XCTAssertTrue(pollMainRunLoop { workspace.panelReviewNudges[agentId] == 3 }, "Re-editing a dirty file is a change")
+
+        // A blocked -> idle turn end on a now-clean tree removes the nudge.
+        try runGit(["add", "-A"], in: repoRoot)
+        try runGit(["-c", "user.email=test@example.com", "-c", "user.name=Test", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "agent"], in: repoRoot)
+        workspace.updatePanelAgentState(panelId: agentId, state: .blocked)
+        XCTAssertEqual(workspace.panelReviewNudges[agentId], 3, "Blocking keeps the nudge")
+        workspace.updatePanelAgentState(panelId: agentId, state: .idle)
+        XCTAssertTrue(pollMainRunLoop { workspace.panelReviewNudges[agentId] == nil }, "An empty diff shows no nudge")
+    }
+
+    func testOpeningReviewPanelClearsReviewNudge() throws {
+        let repoRoot = try makeCommittedTempGitRepo()
+        defer { try? FileManager.default.removeItem(atPath: repoRoot) }
+        try "new".write(toFile: (repoRoot as NSString).appendingPathComponent("untracked.txt"), atomically: true, encoding: .utf8)
+        let workspace = Workspace()
+        let agentId = try XCTUnwrap(workspace.focusedPanelId)
+        workspace.updatePanelDirectory(panelId: agentId, directory: repoRoot)
+
+        // Idle lands before the turn-start probe returns, so there is no baseline and any
+        // non-empty diff nudges.
+        workspace.updatePanelAgentState(panelId: agentId, state: .working)
+        workspace.updatePanelAgentState(panelId: agentId, state: .idle)
+        XCTAssertTrue(pollMainRunLoop { workspace.panelReviewNudges[agentId] == 1 })
+
+        let reviewPanel = try XCTUnwrap(workspace.openReviewFromNudge(panelId: agentId))
+        XCTAssertEqual(reviewPanel.sourceSurfaceId, agentId)
+        XCTAssertTrue(workspace.panelReviewNudges.isEmpty)
+        XCTAssertNil(workspace.reviewNudgeTarget)
+
+        // While a review panel is open it refreshes itself, so turn ends add no nudge on top.
+        workspace.updatePanelAgentState(panelId: agentId, state: .working)
+        workspace.updatePanelAgentState(panelId: agentId, state: .idle)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+        XCTAssertTrue(workspace.panelReviewNudges.isEmpty)
+    }
+
     func testUnresolvableBaseBranchReportsUnknownBaseBranch() throws {
         let repoRoot = try makeTempGitRepo()
         defer { try? FileManager.default.removeItem(atPath: repoRoot) }
@@ -318,6 +451,23 @@ final class ReviewPanelRowPlannerTests: XCTestCase {
         // to resolve against unless a test creates those refs explicitly.
         try runGit(["init", "-q", "-b", "review-test-initial"], in: directory)
         return directory
+    }
+
+    private func makeCommittedTempGitRepo() throws -> String {
+        let directory = try makeTempGitRepo()
+        try "hello".write(toFile: (directory as NSString).appendingPathComponent("committed.txt"), atomically: true, encoding: .utf8)
+        try runGit(["add", "committed.txt"], in: directory)
+        try runGit(["-c", "user.email=test@example.com", "-c", "user.name=Test", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "initial"], in: directory)
+        return directory
+    }
+
+    /// Spins the main run loop so the off-main probe's main-queue completion can land.
+    private func pollMainRunLoop(timeout: TimeInterval = 10, _ condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition(), Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        }
+        return condition()
     }
 
     @discardableResult
