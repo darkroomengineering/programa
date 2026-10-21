@@ -39,6 +39,10 @@ final class ReviewPanel: Panel, ObservableObject {
     @Published private(set) var isRestoringCheckpoint = false
     @Published var checkpointRestoreError: String?
     private var checkpointGeneration: UInt64 = 0
+    /// nil when the workspace has no GitHub pull request.
+    @Published private(set) var mergeReadiness: ReviewMergeReadinessState?
+    @Published private(set) var isRefreshingMergeReadiness = false
+    private var mergeReadinessGeneration: UInt64 = 0
 
     /// Token incremented to trigger the focus flash animation (mirrors `MarkdownPanel`).
     @Published private(set) var focusFlashToken: Int = 0
@@ -175,6 +179,47 @@ final class ReviewPanel: Panel, ObservableObject {
         let newLineNumbers = file.hunks.flatMap { $0.lines.compactMap(\.newLineNumber) }
         guard let maxLine = newLineNumbers.max() else { return false }
         return endLine <= maxLine
+    }
+
+    // MARK: - Merge readiness
+
+    /// Prefers the reviewed surface's own pull request, else the first one the sidebar shows.
+    private var workspacePullRequest: SidebarPullRequestState? {
+        guard let workspace = Workspace.workspaceOwning(surfaceId: sourceSurfaceId) else { return nil }
+        let pullRequests = workspace.sidebarPullRequestsInDisplayOrder()
+        if let own = workspace.panelPullRequests[sourceSurfaceId],
+           let match = pullRequests.first(where: { $0.url == own.url }) {
+            return match
+        }
+        return pullRequests.first
+    }
+
+    /// Fetches PR state, checks and unresolved review threads with `gh` off-main. Runs only on
+    /// explicit requests (panel shown, refresh button), never on a timer or an agent turn edge.
+    func refreshMergeReadiness() {
+        mergeReadinessGeneration &+= 1
+        let generation = mergeReadinessGeneration
+        guard let pullRequest = workspacePullRequest,
+              ReviewMergeReadinessProber.coordinates(from: pullRequest.url) != nil else {
+            mergeReadiness = nil
+            isRefreshingMergeReadiness = false
+            return
+        }
+        let number = pullRequest.number
+        let url = pullRequest.url
+        if mergeReadiness?.url != url {
+            mergeReadiness = ReviewMergeReadinessState(number: number, url: url, result: nil)
+        }
+        isRefreshingMergeReadiness = true
+        let directory = directory
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = ReviewMergeReadinessProber.fetch(pullRequestURL: url, directory: directory)
+            DispatchQueue.main.async {
+                guard let self, self.mergeReadinessGeneration == generation else { return }
+                self.isRefreshingMergeReadiness = false
+                self.mergeReadiness = ReviewMergeReadinessState(number: number, url: url, result: result)
+            }
+        }
     }
 
     // MARK: - Checkpoints
