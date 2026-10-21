@@ -342,7 +342,8 @@ extension Workspace {
             ttyName: ttyName,
             terminal: terminalSnapshot,
             markdown: markdownSnapshot,
-            review: reviewSnapshot
+            review: reviewSnapshot,
+            agentResume: panel.panelType == .terminal ? AgentResumeStore.shared.target(panelId: panelId) : nil
         )
     }
 
@@ -742,6 +743,10 @@ extension Workspace {
         }
 
         surfaceListeningPorts[panelId] = Array(Set(snapshot.listeningPorts)).sorted()
+
+        if snapshot.type == .terminal, let agentResume = snapshot.agentResume {
+            AgentResumeStore.shared.restore(agentResume, panelId: panelId)
+        }
 
         if let ttyName = normalizedSidebarTTYName(snapshot.ttyName) {
             _ = setSidebarTTYName(panelId: panelId, ttyName: ttyName)

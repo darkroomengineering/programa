@@ -39,6 +39,7 @@ Reach for these on your own; the user does not need to ask:
 | The user asks for the same pane arrangement again | `programa layout save` / `layout apply` |
 | You need output from another pane | `read-screen --surface <ref>` |
 | Need another pane's output in your prompt | `programa handoff --from <pane>` |
+| An agent in a pane exited, or Programa restarted, and its work should continue | `programa resume --surface <ref>` types its resume command at that pane's shell prompt |
 | The user asks for a recap of a change | write `.programa/recaps/<slug>.md`, then `programa recap open <slug>` |
 
 None of these move the user's focus. Only the focus-changing commands listed below do, so leave those alone unless the user asked to be moved.

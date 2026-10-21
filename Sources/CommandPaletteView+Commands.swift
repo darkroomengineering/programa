@@ -644,6 +644,15 @@ extension CommandPaletteView {
                 keywords: ["agent", "overview", "attention", "helper", "status"]
             )
         )
+        contributions.append(
+            CommandPaletteCommandContribution(
+                commandId: "palette.resumeAgentSession",
+                title: constant(String(localized: "command.resumeAgentSession.title", defaultValue: "Resume Agent Session")),
+                subtitle: terminalPanelSubtitle,
+                keywords: ["agent", "resume", "session", "claude", "codex", "restore"],
+                when: { $0.bool(CommandPaletteContextKeys.panelCanResumeAgent) }
+            )
+        )
 
         let programaConfigDefaultSubtitle = constant(String(localized: "command.programaConfig.subtitle", defaultValue: "programa.json"))
         for command in programaConfigStore.loadedCommands {
@@ -707,6 +716,20 @@ extension CommandPaletteView {
             guard let workspace = tabManager.selectedWorkspace,
                   let focusedPanelId = workspace.focusedPanelId else { return }
             _ = workspace.newReviewSplit(from: focusedPanelId, orientation: .horizontal, focus: true)
+        }
+        registry.register(commandId: "palette.resumeAgentSession") {
+            // Re-checked here: the agent may have started since the palette opened.
+            guard let context = Self.focusedPanelContext(in: tabManager),
+                  let terminalPanel = context.panel as? TerminalPanel,
+                  context.workspace.panelAgentPresence[context.panelId] == nil,
+                  let target = AgentResumeStore.shared.target(panelId: context.panelId),
+                  let line = AgentResumeCommand.line(
+                    for: target, paneDirectory: context.workspace.panelDirectories[context.panelId]
+                  ) else {
+                NSSound.beep()
+                return
+            }
+            terminalPanel.sendInput(line + "\r")
         }
         registry.register(commandId: "palette.newClaudeWorkspace") {
             let trimmedCwd = tabManager.selectedWorkspace?.currentDirectory

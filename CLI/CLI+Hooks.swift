@@ -708,6 +708,7 @@ extension ProgramaCLI {
             }
             consumed = try? ctx.store.consume(sessionId: sessionId, workspaceId: workspaceId, surfaceId: surfaceId)
         }
+        recordEndedAgentSession(provider: hook.provider, sessionId: sessionId, consumed: consumed, cwd: ctx.parsed.cwd, workspaceId: localWorkspaceId, surfaceId: localSurfaceId)
 
         if let consumed, !consumed.surfaceId.isEmpty {
             clearAgentStateAndReportEvent(client: ctx.client, provider: hook.provider, eventType: "session.exited", workspaceId: consumed.workspaceId, surfaceId: consumed.surfaceId, sessionId: sessionId)
@@ -2776,6 +2777,8 @@ extension ProgramaCLI {
     | Waiting on another agent | `wait-surface --agent-state idle` or `prompt-agent` |
     | The user asks for the same pane arrangement again | `programa layout save` / `layout apply` |
     | You need output from another pane | `read-screen --surface <ref>` |
+    | Need another pane's output in your prompt | `programa handoff --from <pane>` |
+    | An agent in a pane exited, or Programa restarted, and its work should continue | `programa resume --surface <ref>` types its resume command at that pane's shell prompt |
     | The user asks for a recap of a change | write `.programa/recaps/<slug>.md`, then `programa recap open <slug>` |
 
     None of these move the user's focus. Only the focus-changing commands listed below do, so leave those alone unless the user asked to be moved.
@@ -2851,6 +2854,15 @@ extension ProgramaCLI {
     ```
 
     Treat a single read as a snapshot, not a completion signal — use `wait-surface` (below) to know when something finishes.
+
+    `handoff` pastes a pane's last lines into a prompt as context, headed `Context from <pane>:`. It arrives as one paste and Return is never pressed, so the text waits as a draft:
+
+    ```bash
+    programa handoff --from "$handle"                                  # last 200 lines into your own pane
+    programa handoff --from "$handle" --to surface:4 --lines 50 --note "Why does this fail?"
+    ```
+
+    `--lines` defaults to 200 (max 1000) and `--to` to `$PROGRAMA_SURFACE_ID`; `--from` must be a different pane than the target.
 
     ## Parallel or conflicting work: worktrees
 
