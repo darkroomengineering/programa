@@ -2957,6 +2957,8 @@ extension ProgramaCLI {
 
     `review open` reviews the terminal given by `--surface`, or the focused terminal of the target workspace. `--mode` is `uncommitted` (default) or `branch`; `--base-branch` defaults to `origin/main`. Pass the same `--workspace`/`--surface` to `comment` and `send` so they reach the same panel. `review refresh` reloads the diff after more edits.
 
+    Programa checkpoints the repo's files at the start of every agent turn (`refs/programa/checkpoints/...`); the user can revert a turn's file changes from the review panel, which does not rewind your conversation, so re-read files after a revert.
+
     ## Layouts
 
     ```bash
