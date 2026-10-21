@@ -50,8 +50,7 @@ def make_executable(path: Path, text: str) -> None:
 
 class Sandbox:
     def __init__(self, root: str, with_mcp_binary: bool = True, with_codex: bool = True) -> None:
-        # /tmp is a symlink on macOS; the CLI registers the path it was run from.
-        self.root = Path(os.path.realpath(root))
+        self.root = Path(root)
         self.home = self.root / "home"
         self.codex_home = self.home / ".codex"
         self.codex_home.mkdir(parents=True)
@@ -113,7 +112,7 @@ class CodexMCPRegistrationTests(unittest.TestCase):
 
     def test_install_registers_and_uninstall_removes(self) -> None:
         box = Sandbox(self.tmp.name)
-        expected = os.path.realpath(box.mcp_binary)
+        expected = str(box.mcp_binary)
         self.assertOK(box.run("install-integration"))
         self.assertEqual(box.registered_command(), expected)
         self.assertEqual(box.mutating_calls(), [f"mcp add programa -- {expected}"])
@@ -129,7 +128,7 @@ class CodexMCPRegistrationTests(unittest.TestCase):
         box = Sandbox(self.tmp.name)
         box.register("/Applications/Old Programa.app/Contents/Resources/bin/programa-mcp")
         self.assertOK(box.run("install-integration"))
-        self.assertEqual(box.registered_command(), os.path.realpath(box.mcp_binary))
+        self.assertEqual(box.registered_command(), str(box.mcp_binary))
 
     def test_foreign_programa_server_is_left_alone(self) -> None:
         box = Sandbox(self.tmp.name)
