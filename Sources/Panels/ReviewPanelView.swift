@@ -274,6 +274,7 @@ struct ReviewPanelView: View {
             }
             Button {
                 panel.refresh()
+                panel.refreshMergeReadiness()
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
