@@ -574,8 +574,9 @@ struct ProgramaCLI {
                 without asking; without it a non-interactive stdin exits 1 unchanged.
 
                 Install or remove Programa's Codex notification hooks in
-                ~/.codex/hooks.json (or $CODEX_HOME/hooks.json), and the
-                `programa` agent skill (SKILL.md) into ~/.agents/skills/programa/.
+                ~/.codex/hooks.json (or $CODEX_HOME/hooks.json), the
+                `programa` agent skill (SKILL.md) into ~/.agents/skills/programa/,
+                and the bundled programa-mcp server (via `codex mcp add programa`).
                 """,
                 execute: nil
             ),

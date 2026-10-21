@@ -638,6 +638,7 @@ jobs:
           result=0
           for t in \
             tests/test_cli_noninteractive_install_regression.py \
+            tests/test_cli_codex_mcp_registration.py \
             tests/test_cli_themes.py \
             tests/test_cli_socket_no_autodiscovery_regression.py \
             tests/test_cli_wait_surface_agent_state.py \
