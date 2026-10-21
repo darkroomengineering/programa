@@ -54,16 +54,21 @@ struct CodexMCPRegistrationPlan: Equatable {
 extension ProgramaCLI {
     func codexMCPRegistrationPlan(install: Bool) -> CodexMCPRegistrationPlan {
         let codexExecutable = resolveCodexExecutable(searchPath: ProcessInfo.processInfo.environment["PATH"])
-        let mcpBinary = resolvedExecutableURL()?
-            .deletingLastPathComponent()
-            .appendingPathComponent(CodexMCPRegistrationPlan.binaryName, isDirectory: false)
-            .path
         return CodexMCPRegistrationPlan.build(
             install: install,
             codexExecutable: codexExecutable,
-            mcpBinary: mcpBinary.flatMap { FileManager.default.isExecutableFile(atPath: $0) ? $0 : nil },
+            mcpBinary: bundledMCPBinaryPath(),
             registeredCommand: codexExecutable.flatMap { codexRegisteredMCPCommand(codexExecutable: $0) }
         )
+    }
+
+    /// The executable `programa-mcp` next to this CLI, or nil when there is none.
+    func bundledMCPBinaryPath() -> String? {
+        let path = resolvedExecutableURL()?
+            .deletingLastPathComponent()
+            .appendingPathComponent(CodexMCPRegistrationPlan.binaryName, isDirectory: false)
+            .path
+        return path.flatMap { FileManager.default.isExecutableFile(atPath: $0) ? $0 : nil }
     }
 
     private func codexRegisteredMCPCommand(codexExecutable: String) -> String? {

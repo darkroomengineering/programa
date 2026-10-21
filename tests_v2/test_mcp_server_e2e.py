@@ -55,7 +55,7 @@ MCP_PROTOCOL_VERSION = "2025-11-25"
 # Hardcoded and asserted for exact equality against the LIVE `tools/list` response below -- this
 # is what makes a silently dropped/renamed tool fail the build instead of "some tools present".
 EXPECTED_TOOL_NAMES = {
-    "agent_spawn", "agent_task_start", "agent_task_update", "agent_task_finish", "agent_task_finish_session",
+    "agent_needs_input", "agent_spawn", "agent_task_start", "agent_task_update", "agent_task_finish", "agent_task_finish_session",
     "agent_task_list",
     "focus_pane", "focus_pane_last", "focus_review_open", "focus_surface", "focus_window",
     "focus_workspace_last", "focus_workspace_next", "focus_workspace_previous", "focus_workspace_select", "focus_worktree_open",
@@ -68,7 +68,7 @@ EXPECTED_TOOL_NAMES = {
     "surface_current", "surface_health", "surface_list", "surface_move", "surface_ports_kick",
     "surface_read_text", "surface_refresh", "surface_reorder", "surface_report_agent_state", "surface_report_git_branch",
     "surface_report_ports", "surface_report_pr", "surface_report_pwd", "surface_report_shell_state", "surface_report_tty",
-    "surface_send_key", "surface_send_text", "surface_split", "surface_trigger_flash", "surface_wait",
+    "surface_send_key", "surface_send_paste", "surface_send_text", "surface_split", "surface_trigger_flash", "surface_wait",
     "system_capabilities", "system_identify", "system_ping", "system_tree", "tab_action",
     "window_close", "window_create", "window_current", "window_list", "workspace_action",
     "workspace_clear_agent_pid", "workspace_clear_log", "workspace_clear_meta_block", "workspace_clear_progress", "workspace_clear_status",

@@ -74,8 +74,11 @@ extension ProgramaCLI {
             Subcommands:
               install-integration     Install programa's plugin into ~/.config/opencode/plugins/programa.js,
                                        plus the agent skill into ~/.config/opencode/skills/programa/
+                                       and the programa-mcp server (mcp.programa in opencode.json)
               uninstall-integration   Remove programa's plugin (refuses if you've customized the file),
                                        plus the agent skill if programa-managed
+                                       and the MCP server if it runs programa-mcp
+            The OpenCode MCP registration is untested against a live OpenCode.
             """
         case "opencode-hook":
             return """

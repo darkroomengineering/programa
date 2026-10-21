@@ -137,6 +137,25 @@ enum WorkspaceTools {
             ])
         ),
         ProgramaTool(
+            name: "agent_needs_input",
+            socketMethod: V2MethodNames.agentNeedsInput,
+            description: "Tells the user an agent is blocked on their input: marks the surface blocked and posts the matching notification in one call. Use it for a blocking question from a tool without Programa hooks; surface_report_agent_state with blocked only sets the badge.",
+            inputSchema: ProgramaToolSchema.object(
+                properties: [
+                    "workspace_id": ProgramaToolSchema.string("Workspace UUID or short ref, usually PROGRAMA_WORKSPACE_ID."),
+                    "surface_id": ProgramaToolSchema.string("Surface UUID or short ref of the blocked agent, usually PROGRAMA_SURFACE_ID."),
+                    "provider": ProgramaToolSchema.string("Agent name, such as claude, codex or opencode. Defaults to unknown."),
+                    "title": ProgramaToolSchema.string("Notification title. The pane's custom title, if it has one, is appended."),
+                    "subtitle": ProgramaToolSchema.string("Notification subtitle."),
+                    "body": ProgramaToolSchema.string("Notification body, usually the question for the user."),
+                    "session_id": ProgramaToolSchema.string("Optional agent session identifier."),
+                    "pid": ProgramaToolSchema.integer("Optional agent process id, a positive integer."),
+                    "kind": ProgramaToolSchema.stringEnum("What the agent is waiting for.", ["permission", "question"]),
+                ],
+                required: ["workspace_id", "surface_id"]
+            )
+        ),
+        ProgramaTool(
             name: "workspace_current",
             socketMethod: V2MethodNames.workspaceCurrent,
             description: "Returns the currently selected workspace in a window, with its full summary.",
