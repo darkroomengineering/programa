@@ -7,6 +7,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 ## [Unreleased]
 
 ### Added
+- Start work from a GitHub issue: `programa worktree create --from-issue 42` reads the issue with `gh`, names the branch after it and opens the worktree as a workspace. Add `--agent claude` (or `codex`, `opencode`) to start that agent on the issue right away.
 - `programa opencode install-integration` registers the `programa-mcp` server in OpenCode's global `opencode.json`, so OpenCode agents get the Programa MCP tools. It leaves a customized entry and JSONC configs alone, and is untested against a live OpenCode.
 - The `programa-mcp` server has `surface_send_paste` and `agent_needs_input` tools, so an agent can hand text to another pane without pressing Return and ask the user a blocking question without shelling out to `programa rpc`.
 - Scripts can reply to a terminal prompt without the risk of it landing on a newer prompt: the new `surface.send_if_unchanged` socket method sends text and keys only while the screen still matches the `fingerprint` that `surface.read_text` now returns. `programa watch-events --needs-input` prints only agents waiting for the user.
