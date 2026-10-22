@@ -647,6 +647,7 @@ jobs:
             tests/test_cli_agent_resume.py \
             tests/test_cli_agent_usage.py \
             tests/test_cli_worktree_from_issue.py \
+            tests/test_cli_race_agent_launch.py \
             tests/test_shell_state_report_ordering.py; do
             PROGRAMA_CLI_BIN="$CLI_BIN" python3 "$t" || result=1
           done
