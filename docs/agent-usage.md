@@ -45,8 +45,9 @@ Programa as `transcript_path`, next to `session_id` and `cwd`.
   - Each usage object has `input_tokens`, `cached_input_tokens`, `cache_write_input_tokens`,
     `output_tokens`, `reasoning_output_tokens` and `total_tokens`.
 - **Field meaning:** `input_tokens` includes `cached_input_tokens`, and `total_tokens` equals
-  `input_tokens + output_tokens`. `output_tokens` includes `reasoning_output_tokens`. Whether
-  `input_tokens` also includes `cache_write_input_tokens` is not visible in the data.
+  `input_tokens + output_tokens`. `output_tokens` includes `reasoning_output_tokens`.
+  `cache_write_input_tokens` is 0 in every record observed, so whether `input_tokens` also
+  includes it is not visible in the data.
 - **Dedupe:** count each `token_usage_record` `response_id` once. `token_count` events repeat
   (the same running total is often emitted twice) and the running total can drop after a
   resume, so summing `last_token_usage` double-counts and the last `total_token_usage` can
@@ -67,3 +68,37 @@ after their last update. `session-end` removes the live record and adds the sess
 `~/.programa/agent-last-sessions.json`, which keeps at most one ended session per pane and per
 directory, 50 entries, for 7 days. Ended sessions that a newer one replaced are no longer known.
 OpenCode hooks pass no transcript, so OpenCode sessions have no token counts.
+
+## `programa usage`
+
+```sh
+programa usage                          # every workspace
+programa usage --workspace workspace:2  # one workspace
+programa usage --json
+```
+
+`usage` lists the Claude Code and Codex sessions in the hook stores above, grouped by workspace,
+with four token counts per session and a total per workspace:
+
+| Column | Claude Code | Codex |
+|---|---|---|
+| input | `input_tokens` | `input_tokens - cached_input_tokens` |
+| output | `output_tokens` | `output_tokens` (includes reasoning) |
+| cache read | `cache_read_input_tokens` | `cached_input_tokens` |
+| cache write | `cache_creation_input_tokens` | `cache_write_input_tokens` |
+
+- Counts are read from the transcripts each time the command runs, one line at a time. Nothing
+  runs in the background, and the sidebar does not show them.
+- Claude Code counts include the session's subagent transcripts and exclude advisor-model
+  iterations.
+- A session recorded without a transcript path is looked up by id under `$CLAUDE_CONFIG_DIR`
+  (default `~/.claude`) or `$CODEX_HOME` (default `~/.codex`).
+- Sessions whose transcript is missing or unreadable are skipped. The text output ends with how
+  many; `--json` lists them under `skipped`.
+- A workspace that is no longer open is shown by its id, marked closed.
+- There is no cost column: neither agent records a cost per session, and Programa does not keep
+  a price table.
+- Each session's state is `live` (still in a live hook store) or `ended`.
+- In `--json`, each workspace has `id`, `ref`, `title`, `open`, `sessions[]` (`provider`,
+  `session_id`, `state`, `tokens`) and `tokens`; the top level has `tokens` for all workspaces
+  and `skipped`.

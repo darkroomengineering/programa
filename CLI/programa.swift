@@ -1261,7 +1261,7 @@ struct ProgramaCLI {
 
             ]
         descriptors += self.treeDescriptors()
-        descriptors += self.portsDescriptors() + self.resumeDescriptors()
+        descriptors += self.portsDescriptors() + self.resumeDescriptors() + self.usageDescriptors()
         descriptors += self.handoffDescriptors()
         descriptors += [
 
