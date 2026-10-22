@@ -1,6 +1,6 @@
 import SwiftUI
 
-extension ContentView {
+extension CommandPaletteView {
     enum CommandPaletteMode {
         case commands
         case renameInput(CommandPaletteRenameTarget)
@@ -160,7 +160,7 @@ extension ContentView {
         }
 
         func fingerprint() -> Int {
-            ContentView.commandPaletteContextFingerprint(
+            CommandPaletteView.commandPaletteContextFingerprint(
                 boolValues: boolValues,
                 stringValues: stringValues
             )
@@ -189,6 +189,7 @@ extension ContentView {
         static let hasFocusedPanel = "panel.hasFocus"
         static let panelName = "panel.name"
         static let panelIsTerminal = "panel.isTerminal"
+        static let panelCanResumeAgent = "panel.canResumeAgent"
         static let panelHasCustomName = "panel.hasCustomName"
         static let panelShouldPin = "panel.shouldPin"
         static let panelHasUnread = "panel.hasUnread"

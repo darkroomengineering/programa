@@ -7,6 +7,13 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 ## [Unreleased]
 
 ### Added
+- `programa usage` shows how many tokens each Claude Code and Codex session used, grouped by workspace, read from the agents' own transcripts. It shows no cost, because the transcripts don't record one per session. See `docs/agent-usage.md`.
+- Start work from a GitHub issue: `programa worktree create --from-issue 42` reads the issue with `gh`, names the branch after it and opens the worktree as a workspace. Add `--agent claude` (or `codex`, `opencode`) to start that agent on the issue right away.
+- The review panel shows whether the workspace's pull request is ready to merge: its state, which checks are failing or still running, how many review conversations are unresolved, and whether merge conflicts or a missing review block it, with a link to the PR. It reads from the GitHub CLI (`gh`) when the panel opens or you press its refresh button.
+- `programa opencode install-integration` registers the `programa-mcp` server in OpenCode's global `opencode.json`, so OpenCode agents get the Programa MCP tools. It leaves a customized entry and JSONC configs alone, and is untested against a live OpenCode.
+- The `programa-mcp` server has `surface_send_paste` and `agent_needs_input` tools, so an agent can hand text to another pane without pressing Return and ask the user a blocking question without shelling out to `programa rpc`.
+- Scripts can reply to a terminal prompt without the risk of it landing on a newer prompt: the new `surface.send_if_unchanged` socket method sends text and keys only while the screen still matches the `fingerprint` that `surface.read_text` now returns. `programa watch-events --needs-input` prints only agents waiting for the user.
+- Paste another pane's recent output into the current pane's prompt as context, without submitting it, so you can keep typing. Use "Paste Context From Pane…" in the command palette or `programa handoff --from <pane>`; the new `surface.send_paste` socket method pastes text without pressing Return.
 - Programs can report their status to Programa with the OSC 7501 Program Status Protocol. The sidebar shows working, blocked, done and error, an unfocused terminal gets a notification when a program finishes, fails or needs input, and `surface.list`, `system.tree` and `surface.wait` (`program_state`) expose it without ever returning the message text. Programa's own agent hooks emit it too, and it outranks hook and screen-detected state. See `docs/program-status.md`.
 - A ports button in the sidebar footer shows what is listening on a port in each workspace, plus dev servers left running after their terminal closed, with Open, Copy URL, Reveal and Stop. `programa list-ports` and `programa stop-port` and the `ports.list` and `ports.stop` socket methods do the same from the command line.
 - New `agent.needs_input` socket method reports a surface as blocked on the user and posts its notification in one call, instead of three separate calls that could fail independently.
@@ -25,7 +32,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - Every trusted `programa.json` asks for approval once more after updating. Trust is now recorded per config file, and the dialog says so when a config was trusted before that change.
 - `programa claude`, `codex` and `opencode` `install-integration` run without a terminal now need `--yes`.
 - The CLI no longer connects to a dev, staging or tagged app's socket on its own. Point it at one with `--socket` or `PROGRAMA_SOCKET_PATH`.
-- A program that writes to the clipboard with OSC 52 asks before the clipboard changes, showing a preview of the text. "Always allow for this terminal" stops the prompt for that terminal until it closes; a `clipboard-write` setting in your config still wins.
+- With `clipboard-write = ask` in your config, the prompt before an OSC 52 clipboard write shows a preview of the text, and "Always allow until this terminal closes" stops it for that terminal.
 - Socket errors are consistent: a reference that does not resolve returns `not_found` (a malformed one stays `invalid_params`), splitting a workspace that already has four panes returns `limit_reached` before anything is created, and closing a window's last workspace returns `invalid_state`.
 - `surface.send_text` and `agent.prompt` report `"queued": true` when the text waits for a terminal that is not attached yet. `surface.wait` resolves with `"outcome": "closed"` when its surface closes and caps `timeout_ms` at one hour.
 - A workspace's `agent_state` counts only helpers that are still running; finished helpers are counted in the new `helper_outcomes` field of `workspace.list` and `system.tree`.
@@ -45,6 +52,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - The `programa omo`, `omx` and `omc` wrappers for oh-my-openagent, Oh My Codex and Oh My Claude Code. The `programa claude`, `codex` and `opencode` integrations are unchanged. See `docs/removed/omo-omx-omc-wrappers.md` to restore them.
 
 ### Fixed
+- `programa handoff` pastes into a pane whose terminal has not started yet instead of failing.
 - With dozens of tabs in a pane, each tab keeps a width that shows its title instead of shrinking to one letter. The tab bar scrolls with a regular mouse wheel and keeps the selected tab in view.
 - Renaming a tab, or a program changing its title, updates the tab bar right away.
 - Launching a second build of Programa no longer cuts the running app's command line tool and agent hooks off. The new copy used to delete the running app's socket and take it over.

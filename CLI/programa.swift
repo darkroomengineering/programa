@@ -22,179 +22,6 @@ enum CLIIDFormat: String {
     }
 }
 
-enum SocketPasswordResolver {
-    private static let service = "com.darkroom.programa.socket-control"
-    private static let account = "local-socket-password"
-    private static let directoryName = "programa"
-    private static let fileName = "socket-control-password"
-
-    static func resolve(explicit: String?, socketPath: String) -> String? {
-        if let explicit = normalized(explicit) {
-            return explicit
-        }
-        if let env = normalized(ProcessInfo.processInfo.environment["PROGRAMA_SOCKET_PASSWORD"]) {
-            return env
-        }
-        if let filePassword = loadFromFile() {
-            return filePassword
-        }
-        return loadFromKeychain(socketPath: socketPath)
-    }
-
-    private static func normalized(_ value: String?) -> String? {
-        guard let value else { return nil }
-        let trimmed = value.trimmingCharacters(in: .newlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
-    private static func loadFromFile() -> String? {
-        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-            return nil
-        }
-        let passwordURL = appSupport
-            .appendingPathComponent(directoryName, isDirectory: true)
-            .appendingPathComponent(fileName, isDirectory: false)
-
-        var pathStat = stat()
-        guard lstat(passwordURL.path, &pathStat) == 0,
-              (pathStat.st_mode & S_IFMT) == S_IFREG,
-              pathStat.st_uid == geteuid(),
-              (pathStat.st_mode & 0o077) == 0,
-              pathStat.st_size >= 0,
-              pathStat.st_size <= 64 * 1024 else {
-            return nil
-        }
-
-        let descriptor = open(passwordURL.path, O_RDONLY | O_NOFOLLOW)
-        guard descriptor >= 0 else { return nil }
-        defer { close(descriptor) }
-
-        var openedStat = stat()
-        guard fstat(descriptor, &openedStat) == 0,
-              (openedStat.st_mode & S_IFMT) == S_IFREG,
-              openedStat.st_uid == geteuid(),
-              (openedStat.st_mode & 0o077) == 0,
-              openedStat.st_dev == pathStat.st_dev,
-              openedStat.st_ino == pathStat.st_ino,
-              openedStat.st_size >= 0,
-              openedStat.st_size <= 64 * 1024 else {
-            return nil
-        }
-
-        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: false)
-        let data = handle.readDataToEndOfFile()
-        guard let value = String(data: data, encoding: .utf8) else {
-            return nil
-        }
-        return normalized(value)
-    }
-
-    static func keychainServices(
-        socketPath: String,
-        environment: [String: String] = ProcessInfo.processInfo.environment
-    ) -> [String] {
-        guard let scope = keychainScope(socketPath: socketPath, environment: environment) else {
-            return [service]
-        }
-        return ["\(service).\(scope)", service]
-    }
-
-    private static func keychainScope(
-        socketPath: String,
-        environment: [String: String] = ProcessInfo.processInfo.environment
-    ) -> String? {
-        if let tag = normalized(environment["PROGRAMA_TAG"]) {
-            let scoped = sanitizeScope(tag)
-            if !scoped.isEmpty {
-                return scoped
-            }
-        }
-
-        let candidate = URL(fileURLWithPath: socketPath).lastPathComponent
-        let prefixes = ["programa-debug-", "programa-"]
-        for prefix in prefixes {
-            guard candidate.hasPrefix(prefix), candidate.hasSuffix(".sock") else { continue }
-            let start = candidate.index(candidate.startIndex, offsetBy: prefix.count)
-            let end = candidate.index(candidate.endIndex, offsetBy: -".sock".count)
-            guard start < end else { continue }
-            let rawScope = String(candidate[start..<end])
-            let scoped = sanitizeScope(rawScope)
-            if !scoped.isEmpty {
-                return scoped
-            }
-        }
-        return nil
-    }
-
-    private static func sanitizeScope(_ raw: String) -> String {
-        let lowered = raw.lowercased()
-        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: ".-"))
-        let mappedScalars = lowered.unicodeScalars.map { scalar -> Character in
-            allowed.contains(scalar) ? Character(scalar) : "."
-        }
-        var normalizedScope = String(mappedScalars)
-        normalizedScope = normalizedScope.replacingOccurrences(
-            of: "\\.+",
-            with: ".",
-            options: .regularExpression
-        )
-        normalizedScope = normalizedScope.trimmingCharacters(in: CharacterSet(charactersIn: "."))
-        return normalizedScope
-    }
-
-    /// The app keeps its password in the file above; the Keychain only holds a legacy copy.
-    /// A scan that found nothing is remembered by a marker that stays valid until the login
-    /// keychain changes, so calls without a password skip the Keychain query.
-    private static func keychainEmptyMarkerPath(socketPath: String) -> String? {
-        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return nil }
-        let scope = keychainScope(socketPath: socketPath) ?? "default"
-        return appSupport.appendingPathComponent(directoryName, isDirectory: true).appendingPathComponent(".socket-keychain-empty-\(scope)").path
-    }
-
-    private static func modificationTime(_ path: String) -> Int? {
-        var info = stat()
-        return lstat(path, &info) == 0 ? Int(info.st_mtimespec.tv_sec) : nil
-    }
-
-    private static func loadFromKeychain(socketPath: String) -> String? {
-        let marker = keychainEmptyMarkerPath(socketPath: socketPath)
-        let keychainModified = modificationTime(NSHomeDirectory() + "/Library/Keychains/login.keychain-db")
-        if let marker, let keychainModified, let markerModified = modificationTime(marker), markerModified > keychainModified {
-            return nil
-        }
-        var everyServiceMissing = true
-        for service in keychainServices(socketPath: socketPath) {
-            let authContext = LAContext()
-            authContext.interactionNotAllowed = true
-            let query: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword,
-                kSecAttrService as String: service,
-                kSecAttrAccount as String: account,
-                kSecReturnData as String: true,
-                kSecMatchLimit as String: kSecMatchLimitOne,
-                // Never trigger keychain UI from CLI commands; fail fast instead.
-                kSecUseAuthenticationContext as String: authContext,
-            ]
-            var result: CFTypeRef?
-            let status = SecItemCopyMatching(query as CFDictionary, &result)
-            guard status == errSecSuccess else {
-                // A locked or denied item is not proof of absence; only remember clean misses.
-                everyServiceMissing = everyServiceMissing && status == errSecItemNotFound
-                continue
-            }
-            guard let data = result as? Data,
-                  let password = String(data: data, encoding: .utf8) else {
-                continue
-            }
-            return password
-        }
-        if everyServiceMissing, keychainModified != nil, let marker {
-            FileManager.default.createFile(atPath: marker, contents: nil, attributes: [.posixPermissions: 0o600])
-        }
-        return nil
-    }
-}
-
 // CLISocketPathSource / CLISocketPathResolver live in
 // `CLI/SocketPathResolution.swift`, shared with the MCP sidecar
 // (`CLI-MCP/MCPSocketBridge.swift`).
@@ -250,11 +77,15 @@ enum CLIProcessRunner {
         executablePath: String,
         arguments: [String],
         stdinText: String? = nil,
-        timeout: TimeInterval? = nil
+        timeout: TimeInterval? = nil,
+        currentDirectoryPath: String? = nil
     ) -> CLIProcessResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = arguments
+        if let currentDirectoryPath {
+            process.currentDirectoryURL = URL(fileURLWithPath: currentDirectoryPath, isDirectory: true)
+        }
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
@@ -574,8 +405,9 @@ struct ProgramaCLI {
                 without asking; without it a non-interactive stdin exits 1 unchanged.
 
                 Install or remove Programa's Codex notification hooks in
-                ~/.codex/hooks.json (or $CODEX_HOME/hooks.json), and the
-                `programa` agent skill (SKILL.md) into ~/.agents/skills/programa/.
+                ~/.codex/hooks.json (or $CODEX_HOME/hooks.json), the
+                `programa` agent skill (SKILL.md) into ~/.agents/skills/programa/,
+                and the bundled programa-mcp server (via `codex mcp add programa`).
                 """,
                 execute: nil
             ),
@@ -607,9 +439,12 @@ struct ProgramaCLI {
                 Install or remove Programa's OpenCode plugin in
                 ~/.config/opencode/plugins/programa.js (or $OPENCODE_CONFIG_DIR/plugins/programa.js),
                 and the `programa` agent skill (SKILL.md) into
-                ~/.config/opencode/skills/programa/ (or $OPENCODE_CONFIG_DIR/skills/programa/).
-                OpenCode auto-loads local plugin files, so no opencode.json edit or
-                npm install is needed.
+                ~/.config/opencode/skills/programa/ (or $OPENCODE_CONFIG_DIR/skills/programa/),
+                and the bundled programa-mcp server as `mcp.programa` in
+                ~/.config/opencode/opencode.json (or $OPENCODE_CONFIG_DIR/opencode.json).
+                A JSONC config is never rewritten; the command prints the entry to add.
+                OpenCode auto-loads local plugin files, so no npm install is needed.
+                The MCP registration is untested against a live OpenCode.
                 --yes (-y) applies without asking; without it a non-interactive
                 stdin exits 1 unchanged.
                 """,
@@ -1003,6 +838,15 @@ struct ProgramaCLI {
                       layout (see 'programa layout') into the new workspace. --focus opts in to
                       focusing the new workspace (default: does not steal focus).
 
+                  create [<branch>] --from-issue <number> [--agent <name>] [create flags]
+                      Read GitHub issue <number> with 'gh issue view' (run in the repo, so gh
+                      must be installed and logged in) and create the worktree on branch
+                      issue-<number>-<title-slug>. An explicit <branch> wins over the derived
+                      name. --agent (claude, opencode, or codex) then starts that agent in the
+                      new workspace, pointed at a temp file holding the issue title, link and
+                      body; the issue text is never typed into the shell. Prompt files are
+                      kept in $TMPDIR/programa-issue-prompts for 7 days.
+
                   open <path-or-branch> [--repo <dir>] [--focus]
                   open --all [--repo <dir>]
                       Open an existing worktree (by path or branch name) as a workspace.
@@ -1025,6 +869,9 @@ struct ProgramaCLI {
                                      the worktrees.directory setting.
                   --layout <name>    Apply a saved layout (see 'programa layout') after creating
                                      the workspace (create only).
+                  --from-issue <n>   Name the branch after GitHub issue <n> (create only).
+                  --agent <name>     Start claude, opencode, or codex on the issue (needs
+                                     --from-issue).
                   --focus            Focus the workspace after create/open (default: off).
                   --all              Open every worktree of the repo (open only).
                   --force            Allow removing a worktree with uncommitted changes.
@@ -1032,6 +879,7 @@ struct ProgramaCLI {
                 Example:
                   programa worktree create feature-x
                   programa worktree create feature-x --base main --layout fullstack-dev
+                  programa worktree create --from-issue 42 --agent claude
                   programa worktree list --repo ~/code/programa
                   programa worktree open --all
                   programa worktree remove feature-x
@@ -1430,7 +1278,8 @@ struct ProgramaCLI {
 
             ]
         descriptors += self.treeDescriptors()
-        descriptors += self.portsDescriptors()
+        descriptors += self.portsDescriptors() + self.resumeDescriptors() + self.usageDescriptors()
+        descriptors += self.handoffDescriptors()
         descriptors += [
 
             CommandDescriptor(
@@ -2319,7 +2168,7 @@ struct ProgramaCLI {
 
             CommandDescriptor(
                 names: ["watch-events"],
-                helpLines: ["watch-events [--agent-state] [--workspace-lifecycle] [--output <surface_id[,surface_id...]>] [--no-reconnect]"],
+                helpLines: ["watch-events [--agent-state] [--workspace-lifecycle] [--needs-input] [--output <surface_id[,surface_id...]>] [--no-reconnect]"],
                 argumentContract: .watchEvents,
                 detailedUsage: """
                 Usage: programa watch-events [flags]
@@ -2331,9 +2180,11 @@ struct ProgramaCLI {
                 open indefinitely and prints one JSON event per line until interrupted
                 (Ctrl-C) or the process gives up reconnecting.
 
-                Flags (at least one of --agent-state/--workspace-lifecycle/--output required):
+                Flags (at least one of --agent-state/--workspace-lifecycle/--needs-input/--output required):
                   --agent-state                    Agent working/blocked/idle transitions
                   --workspace-lifecycle             Workspace created/closed/renamed
+                  --needs-input                     Agent prompts waiting for the user, with the
+                                                    prompt text (needs_input events)
                   --output <surface_id[,surface_id...]>
                                                     Coalesced output for specific surfaces
                                                     (not available for "all surfaces" -- see docs)
@@ -2356,16 +2207,19 @@ struct ProgramaCLI {
                   programa watch-events --agent-state
                   programa watch-events --output surface:2,surface:3
                   programa watch-events --agent-state --no-reconnect
+                  programa watch-events --needs-input
                 """,
                 execute: { ctx in
                     let agentState = self.hasFlag(ctx.commandArgs, name: "--agent-state")
                     let workspaceLifecycle = self.hasFlag(ctx.commandArgs, name: "--workspace-lifecycle")
+                    let needsInput = self.hasFlag(ctx.commandArgs, name: "--needs-input")
                     let noReconnect = self.hasFlag(ctx.commandArgs, name: "--no-reconnect")
                     let (outputArg, _) = self.parseOption(ctx.commandArgs, name: "--output")
 
                     var classes: [String] = []
                     if agentState { classes.append("agent_state") }
                     if workspaceLifecycle { classes.append("workspace_lifecycle") }
+                    if needsInput { classes.append("needs_input") }
 
                     var params: [String: Any] = [:]
                     if let outputArg {
@@ -4170,18 +4024,28 @@ struct ProgramaCLI {
         let (baseOpt, rem1) = parseOption(rem0, name: "--base")
         let (pathOpt, rem2) = parseOption(rem1, name: "--path")
         let (layoutOpt, rem3) = parseOption(rem2, name: "--layout")
-        let focus = hasFlag(rem3, name: "--focus")
-        var positional = rem3.filter { $0 != "--focus" }
+        let (issueOpt, rem4) = parseOption(rem3, name: "--from-issue")
+        let (agentOpt, rem5) = parseOption(rem4, name: "--agent")
+        let focus = hasFlag(rem5, name: "--focus")
+        var positional = rem5.filter { $0 != "--focus" }
 
-        guard let branch = positional.first, !branch.hasPrefix("--") else {
-            throw CLIError(message: "worktree create requires <branch>")
-        }
-        positional.removeFirst()
+        let explicitBranch = positional.first.flatMap { $0.hasPrefix("--") ? nil : $0 }
+        if explicitBranch != nil { positional.removeFirst() }
         if let unknown = positional.first(where: { $0.hasPrefix("--") }) {
             throw CLIError(message: "worktree create: unknown flag '\(unknown)'")
         }
+        let issueNumber = try issueOpt.map(parseWorktreeIssueNumber)
+        let agent = try agentOpt.map { try validateWorktreeIssueAgent($0, issueNumber: issueNumber) }
+        guard explicitBranch != nil || issueNumber != nil else {
+            throw CLIError(message: "worktree create requires <branch> (or --from-issue <number>)")
+        }
 
         let repo = try resolveWorktreeRepoRoot(explicit: repoOpt)
+        let issue = try issueNumber.map { try fetchGitHubIssue(number: $0, repo: repo) }
+        let promptFile = try agent != nil ? issue.map(writeWorktreeIssuePromptFile) : nil
+        guard let branch = explicitBranch ?? issue.map(worktreeIssueBranchName) else {
+            throw CLIError(message: "worktree create requires <branch>")
+        }
 
         var params: [String: Any] = ["repo": repo, "branch": branch]
         if let baseOpt { params["base"] = baseOpt }
@@ -4189,8 +4053,38 @@ struct ProgramaCLI {
         if let layoutOpt { params["layout"] = layoutOpt }
         if focus { params["focus"] = true }
 
-        let payload = try client.sendV2(method: V2MethodNames.worktreeCreate, params: params)
-        printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: worktreeSummary(payload, idFormat: idFormat))
+        var payload = try client.sendV2(method: V2MethodNames.worktreeCreate, params: params)
+        var summary = worktreeSummary(payload, idFormat: idFormat)
+        if let issue {
+            payload["issue"] = ["number": issue.number, "title": issue.title, "url": issue.url]
+            summary += " issue=#\(issue.number)"
+        }
+        var agentError: String?
+        if let agent, let issue, let promptFile {
+            payload["agent"] = agent
+            payload["prompt_file"] = promptFile
+            summary += " prompt_file=\(promptFile)"
+            do {
+                guard let workspaceId = payload["workspace_id"] as? String else {
+                    throw CLIError(message: "worktree.create did not return a workspace_id")
+                }
+                _ = try client.sendV2(method: V2MethodNames.surfaceSendText, params: [
+                    "workspace_id": workspaceId,
+                    "text": worktreeIssueAgentLaunchCommand(agent: agent, issueNumber: issue.number, promptFile: promptFile) + "\n"
+                ])
+                summary += " agent=\(agent)"
+            } catch {
+                let message = (error as? CLIError)?.message ?? "\(error)"
+                agentError = message
+                payload["agent_error"] = message
+            }
+        }
+        printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: summary)
+        if let agentError, let agent {
+            // Not a throw: in --json mode the top-level handler would print a second JSON object to stdout.
+            FileHandle.standardError.write(Data("Error: worktree create: the workspace was created, but starting \(agent) failed: \(agentError)\n".utf8))
+            exit(1)
+        }
     }
 
     private func runWorktreeOpen(
@@ -4406,7 +4300,7 @@ struct ProgramaCLI {
     /// screen-pattern detection (used for Gemini CLI/Copilot/Cursor Agent/Aider) cannot
     /// provide, so those are deliberately excluded here even though they're supported
     /// elsewhere in the app for status badges.
-    private static let raceSupportedAgents: [String] = ["claude", "opencode", "codex"]
+    static let raceSupportedAgents: [String] = ["claude", "opencode", "codex"]
 
     /// Builds the shell command line that starts an agent with `prompt` as a shell-quoted positional argument.
     private func raceAgentLaunchCommand(agent: String, prompt: String) -> String {
@@ -4418,7 +4312,7 @@ struct ProgramaCLI {
     /// quotes as '\'' (close quote, literal escaped quote, reopen quote) -- the standard
     /// technique, safe against every other shell metacharacter (double quotes, backticks, $,
     /// *, newlines, etc.) since nothing but a literal `'` is special inside single quotes.
-    private func shellSingleQuote(_ raw: String) -> String {
+    func shellSingleQuote(_ raw: String) -> String {
         "'" + raw.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
@@ -5233,13 +5127,22 @@ struct ProgramaCLI {
 
         case "worktree":
             let parsed = try parse(
-                values: ["repo", "base", "path", "layout"],
+                values: ["repo", "base", "path", "layout", "from-issue", "agent"],
                 booleans: ["focus", "force", "json", "all"],
                 minPositionals: 1,
                 maxPositionals: nil
             )
             guard ["create", "open", "remove", "list"].contains(parsed.positional[0].lowercased()) else {
                 throw CLIError(message: "worktree: unknown subcommand \(parsed.positional[0])")
+            }
+            if parsed.options["from-issue"] != nil || parsed.options["agent"] != nil {
+                guard parsed.positional[0].lowercased() == "create" else {
+                    throw CLIError(message: "worktree: --from-issue and --agent are only valid for create")
+                }
+                let issueNumber = try parsed.options["from-issue"].map(parseWorktreeIssueNumber)
+                if let agent = parsed.options["agent"] {
+                    _ = try validateWorktreeIssueAgent(agent, issueNumber: issueNumber)
+                }
             }
             if parsed.options["all"] != nil {
                 guard parsed.positional[0].lowercased() == "open" else {
@@ -5463,16 +5366,17 @@ struct ProgramaCLI {
                 args,
                 command: command,
                 valueFlags: ["output"],
-                booleanFlags: ["agent-state", "workspace-lifecycle", "no-reconnect"]
+                booleanFlags: ["agent-state", "workspace-lifecycle", "needs-input", "no-reconnect"]
             )
             guard parsed.positional.isEmpty else {
                 throw CLIError(message: "watch-events: unexpected arguments: \(parsed.positional.joined(separator: " "))")
             }
             guard parsed.options["agent-state"] != nil
                 || parsed.options["workspace-lifecycle"] != nil
+                || parsed.options["needs-input"] != nil
                 || parsed.options["output"] != nil else {
                 throw CLIError(
-                    message: "watch-events requires at least one of --agent-state, --workspace-lifecycle, --output <surface_id[,surface_id...]>"
+                    message: "watch-events requires at least one of --agent-state, --workspace-lifecycle, --needs-input, --output <surface_id[,surface_id...]>"
                 )
             }
 

@@ -720,6 +720,60 @@ def main() -> int:
         check("corrupt-store-session" in json.loads(state_path.read_text(encoding="utf-8")).get("sessions", {}),
               "a write on a corrupt store did not start a fresh store")
 
+    # Claude Code reports an AskUserQuestion dialog with the same Notification payload as
+    # a tool-approval dialog, so the question saved at PreToolUse must label it until
+    # Claude resumes, and never a later real permission prompt.
+    permission_payload = {"message": "Claude needs your permission", "notification_type": "permission_prompt"}
+    question_text = "Which discount types should the checkout support?"
+    question_payload = {
+        "tool_name": "AskUserQuestion",
+        "tool_input": {"questions": [{
+            "question": question_text,
+            "header": "Discounts",
+            "multiSelect": True,
+            "options": [{"label": "Percentage"}, {"label": "Fixed amount"}],
+        }]},
+    }
+    with tempfile.TemporaryDirectory(prefix="pcli-", dir="/tmp") as directory:
+        question_env = dict(hook_env, PROGRAMA_CLAUDE_HOOK_STATE_PATH=str(Path(directory) / "sessions.json"))
+        with SocketRecorder(directory) as recorder:
+            def claude_hook(event: str, session_id: str, extra: dict[str, Any] | None = None) -> None:
+                payload = json.dumps({"session_id": session_id, **(extra or {})})
+                ran = run_cli(recorder.path, ["claude-hook", event], env_overrides=question_env, input_text=payload)
+                check(ran.returncode == 0, f"claude-hook {event} failed: {merged_output(ran)!r}")
+
+            def needs_input_after(event_steps: list[tuple[str, dict[str, Any] | None]], session_id: str) -> dict[str, Any]:
+                for event, extra in event_steps:
+                    claude_hook(event, session_id, extra)
+                before = len(recorder.frames)
+                claude_hook("notification", session_id, permission_payload)
+                frames = [f for f in recorder.frames[before:] if f.get("method") == "agent.needs_input"]
+                check(len(frames) == 1, f"{session_id}: want one agent.needs_input, frames={recorder.frames[before:]!r}")
+                return frames[0].get("params", {}) if frames else {}
+
+            asked = needs_input_after([("session-start", None), ("pre-tool-use", question_payload)], "question-session")
+            check(asked.get("kind") == "question" and asked.get("subtitle") == "Waiting",
+                  f"AskUserQuestion notification read as {asked!r}, want a Waiting question")
+            check(question_text in str(asked.get("body")), f"AskUserQuestion body={asked.get('body')!r}")
+
+            after_tool = needs_input_after([("pre-tool-use", {"tool_name": "Bash", "tool_input": {"command": "ls"}})],
+                                           "question-session")
+            check(after_tool.get("kind") == "permission" and after_tool.get("subtitle") == "Permission",
+                  f"permission prompt after an answered question read as {after_tool!r}")
+
+            after_prompt = needs_input_after([("pre-tool-use", question_payload), ("prompt-submit", None)],
+                                             "question-session")
+            check(after_prompt.get("kind") == "permission",
+                  f"permission prompt after a new user prompt read as {after_prompt!r}")
+
+            after_idle = needs_input_after([
+                ("session-start", None),
+                ("notification", {"message": "Claude is waiting for your input", "notification_type": "idle_prompt"}),
+                ("prompt-submit", None),
+            ], "idle-session")
+            check(after_idle.get("kind") == "permission",
+                  f"permission prompt after an idle prompt read as {after_idle!r}")
+
     # The implicit password file is security-sensitive: only a regular,
     # user-owned, private file may contribute an auth frame.
     def password_file_frames(kind: str) -> tuple[subprocess.CompletedProcess[str], list[dict[str, Any]]]:

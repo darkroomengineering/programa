@@ -9,7 +9,46 @@ running app over the same v2 JSON control socket the `programa` CLI uses
 (see [socket-api.md](socket-api.md)). It is not part of the app process,
 so it cannot affect terminal rendering or typing latency.
 
-## Setup
+## Automatic setup
+
+Agents started inside Programa get the server without any setup:
+
+- **Claude Code.** The `claude` wrapper Programa puts on `PATH` in its panes passes the bundled
+  `programa-mcp` to every session as a server named `programa`, through
+  `--mcp-config={"mcpServers":{"programa":{"command":"<bundle>/Contents/Resources/bin/programa-mcp"}}}`.
+  Nothing is written to your Claude Code config. A `programa` server in your own config is
+  replaced by this one for that session, so it always talks to the app the pane belongs to.
+  The wrapper skips this when you pass `--mcp-config` or `--strict-mcp-config` yourself, when
+  the bundle has no `programa-mcp`, or when the installed `claude` does not support the flag.
+  It also appends a short system prompt telling the session it runs inside Programa and to
+  follow the `programa` skill, unless you pass `--system-prompt`, `--append-system-prompt`, or
+  their `-file` forms. `programa claude install-integration` does not register the server,
+  because the wrapper already covers every Claude Code session in a Programa pane.
+- **Codex.** `programa codex install-integration` runs
+  `codex mcp add programa -- <bundle>/Contents/Resources/bin/programa-mcp` after you confirm,
+  alongside its hooks and skill. It leaves an existing `programa` server that runs something
+  other than `programa-mcp` unchanged, and `programa codex uninstall-integration` removes the
+  server only when it still runs `programa-mcp`. Codex starts MCP servers with a filtered
+  environment, so this server finds the socket through discovery (the default Programa
+  instance) rather than the pane's `PROGRAMA_SOCKET_PATH`. To point it at a tagged build, add
+  `env_vars = ["PROGRAMA_SOCKET_PATH", "PROGRAMA_SOCKET_PASSWORD"]` under
+  `[mcp_servers.programa]` in `~/.codex/config.toml`.
+- **OpenCode.** `programa opencode install-integration` adds
+  `"programa": {"type": "local", "command": ["<bundle>/Contents/Resources/bin/programa-mcp"], "enabled": true}`
+  under `mcp` in `~/.config/opencode/opencode.json` (or `$OPENCODE_CONFIG_DIR/opencode.json`)
+  after you confirm, alongside its plugin and skill, keeping every other key in the file. It
+  leaves an existing `programa` server that runs something other than a bare `programa-mcp`
+  (extra settings, `enabled: false`, another command) unchanged, and
+  `programa opencode uninstall-integration` removes the entry only when it is still that bare
+  form. It never rewrites `opencode.jsonc` or an `opencode.json` that is not strict JSON, since
+  that would drop comments; it prints the entry to add instead. OpenCode merges config files, so
+  a project `opencode.json` can still override the entry. This path is untested against a live
+  OpenCode.
+
+In password mode the automatic server logs in with the password saved in Settings →
+Automation, the same one the `programa` CLI uses.
+
+## Manual setup
 
 Point your MCP client at the binary inside the app bundle:
 
@@ -44,10 +83,11 @@ instance (a tagged dev build, for example), set `PROGRAMA_SOCKET_PATH`:
 }
 ```
 
-If Settings → Automation uses password-protected socket access, also provide
-`PROGRAMA_SOCKET_PASSWORD` in the MCP server's environment. `programa-mcp` authenticates
-with `auth.login` before sending each tool request and returns an explicit
-`authentication_error` when the password is missing or rejected:
+If Settings → Automation uses password-protected socket access, `programa-mcp` logs in
+with `PROGRAMA_SOCKET_PASSWORD` when it is set, and otherwise with the password saved in
+Settings → Automation. It authenticates with `auth.login` before sending each tool request
+and returns an explicit `authentication_error` when the password is missing or rejected. To
+use a different password, set it in the server's environment:
 
 ```json
 {
@@ -151,9 +191,9 @@ so this only affects hand testing.
 **`transport_error: Socket not found`.** Programa is not running, or the server resolved a
 different instance's socket than you expected. Check `PROGRAMA_SOCKET_PATH`.
 
-**`authentication_error`.** The running app requires socket authentication. Set
-`PROGRAMA_SOCKET_PASSWORD` to the password configured in Settings → Automation, or verify
-that the existing value matches.
+**`authentication_error`.** The running app requires socket authentication. Save a password
+in Settings → Automation, or set `PROGRAMA_SOCKET_PASSWORD` to it and verify that the value
+matches.
 
 **A tool is missing from `tools/list`.** Confirm the method exists in the running build via
 the `system_capabilities` tool. The server and the app can be different versions if you

@@ -165,6 +165,21 @@ enum SurfaceTools {
             )
         ),
         ProgramaTool(
+            name: "surface_send_paste",
+            socketMethod: V2MethodNames.surfaceSendPaste,
+            description: "Pastes text into a terminal surface as one bracketed paste and never presses Return, so newlines stay in the text and an agent prompt keeps it as an editable draft. Use it to hand text to another agent's pane; use surface_send_text to run a command.",
+            inputSchema: ProgramaToolSchema.object(
+                properties: [
+                    "text": ProgramaToolSchema.string("Text to paste. Must not be empty."),
+                    "surface_id": ProgramaToolSchema.string("Target terminal surface UUID or short ref. Defaults to the workspace's focused surface."),
+                    "tab_id": ProgramaToolSchema.string("Optional surface (tab) UUID or short ref used only to resolve the workspace when surface_id and workspace_id are omitted."),
+                    "window_id": ProgramaToolSchema.windowIdProperty,
+                    "workspace_id": ProgramaToolSchema.workspaceIdProperty,
+                ],
+                required: ["text"]
+            )
+        ),
+        ProgramaTool(
             name: "surface_send_key",
             socketMethod: V2MethodNames.surfaceSendKey,
             description: "Sends a single named key (e.g. enter, escape, ctrl+c, up, tab) to a terminal surface.",

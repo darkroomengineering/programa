@@ -138,7 +138,7 @@ script run there talks to that app. To drive a different instance, such as a tag
    written by **Settings > Automation**; `automation.socketPassword` in `settings.json`)
 
 The CLI takes `--password <value>` first, then `PROGRAMA_SOCKET_PASSWORD`, then the saved
-password. `programa-mcp` reads only `PROGRAMA_SOCKET_PASSWORD`.
+password. `programa-mcp` takes `PROGRAMA_SOCKET_PASSWORD`, then the saved password.
 
 A client authenticates once per connection:
 
@@ -470,9 +470,60 @@ Returns `{"workspace_id", "workspace_ref", "surface_id", "surface_ref"}` for the
 terminal surface. Errors: `invalid_params` when `tty` is missing or empty, `not_found` when no
 terminal surface has that tty. The lookup changes no focus or selection.
 
+## `surface.send_paste`
+
+Delivers text to a terminal as one paste and never presses Return, so an agent prompt keeps it as
+a draft. `surface.send_text` instead turns every newline into a Return key, which submits in agent
+TUIs. While the foreground program has bracketed paste on (DEC mode 2004) the newlines are kept
+inside the paste; otherwise they become spaces, so a shell gets one line and runs nothing. CLI:
+`programa handoff`, which reads another pane with `surface.read_text` and pastes it as context.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `text` | string | yes | Must not be empty. |
+| `surface_id` | string | no | Target terminal; defaults to the focused surface of the resolved workspace. |
+| `workspace_id` / `window_id` / `tab_id` | string | no | Same resolution as `surface.send_text`. |
+
+Returns `{"workspace_id", "workspace_ref", "surface_id", "surface_ref", "window_id", "window_ref"}`
+plus `"queued": true` when the terminal was not attached yet. Errors: `invalid_params` for missing
+or empty `text` or a non-terminal surface, `not_found` for an unknown workspace or surface. Runs on
+main like `surface.send_text` and changes no focus or selection.
+
+## `surface.send_if_unchanged`
+
+Sends input only if the terminal still shows what the caller last read, so a reply decided from
+one read cannot land on a prompt that replaced it. `surface.read_text` returns a `fingerprint`
+next to `text`: the lowercase hex SHA-256 of the UTF-8 bytes of exactly that `text`. Pass it back
+as `expected_fingerprint` with the same target and read params. The method reads the screen the
+way `surface.read_text` does, compares, and sends in one main-thread pass, so no other socket
+command or terminal update runs between the check and the input.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `expected_fingerprint` | string | yes | The `fingerprint` from `surface.read_text`. Compared case-insensitively. |
+| `text` | string | no | Sent like `surface.send_text` (newlines become Return). |
+| `keys` | array of string | no | Key names `surface.send_key` accepts, sent in order after `text`. |
+| `lines` / `scrollback` | integer / boolean | no | Same meaning and bounds as `surface.read_text`; use the values from the read that produced the fingerprint. |
+| `surface_id` | string | no | Target terminal; defaults to the focused surface of the resolved workspace. |
+| `workspace_id` / `window_id` / `tab_id` | string | no | Same resolution as `surface.send_text`. |
+
+At least one of a non-empty `text` or a non-empty `keys` is required. Returns
+`{"fingerprint", "workspace_id", "workspace_ref", "surface_id", "surface_ref", "window_id",
+"window_ref"}`. Errors:
+
+- `mismatch`: the screen changed. Nothing was sent. `data` is `{"current_fingerprint", "surface_id"}`;
+  read again before deciding what to send.
+- `invalid_params`: missing `expected_fingerprint`, no `text` or `keys`, a wrong-typed `text` or
+  `keys`, `lines` not greater than 0, an unknown key name (`data.key`, checked before anything is
+  sent), or a non-terminal surface.
+- `not_found`: unknown workspace or surface.
+- `internal_error`: the terminal is not attached yet or its text could not be read.
+
+Changes no focus or selection.
+
 ## Text delivery: `queued`
 
-`surface.send_text` and `agent.prompt` include `"queued": true` in the result when the target
+`surface.send_text`, `surface.send_paste` and `agent.prompt` include `"queued": true` in the result when the target
 terminal was not attached yet and the text went to its pending queue; it is delivered once the
 terminal attaches. The field is absent or `false` when the text was written directly.
 
@@ -596,22 +647,25 @@ pending comments is a no-op (`sent_count: 0`), not an error.
 ## Socket Event Subscriptions (#167)
 
 `subscribe` upgrades the calling connection to receive pushed events — agent state changes
-(#164), coalesced surface output, and workspace lifecycle changes — instead of the caller
-polling `surface.list`/`workspace.list`. Written before implementation, per the issue's ask that
-backpressure/disconnect semantics be specified up front.
+(#164), coalesced surface output, workspace lifecycle changes, and agent prompts for user
+input — instead of the caller polling `surface.list`/`workspace.list`. Written before
+implementation, per the issue's ask that backpressure/disconnect semantics be specified up front.
 
 **This is not the front door.** `surface.wait` (one-shot conditions) and `agent.prompt` (submit +
 wait) cover the common "wait for one thing" case in a single request/response round trip with no
 queue/backpressure/reconnect model to manage. `subscribe` is for consumers that need *many*
 events over time — dashboards, orchestrators, the menu bar of another machine — so a casual
 caller never has to touch subscription machinery. CLI: `programa watch-events` (also positioned
-as the advanced path, not the default way to wait for something).
+as the advanced path, not the default way to wait for something). Its flags pick the classes:
+`--agent-state`, `--workspace-lifecycle`, `--needs-input` and `--output <surface_id,...>`.
+`programa watch-events --needs-input` alone prints only `needs_input` frames (plus any
+`dropped` frame), for bridges that act only on agents waiting for the user.
 
 ### `subscribe`
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `classes` | array of string | yes | Any of `agent_state`, `output`, `workspace_lifecycle`. Non-empty. |
+| `classes` | array of string | yes | Any of `agent_state`, `output`, `workspace_lifecycle`, `needs_input`. Non-empty. |
 | `surface_ids` | array of string (id or ref) | required iff `classes` includes `output` | `output` is opt-in per surface — broadcasting every surface's output to every subscriber by default would be prohibitively expensive. |
 
 Response (`ok: true`): `{"subscription_id": "...", "classes": [...], "surface_ids": [...],
@@ -632,6 +686,7 @@ request they're a response to) — each is its own single-line JSON object with 
 {"event": "agent_state", "workspace_id": "...", "surface_id": "...", "state": "working", "source": "hooks", "ts": 1737590400.123}
 {"event": "output", "workspace_id": "...", "surface_id": "...", "text": "new terminal output...", "ts": 1737590400.223}
 {"event": "workspace_lifecycle", "kind": "renamed", "workspace_id": "...", "title": "new title", "ts": 1737590400.323}
+{"event": "needs_input", "workspace_id": "...", "surface_id": "...", "kind": "question", "provider": "claude-code", "title": "Claude Code", "body": "Which branch should I rebase onto?", "ts": 1737590400.423}
 {"event": "dropped", "count": 7}
 ```
 
@@ -641,6 +696,16 @@ request they're a response to) — each is its own single-line JSON object with 
   under `surface.wait`'s `agent_state` condition above (screen-manifest detection,
   docs/plans/screen-manifest-detection.md) — `null` iff `state` is `null`.
 - `agent_state.program_status` is present only when `source` is `"program"`, with the same object `surface.list` returns. Frames fire when the presence changes, so a `done` to `error` change is delivered although both read `agent_state: "idle"`.
+- `needs_input` fires once per `agent.needs_input` call, after its notification is posted, so
+  `notification.list` already holds the matching entry. It fires whatever the agent-state
+  precedence decides: also while OSC 7501 owns the surface's presence, and also when the
+  surface is already `blocked`. `kind` and `provider` echo the call's params, and `title`,
+  `subtitle`, and `body` are the posted notification's text (`title` includes the surface's
+  custom title suffix, as in `notification.list`). A key whose value is empty or absent is
+  omitted. The text comes from the hook's call and never from OSC 7501 record contents.
+- The `agent_state` `"blocked"` frame for the same prompt may come from `source: "program"`
+  (OSC 7501) or `"hooks"`, or not at all when the presence does not change, so pair
+  `needs_input` with `agent_state` by `surface_id` rather than by order or source.
 - `output.text` is the *newly appended* tail since the last tick for that surface, capped at
   4000 characters — never the full buffer, and never per-byte (see Backpressure below).
 - `workspace_lifecycle.kind` is `created`, `closed`, or `renamed`. `renamed` fires only from the

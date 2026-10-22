@@ -37,7 +37,7 @@ enum RendererRealizationPlanner {
                 return lhs.lastVisibleAt > rhs.lastVisibleAt
             }
 
-        // Closed/hidden windows keep PTYs alive but need no permanently warm swap chain.
+        // With no surface visible, no renderer stays warm; reclaiming releases only the swap chain.
         let warmCap = inputs.contains(where: \.isVisible) ? max(1, settings.maxWarmRenderers) : 0
         var selected: Set<UUID> = []
         for (index, input) in ranked.enumerated() {

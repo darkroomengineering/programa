@@ -1,13 +1,13 @@
 // Command palette pure helpers: fuzzy-search corpus building, result
 // fingerprinting and diffing, shortcut resolution, switcher entries and
-// context snapshots. None of them mutate `@State`. The overlay view, the
-// command list and the @State-mutating flows live in the sibling
-// ContentView+CommandPalette{Overlay,Commands,Flows}.swift files.
+// context snapshots. None of them mutate palette state. The view and its
+// overlay UI live in CommandPaletteView.swift; the command list and the
+// state-mutating flows live in CommandPaletteView+{Commands,Flows}.swift.
 
 import AppKit
 import SwiftUI
 
-extension ContentView {
+extension CommandPaletteView {
     nonisolated static let commandPaletteCommandsPrefix = ">"
     static let commandPaletteVisiblePreviewResultLimit = 48
     static let commandPaletteVisiblePreviewCandidateLimit = 192
@@ -271,6 +271,7 @@ extension ContentView {
         return hasher.finalize()
     }
     func commandPaletteSwitcherEntriesFingerprint(includeSurfaces: Bool) -> Int {
+        if let target = paneHandoffTarget { return paneHandoffSourceEntriesFingerprint(target: target) }
         let windowContexts = commandPaletteSwitcherWindowContexts()
         let fingerprintContexts = windowContexts.map { context in
             CommandPaletteSwitcherFingerprintContext(
@@ -307,6 +308,7 @@ extension ContentView {
         return Self.commandPaletteSwitcherFingerprint(windowContexts: fingerprintContexts)
     }
     func commandPaletteSwitcherEntries(includeSurfaces: Bool) -> [CommandPaletteCommand] {
+        if let target = paneHandoffTarget { return paneHandoffSourceEntries(target: target) }
         let windowContexts = commandPaletteSwitcherWindowContexts()
         guard !windowContexts.isEmpty else { return [] }
 
@@ -698,6 +700,13 @@ extension ContentView {
             snapshot.setBool(CommandPaletteContextKeys.panelHasUnread, hasUnread)
 
             if panelIsTerminal {
+                snapshot.setBool(
+                    CommandPaletteContextKeys.panelCanResumeAgent,
+                    workspace.panelAgentPresence[panelId] == nil
+                        && AgentResumeStore.shared.target(panelId: panelId).flatMap {
+                            AgentResumeCommand.line(for: $0, paneDirectory: workspace.panelDirectories[panelId])
+                        } != nil
+                )
                 let availableTargets = terminalOpenTargets ?? TerminalDirectoryOpenTarget.availableTargets()
                 for target in TerminalDirectoryOpenTarget.commandPaletteShortcutTargets {
                     snapshot.setBool(

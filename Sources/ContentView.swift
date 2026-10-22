@@ -9,11 +9,8 @@ struct ContentView: View {
     @ObservedObject var updateViewModel: UpdateViewModel
     let windowId: UUID
     @EnvironmentObject var tabManager: TabManager
-    @EnvironmentObject var notificationStore: TerminalNotificationStore
     @EnvironmentObject var sidebarState: SidebarState
     @EnvironmentObject var sidebarSelectionState: SidebarSelectionState
-    @EnvironmentObject var programaConfigStore: ProgramaConfigStore
-    @ObservedObject var programaLayoutStore = ProgramaLayoutStore.shared
     @State var sidebarWidth: CGFloat = 200
     @State var hoveredResizerHandles: Set<SidebarResizerHandle> = []
     @State var isResizerDragging = false
@@ -43,9 +40,7 @@ struct ContentView: View {
     #endif
     @State var isSidebarResizerCursorActive = false
     @State var sidebarResizerCursorStabilizer: DispatchSourceTimer?
-    @StateObject var commandPaletteController = CommandPaletteController()
-    @FocusState var isCommandPaletteSearchFocused: Bool
-    @FocusState var isCommandPaletteRenameFocused: Bool
+    @StateObject private var commandPaletteController = CommandPaletteController()
 
     private var sidebarView: some View {
         VerticalTabsSidebar(
@@ -402,9 +397,9 @@ struct ContentView: View {
 
         let step1 = attachWorkspaceLifecycleHandlers(to: baseLayout)
         let step2 = attachTerminalFocusHandlers(to: step1)
-        let step3 = attachCommandPaletteFocusAndTabsHandlers(to: step2)
-        let step4 = attachCommandPaletteRequestHandlers(to: step3)
-        let step5 = attachOverlayWindowAccessor(to: step4)
+        let step3 = attachWorkspaceTabsHandlers(to: step2)
+        let step4 = attachSidebarDragAndFeedbackHandlers(to: step3)
+        let step5 = attachCommandPalette(to: step4)
         let step6 = attachWindowGlassAndFullscreenHandlers(to: step5)
         let step7 = attachSidebarSyncHandlers(to: step6)
         let step8 = attachFinalLifecycleHandlers(to: step7)
@@ -552,7 +547,7 @@ struct ContentView: View {
                 guard let tabId = notification.userInfo?[GhosttyNotificationKey.tabId] as? UUID,
                       tabId == tabManager.selectedTabId else { return }
                 completeWorkspaceHandoffIfNeeded(focusedTabId: tabId, reason: "focus")
-                attemptCommandPaletteFocusRestoreIfNeeded()
+                commandPaletteController.attemptFocusRestoreIfNeeded(tabManager: tabManager, observedWindow: observedWindow)
                 scheduleTitlebarTextRefresh()
             }
             .onChange(of: titlebarThemeGeneration) { oldValue, newValue in
@@ -565,34 +560,84 @@ struct ContentView: View {
                 guard let tabId = notification.userInfo?[GhosttyNotificationKey.tabId] as? UUID,
                       tabId == tabManager.selectedTabId else { return }
                 completeWorkspaceHandoffIfNeeded(focusedTabId: tabId, reason: "first_responder")
-                attemptCommandPaletteFocusRestoreIfNeeded()
-            }
-            .onReceive(NotificationCenter.default.publisher(
-                for: NSWindow.didBecomeKeyNotification,
-                object: observedWindow
-            )) { _ in
-                attemptCommandPaletteFocusRestoreIfNeeded()
-                attemptCommandPaletteTextSelectionIfNeeded()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: NSText.didBeginEditingNotification)) { notification in
-                guard commandPaletteController.commandPalettePendingTextSelectionBehavior != nil else { return }
-                guard let editor = notification.object as? NSTextView,
-                      editor.isFieldEditor else { return }
-                guard let observedWindow else { return }
-                guard editor.window === observedWindow else { return }
-                attemptCommandPaletteTextSelectionIfNeeded()
+                commandPaletteController.attemptFocusRestoreIfNeeded(tabManager: tabManager, observedWindow: observedWindow)
             }
     }
 
     @ViewBuilder
-    private func attachOverlayWindowAccessor(to view: some View) -> some View {
+    private func attachWorkspaceTabsHandlers(to view: some View) -> some View {
         view
-            .background(WindowAccessor(dedupeByWindow: false) { window in
-                MainActor.assumeIsolated {
-                    let overlayController = commandPaletteWindowOverlayController(for: window)
-                    overlayController.update(rootView: AnyView(commandPaletteOverlay), isVisible: commandPaletteController.isCommandPalettePresented)
+            .onReceive(tabManager.$tabs) { tabs in
+                let existingIds = Set(tabs.map { $0.id })
+                if let retiringWorkspaceId, !existingIds.contains(retiringWorkspaceId) {
+                    self.retiringWorkspaceId = nil
+                    workspaceHandoffFallbackTask?.cancel()
+                    workspaceHandoffFallbackTask = nil
                 }
-            })
+                if let previousSelectedWorkspaceId, !existingIds.contains(previousSelectedWorkspaceId) {
+                    self.previousSelectedWorkspaceId = tabManager.selectedTabId
+                }
+                tabManager.pruneBackgroundWorkspaceLoads(existingIds: existingIds)
+                reconcileMountedWorkspaceIds(tabs: tabs)
+                selectedTabIds = selectedTabIds.filter { existingIds.contains($0) }
+                if selectedTabIds.isEmpty, let selectedId = tabManager.selectedTabId {
+                    selectedTabIds = [selectedId]
+                }
+                if let lastIndex = lastSidebarSelectionIndex, lastIndex >= tabs.count {
+                    if let selectedId = tabManager.selectedTabId {
+                        lastSidebarSelectionIndex = tabs.firstIndex { $0.id == selectedId }
+                    } else {
+                        lastSidebarSelectionIndex = nil
+                    }
+                }
+                syncSidebarSelectedWorkspaceIds()
+                applyUITestSidebarSelectionIfNeeded(tabs: tabs)
+            }
+    }
+
+    @ViewBuilder
+    private func attachSidebarDragAndFeedbackHandlers(to view: some View) -> some View {
+        view
+            .onReceive(NotificationCenter.default.publisher(for: SidebarDragLifecycleNotification.stateDidChange)) { notification in
+                let tabId = SidebarDragLifecycleNotification.tabId(from: notification)
+                sidebarDraggedTabId = tabId
+    #if DEBUG
+                dlog(
+                    "sidebar.dragState.content tab=\(debugShortWorkspaceId(tabId)) " +
+                    "reason=\(SidebarDragLifecycleNotification.reason(from: notification))"
+                )
+    #endif
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .feedbackComposerRequested)) { notification in
+                let requestedWindow = notification.object as? NSWindow
+                guard CommandPaletteView.shouldHandleCommandPaletteRequest(
+                    observedWindow: observedWindow,
+                    requestedWindow: requestedWindow,
+                    keyWindow: NSApp.keyWindow,
+                    mainWindow: NSApp.mainWindow
+                ) else { return }
+                presentFeedbackComposer()
+            }
+    }
+
+    @ViewBuilder
+    private func attachCommandPalette(to view: some View) -> some View {
+        view
+            .background(
+                CommandPaletteView(
+                    commandPaletteController: commandPaletteController,
+                    updateViewModel: updateViewModel,
+                    windowId: windowId,
+                    observedWindow: observedWindow,
+                    onSendFeedback: presentFeedbackComposer
+                )
+            )
+    }
+
+    func presentFeedbackComposer() {
+        DispatchQueue.main.async {
+            NSWorkspace.shared.open(URL(string: "https://github.com/darkroomengineering/programa/issues")!)
+        }
     }
 
     @ViewBuilder
@@ -734,7 +779,7 @@ struct ContentView: View {
                         observedWindow = window
                         isFullScreen = window.styleMask.contains(.fullScreen)
                         clampSidebarWidthIfNeeded(availableWidth: window.contentView?.bounds.width ?? window.contentLayoutRect.width)
-                        syncCommandPaletteDebugStateForObservedWindow()
+                        commandPaletteController.syncDebugState(observedWindow: window)
                         installSidebarResizerPointerMonitorIfNeeded()
                         updateSidebarResizerBandState()
                     }
@@ -1106,41 +1151,6 @@ struct ContentView: View {
             dlog("ws.handoff.complete id=none reason=\(reason) retiring=\(debugShortWorkspaceId(retiring))")
         }
 #endif
-    }
-
-    private func selectedWorkspaceIndex() -> Int? {
-        guard let workspace = tabManager.selectedWorkspace else { return nil }
-        return tabManager.tabs.firstIndex { $0.id == workspace.id }
-    }
-
-    func moveSelectedWorkspace(by delta: Int) {
-        guard let workspace = tabManager.selectedWorkspace else { return }
-        tabManager.moveWorkspaceAmongSiblings(tabId: workspace.id, by: delta)
-        tabManager.selectWorkspace(workspace)
-    }
-
-    private func closeWorkspaceIds(_ workspaceIds: [UUID], allowPinned: Bool) {
-        tabManager.closeWorkspacesWithConfirmation(workspaceIds, allowPinned: allowPinned)
-    }
-
-    func closeOtherSelectedWorkspaces() {
-        guard let workspace = tabManager.selectedWorkspace else { return }
-        let workspaceIds = tabManager.tabs.compactMap { $0.id == workspace.id ? nil : $0.id }
-        closeWorkspaceIds(workspaceIds, allowPinned: true)
-    }
-
-    func closeSelectedWorkspacesBelow() {
-        guard tabManager.selectedWorkspace != nil,
-              let anchorIndex = selectedWorkspaceIndex() else { return }
-        let workspaceIds = tabManager.tabs.suffix(from: anchorIndex + 1).map(\.id)
-        closeWorkspaceIds(workspaceIds, allowPinned: true)
-    }
-
-    func closeSelectedWorkspacesAbove() {
-        guard tabManager.selectedWorkspace != nil,
-              let anchorIndex = selectedWorkspaceIndex() else { return }
-        let workspaceIds = tabManager.tabs.prefix(upTo: anchorIndex).map(\.id)
-        closeWorkspaceIds(workspaceIds, allowPinned: true)
     }
 
     func syncSidebarSelectedWorkspaceIds() {

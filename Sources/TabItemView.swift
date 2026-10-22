@@ -135,6 +135,7 @@ struct TabItemView: View, Equatable {
         lhs.isWorktreeFolder == rhs.isWorktreeFolder &&
         lhs.isWorktreeFolderCollapsed == rhs.isWorktreeFolderCollapsed &&
         lhs.worktreeChildCount == rhs.worktreeChildCount &&
+        lhs.runningHelperCount == rhs.runningHelperCount &&
         lhs.rowMetrics == rhs.rowMetrics &&
         // Keep these immutable render snapshots last so `==` and body consume
         // the same drag state without reading Binding storage during typing.
@@ -178,6 +179,9 @@ struct TabItemView: View, Equatable {
     let isWorktreeFolder: Bool
     let isWorktreeFolderCollapsed: Bool
     let worktreeChildCount: Int
+    /// Unfinished `runs_with_parent` helpers (Claude subagents), precomputed by the caller
+    /// from `AgentSupervisionRegistry.runningHelperCounts` and included in `==`.
+    let runningHelperCount: Int
     /// Precomputed by the caller (VerticalTabsSidebar) from `ChromeDensity` and
     /// included in `==` -- see the Equatable typing-latency contract at the
     /// top of this file.
@@ -562,6 +566,25 @@ struct TabItemView: View, Equatable {
                     .multilineTextAlignment(.leading)
             }
 
+            if runningHelperCount > 0 {
+                Button(action: {
+                    AgentOverviewWindowController.shared.show(tabManager: tabManager, workspaceId: tab.id)
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "person.2")
+                            .font(.system(size: 8))
+                            .accessibilityHidden(true)
+                        Text(runningHelperLabel(runningHelperCount))
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                    .font(.system(size: 10))
+                    .foregroundColor(activeSecondaryColor(0.8))
+                }
+                .buttonStyle(.plain)
+                .safeHelp(String(localized: "contextMenu.openAgentOverview", defaultValue: "Open Agent Overview"))
+            }
+
             // The agent badge above is the single source for agent state now; drop any
             // status entry that's still carrying the old duplicate phrasing (older CLI
             // builds may still send it). Other status entries (verbose tool descriptions,
@@ -690,6 +713,31 @@ struct TabItemView: View, Equatable {
                         .safeHelp(String(localized: "sidebar.pullRequest.openTooltip", defaultValue: "Open \(pullRequest.label) #\(pullRequest.number)"))
                     }
                 }
+            }
+
+            // Review nudge: the last agent turn left uncommitted changes. Click-only, never opens itself.
+            if let reviewNudge = tab.reviewNudgeTarget {
+                Button(action: {
+                    openReviewFromNudge(panelId: reviewNudge.panelId)
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus.forwardslash.minus")
+                            .font(.system(size: 9, weight: .semibold))
+                            .accessibilityHidden(true)
+                        Text(reviewNudgeFileCountLabel(reviewNudge.fileCount))
+                            .lineLimit(1)
+                        Text(verbatim: "·")
+                            .accessibilityHidden(true)
+                        Text(String(localized: "sidebar.reviewNudge.action", defaultValue: "Review"))
+                            .underline()
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(pullRequestForegroundColor)
+                }
+                .buttonStyle(.plain)
+                .safeHelp(String(localized: "sidebar.reviewNudge.tooltip", defaultValue: "Open the review panel for these changes"))
             }
 
             // Ports row
@@ -1457,6 +1505,23 @@ struct TabItemView: View, Equatable {
     private func openPullRequestLink(_ url: URL) {
         updateSelection()
         ExternalOpenPolicy.open(url)
+    }
+
+    private func openReviewFromNudge(panelId: UUID) {
+        updateSelection()
+        tab.openReviewFromNudge(panelId: panelId)
+    }
+
+    private func reviewNudgeFileCountLabel(_ count: Int) -> String {
+        count == 1
+            ? String(localized: "sidebar.reviewNudge.oneFileChanged", defaultValue: "1 file changed")
+            : String(localized: "sidebar.reviewNudge.filesChanged", defaultValue: "\(count) files changed")
+    }
+
+    private func runningHelperLabel(_ count: Int) -> String {
+        count == 1
+            ? String(localized: "sidebar.helpers.oneRunning", defaultValue: "1 helper running")
+            : String(localized: "sidebar.helpers.running", defaultValue: "\(count) helpers running")
     }
 
     private func openPortLink(_ port: Int) {

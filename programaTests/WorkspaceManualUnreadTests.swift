@@ -338,7 +338,7 @@ final class CommandPaletteRequestRoutingTests: XCTestCase {
         let windowB = makeWindow()
 
         XCTAssertTrue(
-            ContentView.shouldHandleCommandPaletteRequest(
+            CommandPaletteView.shouldHandleCommandPaletteRequest(
                 observedWindow: windowA,
                 requestedWindow: windowA,
                 keyWindow: windowA,
@@ -346,7 +346,7 @@ final class CommandPaletteRequestRoutingTests: XCTestCase {
             )
         )
         XCTAssertFalse(
-            ContentView.shouldHandleCommandPaletteRequest(
+            CommandPaletteView.shouldHandleCommandPaletteRequest(
                 observedWindow: windowB,
                 requestedWindow: windowA,
                 keyWindow: windowA,
@@ -360,7 +360,7 @@ final class CommandPaletteRequestRoutingTests: XCTestCase {
         let other = makeWindow()
 
         XCTAssertTrue(
-            ContentView.shouldHandleCommandPaletteRequest(
+            CommandPaletteView.shouldHandleCommandPaletteRequest(
                 observedWindow: key,
                 requestedWindow: nil,
                 keyWindow: key,
@@ -368,7 +368,7 @@ final class CommandPaletteRequestRoutingTests: XCTestCase {
             )
         )
         XCTAssertFalse(
-            ContentView.shouldHandleCommandPaletteRequest(
+            CommandPaletteView.shouldHandleCommandPaletteRequest(
                 observedWindow: other,
                 requestedWindow: nil,
                 keyWindow: key,
@@ -382,7 +382,7 @@ final class CommandPaletteRequestRoutingTests: XCTestCase {
         let other = makeWindow()
 
         XCTAssertTrue(
-            ContentView.shouldHandleCommandPaletteRequest(
+            CommandPaletteView.shouldHandleCommandPaletteRequest(
                 observedWindow: main,
                 requestedWindow: nil,
                 keyWindow: nil,
@@ -390,7 +390,7 @@ final class CommandPaletteRequestRoutingTests: XCTestCase {
             )
         )
         XCTAssertFalse(
-            ContentView.shouldHandleCommandPaletteRequest(
+            CommandPaletteView.shouldHandleCommandPaletteRequest(
                 observedWindow: other,
                 requestedWindow: nil,
                 keyWindow: nil,
@@ -401,7 +401,7 @@ final class CommandPaletteRequestRoutingTests: XCTestCase {
 
     func testNoObservedWindowNeverHandlesRequest() {
         XCTAssertFalse(
-            ContentView.shouldHandleCommandPaletteRequest(
+            CommandPaletteView.shouldHandleCommandPaletteRequest(
                 observedWindow: nil,
                 requestedWindow: makeWindow(),
                 keyWindow: makeWindow(),
@@ -414,7 +414,7 @@ final class CommandPaletteRequestRoutingTests: XCTestCase {
 final class CommandPaletteBackNavigationTests: XCTestCase {
     func testBackspaceOnEmptyRenameInputReturnsToCommandList() {
         XCTAssertTrue(
-            ContentView.commandPaletteShouldPopRenameInputOnDelete(
+            CommandPaletteView.commandPaletteShouldPopRenameInputOnDelete(
                 renameDraft: "",
                 modifiers: []
             )
@@ -423,7 +423,7 @@ final class CommandPaletteBackNavigationTests: XCTestCase {
 
     func testBackspaceWithRenameTextDoesNotReturnToCommandList() {
         XCTAssertFalse(
-            ContentView.commandPaletteShouldPopRenameInputOnDelete(
+            CommandPaletteView.commandPaletteShouldPopRenameInputOnDelete(
                 renameDraft: "Terminal 1",
                 modifiers: []
             )
@@ -432,13 +432,13 @@ final class CommandPaletteBackNavigationTests: XCTestCase {
 
     func testModifiedBackspaceDoesNotReturnToCommandList() {
         XCTAssertFalse(
-            ContentView.commandPaletteShouldPopRenameInputOnDelete(
+            CommandPaletteView.commandPaletteShouldPopRenameInputOnDelete(
                 renameDraft: "",
                 modifiers: [.control]
             )
         )
         XCTAssertFalse(
-            ContentView.commandPaletteShouldPopRenameInputOnDelete(
+            CommandPaletteView.commandPaletteShouldPopRenameInputOnDelete(
                 renameDraft: "",
                 modifiers: [.command]
             )

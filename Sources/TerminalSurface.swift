@@ -2529,6 +2529,10 @@ final class TerminalSurface: Identifiable, ObservableObject {
         return true
     }
 
+    func isKnownNamedKey(_ keyName: String) -> Bool {
+        pendingKeyEvent(for: keyName) != nil
+    }
+
     /// Send text with control characters (Return, Tab, etc.) delivered as key
     /// events so the shell processes them, while regular text is sent via the
     /// normal key-text path.  Mirrors `TerminalController.sendSocketText`.

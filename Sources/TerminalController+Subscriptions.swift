@@ -29,6 +29,7 @@ enum SocketEventClass: String, CaseIterable {
     case agentState = "agent_state"
     case output
     case workspaceLifecycle = "workspace_lifecycle"
+    case needsInput = "needs_input"
 }
 
 /// Wraps a single accepted v2 socket connection (one per `TerminalController.handleClient`
@@ -372,6 +373,20 @@ final class SocketEventBroadcaster: @unchecked Sendable {
         for sub in subs { sub.enqueue(frame) }
     }
 
+    /// Published on every `agent.needs_input` call, independent of whether the agent-state write
+    /// it makes wins precedence, so a consumer gets the hook's prompt text even while OSC 7501
+    /// owns the surface's presence. `payload` must never carry OSC 7501 record contents.
+    func publishNeedsInput(workspaceId: UUID, surfaceId: UUID, payload: [String: String]) {
+        let subs = subscribers(for: .needsInput)
+        guard !subs.isEmpty else { return }
+        var frame: [String: Any] = payload.filter { !$0.value.isEmpty }
+        frame["event"] = "needs_input"
+        frame["workspace_id"] = workspaceId.uuidString
+        frame["surface_id"] = surfaceId.uuidString
+        frame["ts"] = Date().timeIntervalSince1970
+        for sub in subs { sub.enqueue(frame) }
+    }
+
     func publishWorkspaceLifecycle(kind: String, workspaceId: UUID, title: String?) {
         let subs = subscribers(for: .workspaceLifecycle)
         guard !subs.isEmpty else { return }
@@ -451,13 +466,13 @@ final class SocketEventBroadcaster: @unchecked Sendable {
 
 extension TerminalController {
     /// `subscribe`: upgrades the calling connection to receive pushed events for the requested
-    /// `classes` (any of `agent_state`, `output`, `workspace_lifecycle`). Replaces any existing
-    /// subscription on this connection. `output` requires a non-empty `surface_ids` array.
+    /// `classes` (any of `agent_state`, `output`, `workspace_lifecycle`, `needs_input`). Replaces
+    /// any existing subscription on this connection. `output` requires a non-empty `surface_ids` array.
     nonisolated func v2Subscribe(params: [String: Any], connection: SocketConnection) -> V2CallResult {
         guard let rawClasses = v2StringArray(params, "classes"), !rawClasses.isEmpty else {
             return .err(
                 code: "invalid_params",
-                message: "classes must be a non-empty array of: agent_state, output, workspace_lifecycle",
+                message: "classes must be a non-empty array of: agent_state, output, workspace_lifecycle, needs_input",
                 data: nil
             )
         }
@@ -466,7 +481,7 @@ extension TerminalController {
             guard let eventClass = SocketEventClass(rawValue: raw) else {
                 return .err(
                     code: "invalid_params",
-                    message: "Unknown event class '\(raw)' -- use: agent_state, output, workspace_lifecycle",
+                    message: "Unknown event class '\(raw)' -- use: agent_state, output, workspace_lifecycle, needs_input",
                     data: nil
                 )
             }

@@ -167,6 +167,7 @@ struct ReviewPanelView: View {
     @State private var composer: InlineComposerState?
     @State private var commentAdmissionError: String?
     @State private var rowPlanner = ReviewPanelRowPlanner()
+    @State private var isConfirmingCheckpointRevert = false
 
     private struct InlineComposerState {
         let filePath: String
@@ -181,6 +182,12 @@ struct ReviewPanelView: View {
             header
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
+            if let readiness = panel.mergeReadiness {
+                Divider()
+                mergeReadinessSection(readiness)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+            }
             Divider()
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
@@ -204,6 +211,11 @@ struct ReviewPanelView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            if panel.mergeReadiness == nil {
+                panel.refreshMergeReadiness()
+            }
+        }
         .alert(String(localized: "review.comment.addFailed", defaultValue: "Could not add comment"), isPresented: Binding(
             get: { commentAdmissionError != nil },
             set: { if !$0 { commentAdmissionError = nil } }
@@ -211,6 +223,14 @@ struct ReviewPanelView: View {
             Button(String(localized: "common.ok", defaultValue: "OK"), role: .cancel) { commentAdmissionError = nil }
         } message: {
             Text(commentAdmissionError ?? "")
+        }
+        .alert(String(localized: "review.checkpoint.revertFailed", defaultValue: "Could not revert files"), isPresented: Binding(
+            get: { panel.checkpointRestoreError != nil },
+            set: { if !$0 { panel.checkpointRestoreError = nil } }
+        )) {
+            Button(String(localized: "common.ok", defaultValue: "OK"), role: .cancel) { panel.checkpointRestoreError = nil }
+        } message: {
+            Text(panel.checkpointRestoreError ?? "")
         }
         .background(Color(nsColor: .textBackgroundColor))
         .background {
@@ -245,18 +265,218 @@ struct ReviewPanelView: View {
                 .font(.system(size: 12, weight: .medium))
                 .lineLimit(1)
             Spacer()
-            if panel.isRefreshing {
+            if panel.isRefreshing || panel.isRestoringCheckpoint {
                 ProgressView()
                     .controlSize(.small)
             }
+            if let checkpoint = panel.latestCheckpoint {
+                checkpointRevertButton(for: checkpoint)
+            }
             Button {
                 panel.refresh()
+                panel.refreshMergeReadiness()
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
             .buttonStyle(.plain)
             .safeHelp(String(localized: "review.refresh.help", defaultValue: "Refresh diff"))
             .accessibilityLabel(String(localized: "review.refresh.help", defaultValue: "Refresh diff"))
+        }
+    }
+
+    /// After a revert the newest checkpoint is the pre-revert save, so the same button offers the undo.
+    private func checkpointRevertButton(for checkpoint: ReviewCheckpoint) -> some View {
+        let isUndo = checkpoint.kind == .beforeRevert
+        let title = isUndo
+            ? String(localized: "review.checkpoint.undo.button", defaultValue: "Undo File Revert")
+            : String(localized: "review.checkpoint.revert.button", defaultValue: "Revert Files to Before Last Turn")
+        return Button(title) {
+            isConfirmingCheckpointRevert = true
+        }
+        .buttonStyle(.borderless)
+        .font(.system(size: 11))
+        .lineLimit(1)
+        .disabled(panel.isRestoringCheckpoint)
+        .alert(title, isPresented: $isConfirmingCheckpointRevert) {
+            Button(String(localized: "review.checkpoint.confirm.revert", defaultValue: "Revert"), role: .destructive) {
+                panel.revertToLatestCheckpoint()
+            }
+            Button(String(localized: "review.checkpoint.confirm.cancel", defaultValue: "Cancel"), role: .cancel) {}
+        } message: {
+            Text(isUndo
+                ? String(
+                    localized: "review.checkpoint.undo.message",
+                    defaultValue: "Puts the files in this repository back the way they were before the last revert. The agent's conversation is not changed. Your current files are saved first."
+                )
+                : String(
+                    localized: "review.checkpoint.revert.message",
+                    defaultValue: "Restores the files in this repository to how they were when the agent's last turn started. The agent's conversation is not rewound. Your current files are saved first, so you can undo this."
+                ))
+        }
+    }
+
+    // MARK: - Merge readiness
+
+    private func mergeReadinessSection(_ readiness: ReviewMergeReadinessState) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.triangle.pull")
+                    .foregroundColor(.secondary)
+                    .accessibilityHidden(true)
+                Button {
+                    ExternalOpenPolicy.open(readiness.url)
+                } label: {
+                    Text(String(localized: "review.readiness.pullRequest", defaultValue: "PR #\(readiness.number)"))
+                        .underline()
+                }
+                .buttonStyle(.plain)
+                .safeHelp(String(localized: "review.readiness.open.help", defaultValue: "Open PR #\(readiness.number) in the browser"))
+                if case .loaded(let loaded) = readiness.result {
+                    Text(mergeReadinessStateLabel(loaded.state))
+                        .foregroundColor(.secondary)
+                    if loaded.isReadyToMerge {
+                        Text(String(localized: "review.readiness.ready", defaultValue: "Ready to merge"))
+                            .foregroundColor(.green)
+                            .safeHelp(String(
+                                localized: "review.readiness.ready.help",
+                                defaultValue: "Checks pass, there are no merge conflicts, the review requirement is met, and no conversations are unresolved."
+                            ))
+                    }
+                }
+                Spacer()
+                if panel.isRefreshingMergeReadiness {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Button {
+                        panel.refreshMergeReadiness()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.plain)
+                    .safeHelp(String(localized: "review.readiness.refresh.help", defaultValue: "Refresh merge status"))
+                    .accessibilityLabel(String(localized: "review.readiness.refresh.help", defaultValue: "Refresh merge status"))
+                }
+            }
+            .font(.system(size: 11, weight: .medium))
+
+            switch readiness.result {
+            case .loaded(let loaded) where loaded.state == .open || loaded.state == .draft:
+                mergeReadinessChecksRow(loaded)
+                mergeReadinessThreadsRow(loaded, number: readiness.number, url: readiness.url)
+                if loaded.state == .open, let blocker = loaded.mergeBlocker {
+                    mergeReadinessBlockerRow(blocker)
+                }
+            case .unavailable:
+                Text(String(
+                    localized: "review.readiness.unavailable",
+                    defaultValue: "Couldn't load merge status. It needs the GitHub CLI (gh), signed in."
+                ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            case .loaded, nil:
+                EmptyView()
+            }
+        }
+    }
+
+    private func mergeReadinessStateLabel(_ state: ReviewMergeReadiness.PullRequestState) -> String {
+        switch state {
+        case .open:
+            return String(localized: "review.readiness.state.open", defaultValue: "Open")
+        case .draft:
+            return String(localized: "review.readiness.state.draft", defaultValue: "Draft")
+        case .merged:
+            return String(localized: "review.readiness.state.merged", defaultValue: "Merged")
+        case .closed:
+            return String(localized: "review.readiness.state.closed", defaultValue: "Closed")
+        }
+    }
+
+    private func mergeReadinessChecksRow(_ readiness: ReviewMergeReadiness) -> some View {
+        let failingCount = readiness.failingCheckNames.count
+        let pendingCount = readiness.pendingCheckCount
+        let pendingLabel = pendingCount == 1
+            ? String(localized: "review.readiness.checks.onePending", defaultValue: "1 check pending")
+            : String(localized: "review.readiness.checks.pending", defaultValue: "\(pendingCount) checks pending")
+        let (icon, color, label): (String, Color, String) = {
+            if failingCount > 0 {
+                let names = ListFormatter.localizedString(byJoining: readiness.failingCheckNames)
+                let failing = failingCount == 1
+                    ? String(localized: "review.readiness.checks.oneFailing", defaultValue: "1 check failing: \(names)")
+                    : String(localized: "review.readiness.checks.failing", defaultValue: "\(failingCount) checks failing: \(names)")
+                return ("xmark.circle.fill", .red, pendingCount > 0 ? "\(failing) · \(pendingLabel)" : failing)
+            }
+            if pendingCount > 0 {
+                return ("clock", .orange, pendingLabel)
+            }
+            if readiness.passingCheckCount > 0 {
+                return ("checkmark.circle.fill", .green, String(localized: "review.readiness.checks.passing", defaultValue: "Checks passing"))
+            }
+            return ("minus.circle", .secondary, String(localized: "review.readiness.checks.none", defaultValue: "No checks"))
+        }()
+        return HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: icon)
+                .foregroundColor(color)
+                .accessibilityHidden(true)
+            Text(label)
+                .lineLimit(2)
+                .truncationMode(.tail)
+        }
+        .font(.system(size: 11))
+    }
+
+    @ViewBuilder
+    private func mergeReadinessThreadsRow(_ readiness: ReviewMergeReadiness, number: Int, url: URL) -> some View {
+        if let unresolved = readiness.unresolvedThreadCount {
+            Button {
+                ExternalOpenPolicy.open(url)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: unresolved == 0 ? "bubble.left" : "exclamationmark.bubble")
+                        .foregroundColor(unresolved == 0 ? .secondary : .orange)
+                        .accessibilityHidden(true)
+                    Text(mergeReadinessThreadsLabel(unresolved))
+                        .underline()
+                }
+                .font(.system(size: 11))
+            }
+            .buttonStyle(.plain)
+            .safeHelp(String(localized: "review.readiness.open.help", defaultValue: "Open PR #\(number) in the browser"))
+        } else {
+            Text(String(localized: "review.readiness.threads.unavailable", defaultValue: "Couldn't load review conversations."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func mergeReadinessBlockerRow(_ blocker: ReviewMergeReadiness.MergeBlocker) -> some View {
+        let label: String
+        switch blocker {
+        case .conflicts:
+            label = String(localized: "review.readiness.blocker.conflicts", defaultValue: "Merge conflicts")
+        case .changesRequested:
+            label = String(localized: "review.readiness.blocker.changesRequested", defaultValue: "Changes requested")
+        case .reviewRequired:
+            label = String(localized: "review.readiness.blocker.reviewRequired", defaultValue: "Review required")
+        }
+        return HStack(spacing: 6) {
+            Image(systemName: "exclamationmark.triangle")
+                .foregroundColor(.orange)
+                .accessibilityHidden(true)
+            Text(label)
+        }
+        .font(.system(size: 11))
+    }
+
+    private func mergeReadinessThreadsLabel(_ count: Int) -> String {
+        switch count {
+        case 0:
+            return String(localized: "review.readiness.threads.none", defaultValue: "No unresolved conversations")
+        case 1:
+            return String(localized: "review.readiness.threads.one", defaultValue: "1 unresolved conversation")
+        default:
+            return String(localized: "review.readiness.threads.many", defaultValue: "\(count) unresolved conversations")
         }
     }
 

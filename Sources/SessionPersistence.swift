@@ -293,6 +293,8 @@ struct SessionPanelSnapshot: Codable, Sendable {
     var terminal: SessionTerminalPanelSnapshot?
     var markdown: SessionMarkdownPanelSnapshot?
     var review: SessionReviewPanelSnapshot?
+    /// Terminal panels only: the agent session the panel last ran. Absent in older snapshots.
+    var agentResume: AgentResumeTarget?
 }
 
 enum SessionSplitOrientation: String, Codable, Sendable {
@@ -1012,6 +1014,11 @@ enum SessionPersistenceStore {
                     return false
                 }
             }
+        }
+
+        if let resume = panel.agentResume {
+            guard isValidString(resume.provider), isValidString(resume.sessionId),
+                  isValidString(resume.cwd, maxBytes: SessionPersistencePolicy.maxPathStringBytes) else { return false }
         }
 
         if let markdown = panel.markdown,

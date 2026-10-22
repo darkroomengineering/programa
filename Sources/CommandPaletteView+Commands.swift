@@ -2,7 +2,7 @@ import AppKit
 import Bonsplit
 import SwiftUI
 
-extension ContentView {
+extension CommandPaletteView {
     func focusCommandPaletteSwitcherTarget(
         windowId: UUID,
         tabManager: TabManager,
@@ -553,6 +553,16 @@ extension ContentView {
         )
         contributions.append(
             CommandPaletteCommandContribution(
+                commandId: "palette.pasteContextFromPane",
+                title: constant(String(localized: "command.pasteContextFromPane.title", defaultValue: "Paste Context From Pane…")),
+                subtitle: terminalPanelSubtitle,
+                keywords: ["paste", "context", "handoff", "pane", "output", "agent", "prompt"],
+                dismissOnRun: false,
+                when: { $0.bool(CommandPaletteContextKeys.panelIsTerminal) }
+            )
+        )
+        contributions.append(
+            CommandPaletteCommandContribution(
                 commandId: "palette.terminalFindPrevious",
                 title: constant(String(localized: "command.terminalFindPrevious.title", defaultValue: "Find Previous")),
                 subtitle: terminalPanelSubtitle,
@@ -634,6 +644,15 @@ extension ContentView {
                 keywords: ["agent", "overview", "attention", "helper", "status"]
             )
         )
+        contributions.append(
+            CommandPaletteCommandContribution(
+                commandId: "palette.resumeAgentSession",
+                title: constant(String(localized: "command.resumeAgentSession.title", defaultValue: "Resume Agent Session")),
+                subtitle: terminalPanelSubtitle,
+                keywords: ["agent", "resume", "session", "claude", "codex", "restore"],
+                when: { $0.bool(CommandPaletteContextKeys.panelCanResumeAgent) }
+            )
+        )
 
         let programaConfigDefaultSubtitle = constant(String(localized: "command.programaConfig.subtitle", defaultValue: "programa.json"))
         for command in programaConfigStore.loadedCommands {
@@ -698,6 +717,20 @@ extension ContentView {
                   let focusedPanelId = workspace.focusedPanelId else { return }
             _ = workspace.newReviewSplit(from: focusedPanelId, orientation: .horizontal, focus: true)
         }
+        registry.register(commandId: "palette.resumeAgentSession") {
+            // Re-checked here: the agent may have started since the palette opened.
+            guard let context = Self.focusedPanelContext(in: tabManager),
+                  let terminalPanel = context.panel as? TerminalPanel,
+                  context.workspace.panelAgentPresence[context.panelId] == nil,
+                  let target = AgentResumeStore.shared.target(panelId: context.panelId),
+                  let line = AgentResumeCommand.line(
+                    for: target, paneDirectory: context.workspace.panelDirectories[context.panelId]
+                  ) else {
+                NSSound.beep()
+                return
+            }
+            terminalPanel.sendInput(line + "\r")
+        }
         registry.register(commandId: "palette.newClaudeWorkspace") {
             let trimmedCwd = tabManager.selectedWorkspace?.currentDirectory
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -722,7 +755,7 @@ extension ContentView {
             AppDelegate.shared?.openNewMainWindow(nil)
         }
         registry.register(commandId: "palette.sendFeedback") {
-            presentFeedbackComposer()
+            onSendFeedback()
         }
         registry.register(commandId: "palette.reloadConfiguration") {
             GhosttyApp.shared.reloadConfiguration(source: "palette.reloadConfiguration")
@@ -931,6 +964,9 @@ extension ContentView {
         registry.register(commandId: "palette.terminalFindNext") {
             tabManager.findNext()
         }
+        registry.register(commandId: "palette.pasteContextFromPane") {
+            beginPaneHandoffPickFlow()
+        }
         registry.register(commandId: "palette.terminalFindPrevious") {
             tabManager.findPrevious()
         }
@@ -1001,7 +1037,46 @@ extension ContentView {
         }
     }
 
+    private func selectedWorkspaceIndex() -> Int? {
+        guard let workspace = tabManager.selectedWorkspace else { return nil }
+        return tabManager.tabs.firstIndex { $0.id == workspace.id }
+    }
+
+    func moveSelectedWorkspace(by delta: Int) {
+        guard let workspace = tabManager.selectedWorkspace else { return }
+        tabManager.moveWorkspaceAmongSiblings(tabId: workspace.id, by: delta)
+        tabManager.selectWorkspace(workspace)
+    }
+
+    private func closeWorkspaceIds(_ workspaceIds: [UUID], allowPinned: Bool) {
+        tabManager.closeWorkspacesWithConfirmation(workspaceIds, allowPinned: allowPinned)
+    }
+
+    func closeOtherSelectedWorkspaces() {
+        guard let workspace = tabManager.selectedWorkspace else { return }
+        let workspaceIds = tabManager.tabs.compactMap { $0.id == workspace.id ? nil : $0.id }
+        closeWorkspaceIds(workspaceIds, allowPinned: true)
+    }
+
+    func closeSelectedWorkspacesBelow() {
+        guard tabManager.selectedWorkspace != nil,
+              let anchorIndex = selectedWorkspaceIndex() else { return }
+        let workspaceIds = tabManager.tabs.suffix(from: anchorIndex + 1).map(\.id)
+        closeWorkspaceIds(workspaceIds, allowPinned: true)
+    }
+
+    func closeSelectedWorkspacesAbove() {
+        guard tabManager.selectedWorkspace != nil,
+              let anchorIndex = selectedWorkspaceIndex() else { return }
+        let workspaceIds = tabManager.tabs.prefix(upTo: anchorIndex).map(\.id)
+        closeWorkspaceIds(workspaceIds, allowPinned: true)
+    }
+
     var focusedPanelContext: (workspace: Workspace, panelId: UUID, panel: any Panel)? {
+        Self.focusedPanelContext(in: tabManager)
+    }
+
+    static func focusedPanelContext(in tabManager: TabManager) -> (workspace: Workspace, panelId: UUID, panel: any Panel)? {
         guard let workspace = tabManager.selectedWorkspace,
               let panelId = workspace.focusedPanelId,
               let panel = workspace.panels[panelId] else {

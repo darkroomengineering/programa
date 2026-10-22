@@ -688,6 +688,9 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         panelDirectories.removeValue(forKey: panelId)
         panelGitBranches.removeValue(forKey: panelId)
         panelPullRequests.removeValue(forKey: panelId)
+        panelReviewNudges.removeValue(forKey: panelId)
+        reviewNudgeProbeGenerations.removeValue(forKey: panelId)
+        reviewNudgeBaselines.removeValue(forKey: panelId)
         panelTitles.removeValue(forKey: panelId)
         panelCustomTitles.removeValue(forKey: panelId)
         pinnedPanelIds.remove(panelId)
@@ -719,6 +722,7 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         } else {
             AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: id, surfaceId: panelId)
             clearPanelAgentState(panelId: panelId, force: true)
+            AgentResumeStore.shared.forget(panelId: panelId)
         }
         if progressSourcePanelId == panelId {
             progress = nil

@@ -691,6 +691,28 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertNil(decoded.windows.first?.tabManager.workspaces.first?.customColor)
     }
 
+    func testPanelSnapshotWithoutAgentResumeDecodesAsNoResume() throws {
+        let legacy = """
+        {"id":"2B9E3C1A-4D5F-4E6A-8B7C-9D0E1F2A3B4C","type":"terminal","title":"zsh",
+         "isPinned":false,"isManuallyUnread":false,"listeningPorts":[],
+         "terminal":{"workingDirectory":"/tmp/project"}}
+        """
+        let decoded = try JSONDecoder().decode(SessionPanelSnapshot.self, from: Data(legacy.utf8))
+        XCTAssertNil(decoded.agentResume)
+        XCTAssertEqual(decoded.terminal?.workingDirectory, "/tmp/project")
+    }
+
+    func testPanelSnapshotRoundTripsAgentResume() throws {
+        let legacy = """
+        {"id":"2B9E3C1A-4D5F-4E6A-8B7C-9D0E1F2A3B4C","type":"terminal",
+         "isPinned":false,"isManuallyUnread":false,"listeningPorts":[]}
+        """
+        var panel = try JSONDecoder().decode(SessionPanelSnapshot.self, from: Data(legacy.utf8))
+        panel.agentResume = AgentResumeTarget(provider: "claude-code", sessionId: "5f0c2a9e-1b2d-4c3e-8f4a-6b7c8d9e0f1a", cwd: "/tmp/project")
+        let decoded = try JSONDecoder().decode(SessionPanelSnapshot.self, from: JSONEncoder().encode(panel))
+        XCTAssertEqual(decoded.agentResume, panel.agentResume)
+    }
+
     func testLoadRejectsSchemaVersionMismatch() {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("programa-session-tests-\(UUID().uuidString)", isDirectory: true)

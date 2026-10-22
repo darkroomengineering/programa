@@ -3,25 +3,24 @@
 // CommandPaletteController owns every piece of palette state that is
 // exclusively used by the command palette (query, mode,
 // search corpus/results, rename/workspace-description drafts, focus-restore
-// targets, usage history, etc.). ContentView holds a single
-// `@StateObject private var commandPaletteController` and exposes each
-// property to the palette code in the ContentView+CommandPalette*.swift
-// extensions through thin computed proxies, so that code reads and writes
-// unqualified names while storage lives on the controller.
+// targets, usage history, etc.). ContentView creates it as a
+// `@StateObject` (one per main window) and passes it to CommandPaletteView,
+// whose CommandPaletteView*.swift extensions hold the palette's UI, commands
+// and flows. The focus-restore and debug-state methods ContentView also
+// calls live in CommandPaletteController+Focus.swift.
 //
 // The two @FocusState properties (isCommandPaletteSearchFocused,
-// isCommandPaletteRenameFocused) stay on ContentView: @FocusState is a
-// SwiftUI View-only property wrapper and cannot be hosted on an
+// isCommandPaletteRenameFocused) live on CommandPaletteView: @FocusState is
+// a SwiftUI View-only property wrapper and cannot be hosted on an
 // ObservableObject.
 //
-// CommandPaletteMode, CommandPaletteRestoreFocusTarget,
-// CommandPaletteTextSelectionBehavior, and CommandPaletteMultilineTextEditorRepresentable
-// are internal nested types of ContentView so this controller (a different file) can
-// reference them. CommandPaletteCommand, CommandPaletteSearchResult,
-// CommandPaletteListScope, CommandPalettePendingActivation, and
-// CommandPaletteUsageEntry are also internal nested types; referenced here
-// via `ContentView.` qualification since nested-type name lookup requires it
-// from outside the enclosing type's lexical scope.
+// CommandPaletteMode, CommandPaletteRestoreFocusTarget, CommandPaletteCommand,
+// CommandPaletteSearchResult, CommandPaletteListScope,
+// CommandPalettePendingActivation, CommandPaletteTextSelectionBehavior,
+// CommandPaletteUsageEntry and CommandPaletteMultilineTextEditorRepresentable
+// are internal nested types of CommandPaletteView, referenced here via
+// `CommandPaletteView.` qualification since nested-type name lookup requires
+// it from outside the enclosing type's lexical scope.
 
 import AppKit
 import Combine
@@ -144,39 +143,39 @@ final class CommandPaletteController: ObservableObject {
     static let windowLifecycle = CommandPaletteWindowLifecycle()
     @Published var isCommandPalettePresented = false
     @Published var commandPaletteQuery: String = ""
-    @Published var commandPaletteMode: ContentView.CommandPaletteMode = .commands
+    @Published var commandPaletteMode: CommandPaletteView.CommandPaletteMode = .commands
     @Published var commandPaletteRenameDraft: String = ""
     @Published var commandPaletteWorkspaceDescriptionDraft: String = ""
-    @Published var commandPaletteWorkspaceDescriptionHeight: CGFloat = ContentView.CommandPaletteMultilineTextEditorRepresentable.defaultMinimumHeight
+    @Published var commandPaletteWorkspaceDescriptionHeight: CGFloat = CommandPaletteView.CommandPaletteMultilineTextEditorRepresentable.defaultMinimumHeight
     @Published var commandPaletteSelectedResultIndex: Int = 0
     @Published var commandPaletteSelectionAnchorCommandID: String?
     @Published var commandPaletteHoveredResultIndex: Int?
     @Published var commandPaletteScrollTargetIndex: Int?
     @Published var commandPaletteScrollTargetAnchor: UnitPoint?
-    @Published var commandPaletteRestoreFocusTarget: ContentView.CommandPaletteRestoreFocusTarget?
+    @Published var commandPaletteRestoreFocusTarget: CommandPaletteView.CommandPaletteRestoreFocusTarget?
     @Published var commandPaletteSearchCorpus: [CommandPaletteSearchCorpusEntry<String>] = []
     @Published var commandPaletteSearchCorpusByID: [String: CommandPaletteSearchCorpusEntry<String>] = [:]
-    @Published var commandPaletteSearchCommandsByID: [String: ContentView.CommandPaletteCommand] = [:]
-    @Published var cachedCommandPaletteResults: [ContentView.CommandPaletteSearchResult] = []
-    @Published var commandPaletteVisibleResults: [ContentView.CommandPaletteSearchResult] = []
-    @Published var commandPaletteVisibleResultsScope: ContentView.CommandPaletteListScope?
+    @Published var commandPaletteSearchCommandsByID: [String: CommandPaletteView.CommandPaletteCommand] = [:]
+    @Published var cachedCommandPaletteResults: [CommandPaletteView.CommandPaletteSearchResult] = []
+    @Published var commandPaletteVisibleResults: [CommandPaletteView.CommandPaletteSearchResult] = []
+    @Published var commandPaletteVisibleResultsScope: CommandPaletteView.CommandPaletteListScope?
     @Published var commandPaletteVisibleResultsFingerprint: Int?
-    @Published var cachedCommandPaletteScope: ContentView.CommandPaletteListScope?
+    @Published var cachedCommandPaletteScope: CommandPaletteView.CommandPaletteListScope?
     @Published var cachedCommandPaletteFingerprint: Int?
-    @Published var commandPalettePendingDismissFocusTarget: ContentView.CommandPaletteRestoreFocusTarget?
+    @Published var commandPalettePendingDismissFocusTarget: CommandPaletteView.CommandPaletteRestoreFocusTarget?
     @Published var commandPaletteRestoreTimeoutWorkItem: DispatchWorkItem?
-    @Published var commandPalettePendingTextSelectionBehavior: ContentView.CommandPaletteTextSelectionBehavior?
+    @Published var commandPalettePendingTextSelectionBehavior: CommandPaletteView.CommandPaletteTextSelectionBehavior?
     @Published var commandPaletteSearchTask: Task<Void, Never>?
     @Published var commandPaletteSearchRequestID: UInt64 = 0
     @Published var commandPaletteResolvedSearchRequestID: UInt64 = 0
-    @Published var commandPaletteResolvedSearchScope: ContentView.CommandPaletteListScope?
+    @Published var commandPaletteResolvedSearchScope: CommandPaletteView.CommandPaletteListScope?
     @Published var commandPaletteResolvedSearchFingerprint: Int?
     @Published var commandPaletteResolvedMatchingQuery = ""
     @Published var commandPaletteTerminalOpenTargetAvailability: Set<TerminalDirectoryOpenTarget> = []
     @Published var isCommandPaletteSearchPending = false
-    @Published var commandPalettePendingActivation: ContentView.CommandPalettePendingActivation?
+    @Published var commandPalettePendingActivation: CommandPaletteView.CommandPalettePendingActivation?
     @Published var commandPaletteResultsRevision: UInt64 = 0
-    @Published var commandPaletteUsageHistoryByCommandId: [String: ContentView.CommandPaletteUsageEntry] = [:]
+    @Published var commandPaletteUsageHistoryByCommandId: [String: CommandPaletteView.CommandPaletteUsageEntry] = [:]
     @AppStorage(CommandPaletteSwitcherSearchSettings.searchAllSurfacesKey)
     var commandPaletteSearchAllSurfaces = CommandPaletteSwitcherSearchSettings.defaultSearchAllSurfaces
     @Published var commandPaletteShouldFocusWorkspaceDescriptionEditor = false
@@ -187,8 +186,8 @@ final class CommandPaletteController: ObservableObject {
     }
 
     func setVisibleResults(
-        _ results: [ContentView.CommandPaletteSearchResult],
-        scope: ContentView.CommandPaletteListScope,
+        _ results: [CommandPaletteView.CommandPaletteSearchResult],
+        scope: CommandPaletteView.CommandPaletteListScope,
         fingerprint: Int?
     ) {
         commandPaletteVisibleResults = results
@@ -202,7 +201,7 @@ final class CommandPaletteController: ObservableObject {
     }
 
     func syncSelectionAnchor(resultIDs: [String]) {
-        commandPaletteSelectionAnchorCommandID = ContentView.commandPaletteSelectionAnchorCommandID(
+        commandPaletteSelectionAnchorCommandID = CommandPaletteView.commandPaletteSelectionAnchorCommandID(
             selectedIndex: commandPaletteSelectedResultIndex,
             resultIDs: resultIDs
         )
@@ -235,7 +234,7 @@ final class CommandPaletteController: ObservableObject {
 
     func beginPresentation(
         initialQuery: String,
-        restoreFocusTarget: ContentView.CommandPaletteRestoreFocusTarget?,
+        restoreFocusTarget: CommandPaletteView.CommandPaletteRestoreFocusTarget?,
         minimumEditorHeight: CGFloat
     ) {
         commandPaletteRestoreFocusTarget = restoreFocusTarget
@@ -243,7 +242,7 @@ final class CommandPaletteController: ObservableObject {
         resetListState(initialQuery: initialQuery, minimumEditorHeight: minimumEditorHeight)
     }
 
-    func prepareDismissal(minimumEditorHeight: CGFloat) -> ContentView.CommandPaletteRestoreFocusTarget? {
+    func prepareDismissal(minimumEditorHeight: CGFloat) -> CommandPaletteView.CommandPaletteRestoreFocusTarget? {
         let focusTarget = commandPaletteRestoreFocusTarget
         cancelSearch()
         commandPaletteSearchRequestID &+= 1
@@ -270,9 +269,9 @@ final class CommandPaletteController: ObservableObject {
         return focusTarget
     }
 
-    func recordUsage(commandId: String, usedAt: TimeInterval) -> [String: ContentView.CommandPaletteUsageEntry] {
+    func recordUsage(commandId: String, usedAt: TimeInterval) -> [String: CommandPaletteView.CommandPaletteUsageEntry] {
         var entry = commandPaletteUsageHistoryByCommandId[commandId]
-            ?? ContentView.CommandPaletteUsageEntry(useCount: 0, lastUsedAt: 0)
+            ?? CommandPaletteView.CommandPaletteUsageEntry(useCount: 0, lastUsedAt: 0)
         entry.useCount += 1
         entry.lastUsedAt = usedAt
         commandPaletteUsageHistoryByCommandId[commandId] = entry

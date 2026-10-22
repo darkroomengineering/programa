@@ -5384,7 +5384,7 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
     }
 
     /// Every main window built via `createMainWindow()` already hosts a real command
-    /// palette overlay container (installed by `ContentView`, tagged with
+    /// palette overlay container (installed by `CommandPaletteView`, tagged with
     /// `commandPaletteOverlayContainerIdentifier`) as a sibling of `contentView`, not
     /// nested inside it. Adding a second, decoy view with the same identifier under
     /// `contentView` does not shadow it -- the production tree walk

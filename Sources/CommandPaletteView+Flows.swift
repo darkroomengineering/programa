@@ -2,9 +2,9 @@ import AppKit
 import Bonsplit
 import SwiftUI
 
-extension ContentView {
+extension CommandPaletteView {
     @ViewBuilder
-    func attachCommandPaletteFocusAndTabsHandlers(to view: some View) -> some View {
+    func attachCommandPaletteFocusHandlers(to view: some View) -> some View {
         view
             .onChange(of: isCommandPaletteSearchFocused) { _, focused in
                 if focused {
@@ -16,47 +16,26 @@ extension ContentView {
                     attemptCommandPaletteTextSelectionIfNeeded()
                 }
             }
-            .onReceive(tabManager.$tabs) { tabs in
-                let existingIds = Set(tabs.map { $0.id })
-                if let retiringWorkspaceId, !existingIds.contains(retiringWorkspaceId) {
-                    self.retiringWorkspaceId = nil
-                    workspaceHandoffFallbackTask?.cancel()
-                    workspaceHandoffFallbackTask = nil
-                }
-                if let previousSelectedWorkspaceId, !existingIds.contains(previousSelectedWorkspaceId) {
-                    self.previousSelectedWorkspaceId = tabManager.selectedTabId
-                }
-                tabManager.pruneBackgroundWorkspaceLoads(existingIds: existingIds)
-                reconcileMountedWorkspaceIds(tabs: tabs)
-                selectedTabIds = selectedTabIds.filter { existingIds.contains($0) }
-                if selectedTabIds.isEmpty, let selectedId = tabManager.selectedTabId {
-                    selectedTabIds = [selectedId]
-                }
-                if let lastIndex = lastSidebarSelectionIndex, lastIndex >= tabs.count {
-                    if let selectedId = tabManager.selectedTabId {
-                        lastSidebarSelectionIndex = tabs.firstIndex { $0.id == selectedId }
-                    } else {
-                        lastSidebarSelectionIndex = nil
-                    }
-                }
-                syncSidebarSelectedWorkspaceIds()
-                applyUITestSidebarSelectionIfNeeded(tabs: tabs)
+            .onReceive(NotificationCenter.default.publisher(
+                for: NSWindow.didBecomeKeyNotification,
+                object: observedWindow
+            )) { _ in
+                attemptCommandPaletteFocusRestoreIfNeeded()
+                attemptCommandPaletteTextSelectionIfNeeded()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSText.didBeginEditingNotification)) { notification in
+                guard commandPaletteController.commandPalettePendingTextSelectionBehavior != nil else { return }
+                guard let editor = notification.object as? NSTextView,
+                      editor.isFieldEditor else { return }
+                guard let observedWindow else { return }
+                guard editor.window === observedWindow else { return }
+                attemptCommandPaletteTextSelectionIfNeeded()
             }
     }
 
     @ViewBuilder
     func attachCommandPaletteRequestHandlers(to view: some View) -> some View {
         view
-            .onReceive(NotificationCenter.default.publisher(for: SidebarDragLifecycleNotification.stateDidChange)) { notification in
-                let tabId = SidebarDragLifecycleNotification.tabId(from: notification)
-                sidebarDraggedTabId = tabId
-    #if DEBUG
-                dlog(
-                    "sidebar.dragState.content tab=\(debugShortWorkspaceId(tabId)) " +
-                    "reason=\(SidebarDragLifecycleNotification.reason(from: notification))"
-                )
-    #endif
-            }
             .onReceive(NotificationCenter.default.publisher(for: .commandPaletteToggleRequested)) { notification in
                 let requestedWindow = notification.object as? NSWindow
                 guard Self.shouldHandleCommandPaletteRequest(
@@ -185,16 +164,6 @@ extension ContentView {
                 ) else { return }
                 _ = handleCommandPaletteRenameDeleteBackward(modifiers: [])
             }
-            .onReceive(NotificationCenter.default.publisher(for: .feedbackComposerRequested)) { notification in
-                let requestedWindow = notification.object as? NSWindow
-                guard Self.shouldHandleCommandPaletteRequest(
-                    observedWindow: observedWindow,
-                    requestedWindow: requestedWindow,
-                    keyWindow: NSApp.keyWindow,
-                    mainWindow: NSApp.mainWindow
-                ) else { return }
-                presentFeedbackComposer()
-            }
     }
 
     var commandPaletteListScope: CommandPaletteListScope {
@@ -222,6 +191,9 @@ extension ContentView {
         case .commands:
             return String(localized: "commandPalette.search.commandsPlaceholder", defaultValue: "Type a command")
         case .switcher:
+            if paneHandoffTarget != nil {
+                return String(localized: "commandPalette.search.paneHandoffPlaceholder", defaultValue: "Pick a pane to paste its output")
+            }
             return commandPaletteController.commandPaletteSearchAllSurfaces
                 ? String(localized: "commandPalette.search.switcherPlaceholderAllSurfaces", defaultValue: "Search workspaces and surfaces")
                 : String(localized: "commandPalette.search.switcherPlaceholder", defaultValue: "Search workspaces")
@@ -233,6 +205,9 @@ extension ContentView {
         case .commands:
             return String(localized: "commandPalette.search.commandsEmpty", defaultValue: "No commands match your search.")
         case .switcher:
+            if paneHandoffTarget != nil {
+                return String(localized: "commandPalette.search.paneHandoffEmpty", defaultValue: "No other terminal panes match your search.")
+            }
             return commandPaletteController.commandPaletteSearchAllSurfaces
                 ? String(localized: "commandPalette.search.switcherEmptyAllSurfaces", defaultValue: "No workspaces or surfaces match your search.")
                 : String(localized: "commandPalette.search.switcherEmpty", defaultValue: "No workspaces match your search.")
@@ -722,49 +697,8 @@ extension ContentView {
 #endif
     }
 
-    func presentFeedbackComposer() {
-        DispatchQueue.main.async {
-            NSWorkspace.shared.open(URL(string: "https://github.com/darkroomengineering/programa/issues")!)
-        }
-    }
-
     func syncCommandPaletteDebugStateForObservedWindow() {
-        guard let window = observedWindow ?? NSApp.keyWindow ?? NSApp.mainWindow else { return }
-        AppDelegate.shared?.setCommandPaletteVisible(commandPaletteController.isCommandPalettePresented, for: window)
-        let visibleResultCount = commandPaletteController.commandPaletteVisibleResults.count
-        let selectedIndex = commandPaletteController.isCommandPalettePresented ? commandPaletteSelectedIndex(resultCount: visibleResultCount) : 0
-        AppDelegate.shared?.setCommandPaletteSelectionIndex(selectedIndex, for: window)
-        AppDelegate.shared?.setCommandPaletteSnapshot(commandPaletteDebugSnapshot(), for: window)
-    }
-
-    private func commandPaletteDebugSnapshot() -> CommandPaletteDebugSnapshot {
-        guard commandPaletteController.isCommandPalettePresented else { return .empty }
-
-        let mode: String
-        switch commandPaletteController.commandPaletteMode {
-        case .commands:
-            mode = commandPaletteListScope.rawValue
-        case .renameInput:
-            mode = "rename_input"
-        case .workspaceDescriptionInput:
-            mode = "workspace_description_input"
-        }
-
-        let rows = Array(commandPaletteController.commandPaletteVisibleResults.prefix(100)).map { result in
-                CommandPaletteDebugResultRow(
-                    commandId: result.command.id,
-                    title: result.command.title,
-                    shortcutHint: result.command.shortcutHint,
-                    trailingLabel: commandPaletteTrailingLabel(for: result.command)?.text,
-                    score: result.score
-                )
-        }
-
-        return CommandPaletteDebugSnapshot(
-            query: commandPaletteQueryForMatching,
-            mode: mode,
-            results: rows
-        )
+        commandPaletteController.syncDebugState(observedWindow: observedWindow)
     }
 
     private func presentCommandPalette(initialQuery: String) {
@@ -789,7 +723,7 @@ extension ContentView {
         syncCommandPaletteDebugStateForObservedWindow()
     }
 
-    private func resetCommandPaletteListState(initialQuery: String) {
+    func resetCommandPaletteListState(initialQuery: String) {
         commandPaletteController.resetListState(
             initialQuery: initialQuery,
             minimumEditorHeight: CommandPaletteMultilineTextEditorRepresentable.defaultMinimumHeight
@@ -821,6 +755,7 @@ extension ContentView {
             )
         }
 #endif
+        paneHandoffTarget = nil
         let storedFocusTarget = commandPaletteController.prepareDismissal(
             minimumEditorHeight: CommandPaletteMultilineTextEditorRepresentable.defaultMinimumHeight
         )
@@ -922,47 +857,15 @@ extension ContentView {
     }
 
     private func requestCommandPaletteFocusRestore(target: CommandPaletteRestoreFocusTarget) {
-        commandPaletteController.commandPalettePendingDismissFocusTarget = target
-        commandPaletteController.commandPaletteRestoreTimeoutWorkItem?.cancel()
-        let timeoutWork = DispatchWorkItem {
-            commandPaletteController.commandPalettePendingDismissFocusTarget = nil
-            commandPaletteController.commandPaletteRestoreTimeoutWorkItem = nil
-        }
-        commandPaletteController.commandPaletteRestoreTimeoutWorkItem = timeoutWork
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: timeoutWork)
-        attemptCommandPaletteFocusRestoreIfNeeded()
+        commandPaletteController.requestFocusRestore(
+            target: target,
+            tabManager: tabManager,
+            observedWindow: observedWindow
+        )
     }
 
     func attemptCommandPaletteFocusRestoreIfNeeded() {
-        guard !commandPaletteController.isCommandPalettePresented else { return }
-        guard let target = commandPaletteController.commandPalettePendingDismissFocusTarget else { return }
-        if let window = observedWindow, !window.isVisible {
-            commandPaletteController.commandPalettePendingDismissFocusTarget = nil
-            commandPaletteController.commandPaletteRestoreTimeoutWorkItem?.cancel()
-            commandPaletteController.commandPaletteRestoreTimeoutWorkItem = nil
-            return
-        }
-        guard tabManager.tabs.contains(where: { $0.id == target.workspaceId }) else {
-            commandPaletteController.commandPalettePendingDismissFocusTarget = nil
-            commandPaletteController.commandPaletteRestoreTimeoutWorkItem?.cancel()
-            commandPaletteController.commandPaletteRestoreTimeoutWorkItem = nil
-            return
-        }
-
-        if let window = observedWindow, !window.isKeyWindow {
-            window.makeKeyAndOrderFront(nil)
-        }
-        tabManager.focusTab(target.workspaceId, surfaceId: target.panelId, suppressFlash: true)
-
-        guard let context = focusedPanelContext,
-              context.workspace.id == target.workspaceId,
-              context.panelId == target.panelId else {
-            return
-        }
-        guard context.panel.restoreFocusIntent(target.intent) else { return }
-        commandPaletteController.commandPalettePendingDismissFocusTarget = nil
-        commandPaletteController.commandPaletteRestoreTimeoutWorkItem?.cancel()
-        commandPaletteController.commandPaletteRestoreTimeoutWorkItem = nil
+        commandPaletteController.attemptFocusRestoreIfNeeded(tabManager: tabManager, observedWindow: observedWindow)
     }
 
 #if DEBUG

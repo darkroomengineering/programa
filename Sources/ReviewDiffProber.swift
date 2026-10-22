@@ -31,6 +31,21 @@ struct ReviewDiffSnapshot: Equatable, Sendable {
     }
 }
 
+/// Uncommitted changes at one moment: which paths differ and, under the hashing cap, what each
+/// holds. The review nudge compares a turn's start and end fingerprints.
+struct ReviewChangeFingerprint: Equatable, Sendable {
+    let paths: Set<String>
+    /// `nil` past `ReviewDiffProber.fingerprintHashPathLimit` or when hashing failed.
+    let contentHashes: [String: String]?
+
+    /// Paths always compare; contents only when both sides were hashed.
+    func differs(from baseline: ReviewChangeFingerprint) -> Bool {
+        if paths != baseline.paths { return true }
+        guard let contentHashes, let baselineHashes = baseline.contentHashes else { return false }
+        return contentHashes != baselineHashes
+    }
+}
+
 /// Stateless git-subprocess probing for the diff review panel.
 struct ReviewDiffProber {
     /// Files whose diff hunk text exceeds this many bytes are treated as "not diffable -- too
@@ -68,6 +83,85 @@ struct ReviewDiffProber {
         }
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// Paths the `.uncommitted` review would list, without building hunks: tracked changes vs
+    /// `HEAD` plus untracked files. `nil` when `directory` is not in a git repo or a git command
+    /// failed, so a failed probe never reads as "no changes".
+    nonisolated static func uncommittedChangedPaths(directory: String) -> Set<String>? {
+        guard let repoRoot = repositoryRoot(directory: directory) else { return nil }
+        return changedPaths(repoRoot: repoRoot)
+    }
+
+    nonisolated static func uncommittedFileCount(directory: String) -> Int? {
+        uncommittedChangedPaths(directory: directory)?.count
+    }
+
+    /// Above this many changed paths the fingerprint skips content hashes.
+    static let fingerprintHashPathLimit = 500
+
+    /// The changed paths plus the current content hash of each, so a second edit to an
+    /// already-dirty file reads as a change. `nil` under the same conditions as
+    /// `uncommittedChangedPaths`.
+    nonisolated static func uncommittedChangeFingerprint(directory: String) -> ReviewChangeFingerprint? {
+        guard let repoRoot = repositoryRoot(directory: directory),
+              let paths = changedPaths(repoRoot: repoRoot) else { return nil }
+        // SHORTCUT: no content hashes past `fingerprintHashPathLimit` paths, so the paths fit one
+        // `git hash-object` argv (CanonicalSubprocessRunner has no stdin for `--stdin-paths`).
+        // ceiling: in a diff of 500+ files, re-editing an already-dirty file shows no nudge.
+        // upgrade: feed `--stdin-paths` once the runner can write stdin, or when large-diff
+        // workspaces report missed nudges.
+        guard paths.count <= fingerprintHashPathLimit else {
+            return ReviewChangeFingerprint(paths: paths, contentHashes: nil)
+        }
+        return ReviewChangeFingerprint(paths: paths, contentHashes: contentHashes(repoRoot: repoRoot, paths: paths))
+    }
+
+    /// Worktree blob id per path; deleted paths, directories (submodules) and dangling links map
+    /// to "" since `hash-object` cannot read them. `nil` if hashing failed.
+    private nonisolated static func contentHashes(repoRoot: String, paths: Set<String>) -> [String: String]? {
+        var hashes: [String: String] = [:]
+        var hashable: [String] = []
+        for path in paths.sorted() {
+            var isDirectory: ObjCBool = false
+            let fullPath = (repoRoot as NSString).appendingPathComponent(path)
+            if FileManager.default.fileExists(atPath: fullPath, isDirectory: &isDirectory), !isDirectory.boolValue {
+                hashable.append(path)
+            } else {
+                hashes[path] = ""
+            }
+        }
+        guard !hashable.isEmpty else { return hashes }
+        // `--no-filters` hashes the bytes on disk without running clean/LFS filter processes.
+        guard case .success(let output) = runCommandResult(
+            directory: repoRoot,
+            executable: "git",
+            arguments: ["hash-object", "--no-filters", "--"] + hashable
+        ) else {
+            return nil
+        }
+        let ids = output.split(separator: "\n").map(String.init)
+        guard ids.count == hashable.count else { return nil }
+        for (path, id) in zip(hashable, ids) {
+            hashes[path] = id
+        }
+        return hashes
+    }
+
+    private nonisolated static func changedPaths(repoRoot: String) -> Set<String>? {
+        let diffRangeArgs = headDiffRangeArgs(repoRoot: repoRoot)
+        guard case .success(let tracked) = runCommandResult(
+            directory: repoRoot,
+            executable: "git",
+            arguments: ["diff", "--name-only", "-z", "--no-ext-diff", "--no-textconv", "--ignore-submodules=dirty", "--find-renames"] + diffRangeArgs
+        ), case .success(let untracked) = runCommandResult(
+            directory: repoRoot,
+            executable: "git",
+            arguments: ["ls-files", "-z", "--others", "--exclude-standard"]
+        ) else {
+            return nil
+        }
+        return Set((tracked + untracked).split(separator: "\0").map(String.init))
     }
 
     // MARK: - Snapshot modes

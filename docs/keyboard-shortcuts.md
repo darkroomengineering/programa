@@ -111,7 +111,9 @@ were open at quit from session data.
 
 The agent diff review panel (`programa review open`, or the command palette) shows the
 worktree diff for a terminal surface, with line comments you can send back into the agent's
-input. No default keyboard shortcut ships for v1 to avoid colliding with existing bindings
+input. When the workspace has a GitHub pull request, the top of the panel shows its state, failing
+and pending checks, unresolved review conversations, and merge conflicts or a missing review, read with `gh` when the panel opens or
+you press a refresh button. No default keyboard shortcut ships for v1 to avoid colliding with existing bindings
 (⌘⇧R is already Rename Workspace) — bind one yourself if you want a shortcut.
 
 ## Git worktrees & named layouts
@@ -119,6 +121,13 @@ input. No default keyboard shortcut ships for v1 to avoid colliding with existin
 The native git worktree workflow (`programa worktree ...`) and named layout configs
 (`programa layout ...`, "Apply layout: <name>" in the command palette) add no new keyboard
 shortcuts — CLI and command palette only, by design (not an oversight).
+
+## Agent sessions
+
+**Resume Agent Session** in the command palette types the focused terminal's last agent
+session resume command (`claude --resume <id>` or `codex resume <id>`) at its shell prompt. It
+has no keyboard shortcut; `programa resume` does the same from the command line. See
+[workspace-interface.md](workspace-interface.md#resume-an-agent-session).
 
 ## Action ids and chord syntax
 
