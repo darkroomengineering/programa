@@ -269,6 +269,7 @@
 		B9000039A1B2C3D4E5F60719 /* CLI+Tree.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000038A1B2C3D4E5F60719 /* CLI+Tree.swift */; };
 		7B3F9A10C2D4E5F6A7B8000A /* CLI+Ports.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3F9A10C2D4E5F6A7B80009 /* CLI+Ports.swift */; };
 		A2E500000000000000000007 /* CLI+AgentResume.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2E500000000000000000006 /* CLI+AgentResume.swift */; };
+		F1D600000000000000000002 /* CLI+Usage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1D600000000000000000001 /* CLI+Usage.swift */; };
 		B900003BA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */; };
 		B900003DA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */; };
 		E9C500000000000000000001 /* CLI+WorktreeIssue.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9C500000000000000000002 /* CLI+WorktreeIssue.swift */; };
@@ -697,6 +698,7 @@
 		B9000038A1B2C3D4E5F60719 /* CLI+Tree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Tree.swift"; sourceTree = "<group>"; };
 		7B3F9A10C2D4E5F6A7B80009 /* CLI+Ports.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Ports.swift"; sourceTree = "<group>"; };
 		A2E500000000000000000006 /* CLI+AgentResume.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+AgentResume.swift"; sourceTree = "<group>"; };
+		F1D600000000000000000001 /* CLI+Usage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Usage.swift"; sourceTree = "<group>"; };
 		B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+TmuxCompat.swift"; sourceTree = "<group>"; };
 		B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+AgentWrappers.swift"; sourceTree = "<group>"; };
 		E9C500000000000000000002 /* CLI+WorktreeIssue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+WorktreeIssue.swift"; sourceTree = "<group>"; };
@@ -1133,6 +1135,7 @@
 				7B3F9A10C2D4E5F6A7B80009 /* CLI+Ports.swift */,
 				A1D000000000000000000006 /* CLI+Handoff.swift */,
 				A2E500000000000000000006 /* CLI+AgentResume.swift */,
+				F1D600000000000000000001 /* CLI+Usage.swift */,
 				B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */,
 				B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */,
 				E9C500000000000000000002 /* CLI+WorktreeIssue.swift */,
@@ -1804,6 +1807,7 @@
 				7B3F9A10C2D4E5F6A7B8000A /* CLI+Ports.swift in Sources */,
 				A1D000000000000000000007 /* CLI+Handoff.swift in Sources */,
 				A2E500000000000000000007 /* CLI+AgentResume.swift in Sources */,
+				F1D600000000000000000002 /* CLI+Usage.swift in Sources */,
 				A2E500000000000000000003 /* AgentResumeCommand.swift in Sources */,
 				B900003BA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift in Sources */,
 				B900003DA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift in Sources */,

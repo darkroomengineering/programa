@@ -59,7 +59,7 @@ Read by the app, the CLI and `programa-mcp`. Modes and discovery are described i
 | `PROGRAMA_COMMIT` | Commit hash the CLI and the About box show when the build has no embedded value. |
 | `PROGRAMA_CLI_TTY_NAME`, `PROGRAMA_TTY_NAME` | Terminal device name that the agent hooks report for the surface. They fall back to `TTY` and `SSH_TTY`. |
 | `PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC` | CLI | Seconds the CLI waits for a socket response (default 15). |
-| `PROGRAMA_CLAUDE_HOOK_STATE_PATH` | Overrides where the Claude, Codex and OpenCode hooks keep their session state file. |
+| `PROGRAMA_CLAUDE_HOOK_STATE_PATH` | Overrides where the Claude hooks keep their session state file. The Codex and OpenCode hooks always use `~/.programa/codex-hook-sessions.json` and `~/.programa/opencode-hook-sessions.json`. |
 | `PROGRAMA_CLAUDE_PID` | Process id of the Claude Code instance a hook belongs to. Set by the `claude` wrapper. |
 | `PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN` | `programa` binary the `claude` wrapper's hooks call. |
 | `_PROGRAMA_CLAUDE_FLAGS_CACHE_KEY`, `_PROGRAMA_CLAUDE_FLAGS_CACHE_VAL` | Which optional flags (`--session-id`, `--mcp-config`, `--append-system-prompt`) the resolved `claude` binary supports, cached per binary path and mtime by the `claude` wrapper. |

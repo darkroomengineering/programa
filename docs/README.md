@@ -18,6 +18,7 @@
 - [socket-api.md](socket-api.md): the control socket, its security model, discovery, and the core methods; the full method list is `contracts/v2/methods.json`.
 - [mcp-server.md](mcp-server.md): the MCP server and its tools.
 - [agent-skill.md](agent-skill.md): the installable agent skill.
+- [agent-usage.md](agent-usage.md): what token data Claude Code and Codex record, and `programa usage`.
 - [agent-detection-manifests.md](agent-detection-manifests.md): the manifest format for screen-based agent detection.
 - [aside-browser.md](aside-browser.md): Using the Aside browser from agents in Programa panes.
 

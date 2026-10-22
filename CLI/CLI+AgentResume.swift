@@ -9,6 +9,7 @@ struct AgentLastSessionRecord: Codable, Equatable {
     var workspaceId: String?
     var surfaceId: String?
     var endedAt: TimeInterval
+    var transcriptPath: String? = nil
 }
 
 private struct AgentLastSessionsFile: Codable, Equatable {
@@ -118,7 +119,8 @@ extension ProgramaCLI {
         consumed: ClaudeHookSessionRecord?,
         cwd: String?,
         workspaceId: String?,
-        surfaceId: String?
+        surfaceId: String?,
+        transcriptPath: String?
     ) {
         func nonEmpty(_ value: String?) -> String? {
             guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
@@ -131,7 +133,8 @@ extension ProgramaCLI {
             cwd: nonEmpty(consumed?.cwd) ?? nonEmpty(cwd),
             workspaceId: nonEmpty(consumed?.workspaceId) ?? workspaceId,
             surfaceId: nonEmpty(consumed?.surfaceId) ?? surfaceId,
-            endedAt: Date().timeIntervalSince1970
+            endedAt: Date().timeIntervalSince1970,
+            transcriptPath: nonEmpty(transcriptPath) ?? nonEmpty(consumed?.transcriptPath)
         ))
     }
 

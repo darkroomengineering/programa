@@ -31,6 +31,7 @@ struct ClaudeHookSessionRecord: Codable, Equatable {
     var pendingQuestion: String? = nil
     var startedAt: TimeInterval
     var updatedAt: TimeInterval
+    var transcriptPath: String? = nil
 }
 
 private struct ClaudeHookSessionStoreFile: Codable, Equatable {
@@ -71,6 +72,13 @@ final class ClaudeHookSessionStore {
         return state.sessions[normalized]
     }
 
+    /// Read-only, like `lookup`.
+    func allSessions() -> [ClaudeHookSessionRecord] {
+        var state = (try? loadUnlocked()) ?? ClaudeHookSessionStoreFile()
+        pruneExpired(&state)
+        return Array(state.sessions.values)
+    }
+
     func upsert(
         sessionId: String,
         workspaceId: String,
@@ -79,7 +87,8 @@ final class ClaudeHookSessionStore {
         pid: Int? = nil,
         lastSubtitle: String? = nil,
         lastBody: String? = nil,
-        pendingQuestion: String? = nil
+        pendingQuestion: String? = nil,
+        transcriptPath: String? = nil
     ) throws {
         let normalized = normalizeSessionId(sessionId)
         guard !normalized.isEmpty else { return }
@@ -114,6 +123,9 @@ final class ClaudeHookSessionStore {
             }
             if let pendingQuestion = normalizeOptional(pendingQuestion) {
                 record.pendingQuestion = pendingQuestion
+            }
+            if let transcriptPath = normalizeOptional(transcriptPath) {
+                record.transcriptPath = transcriptPath
             }
             record.updatedAt = now
             state.sessions[normalized] = record
@@ -562,7 +574,10 @@ extension ProgramaCLI {
         )
         let pid = hook.startPid()
         if let sessionId = ctx.parsed.sessionId {
-            try? ctx.store.upsert(sessionId: sessionId, workspaceId: workspaceId, surfaceId: surfaceId, cwd: ctx.parsed.cwd, pid: pid)
+            try? ctx.store.upsert(
+                sessionId: sessionId, workspaceId: workspaceId, surfaceId: surfaceId, cwd: ctx.parsed.cwd, pid: pid,
+                transcriptPath: ctx.parsed.transcriptPath
+            )
         }
         // Registers the pid for stale-session detection and OSC suppression but sets no
         // visible status: "Running" only appears once a prompt is submitted or work starts.
@@ -586,7 +601,8 @@ extension ProgramaCLI {
                     workspaceId: workspaceId,
                     surfaceId: mapped.surfaceId,
                     cwd: ctx.parsed.cwd ?? mapped.cwd,
-                    pid: pid
+                    pid: pid,
+                    transcriptPath: ctx.parsed.transcriptPath
                 )
             }
             if let pid {
@@ -622,7 +638,8 @@ extension ProgramaCLI {
                 cwd: ctx.parsed.cwd ?? mapped?.cwd,
                 pid: pid,
                 lastSubtitle: completion.storedSubtitle,
-                lastBody: completion.storedBody
+                lastBody: completion.storedBody,
+                transcriptPath: ctx.parsed.transcriptPath
             )
         }
         if hook.refreshesAgentPid, let pid {
@@ -663,7 +680,8 @@ extension ProgramaCLI {
                 cwd: ctx.parsed.cwd,
                 pid: pid,
                 lastSubtitle: notification.subtitle,
-                lastBody: notification.body
+                lastBody: notification.body,
+                transcriptPath: ctx.parsed.transcriptPath
             )
         }
         if hook.refreshesAgentPid, let pid {
@@ -708,7 +726,10 @@ extension ProgramaCLI {
             }
             consumed = try? ctx.store.consume(sessionId: sessionId, workspaceId: workspaceId, surfaceId: surfaceId)
         }
-        recordEndedAgentSession(provider: hook.provider, sessionId: sessionId, consumed: consumed, cwd: ctx.parsed.cwd, workspaceId: localWorkspaceId, surfaceId: localSurfaceId)
+        recordEndedAgentSession(
+            provider: hook.provider, sessionId: sessionId, consumed: consumed, cwd: ctx.parsed.cwd,
+            workspaceId: localWorkspaceId, surfaceId: localSurfaceId, transcriptPath: ctx.parsed.transcriptPath
+        )
 
         if let consumed, !consumed.surfaceId.isEmpty {
             clearAgentStateAndReportEvent(client: ctx.client, provider: hook.provider, eventType: "session.exited", workspaceId: consumed.workspaceId, surfaceId: consumed.surfaceId, sessionId: sessionId)
