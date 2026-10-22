@@ -290,7 +290,7 @@ def main() -> int:
                 payload = None
                 failures.append(f"agent start fails (json): stdout is not one JSON object: {process.stdout!r}")
             if isinstance(payload, dict):
-                check(payload.get("workspace_id") == NEW_WORKSPACE_ID, f"agent start fails (json): workspace_id was {payload.get('workspace_id')!r}")
+                check(payload.get("workspace_ref") == "workspace:9", f"agent start fails (json): workspace_ref was {payload.get('workspace_ref')!r}")
                 check("fixture surface is gone" in str(payload.get("agent_error", "")),
                       f"agent start fails (json): agent_error was {payload.get('agent_error')!r}")
             check("starting claude failed" in process.stderr, f"agent start fails (json): stderr was {process.stderr!r}")
