@@ -8,6 +8,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 
 ### Added
 - `programa usage` shows how many tokens each Claude Code and Codex session used, grouped by workspace, read from the agents' own transcripts. It shows no cost, because the transcripts don't record one per session. See `docs/agent-usage.md`.
+- The review panel shows whether the workspace's pull request is ready to merge: its state, which checks are failing or still running, how many review conversations are unresolved, and whether merge conflicts or a missing review block it, with a link to the PR. It reads from the GitHub CLI (`gh`) when the panel opens or you press its refresh button.
 - `programa opencode install-integration` registers the `programa-mcp` server in OpenCode's global `opencode.json`, so OpenCode agents get the Programa MCP tools. It leaves a customized entry and JSONC configs alone, and is untested against a live OpenCode.
 - The `programa-mcp` server has `surface_send_paste` and `agent_needs_input` tools, so an agent can hand text to another pane without pressing Return and ask the user a blocking question without shelling out to `programa rpc`.
 - Scripts can reply to a terminal prompt without the risk of it landing on a newer prompt: the new `surface.send_if_unchanged` socket method sends text and keys only while the screen still matches the `fingerprint` that `surface.read_text` now returns. `programa watch-events --needs-input` prints only agents waiting for the user.
