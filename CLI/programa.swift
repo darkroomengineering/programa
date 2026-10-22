@@ -4302,9 +4302,9 @@ struct ProgramaCLI {
     /// elsewhere in the app for status badges.
     static let raceSupportedAgents: [String] = ["claude", "opencode", "codex"]
 
-    /// Builds the shell command line that starts an agent with `prompt` as a shell-quoted positional argument.
-    private func raceAgentLaunchCommand(agent: String, prompt: String) -> String {
-        "\(agent) \(shellSingleQuote(prompt))"
+    /// Builds the shell command line that starts an agent on `prompt`. OpenCode reads a bare argument as a project path.
+    func raceAgentLaunchCommand(agent: String, prompt: String) -> String {
+        "\(agent) \(agent == "opencode" ? "--prompt " : "")\(shellSingleQuote(prompt))"
     }
 
     /// Shell-quotes arbitrary text for safe inclusion in a POSIX shell command line typed into

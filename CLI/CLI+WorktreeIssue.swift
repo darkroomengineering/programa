@@ -146,9 +146,6 @@ extension ProgramaCLI {
     /// text is untrusted, so it reaches the agent through the file and never through the shell.
     func worktreeIssueAgentLaunchCommand(agent: String, issueNumber: Int, promptFile: String) -> String {
         let prompt = "Work on GitHub issue #\(issueNumber). Its title, link and description are in \(promptFile); read that file first."
-        if agent == "opencode" {
-            return "opencode --prompt \(shellSingleQuote(prompt))"
-        }
-        return "\(agent) \(shellSingleQuote(prompt))"
+        return raceAgentLaunchCommand(agent: agent, prompt: prompt)
     }
 }
