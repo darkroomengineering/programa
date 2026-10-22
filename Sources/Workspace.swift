@@ -113,6 +113,10 @@ final class Workspace: Identifiable, ObservableObject {
     /// session restore), as opposed to the displayTitle placeholder seeded at
     /// panel creation. Only these titles may be promoted to the workspace title.
     var panelsWithLiveTitle: Set<UUID> = []
+    /// Panels whose title came from session restore and has not yet been replaced by a real
+    /// title. While held, the restored shell's startup titles (its cwd, a typed resume
+    /// command, an agent's untitled banner) are ignored so the saved title stays visible.
+    var panelsHoldingRestoredTitle: Set<UUID> = []
     @Published var panelCustomTitles: [UUID: String] = [:]
     @Published var pinnedPanelIds: Set<UUID> = []
     /// Per-tab color tint (pane tab bar), keyed by panel id. Distinct from `customColor`,
