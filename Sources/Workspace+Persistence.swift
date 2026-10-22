@@ -719,6 +719,9 @@ extension Workspace {
         if let title = snapshot.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
             panelTitles[panelId] = title
             panelsWithLiveTitle.insert(panelId)
+            if !Self.isTerminalStartupTitle(title) {
+                panelsHoldingRestoredTitle.insert(panelId)
+            }
         }
 
         setPanelCustomTitle(panelId: panelId, title: snapshot.customTitle)
