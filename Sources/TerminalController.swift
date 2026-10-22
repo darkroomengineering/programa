@@ -1975,6 +1975,8 @@ class TerminalController {
             return v2Ok(id: id, result: self.v2NotificationList())
         case "notification.clear":
             return v2Result(id: id, self.v2NotificationClear(params: params))
+        case "notification.claim_banners":
+            return v2Result(id: id, self.v2NotificationClaimBanners(params: params, connection: connection))
 
         case "app.reload_config":
             return v2Result(id: id, self.v2AppReloadConfig(params: params))
@@ -2072,6 +2074,10 @@ class TerminalController {
             return v2Result(id: id, self.v2DebugSamplesReset(params: params))
         case "debug.notification.focus":
             return v2Result(id: id, self.v2DebugFocusNotification(params: params))
+        case "debug.notification.banner_count":
+            return v2Result(id: id, self.v2DebugNotificationBannerCount())
+        case "debug.notification.banner_reset":
+            return v2Result(id: id, self.v2DebugNotificationBannerReset())
         case "debug.flash.count":
             return v2Result(id: id, self.v2DebugFlashCount(params: params))
         case "debug.flash.reset":

@@ -322,7 +322,10 @@ final class TerminalNotificationStore: ObservableObject {
         subtitle: String,
         body: String,
         cooldownKey: String? = nil,
-        cooldownInterval: TimeInterval? = nil
+        cooldownInterval: TimeInterval? = nil,
+        // false while a socket client shows this kind's banner itself (`notification.claim_banners`);
+        // the list, sidebar and Dock badge still update.
+        deliversBanner: Bool = true
     ) {
         let now = Date()
         let resolvedCooldownInterval: TimeInterval?
@@ -390,7 +393,10 @@ final class TerminalNotificationStore: ObservableObject {
         }
         if shouldSuppressExternalDelivery {
             suppressedNotificationFeedbackHandler(self, notification)
-        } else {
+        } else if deliversBanner {
+#if DEBUG
+            bannerHandoffCountForTesting += 1
+#endif
             notificationDeliveryHandler(self, notification)
         }
     }
@@ -848,6 +854,10 @@ final class TerminalNotificationStore: ObservableObject {
     }
 
 #if DEBUG
+    /// Notifications handed to `notificationDeliveryHandler`, counted before authorization so a
+    /// test runner without notification permission still sees them (`debug.notification.banner_count`).
+    var bannerHandoffCountForTesting = 0
+
     func configureNotificationSettingsPromptHooksForTesting(
         windowProvider: @escaping () -> NSWindow?,
         alertFactory: @escaping () -> NSAlert,

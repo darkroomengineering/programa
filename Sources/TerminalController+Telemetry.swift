@@ -497,7 +497,8 @@ extension TerminalController {
                 surfaceId: sid,
                 title: resolvedTitle,
                 subtitle: subtitle,
-                body: body
+                body: body,
+                deliversBanner: !NotificationBannerClaims.shared.isClaimed(.needsInput)
             )
             SocketEventBroadcaster.shared.publishNeedsInput(
                 workspaceId: workspaceId,
