@@ -77,11 +77,15 @@ enum CLIProcessRunner {
         executablePath: String,
         arguments: [String],
         stdinText: String? = nil,
-        timeout: TimeInterval? = nil
+        timeout: TimeInterval? = nil,
+        currentDirectoryPath: String? = nil
     ) -> CLIProcessResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = arguments
+        if let currentDirectoryPath {
+            process.currentDirectoryURL = URL(fileURLWithPath: currentDirectoryPath, isDirectory: true)
+        }
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
@@ -834,6 +838,15 @@ struct ProgramaCLI {
                       layout (see 'programa layout') into the new workspace. --focus opts in to
                       focusing the new workspace (default: does not steal focus).
 
+                  create [<branch>] --from-issue <number> [--agent <name>] [create flags]
+                      Read GitHub issue <number> with 'gh issue view' (run in the repo, so gh
+                      must be installed and logged in) and create the worktree on branch
+                      issue-<number>-<title-slug>. An explicit <branch> wins over the derived
+                      name. --agent (claude, opencode, or codex) then starts that agent in the
+                      new workspace, pointed at a temp file holding the issue title, link and
+                      body; the issue text is never typed into the shell. Prompt files are
+                      kept in $TMPDIR/programa-issue-prompts for 7 days.
+
                   open <path-or-branch> [--repo <dir>] [--focus]
                   open --all [--repo <dir>]
                       Open an existing worktree (by path or branch name) as a workspace.
@@ -856,6 +869,9 @@ struct ProgramaCLI {
                                      the worktrees.directory setting.
                   --layout <name>    Apply a saved layout (see 'programa layout') after creating
                                      the workspace (create only).
+                  --from-issue <n>   Name the branch after GitHub issue <n> (create only).
+                  --agent <name>     Start claude, opencode, or codex on the issue (needs
+                                     --from-issue).
                   --focus            Focus the workspace after create/open (default: off).
                   --all              Open every worktree of the repo (open only).
                   --force            Allow removing a worktree with uncommitted changes.
@@ -863,6 +879,7 @@ struct ProgramaCLI {
                 Example:
                   programa worktree create feature-x
                   programa worktree create feature-x --base main --layout fullstack-dev
+                  programa worktree create --from-issue 42 --agent claude
                   programa worktree list --repo ~/code/programa
                   programa worktree open --all
                   programa worktree remove feature-x
@@ -4007,18 +4024,28 @@ struct ProgramaCLI {
         let (baseOpt, rem1) = parseOption(rem0, name: "--base")
         let (pathOpt, rem2) = parseOption(rem1, name: "--path")
         let (layoutOpt, rem3) = parseOption(rem2, name: "--layout")
-        let focus = hasFlag(rem3, name: "--focus")
-        var positional = rem3.filter { $0 != "--focus" }
+        let (issueOpt, rem4) = parseOption(rem3, name: "--from-issue")
+        let (agentOpt, rem5) = parseOption(rem4, name: "--agent")
+        let focus = hasFlag(rem5, name: "--focus")
+        var positional = rem5.filter { $0 != "--focus" }
 
-        guard let branch = positional.first, !branch.hasPrefix("--") else {
-            throw CLIError(message: "worktree create requires <branch>")
-        }
-        positional.removeFirst()
+        let explicitBranch = positional.first.flatMap { $0.hasPrefix("--") ? nil : $0 }
+        if explicitBranch != nil { positional.removeFirst() }
         if let unknown = positional.first(where: { $0.hasPrefix("--") }) {
             throw CLIError(message: "worktree create: unknown flag '\(unknown)'")
         }
+        let issueNumber = try issueOpt.map(parseWorktreeIssueNumber)
+        let agent = try agentOpt.map { try validateWorktreeIssueAgent($0, issueNumber: issueNumber) }
+        guard explicitBranch != nil || issueNumber != nil else {
+            throw CLIError(message: "worktree create requires <branch> (or --from-issue <number>)")
+        }
 
         let repo = try resolveWorktreeRepoRoot(explicit: repoOpt)
+        let issue = try issueNumber.map { try fetchGitHubIssue(number: $0, repo: repo) }
+        let promptFile = try agent != nil ? issue.map(writeWorktreeIssuePromptFile) : nil
+        guard let branch = explicitBranch ?? issue.map(worktreeIssueBranchName) else {
+            throw CLIError(message: "worktree create requires <branch>")
+        }
 
         var params: [String: Any] = ["repo": repo, "branch": branch]
         if let baseOpt { params["base"] = baseOpt }
@@ -4026,8 +4053,38 @@ struct ProgramaCLI {
         if let layoutOpt { params["layout"] = layoutOpt }
         if focus { params["focus"] = true }
 
-        let payload = try client.sendV2(method: V2MethodNames.worktreeCreate, params: params)
-        printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: worktreeSummary(payload, idFormat: idFormat))
+        var payload = try client.sendV2(method: V2MethodNames.worktreeCreate, params: params)
+        var summary = worktreeSummary(payload, idFormat: idFormat)
+        if let issue {
+            payload["issue"] = ["number": issue.number, "title": issue.title, "url": issue.url]
+            summary += " issue=#\(issue.number)"
+        }
+        var agentError: String?
+        if let agent, let issue, let promptFile {
+            payload["agent"] = agent
+            payload["prompt_file"] = promptFile
+            summary += " prompt_file=\(promptFile)"
+            do {
+                guard let workspaceId = payload["workspace_id"] as? String else {
+                    throw CLIError(message: "worktree.create did not return a workspace_id")
+                }
+                _ = try client.sendV2(method: V2MethodNames.surfaceSendText, params: [
+                    "workspace_id": workspaceId,
+                    "text": worktreeIssueAgentLaunchCommand(agent: agent, issueNumber: issue.number, promptFile: promptFile) + "\n"
+                ])
+                summary += " agent=\(agent)"
+            } catch {
+                let message = (error as? CLIError)?.message ?? "\(error)"
+                agentError = message
+                payload["agent_error"] = message
+            }
+        }
+        printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: summary)
+        if let agentError, let agent {
+            // Not a throw: in --json mode the top-level handler would print a second JSON object to stdout.
+            FileHandle.standardError.write(Data("Error: worktree create: the workspace was created, but starting \(agent) failed: \(agentError)\n".utf8))
+            exit(1)
+        }
     }
 
     private func runWorktreeOpen(
@@ -4243,7 +4300,7 @@ struct ProgramaCLI {
     /// screen-pattern detection (used for Gemini CLI/Copilot/Cursor Agent/Aider) cannot
     /// provide, so those are deliberately excluded here even though they're supported
     /// elsewhere in the app for status badges.
-    private static let raceSupportedAgents: [String] = ["claude", "opencode", "codex"]
+    static let raceSupportedAgents: [String] = ["claude", "opencode", "codex"]
 
     /// Builds the shell command line that starts an agent with `prompt` as a shell-quoted positional argument.
     private func raceAgentLaunchCommand(agent: String, prompt: String) -> String {
@@ -4255,7 +4312,7 @@ struct ProgramaCLI {
     /// quotes as '\'' (close quote, literal escaped quote, reopen quote) -- the standard
     /// technique, safe against every other shell metacharacter (double quotes, backticks, $,
     /// *, newlines, etc.) since nothing but a literal `'` is special inside single quotes.
-    private func shellSingleQuote(_ raw: String) -> String {
+    func shellSingleQuote(_ raw: String) -> String {
         "'" + raw.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
@@ -5070,13 +5127,22 @@ struct ProgramaCLI {
 
         case "worktree":
             let parsed = try parse(
-                values: ["repo", "base", "path", "layout"],
+                values: ["repo", "base", "path", "layout", "from-issue", "agent"],
                 booleans: ["focus", "force", "json", "all"],
                 minPositionals: 1,
                 maxPositionals: nil
             )
             guard ["create", "open", "remove", "list"].contains(parsed.positional[0].lowercased()) else {
                 throw CLIError(message: "worktree: unknown subcommand \(parsed.positional[0])")
+            }
+            if parsed.options["from-issue"] != nil || parsed.options["agent"] != nil {
+                guard parsed.positional[0].lowercased() == "create" else {
+                    throw CLIError(message: "worktree: --from-issue and --agent are only valid for create")
+                }
+                let issueNumber = try parsed.options["from-issue"].map(parseWorktreeIssueNumber)
+                if let agent = parsed.options["agent"] {
+                    _ = try validateWorktreeIssueAgent(agent, issueNumber: issueNumber)
+                }
             }
             if parsed.options["all"] != nil {
                 guard parsed.positional[0].lowercased() == "open" else {
