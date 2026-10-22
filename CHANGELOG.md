@@ -53,6 +53,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 
 ### Fixed
 - `programa handoff` pastes into a pane whose terminal has not started yet instead of failing.
+- `programa race --agent opencode` now hands OpenCode the prompt with `--prompt`. OpenCode read the bare argument as a project path, so the prompt never arrived.
 - With dozens of tabs in a pane, each tab keeps a width that shows its title instead of shrinking to one letter. The tab bar scrolls with a regular mouse wheel and keeps the selected tab in view.
 - Renaming a tab, or a program changing its title, updates the tab bar right away.
 - Launching a second build of Programa no longer cuts the running app's command line tool and agent hooks off. The new copy used to delete the running app's socket and take it over.
