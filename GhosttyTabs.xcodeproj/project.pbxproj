@@ -163,6 +163,7 @@
 		RVPN00000000000000000004 /* ReviewCommentSerializer.swift in Sources */ = {isa = PBXBuildFile; fileRef = RVPN00000000000000000003 /* ReviewCommentSerializer.swift */; };
 		RVPN00000000000000000006 /* ReviewDiffParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = RVPN00000000000000000005 /* ReviewDiffParser.swift */; };
 		RVPN00000000000000000008 /* ReviewDiffProber.swift in Sources */ = {isa = PBXBuildFile; fileRef = RVPN00000000000000000007 /* ReviewDiffProber.swift */; };
+		D8B400000000000000000002 /* ReviewMergeReadiness.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8B400000000000000000001 /* ReviewMergeReadiness.swift */; };
 		A3C4CE000000000000000002 /* ReviewCheckpointStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3C4CE000000000000000001 /* ReviewCheckpointStore.swift */; };
 		RVPN0000000000000000000A /* ReviewPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = RVPN00000000000000000009 /* ReviewPanel.swift */; };
 		RVPN0000000000000000000C /* ReviewPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = RVPN0000000000000000000B /* ReviewPanelView.swift */; };
@@ -323,6 +324,7 @@
 					FA000000A1B2C3D4E5F60718 /* WorkspaceStressProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000001A1B2C3D4E5F60718 /* WorkspaceStressProfileTests.swift */; };
 					A5008383 /* CommandPaletteSearchEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5008382 /* CommandPaletteSearchEngineTests.swift */; };
 					RPVW0002 /* ReviewPanelViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = RPVW0001 /* ReviewPanelViewTests.swift */; };
+					D8B400000000000000000004 /* ReviewMergeReadinessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8B400000000000000000003 /* ReviewMergeReadinessTests.swift */; };
 					A3C4CE000000000000000004 /* ReviewCheckpointStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3C4CE000000000000000003 /* ReviewCheckpointStoreTests.swift */; };
 		DA7A10CA710E000000000003 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = DA7A10CA710E000000000001 /* Localizable.xcstrings */; };
 		DA7A10CA710E000000000004 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = DA7A10CA710E000000000002 /* InfoPlist.xcstrings */; };
@@ -588,6 +590,7 @@
 		RVPN00000000000000000003 /* ReviewCommentSerializer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewCommentSerializer.swift; sourceTree = "<group>"; };
 		RVPN00000000000000000005 /* ReviewDiffParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewDiffParser.swift; sourceTree = "<group>"; };
 		RVPN00000000000000000007 /* ReviewDiffProber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewDiffProber.swift; sourceTree = "<group>"; };
+		D8B400000000000000000001 /* ReviewMergeReadiness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewMergeReadiness.swift; sourceTree = "<group>"; };
 		A3C4CE000000000000000001 /* ReviewCheckpointStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewCheckpointStore.swift; sourceTree = "<group>"; };
 		RVPN00000000000000000009 /* ReviewPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/ReviewPanel.swift; sourceTree = "<group>"; };
 		RVPN0000000000000000000B /* ReviewPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/ReviewPanelView.swift; sourceTree = "<group>"; };
@@ -742,6 +745,7 @@
 					FA000001A1B2C3D4E5F60718 /* WorkspaceStressProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceStressProfileTests.swift; sourceTree = "<group>"; };
 				A5008382 /* CommandPaletteSearchEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteSearchEngineTests.swift; sourceTree = "<group>"; };
 				RPVW0001 /* ReviewPanelViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewPanelViewTests.swift; sourceTree = "<group>"; };
+				D8B400000000000000000003 /* ReviewMergeReadinessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewMergeReadinessTests.swift; sourceTree = "<group>"; };
 				A3C4CE000000000000000003 /* ReviewCheckpointStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewCheckpointStoreTests.swift; sourceTree = "<group>"; };
 		DA7A10CA710E000000000001 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		DA7A10CA710E000000000002 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
@@ -1105,6 +1109,7 @@
 				RVPN00000000000000000003 /* ReviewCommentSerializer.swift */,
 				RVPN00000000000000000005 /* ReviewDiffParser.swift */,
 				RVPN00000000000000000007 /* ReviewDiffProber.swift */,
+				D8B400000000000000000001 /* ReviewMergeReadiness.swift */,
 				A3C4CE000000000000000001 /* ReviewCheckpointStore.swift */,
 				RVPN00000000000000000009 /* ReviewPanel.swift */,
 				RVPN0000000000000000000B /* ReviewPanelView.swift */,
@@ -1271,6 +1276,7 @@
 					FA000001A1B2C3D4E5F60718 /* WorkspaceStressProfileTests.swift */,
 					A5008382 /* CommandPaletteSearchEngineTests.swift */,
 					RPVW0001 /* ReviewPanelViewTests.swift */,
+					D8B400000000000000000003 /* ReviewMergeReadinessTests.swift */,
 					A1D00000000000000000000A /* PaneHandoffFormatterTests.swift */,
 					A3C4CE000000000000000003 /* ReviewCheckpointStoreTests.swift */,
 					02FC74F2C27127CC565B3E8C /* TerminalAndGhosttyTests.swift */,
@@ -1644,6 +1650,7 @@
 				RVPN00000000000000000004 /* ReviewCommentSerializer.swift in Sources */,
 				RVPN00000000000000000006 /* ReviewDiffParser.swift in Sources */,
 				RVPN00000000000000000008 /* ReviewDiffProber.swift in Sources */,
+				D8B400000000000000000002 /* ReviewMergeReadiness.swift in Sources */,
 				A3C4CE000000000000000002 /* ReviewCheckpointStore.swift in Sources */,
 				RVPN0000000000000000000A /* ReviewPanel.swift in Sources */,
 				RVPN0000000000000000000C /* ReviewPanelView.swift in Sources */,
@@ -1736,6 +1743,7 @@
 					FA000000A1B2C3D4E5F60718 /* WorkspaceStressProfileTests.swift in Sources */,
 					A5008383 /* CommandPaletteSearchEngineTests.swift in Sources */,
 					RPVW0002 /* ReviewPanelViewTests.swift in Sources */,
+					D8B400000000000000000004 /* ReviewMergeReadinessTests.swift in Sources */,
 					A1D00000000000000000000B /* PaneHandoffFormatterTests.swift in Sources */,
 					A3C4CE000000000000000004 /* ReviewCheckpointStoreTests.swift in Sources */,
 					46F6AC15863EC84DCD3770A2 /* TerminalAndGhosttyTests.swift in Sources */,
