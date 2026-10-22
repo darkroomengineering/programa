@@ -722,6 +722,7 @@ extension Workspace {
             if !Self.isTerminalStartupTitle(title) {
                 panelsHoldingRestoredTitle.insert(panelId)
             }
+            syncResolvedPanelTitle(panelId: panelId)
         }
 
         setPanelCustomTitle(panelId: panelId, title: snapshot.customTitle)
