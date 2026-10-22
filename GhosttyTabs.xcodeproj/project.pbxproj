@@ -271,6 +271,7 @@
 		A2E500000000000000000007 /* CLI+AgentResume.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2E500000000000000000006 /* CLI+AgentResume.swift */; };
 		B900003BA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */; };
 		B900003DA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */; };
+		E9C500000000000000000001 /* CLI+WorktreeIssue.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9C500000000000000000002 /* CLI+WorktreeIssue.swift */; };
 		B900003FA1B2C3D4E5F60719 /* CLI+Hooks.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */; };
 		C7A3000005 /* CLI+AgentEventAdapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A3000006 /* CLI+AgentEventAdapters.swift */; };
 		7501C0000000000000000001 /* CLI+ProgramStatusEmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7501C0000000000000000002 /* CLI+ProgramStatusEmitter.swift */; };
@@ -698,6 +699,7 @@
 		A2E500000000000000000006 /* CLI+AgentResume.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+AgentResume.swift"; sourceTree = "<group>"; };
 		B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+TmuxCompat.swift"; sourceTree = "<group>"; };
 		B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+AgentWrappers.swift"; sourceTree = "<group>"; };
+		E9C500000000000000000002 /* CLI+WorktreeIssue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+WorktreeIssue.swift"; sourceTree = "<group>"; };
 		B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Hooks.swift"; sourceTree = "<group>"; };
 		C7A3000006 /* CLI+AgentEventAdapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+AgentEventAdapters.swift"; sourceTree = "<group>"; };
 		7501C0000000000000000002 /* CLI+ProgramStatusEmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+ProgramStatusEmitter.swift"; sourceTree = "<group>"; };
@@ -1133,6 +1135,7 @@
 				A2E500000000000000000006 /* CLI+AgentResume.swift */,
 				B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */,
 				B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */,
+				E9C500000000000000000002 /* CLI+WorktreeIssue.swift */,
 				B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */,
 				C7A3000006 /* CLI+AgentEventAdapters.swift */,
 				7501C0000000000000000002 /* CLI+ProgramStatusEmitter.swift */,
@@ -1804,6 +1807,7 @@
 				A2E500000000000000000003 /* AgentResumeCommand.swift in Sources */,
 				B900003BA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift in Sources */,
 				B900003DA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift in Sources */,
+				E9C500000000000000000001 /* CLI+WorktreeIssue.swift in Sources */,
 				B900003FA1B2C3D4E5F60719 /* CLI+Hooks.swift in Sources */,
 				C7A3000005 /* CLI+AgentEventAdapters.swift in Sources */,
 				7501C0000000000000000001 /* CLI+ProgramStatusEmitter.swift in Sources */,

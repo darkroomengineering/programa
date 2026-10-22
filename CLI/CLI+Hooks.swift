@@ -2880,6 +2880,8 @@ extension ProgramaCLI {
 
     `create` checks out `<branch>` if it already exists, otherwise creates it from `--base` (default `HEAD`). The workspace opens next to its repo in the sidebar without taking focus; pass `--focus` only when the user should jump to it, and `--layout <name>` to apply a saved layout into it. Text output is `OK worktree workspace=<ref> path=<dir> branch=<branch>`; pass that workspace ref to `send --workspace`, `read-screen --workspace`, or `wait-surface --workspace`.
 
+    `programa worktree create --from-issue <number>` reads the GitHub issue with `gh` and names the branch `issue-<number>-<title-slug>` (an explicit `<branch>` still wins); add `--agent <claude|opencode|codex>` to start that agent on the issue in the new workspace.
+
     ## Spawning a helper agent and coordinating with it
 
     When the `agent_spawn` tool is available, use it for helper agents. It opens the helper as a nested workspace under the current workspace, keeps the same folder, and does not move the user's focus. Set `needs_isolation` (with `repository_path` and `branch`) when the helper will make conflicting Git changes and needs a separate worktree. Programa then shows the helper in Agent Overview automatically.
