@@ -3170,6 +3170,57 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
         assertPanelAndTabTitle("live-process", workspace: restored, panelId: restoredPanelId)
     }
 
+    func testSessionRestoreKeepsTitleUntilTheShellSendsARealOne() throws {
+        let source = Workspace()
+        let restored = Workspace()
+        defer {
+            source.teardownAllPanels()
+            restored.teardownAllPanels()
+        }
+        let panelId = try XCTUnwrap(source.focusedPanelId)
+        XCTAssertTrue(source.updatePanelTitle(panelId: panelId, title: "Reviewing drive capital proposal"))
+
+        restored.restoreSessionSnapshot(source.sessionSnapshot(includeScrollback: false))
+        let restoredPanelId = try XCTUnwrap(restored.focusedPanelId)
+
+        for placeholder in [
+            "/Users/someone/gitlab/project",
+            "~/gitlab/project",
+            "someone@host: ~/gitlab/project",
+            "cd -- '/Users/someone/gitlab/project' && claude --resume 3a8f89e1",
+            "claude --resume 3a8f89e1",
+            "codex resume 3a8f89e1",
+            "Claude Code",
+            "✳ Claude Code",
+        ] {
+            restored.updatePanelTitle(panelId: restoredPanelId, title: placeholder)
+            assertPanelAndTabTitle("Reviewing drive capital proposal", workspace: restored, panelId: restoredPanelId)
+        }
+
+        XCTAssertTrue(restored.updatePanelTitle(panelId: restoredPanelId, title: "Fixing the tab strip"))
+        assertPanelAndTabTitle("Fixing the tab strip", workspace: restored, panelId: restoredPanelId)
+
+        XCTAssertTrue(restored.updatePanelTitle(panelId: restoredPanelId, title: "~/gitlab/project"))
+        assertPanelAndTabTitle("~/gitlab/project", workspace: restored, panelId: restoredPanelId)
+    }
+
+    func testSessionRestoredPathTitleYieldsToTheShell() throws {
+        let source = Workspace()
+        let restored = Workspace()
+        defer {
+            source.teardownAllPanels()
+            restored.teardownAllPanels()
+        }
+        let panelId = try XCTUnwrap(source.focusedPanelId)
+        XCTAssertTrue(source.updatePanelTitle(panelId: panelId, title: "~/gitlab/old"))
+
+        restored.restoreSessionSnapshot(source.sessionSnapshot(includeScrollback: false))
+        let restoredPanelId = try XCTUnwrap(restored.focusedPanelId)
+
+        XCTAssertTrue(restored.updatePanelTitle(panelId: restoredPanelId, title: "~/gitlab/new"))
+        assertPanelAndTabTitle("~/gitlab/new", workspace: restored, panelId: restoredPanelId)
+    }
+
     func testTerminalSplitWithFocusFalsePreservesOriginalFocusedPanel() {
         let workspace = Workspace()
         guard let originalFocusedPanelId = workspace.focusedPanelId else {
