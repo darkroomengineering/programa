@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Regression: CLI defaults to refs output; UUIDs only when requested."""
 
-import glob
 import json
 import os
 import subprocess

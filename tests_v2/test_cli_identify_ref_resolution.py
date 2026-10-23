@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Regression test: `identify` caller args must honor ref-style handles."""
 
-import glob
 import json
 import os
 import subprocess

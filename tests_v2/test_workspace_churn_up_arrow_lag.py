@@ -30,7 +30,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
 # This is the only python test wired into CI (.github/workflows/ci.yml,
 # tests-build-and-lag job) that speaks the socket protocol. It has been

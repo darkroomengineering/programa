@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from programa_client import ProgramaClient, ProgramaClientError
+from programa_client import ProgramaClient
 from v2_support import palette_visible as _palette_visible, wait_until as _wait_until
 
 

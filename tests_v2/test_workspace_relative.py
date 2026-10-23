@@ -6,12 +6,10 @@ Tests that when PROGRAMA_WORKSPACE_ID is set, CLI commands target that workspace
 background workspaces should not affect the user's active workspace.
 """
 
-import glob
 import json
 import os
 import subprocess
 import sys
-import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 

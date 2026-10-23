@@ -16,7 +16,7 @@ from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from programa_client import ProgramaClient, ProgramaClientError
+from programa_client import ProgramaClient
 
 
 class TestResult:

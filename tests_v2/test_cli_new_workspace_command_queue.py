@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import glob
 import os
 import subprocess
 import sys
@@ -12,7 +11,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from programa_client import ProgramaClient, ProgramaClientError
+from programa_client import ProgramaClient
 from v2_support import must as _must
 from v2_support import find_cli_binary as _find_cli_binary
 

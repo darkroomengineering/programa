@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Regression: tmux rename-window parity via workspace.rename + CLI aliases."""
 
-import glob
 import os
 import subprocess
 import sys
