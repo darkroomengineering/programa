@@ -7,6 +7,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 ## [Unreleased]
 
 ### Added
+- An app connected to the socket can show the macOS banner for agent questions itself, so you get one banner per question instead of two. The new `notification.claim_banners` method holds Programa's own banner only while that app stays connected; the notification list, sidebar and Dock badge keep updating, and the banner comes back by itself when the app quits.
 - `programa usage` shows how many tokens each Claude Code and Codex session used, grouped by workspace, read from the agents' own transcripts. It shows no cost, because the transcripts don't record one per session. See `docs/agent-usage.md`.
 - Start work from a GitHub issue: `programa worktree create --from-issue 42` reads the issue with `gh`, names the branch after it and opens the worktree as a workspace. Add `--agent claude` (or `codex`, `opencode`) to start that agent on the issue right away.
 - The review panel shows whether the workspace's pull request is ready to merge: its state, which checks are failing or still running, how many review conversations are unresolved, and whether merge conflicts or a missing review block it, with a link to the PR. It reads from the GitHub CLI (`gh`) when the panel opens or you press its refresh button.

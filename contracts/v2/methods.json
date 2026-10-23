@@ -924,6 +924,42 @@
       },
       "threading": "off_main"
     },
+    "debug.notification.banner_count": {
+      "auth_required": true,
+      "debug_only": true,
+      "description": "DEBUG-build-only introspection and simulation. Number of notifications handed to the macOS banner path since launch or the last debug.notification.banner_reset.",
+      "errors": [],
+      "focus_intent": false,
+      "handler": "v2DebugNotificationBannerCount",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "result": {
+        "type": "object"
+      },
+      "threading": "main"
+    },
+    "debug.notification.banner_reset": {
+      "auth_required": true,
+      "debug_only": true,
+      "description": "DEBUG-build-only introspection and simulation. Resets debug.notification.banner_count to zero.",
+      "errors": [],
+      "focus_intent": false,
+      "handler": "v2DebugNotificationBannerReset",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "result": {
+        "type": "object"
+      },
+      "threading": "main"
+    },
     "debug.notification.focus": {
       "auth_required": true,
       "debug_only": true,
@@ -1536,6 +1572,38 @@
         "type": "object"
       },
       "threading": "main"
+    },
+    "notification.claim_banners": {
+      "auth_required": true,
+      "debug_only": false,
+      "description": "Lets the calling connection take over the macOS banners for the listed notification kinds while it stays connected (docs/socket-api.md \"notification.claim_banners\").",
+      "errors": [
+        "invalid_params"
+      ],
+      "focus_intent": false,
+      "handler": "v2NotificationClaimBanners",
+      "params": {
+        "additionalProperties": false,
+        "properties": {
+          "kinds": {
+            "items": {
+              "enum": [
+                "needs_input"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "kinds"
+        ],
+        "type": "object"
+      },
+      "result": {
+        "type": "object"
+      },
+      "threading": "off_main"
     },
     "notification.clear": {
       "auth_required": true,

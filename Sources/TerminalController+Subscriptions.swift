@@ -32,6 +32,35 @@ enum SocketEventClass: String, CaseIterable {
     case needsInput = "needs_input"
 }
 
+/// Notification kinds whose macOS banner a socket client can take over with
+/// `notification.claim_banners`.
+enum NotificationBannerClaimKind: String, CaseIterable {
+    /// Notifications posted by `agent.needs_input`.
+    case needsInput = "needs_input"
+}
+
+/// The banner kinds each live connection claims. A claim ends with its connection:
+/// `SocketConnection.teardown()` releases it on every close path, so a client that quits or
+/// crashes hands the banners back to Programa without having to say so.
+final class NotificationBannerClaims: @unchecked Sendable {
+    static let shared = NotificationBannerClaims()
+
+    private let lock = NSLock()
+    private var kindsByConnection: [ObjectIdentifier: Set<NotificationBannerClaimKind>] = [:]
+
+    func set(_ kinds: Set<NotificationBannerClaimKind>, for connection: SocketConnection) {
+        lock.lock()
+        defer { lock.unlock() }
+        kindsByConnection[ObjectIdentifier(connection)] = kinds.isEmpty ? nil : kinds
+    }
+
+    func isClaimed(_ kind: NotificationBannerClaimKind) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return kindsByConnection.values.contains { $0.contains(kind) }
+    }
+}
+
 /// Wraps a single accepted v2 socket connection (one per `TerminalController.handleClient`
 /// invocation) so that ordinary request/response writes and subscription event pushes -- which
 /// can originate from different threads -- serialize onto the same underlying fd through one
@@ -149,6 +178,16 @@ final class SocketConnection: @unchecked Sendable {
         }
     }
 
+    /// Replaces this connection's banner claim (`notification.claim_banners`); an empty set
+    /// releases it. Checked against `closed` under `stateLock` so a claim can never be recorded
+    /// after `teardown()` has released it.
+    func claimBanners(_ kinds: Set<NotificationBannerClaimKind>) {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        guard !closed else { return }
+        NotificationBannerClaims.shared.set(kinds, for: self)
+    }
+
     /// Called from `handleClient`'s `defer`, in addition to (and before) closing the raw fd.
     func teardown() {
         writeLock.lock()
@@ -160,6 +199,7 @@ final class SocketConnection: @unchecked Sendable {
         pendingSubscription = nil
         stateLock.unlock()
         writeLock.unlock()
+        NotificationBannerClaims.shared.set([], for: self)
         if previousActive != nil || previousPending != nil {
             dilog("socket.conn", "teardown hadSubscription=true")
         }
@@ -524,6 +564,29 @@ extension TerminalController {
     nonisolated func v2Unsubscribe(params: [String: Any], connection: SocketConnection) -> V2CallResult {
         connection.detachSubscription()
         return .ok(["unsubscribed": true])
+    }
+
+    /// `notification.claim_banners`: the calling connection shows the macOS banner for `kinds`
+    /// itself while it stays connected. Replaces the connection's previous claim; `[]` releases
+    /// it. Runs off-main: it only writes `NotificationBannerClaims`, which is lock-protected.
+    nonisolated func v2NotificationClaimBanners(params: [String: Any], connection: SocketConnection) -> V2CallResult {
+        let validKinds = NotificationBannerClaimKind.allCases.map(\.rawValue).joined(separator: ", ")
+        guard let rawKinds = params["kinds"] as? [Any] else {
+            return .err(code: "invalid_params", message: "kinds must be an array of: \(validKinds)", data: nil)
+        }
+        var kinds: Set<NotificationBannerClaimKind> = []
+        for raw in rawKinds {
+            guard let name = raw as? String, let kind = NotificationBannerClaimKind(rawValue: name) else {
+                return .err(
+                    code: "invalid_params",
+                    message: "Unknown notification kind '\(raw)' -- use: \(validKinds)",
+                    data: nil
+                )
+            }
+            kinds.insert(kind)
+        }
+        connection.claimBanners(kinds)
+        return .ok(["claimed": kinds.map(\.rawValue).sorted()])
     }
 
     // MARK: - Output event polling (#167 task 3)
