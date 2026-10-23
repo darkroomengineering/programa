@@ -136,6 +136,7 @@ struct TabItemView: View, Equatable {
         lhs.isWorktreeFolderCollapsed == rhs.isWorktreeFolderCollapsed &&
         lhs.worktreeChildCount == rhs.worktreeChildCount &&
         lhs.runningHelperCount == rhs.runningHelperCount &&
+        lhs.finishedHelperCount == rhs.finishedHelperCount &&
         lhs.rowMetrics == rhs.rowMetrics &&
         // Keep these immutable render snapshots last so `==` and body consume
         // the same drag state without reading Binding storage during typing.
@@ -182,12 +183,16 @@ struct TabItemView: View, Equatable {
     /// Unfinished `runs_with_parent` helpers (Claude subagents), precomputed by the caller
     /// from `AgentSupervisionRegistry.runningHelperCounts` and included in `==`.
     let runningHelperCount: Int
+    /// Finished `runs_with_parent` helpers not yet cleared, from
+    /// `AgentSupervisionRegistry.finishedHelperCounts`; keeps the helpers line reachable.
+    let finishedHelperCount: Int
     /// Precomputed by the caller (VerticalTabsSidebar) from `ChromeDensity` and
     /// included in `==` -- see the Equatable typing-latency contract at the
     /// top of this file.
     let rowMetrics: SidebarRowMetrics
     @State private var workspaceObservationGeneration: UInt64 = 0
     @State private var isHovering = false
+    @State private var isShowingHelpers = false
     @State private var rowHeight: CGFloat = 1
     // Cached results of the expensive bonsplit tree walk + branch/dir/PR snapshot.
     // Updated only by the debounced detail-data publisher and onAppear —
@@ -566,23 +571,30 @@ struct TabItemView: View, Equatable {
                     .multilineTextAlignment(.leading)
             }
 
-            if runningHelperCount > 0 {
+            if runningHelperCount > 0 || finishedHelperCount > 0 {
                 Button(action: {
-                    AgentOverviewWindowController.shared.show(tabManager: tabManager, workspaceId: tab.id)
+                    isShowingHelpers.toggle()
                 }) {
                     HStack(spacing: 4) {
                         Image(systemName: "person.2")
                             .font(.system(size: 8))
                             .accessibilityHidden(true)
-                        Text(runningHelperLabel(runningHelperCount))
+                        Text(helperLineLabel)
                             .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 7, weight: .semibold))
+                            .accessibilityHidden(true)
                         Spacer(minLength: 0)
                     }
                     .font(.system(size: 10))
                     .foregroundColor(activeSecondaryColor(0.8))
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .safeHelp(String(localized: "contextMenu.openAgentOverview", defaultValue: "Open Agent Overview"))
+                .safeHelp(String(localized: "sidebar.helpers.show", defaultValue: "Show helpers and their reports"))
+                .popover(isPresented: $isShowingHelpers, arrowEdge: .trailing) {
+                    AgentHelpersPopover(workspace: tab)
+                }
             }
 
             // The agent badge above is the single source for agent state now; drop any
@@ -1018,14 +1030,6 @@ struct TabItemView: View, Equatable {
                     title: String(localized: "contextMenu.clearWorkspaceDescription", defaultValue: "Clear Workspace Description")
                 ) { [self] in tabManager.clearCustomDescription(tabId: tab.id) })
             }
-
-            menu.addItem(.separator())
-
-            menu.addItem(SidebarMenuItem(
-                title: String(localized: "contextMenu.openAgentOverview", defaultValue: "Open Agent Overview")
-            ) { [self] in
-                AgentOverviewWindowController.shared.show(tabManager: tabManager, workspaceId: tab.id)
-            })
         }
 
         if !isMulti, !showsWorktreeBadge {
@@ -1518,10 +1522,15 @@ struct TabItemView: View, Equatable {
             : String(localized: "sidebar.reviewNudge.filesChanged", defaultValue: "\(count) files changed")
     }
 
-    private func runningHelperLabel(_ count: Int) -> String {
-        count == 1
-            ? String(localized: "sidebar.helpers.oneRunning", defaultValue: "1 helper running")
-            : String(localized: "sidebar.helpers.running", defaultValue: "\(count) helpers running")
+    private var helperLineLabel: String {
+        if runningHelperCount > 0 {
+            return runningHelperCount == 1
+                ? String(localized: "sidebar.helpers.oneRunning", defaultValue: "1 helper running")
+                : String(localized: "sidebar.helpers.running", defaultValue: "\(runningHelperCount) helpers running")
+        }
+        return finishedHelperCount == 1
+            ? String(localized: "sidebar.helpers.oneFinished", defaultValue: "1 helper finished")
+            : String(localized: "sidebar.helpers.finished", defaultValue: "\(finishedHelperCount) helpers finished")
     }
 
     private func openPortLink(_ port: Int) {

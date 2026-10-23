@@ -113,7 +113,7 @@ enum AgentTranscriptUsage {
 
     /// Streams the file one line at a time; `body` gets a view of the line buffer that is only
     /// valid during the call. False when the file cannot be opened.
-    private static func forEachLine(path: String, _ body: (Data) -> Void) -> Bool {
+    static func forEachLine(path: String, _ body: (Data) -> Void) -> Bool {
         guard let file = fopen(path, "r") else { return false }
         defer { fclose(file) }
         var buffer: UnsafeMutablePointer<CChar>?
@@ -129,6 +129,49 @@ enum AgentTranscriptUsage {
 
     private static func int(_ value: Any?) -> Int {
         (value as? NSNumber)?.intValue ?? 0
+    }
+}
+
+/// Reads what Claude Code records about one subagent run, for the Agent Overview row.
+enum ClaudeSubagentTranscript {
+    /// `<session>.jsonl` keeps subagent `<id>` at `<session>/subagents/agent-<id>.jsonl`.
+    static func transcriptPath(sessionTranscriptPath: String, agentId: String) -> String? {
+        guard sessionTranscriptPath.hasSuffix(".jsonl") else { return nil }
+        let name = agentId.hasPrefix("agent-") ? agentId : "agent-\(agentId)"
+        return String(sessionTranscriptPath.dropLast(".jsonl".count)) + "/subagents/\(name).jsonl"
+    }
+
+    /// The short `description` the parent passed to the Agent tool, from the sibling
+    /// `agent-<id>.meta.json`.
+    static func description(transcriptPath: String) -> String? {
+        guard transcriptPath.hasSuffix(".jsonl"),
+              let data = FileManager.default.contents(
+                atPath: String(transcriptPath.dropLast(".jsonl".count)) + ".meta.json"
+              ),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let description = (object["description"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !description.isEmpty else { return nil }
+        return description
+    }
+
+    /// In auto mode a subagent delivers its report through a `SubagentHandback` call, and
+    /// SubagentStop's `last_assistant_message` then holds only its closing text.
+    static func handbackMessage(transcriptPath: String) -> String? {
+        var message: String?
+        let needle = Data("\"SubagentHandback\"".utf8)
+        _ = AgentTranscriptUsage.forEachLine(path: transcriptPath) { line in
+            guard line.range(of: needle) != nil,
+                  let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
+                  let content = (object["message"] as? [String: Any])?["content"] as? [[String: Any]] else { return }
+            for block in content where block["type"] as? String == "tool_use"
+                && block["name"] as? String == "SubagentHandback" {
+                if let text = (block["input"] as? [String: Any])?["message"] as? String {
+                    message = text
+                }
+            }
+        }
+        return message
     }
 }
 

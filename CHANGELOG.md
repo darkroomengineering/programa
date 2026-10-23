@@ -7,6 +7,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 ## [Unreleased]
 
 ### Added
+- An app connected to the socket can show the macOS banner for agent questions itself, so you get one banner per question instead of two. The new `notification.claim_banners` method holds Programa's own banner only while that app stays connected; the notification list, sidebar and Dock badge keep updating, and the banner comes back by itself when the app quits.
 - `programa usage` shows how many tokens each Claude Code and Codex session used, grouped by workspace, read from the agents' own transcripts. It shows no cost, because the transcripts don't record one per session. See `docs/agent-usage.md`.
 - Start work from a GitHub issue: `programa worktree create --from-issue 42` reads the issue with `gh`, names the branch after it and opens the worktree as a workspace. Add `--agent claude` (or `codex`, `opencode`) to start that agent on the issue right away.
 - The review panel shows whether the workspace's pull request is ready to merge: its state, which checks are failing or still running, how many review conversations are unresolved, and whether merge conflicts or a missing review block it, with a link to the PR. It reads from the GitHub CLI (`gh`) when the panel opens or you press its refresh button.
@@ -53,6 +54,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 
 ### Fixed
 - `programa handoff` pastes into a pane whose terminal has not started yet instead of failing.
+- `programa race --agent opencode` now hands OpenCode the prompt with `--prompt`. OpenCode read the bare argument as a project path, so the prompt never arrived.
 - With dozens of tabs in a pane, each tab keeps a width that shows its title instead of shrinking to one letter. The tab bar scrolls with a regular mouse wheel and keeps the selected tab in view.
 - Renaming a tab, or a program changing its title, updates the tab bar right away.
 - Launching a second build of Programa no longer cuts the running app's command line tool and agent hooks off. The new copy used to delete the running app's socket and take it over.

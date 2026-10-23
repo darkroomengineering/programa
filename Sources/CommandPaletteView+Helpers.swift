@@ -576,8 +576,6 @@ extension CommandPaletteView {
     }
     func commandPaletteShortcutAction(for commandId: String) -> KeyboardShortcutSettings.Action? {
         switch commandId {
-        case "palette.openAgentOverview":
-            return .openAgentOverview
         case "palette.newWorkspace":
             return .newTab
         case "palette.newWindow":

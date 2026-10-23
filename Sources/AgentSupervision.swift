@@ -42,6 +42,8 @@ struct AgentTaskRecord: Sendable {
     let session: String?
     let task: String?
     let role: String?
+    /// The helper's final report, as handed back to its parent.
+    let summary: String?
     let state: AgentTaskState
     let placement: AgentTaskPlacement
     let workspaceId: UUID
@@ -66,6 +68,7 @@ struct AgentTaskRecord: Sendable {
             "session": Self.jsonValue(session),
             "task": Self.jsonValue(task),
             "role": Self.jsonValue(role),
+            "summary": Self.jsonValue(summary),
             "state": state.rawValue,
             "placement": placement.rawValue,
             "workspace_id": workspaceId.uuidString,
@@ -105,11 +108,15 @@ final class AgentSupervisionRegistry: ObservableObject {
 
     let capacity: Int
     /// Unfinished `runs_with_parent` helpers per workspace, shown on the sidebar row.
-    /// Republished only when a count changes: `updateActiveSurface` runs on every agent
-    /// state report, and an unconditional publish would re-render the whole sidebar.
-    @Published private(set) var runningHelperCounts: [UUID: Int] = [:]
+    /// Both counts publish together, once, and only when one changes: `updateActiveSurface`
+    /// runs on every agent state report, and finishing a helper moves it between the two
+    /// counts. Either extra publish re-renders the whole sidebar.
+    private(set) var runningHelperCounts: [UUID: Int] = [:]
+    /// Finished `runs_with_parent` helpers per workspace, kept so their reports stay
+    /// reachable from the sidebar until cleared.
+    private(set) var finishedHelperCounts: [UUID: Int] = [:]
     private var recordsById: [UUID: AgentTaskRecord] = [:] {
-        didSet { refreshRunningHelperCounts() }
+        didSet { refreshHelperCounts() }
     }
 
     init(capacity: Int = 256) {
@@ -145,6 +152,7 @@ final class AgentSupervisionRegistry: ObservableObject {
         session: String? = nil,
         task: String? = nil,
         role: String? = nil,
+        summary: String? = nil,
         state: AgentTaskState = .working,
         placement: AgentTaskPlacement,
         workspaceId: UUID,
@@ -166,6 +174,7 @@ final class AgentSupervisionRegistry: ObservableObject {
             session: session,
             task: task,
             role: role,
+            summary: summary,
             state: state,
             placement: placement,
             workspaceId: workspaceId,
@@ -185,6 +194,7 @@ final class AgentSupervisionRegistry: ObservableObject {
         session: String? = nil,
         task: String? = nil,
         role: String? = nil,
+        summary: String? = nil,
         workspaceId: UUID? = nil,
         surfaceId: UUID? = nil,
         now: Date = Date()
@@ -213,6 +223,7 @@ final class AgentSupervisionRegistry: ObservableObject {
             session: session ?? existing.session,
             task: task ?? existing.task,
             role: role ?? existing.role,
+            summary: summary ?? existing.summary,
             state: nextState,
             placement: existing.placement,
             workspaceId: workspaceId ?? existing.workspaceId,
@@ -229,12 +240,14 @@ final class AgentSupervisionRegistry: ObservableObject {
     func finish(
         id: UUID,
         state: AgentTaskState = .completed,
+        task: String? = nil,
+        summary: String? = nil,
         now: Date = Date()
     ) throws -> AgentTaskRecord {
         guard state.isFinished else {
             throw AgentSupervisionRegistryError.finishStateRequired
         }
-        return try update(id: id, state: state, now: now)
+        return try update(id: id, state: state, task: task, summary: summary, now: now)
     }
 
     func finishSession(
@@ -306,6 +319,21 @@ final class AgentSupervisionRegistry: ObservableObject {
         recordsById.removeValue(forKey: id)
     }
 
+    /// Removes the workspace's finished in-process helpers.
+    @discardableResult
+    func discardFinishedHelpers(workspaceId: UUID) -> Int {
+        let ids = recordsById.values.compactMap { record in
+            record.workspaceId == workspaceId
+                && record.placement == .runsWithParent
+                && record.state.isFinished
+                ? record.id
+                : nil
+        }
+        guard !ids.isEmpty else { return 0 }
+        recordsById = recordsById.filter { !ids.contains($0.key) }
+        return ids.count
+    }
+
     func retainWorkspaces(_ liveWorkspaceIds: Set<UUID>) {
         recordsById = recordsById.filter { liveWorkspaceIds.contains($0.value.workspaceId) }
     }
@@ -321,12 +349,20 @@ final class AgentSupervisionRegistry: ObservableObject {
         }
     }
 
-    private func refreshRunningHelperCounts() {
-        var counts: [UUID: Int] = [:]
-        for record in recordsById.values where record.placement == .runsWithParent && !record.state.isFinished {
-            counts[record.workspaceId, default: 0] += 1
+    private func refreshHelperCounts() {
+        var running: [UUID: Int] = [:]
+        var finished: [UUID: Int] = [:]
+        for record in recordsById.values where record.placement == .runsWithParent {
+            if record.state.isFinished {
+                finished[record.workspaceId, default: 0] += 1
+            } else {
+                running[record.workspaceId, default: 0] += 1
+            }
         }
-        if counts != runningHelperCounts { runningHelperCounts = counts }
+        guard running != runningHelperCounts || finished != finishedHelperCounts else { return }
+        objectWillChange.send()
+        runningHelperCounts = running
+        finishedHelperCounts = finished
     }
 
     private func makeRoomForNewRecord() throws {

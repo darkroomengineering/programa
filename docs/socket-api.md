@@ -910,6 +910,34 @@ updates `AgentSupervisionRegistry` in the same handler call. Existing methods
 hook configuration on user machines doesn't need reinstalling to pick it up. Errors:
 `invalid_params`, `not_found`.
 
+## `notification.claim_banners`
+
+Lets a connected client show the macOS banner for agent questions itself, so the user gets one
+banner per question instead of one from Programa and one from the client. Mesinyer uses it to
+replace Programa's banner with its own.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `kinds` | array of string | yes | Notification kinds to claim. The only kind is `needs_input`, the notification `agent.needs_input` posts. `[]` releases the claim. |
+
+Response (`ok: true`): `{"claimed": ["needs_input"]}`, the kinds this connection now claims,
+sorted. An unknown kind or a missing `kinds` returns `invalid_params` and leaves the existing
+claim as it was. Requires the same authentication as any other method.
+
+The claim belongs to the connection that made it. Calling again on the same connection replaces
+its kinds, and the claim ends when the connection closes, however it closes (the client quits
+or crashes, or the app shuts the listener down). Banners stay claimed while at least one live
+connection claims the kind, so a client keeps its connection open for as long as it shows the
+banners.
+
+While `needs_input` is claimed, a notification from `agent.needs_input` still goes into the
+notification list (`notification.list`), the sidebar and the Dock badge, the surface still
+reports `blocked`, and subscribers still get the `needs_input` event frame. Only the macOS
+banner, and the sound that comes with it, is skipped. The claim is read when each notification
+is posted, so after the last claiming connection closes, the next `agent.needs_input` shows a
+banner again. Notifications from `notification.create*`, terminal escape sequences and OSC 7501
+are not affected.
+
 ## Workspace `agent_state` and `helper_outcomes`
 
 `workspace.list` and `system.tree` entries carry an aggregate `agent_state` of `idle`,
@@ -979,6 +1007,11 @@ Services call. Both are omitted if resolution fails.
 `debug.*` methods, including `debug.terminals` (the window, workspace, pane and surface mapping
 of every terminal), exist only in Debug builds. Release builds answer them with
 `method_not_found`.
+
+`debug.notification.banner_count` returns `{"count": N}`, the number of notifications handed to
+the macOS banner path since launch or the last `debug.notification.banner_reset`. It counts
+before the notification-permission check, so tests on a runner without permission still see
+each hand-off.
 
 ## Tests
 

@@ -66,7 +66,6 @@ enum KeyboardShortcutSettings {
         case hideFind
         case useSelectionForFind
         case openReview
-        case openAgentOverview
 
         var id: String { rawValue }
 
@@ -116,7 +115,6 @@ enum KeyboardShortcutSettings {
             case .hideFind: return String(localized: "menu.find.hideFindBar", defaultValue: "Hide Find Bar")
             case .useSelectionForFind: return String(localized: "menu.find.useSelectionForFind", defaultValue: "Use Selection for Find")
             case .openReview: return String(localized: "shortcut.openReview.label", defaultValue: "Open Review Panel")
-            case .openAgentOverview: return String(localized: "contextMenu.openAgentOverview", defaultValue: "Open Agent Overview")
             }
         }
 
@@ -210,7 +208,7 @@ enum KeyboardShortcutSettings {
                 return StoredShortcut(key: "f", command: true, shift: true, option: false, control: false)
             case .useSelectionForFind:
                 return StoredShortcut(key: "e", command: true, shift: false, option: false, control: false)
-            case .openReview, .openAgentOverview:
+            case .openReview:
                 // Shipped without a default binding: Cmd+Shift+R (the plan's suggested default)
                 // is already taken by `.renameWorkspace` (see docs/keyboard-shortcuts.md), and no
                 // other unclaimed combo was confirmed free across the whole app. Still fully

@@ -416,6 +416,17 @@ extension TerminalController {
         }
         return .ok([:])
     }
+
+    // The counter lives on the main-actor notification store, so both methods take the main hop.
+    nonisolated func v2DebugNotificationBannerCount() -> V2CallResult {
+        let count: Int = v2MainSync { TerminalNotificationStore.shared.bannerHandoffCountForTesting }
+        return .ok(["count": count])
+    }
+
+    nonisolated func v2DebugNotificationBannerReset() -> V2CallResult {
+        v2MainSync { TerminalNotificationStore.shared.bannerHandoffCountForTesting = 0 }
+        return .ok([:])
+    }
 #endif
 
     nonisolated func v2DebugFocusNotification(params: [String: Any]) -> V2CallResult {

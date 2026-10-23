@@ -496,6 +496,10 @@ extension Workspace {
     func updatePanelTitle(panelId: UUID, title: String) -> Bool {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
+        if panelsHoldingRestoredTitle.contains(panelId) {
+            if Self.isTerminalStartupTitle(trimmed) { return false }
+            panelsHoldingRestoredTitle.remove(panelId)
+        }
         var didMutate = false
 
         if panelTitles[panelId] != trimmed {
@@ -522,6 +526,22 @@ extension Workspace {
         return didMutate
     }
 
+    /// Titles a terminal shows before it has anything of its own to say: a shell's cwd
+    /// (`/path`, `~/path`, `user@host: ~/path`), the `AgentResumeCommand` line being run, and
+    /// an agent's banner before its session has a topic.
+    static func isTerminalStartupTitle(_ title: String) -> Bool {
+        var text = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let range = text.range(of: #"^[^\s@:]+@[^\s:]+:\s*"#, options: .regularExpression) {
+            text.removeSubrange(range)
+        }
+        if text.hasPrefix("/") || text.hasPrefix("~") { return true }
+        if text.range(of: #"(^|&& )(claude --resume|codex resume) "#, options: .regularExpression) != nil {
+            return true
+        }
+        let banner = text.drop { !$0.isLetter && !$0.isNumber }
+        return banner.caseInsensitiveCompare("Claude Code") == .orderedSame
+    }
+
     /// Re-derive the workspace title from the focused panel's last known
     /// title. Called on pane-focus changes so the sidebar follows the active
     /// pane without waiting for it to emit a new OSC title. Only titles that
@@ -544,6 +564,7 @@ extension Workspace {
         }
         if panelsWithLiveTitle.contains(where: { !validSurfaceIds.contains($0) }) {
             panelsWithLiveTitle = panelsWithLiveTitle.filter { validSurfaceIds.contains($0) }
+            panelsHoldingRestoredTitle = panelsHoldingRestoredTitle.filter { validSurfaceIds.contains($0) }
         }
         if panelCustomTitles.keys.contains(where: { !validSurfaceIds.contains($0) }) {
             panelCustomTitles = panelCustomTitles.filter { validSurfaceIds.contains($0.key) }
