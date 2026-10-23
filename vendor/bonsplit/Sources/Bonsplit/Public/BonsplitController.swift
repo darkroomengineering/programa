@@ -1,7 +1,6 @@
 import Foundation
 import SwiftUI
 
-/// Main controller for the split tab bar system
 @MainActor
 @Observable
 public final class BonsplitController {
@@ -23,14 +22,8 @@ public final class BonsplitController {
         }
     }
 
-    // MARK: - Delegate
-
-    /// Delegate for receiving callbacks about tab bar events
     public weak var delegate: BonsplitDelegate?
 
-    // MARK: - Configuration
-
-    /// Configuration for behavior and appearance
     public var configuration: BonsplitConfiguration
 
     /// When false, drop delegates reject all drags. Set to false for inactive workspaces
@@ -74,13 +67,8 @@ public final class BonsplitController {
         paneChromePortalRevision &+= 1
     }
 
-    // MARK: - Internal State
-
     internal var internalController: SplitViewController
 
-    // MARK: - Initialization
-
-    /// Create a new controller with the specified configuration
     public init(configuration: BonsplitConfiguration = .default) {
         self.configuration = configuration
         self.internalController = SplitViewController()
@@ -132,16 +120,15 @@ public final class BonsplitController {
             isPinned: isPinned,
             customColorHex: customColorHex
         )
-        let targetPane = pane ?? focusedPaneId ?? PaneID(id: internalController.rootNode.allPaneIds.first!.id)
+        let targetPane = pane ?? focusedPaneId ?? internalController.rootNode.allPaneIds.first!
 
-        // Check with delegate
         if delegate?.splitTabBar(self, shouldCreateTab: tab, inPane: targetPane) == false {
             return nil
         }
 
         // Insert after the currently selected tab, or append when nothing is selected.
         let insertIndex: Int?
-        if let paneState = internalController.rootNode.findPane(PaneID(id: targetPane.id)),
+        if let paneState = internalController.rootNode.findPane(targetPane),
            let selectedTabId = paneState.selectedTabId,
            let currentIndex = paneState.tabs.firstIndex(where: { $0.id == selectedTabId }) {
             insertIndex = currentIndex + 1
@@ -149,12 +136,7 @@ public final class BonsplitController {
             insertIndex = nil
         }
 
-        // Create internal TabItem
-        let tabItem = TabItem(from: tab)
-        internalController.addTab(tabItem, toPane: PaneID(id: targetPane.id), atIndex: insertIndex)
-
-        // Notify delegate
-        delegate?.splitTabBar(self, didCreateTab: tab, inPane: targetPane)
+        internalController.addTab(TabItem(from: tab), toPane: targetPane, atIndex: insertIndex)
 
         return tabId
     }
@@ -262,23 +244,17 @@ public final class BonsplitController {
         return closeTab(tabId, with: tabIndex, in: pane)
     }
     
-    /// Internal helper to close a tab given its index in a pane
-    /// - Parameter tabId: The tab to close
-    /// - Parameter tabIndex: The position of the tab within the pane
-    /// - Parameter pane: The pane in which to close the tab
     private func closeTab(_ tabId: TabID, with tabIndex: Int, in pane: PaneState) -> Bool {
         let tabItem = pane.tabs[tabIndex]
         let tab = Tab(from: tabItem)
         let paneId = pane.id
 
-        // Check with delegate
         if delegate?.splitTabBar(self, shouldCloseTab: tab, inPane: paneId) == false {
             return false
         }
 
         internalController.closeTab(tabId.id, inPane: pane.id)
 
-        // Notify delegate
         delegate?.splitTabBar(self, didCloseTab: tabId, fromPane: paneId)
         notifyGeometryChange()
 
@@ -293,7 +269,6 @@ public final class BonsplitController {
         pane.selectTab(tabId.id)
         internalController.focusPane(pane.id)
 
-        // Notify delegate
         let tab = Tab(from: pane.tabs[tabIndex])
         delegate?.splitTabBar(self, didSelectTab: tab, inPane: pane.id)
     }
@@ -307,7 +282,7 @@ public final class BonsplitController {
     @discardableResult
     public func moveTab(_ tabId: TabID, toPane targetPaneId: PaneID, atIndex index: Int? = nil) -> Bool {
         guard let (sourcePane, sourceIndex) = findTabInternal(tabId) else { return false }
-        guard let targetPane = internalController.rootNode.findPane(PaneID(id: targetPaneId.id)) else { return false }
+        guard let targetPane = internalController.rootNode.findPane(targetPaneId) else { return false }
 
         let tabItem = sourcePane.tabs[sourceIndex]
         let movedTab = Tab(from: tabItem)
@@ -357,13 +332,11 @@ public final class BonsplitController {
         return true
     }
 
-    /// Move to previous tab in focused pane
     public func selectPreviousTab() {
         internalController.selectPreviousTab()
         notifyTabSelection()
     }
 
-    /// Move to next tab in focused pane
     public func selectNextTab() {
         internalController.selectNextTab()
         notifyTabSelection()
@@ -386,29 +359,15 @@ public final class BonsplitController {
         let targetPaneId = paneId ?? focusedPaneId
         guard let targetPaneId else { return nil }
 
-        // Check with delegate
         if delegate?.splitTabBar(self, shouldSplitPane: targetPaneId, orientation: orientation) == false {
             return nil
         }
 
-        let internalTab: TabItem?
-        if let tab {
-            internalTab = TabItem(from: tab)
-        } else {
-            internalTab = nil
-        }
+        internalController.splitPane(targetPaneId, orientation: orientation, with: tab.map(TabItem.init(from:)))
 
-        // Perform split
-        internalController.splitPane(
-            PaneID(id: targetPaneId.id),
-            orientation: orientation,
-            with: internalTab
-        )
-
-        // Find new pane (will be focused after split)
+        // The split focuses the new pane.
         let newPaneId = focusedPaneId!
 
-        // Notify delegate
         delegate?.splitTabBar(self, didSplitPane: targetPaneId, newPane: newPaneId, orientation: orientation)
 
         notifyGeometryChange()
@@ -437,24 +396,19 @@ public final class BonsplitController {
         let targetPaneId = paneId ?? focusedPaneId
         guard let targetPaneId else { return nil }
 
-        // Check with delegate
         if delegate?.splitTabBar(self, shouldSplitPane: targetPaneId, orientation: orientation) == false {
             return nil
         }
 
-        let internalTab = TabItem(from: tab)
-
-        // Perform split with insertion side.
-        internalController.splitPaneWithTab(
-            PaneID(id: targetPaneId.id),
+        internalController.splitPane(
+            targetPaneId,
             orientation: orientation,
-            tab: internalTab,
+            with: TabItem(from: tab),
             insertFirst: insertFirst
         )
 
         let newPaneId = focusedPaneId!
 
-        // Notify delegate
         delegate?.splitTabBar(self, didSplitPane: targetPaneId, newPane: newPaneId, orientation: orientation)
 
         notifyGeometryChange()
@@ -481,19 +435,16 @@ public final class BonsplitController {
         movingTab tabId: TabID,
         insertFirst: Bool
     ) -> PaneID? {
-        // Find the existing tab and its source pane.
         guard let (sourcePane, tabIndex) = findTabInternal(tabId) else { return nil }
         let tabItem = sourcePane.tabs[tabIndex]
 
         // Default target to the tab's current pane to match edge-drop behavior on the source pane.
         let targetPaneId = paneId ?? sourcePane.id
 
-        // Check with delegate
         if delegate?.splitTabBar(self, shouldSplitPane: targetPaneId, orientation: orientation) == false {
             return nil
         }
 
-        // Remove from source first.
         sourcePane.removeTab(tabItem.id)
 
         if sourcePane.tabs.isEmpty {
@@ -503,22 +454,19 @@ public final class BonsplitController {
                 // needing to special-case empty panes.
                 sourcePane.addTab(TabItem(title: BonsplitStrings.emptyTabTitle, icon: nil), select: true)
             } else if internalController.rootNode.allPaneIds.count > 1 {
-                // If the source pane is now empty, close it (unless it's also the split target).
                 internalController.closePane(sourcePane.id)
             }
         }
 
-        // Perform split with the moved tab.
-        internalController.splitPaneWithTab(
-            PaneID(id: targetPaneId.id),
+        internalController.splitPane(
+            targetPaneId,
             orientation: orientation,
-            tab: tabItem,
+            with: tabItem,
             insertFirst: insertFirst
         )
 
         let newPaneId = focusedPaneId!
 
-        // Notify delegate
         delegate?.splitTabBar(self, didSplitPane: targetPaneId, newPane: newPaneId, orientation: orientation)
 
         notifyGeometryChange()
@@ -536,14 +484,12 @@ public final class BonsplitController {
             return false
         }
 
-        // Check with delegate
         if delegate?.splitTabBar(self, shouldClosePane: paneId) == false {
             return false
         }
 
-        internalController.closePane(PaneID(id: paneId.id))
+        internalController.closePane(paneId)
 
-        // Notify delegate
         delegate?.splitTabBar(self, didClosePane: paneId)
 
         notifyGeometryChange()
@@ -553,19 +499,15 @@ public final class BonsplitController {
 
     // MARK: - Focus Management
 
-    /// Currently focused pane ID
     public var focusedPaneId: PaneID? {
-        guard let internalId = internalController.focusedPaneId else { return nil }
-        return internalId
+        internalController.focusedPaneId
     }
 
-    /// Focus a specific pane
     public func focusPane(_ paneId: PaneID) {
-        internalController.focusPane(PaneID(id: paneId.id))
+        internalController.focusPane(paneId)
         delegate?.splitTabBar(self, didFocusPane: paneId)
     }
 
-    /// Navigate focus in a direction
     public func navigateFocus(direction: NavigationDirection) {
         internalController.navigateFocus(direction: direction)
         if let focusedPaneId {
@@ -580,7 +522,6 @@ public final class BonsplitController {
 
     // MARK: - Split Zoom
 
-    /// Currently zoomed pane ID, if any.
     public var zoomedPaneId: PaneID? {
         internalController.zoomedPaneId
     }
@@ -617,35 +558,30 @@ public final class BonsplitController {
 
     // MARK: - Query Methods
 
-    /// Get all tab IDs
     public var allTabIds: [TabID] {
         internalController.rootNode.allPanes.flatMap { pane in
             pane.tabs.map { TabID(id: $0.id) }
         }
     }
 
-    /// Get all pane IDs
     public var allPaneIds: [PaneID] {
         internalController.rootNode.allPaneIds
     }
 
-    /// Get tab metadata by ID
     public func tab(_ tabId: TabID) -> Tab? {
         guard let (pane, tabIndex) = findTabInternal(tabId) else { return nil }
         return Tab(from: pane.tabs[tabIndex])
     }
 
-    /// Get tabs in a specific pane
     public func tabs(inPane paneId: PaneID) -> [Tab] {
-        guard let pane = internalController.rootNode.findPane(PaneID(id: paneId.id)) else {
+        guard let pane = internalController.rootNode.findPane(paneId) else {
             return []
         }
         return pane.tabs.map { Tab(from: $0) }
     }
 
-    /// Get selected tab in a pane
     public func selectedTab(inPane paneId: PaneID) -> Tab? {
-        guard let pane = internalController.rootNode.findPane(PaneID(id: paneId.id)),
+        guard let pane = internalController.rootNode.findPane(paneId),
               let selected = pane.selectedTab else {
             return nil
         }
@@ -654,22 +590,16 @@ public final class BonsplitController {
 
     // MARK: - Geometry Query API
 
-    /// Get current layout snapshot with pixel coordinates
+    /// Pane geometry in the container's global pixel coordinates.
     public func layoutSnapshot() -> LayoutSnapshot {
         let containerFrame = internalController.containerFrame
         let paneBounds = internalController.rootNode.computePaneBounds()
 
         let paneGeometries = paneBounds.map { bounds -> PaneGeometry in
             let pane = internalController.rootNode.findPane(bounds.paneId)
-            let pixelFrame = PixelRect(
-                x: Double(bounds.bounds.minX * containerFrame.width + containerFrame.origin.x),
-                y: Double(bounds.bounds.minY * containerFrame.height + containerFrame.origin.y),
-                width: Double(bounds.bounds.width * containerFrame.width),
-                height: Double(bounds.bounds.height * containerFrame.height)
-            )
             return PaneGeometry(
                 paneId: bounds.paneId.id.uuidString,
-                frame: pixelFrame,
+                frame: Self.pixelRect(for: bounds.bounds, in: containerFrame),
                 selectedTabId: pane?.selectedTabId?.uuidString,
                 tabIds: pane?.tabs.map { $0.id.uuidString } ?? []
             )
@@ -683,62 +613,43 @@ public final class BonsplitController {
         )
     }
 
-    /// Get full tree structure for external consumption
     public func treeSnapshot() -> ExternalTreeNode {
         let containerFrame = internalController.containerFrame
         return buildExternalTree(from: internalController.rootNode, containerFrame: containerFrame)
     }
 
+    private static func pixelRect(for normalized: CGRect, in containerFrame: CGRect) -> PixelRect {
+        PixelRect(
+            x: Double(normalized.minX * containerFrame.width + containerFrame.origin.x),
+            y: Double(normalized.minY * containerFrame.height + containerFrame.origin.y),
+            width: Double(normalized.width * containerFrame.width),
+            height: Double(normalized.height * containerFrame.height)
+        )
+    }
+
     private func buildExternalTree(from node: SplitNode, containerFrame: CGRect, bounds: CGRect = CGRect(x: 0, y: 0, width: 1, height: 1)) -> ExternalTreeNode {
         switch node {
         case .pane(let paneState):
-            let pixelFrame = PixelRect(
-                x: Double(bounds.minX * containerFrame.width + containerFrame.origin.x),
-                y: Double(bounds.minY * containerFrame.height + containerFrame.origin.y),
-                width: Double(bounds.width * containerFrame.width),
-                height: Double(bounds.height * containerFrame.height)
-            )
             let tabs = paneState.tabs.map { ExternalTab(id: $0.id.uuidString, title: $0.title) }
             let paneNode = ExternalPaneNode(
                 id: paneState.id.id.uuidString,
-                frame: pixelFrame,
+                frame: Self.pixelRect(for: bounds, in: containerFrame),
                 tabs: tabs,
                 selectedTabId: paneState.selectedTabId?.uuidString
             )
             return .pane(paneNode)
 
         case .split(let splitState):
-            let dividerPos = splitState.dividerPosition
-            let firstBounds: CGRect
-            let secondBounds: CGRect
-
-            switch splitState.orientation {
-            case .horizontal:
-                firstBounds = CGRect(x: bounds.minX, y: bounds.minY,
-                                     width: bounds.width * dividerPos, height: bounds.height)
-                secondBounds = CGRect(x: bounds.minX + bounds.width * dividerPos, y: bounds.minY,
-                                      width: bounds.width * (1 - dividerPos), height: bounds.height)
-            case .vertical:
-                firstBounds = CGRect(x: bounds.minX, y: bounds.minY,
-                                     width: bounds.width, height: bounds.height * dividerPos)
-                secondBounds = CGRect(x: bounds.minX, y: bounds.minY + bounds.height * dividerPos,
-                                      width: bounds.width, height: bounds.height * (1 - dividerPos))
-            }
-
+            let childBounds = splitState.childBounds(in: bounds)
             let splitNode = ExternalSplitNode(
                 id: splitState.id.uuidString,
-                orientation: splitState.orientation == .horizontal ? "horizontal" : "vertical",
+                orientation: splitState.orientation.rawValue,
                 dividerPosition: Double(splitState.dividerPosition),
-                first: buildExternalTree(from: splitState.first, containerFrame: containerFrame, bounds: firstBounds),
-                second: buildExternalTree(from: splitState.second, containerFrame: containerFrame, bounds: secondBounds)
+                first: buildExternalTree(from: splitState.first, containerFrame: containerFrame, bounds: childBounds.first),
+                second: buildExternalTree(from: splitState.second, containerFrame: containerFrame, bounds: childBounds.second)
             )
             return .split(splitNode)
         }
-    }
-
-    /// Check if a split exists by ID
-    public func findSplit(_ splitId: UUID) -> Bool {
-        return internalController.findSplit(splitId) != nil
     }
 
     // MARK: - Geometry Update API
@@ -757,7 +668,6 @@ public final class BonsplitController {
             internalController.isExternalUpdateInProgress = true
         }
 
-        // Clamp position to valid range
         let clampedPosition = min(max(position, 0.1), 0.9)
         split.dividerPosition = clampedPosition
 
@@ -771,35 +681,10 @@ public final class BonsplitController {
         return true
     }
 
-    /// Update container frame (called when window moves/resizes)
-    public func setContainerFrame(_ frame: CGRect) {
-        internalController.containerFrame = frame
-    }
-
-    /// Notify geometry change to delegate (internal use)
-    /// - Parameter isDragging: Whether the change is due to active divider dragging
-    internal func notifyGeometryChange(isDragging: Bool = false) {
+    internal func notifyGeometryChange() {
         guard !internalController.isExternalUpdateInProgress else { return }
-
-        // If dragging, check if delegate wants notifications during drag
-        if isDragging {
-            let shouldNotify = delegate?.splitTabBar(self, shouldNotifyDuringDrag: true) ?? false
-            guard shouldNotify else { return }
-        }
-
-        if isDragging {
-            // Debounce drag updates to avoid flooding delegates during divider moves.
-            let now = Date().timeIntervalSince1970
-            let debounceInterval: TimeInterval = 0.05
-            guard now - internalController.lastGeometryNotificationTime >= debounceInterval else { return }
-            internalController.lastGeometryNotificationTime = now
-        }
-
-        let snapshot = layoutSnapshot()
-        delegate?.splitTabBar(self, didChangeGeometry: snapshot)
+        delegate?.splitTabBar(self, didChangeGeometry: layoutSnapshot())
     }
-
-    // MARK: - Private Helpers
 
     private func findTabInternal(_ tabId: TabID) -> (PaneState, Int)? {
         for pane in internalController.rootNode.allPanes {

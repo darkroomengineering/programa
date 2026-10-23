@@ -174,18 +174,13 @@ let tree = controller.treeSnapshot()
 
 // Set divider position programmatically (0.0-1.0)
 controller.setDividerPosition(0.3, forSplit: splitId, fromExternal: true)
-
-// Update container frame when window moves
-controller.setContainerFrame(newFrame)
 ```
 
 | Method | Description |
 |--------|-------------|
 | `layoutSnapshot()` | Get current pane geometry with pixel coordinates |
 | `treeSnapshot()` | Get full tree structure for external consumption |
-| `findSplit(_:)` | Check if a split exists by UUID |
 | `setDividerPosition(_:forSplit:fromExternal:)` | Programmatically set divider position |
-| `setContainerFrame(_:)` | Update container frame |
 
 ### Tab
 
@@ -250,7 +245,6 @@ All delegate methods have default implementations and are optional.
 | Method | Description |
 |--------|-------------|
 | `shouldCreateTab` | Called before creating a tab. Return `false` to prevent. |
-| `didCreateTab` | Called after a tab is created. |
 | `shouldCloseTab` | Called before closing a tab. Return `false` to prevent. |
 | `didCloseTab` | Called after a tab is closed. |
 | `didSelectTab` | Called when a tab is selected. |
@@ -260,8 +254,7 @@ All delegate methods have default implementations and are optional.
 | `shouldClosePane` | Called before closing a pane. Return `false` to prevent. |
 | `didClosePane` | Called after a pane is closed. |
 | `didFocusPane` | Called when focus changes to a different pane. |
-| `didChangeGeometry` | Called when any pane geometry changes (resize, split, close). |
-| `shouldNotifyDuringDrag` | Return `true` for real-time notifications during divider drag. |
+| `didChangeGeometry` | Called when any pane geometry changes (resize, split, close, end of a divider drag). |
 
 #### Geometry Notifications
 
@@ -275,12 +268,6 @@ func splitTabBar(_ controller: BonsplitController,
     if let data = try? encoder.encode(snapshot) {
         UserDefaults.standard.set(data, forKey: "savedLayout")
     }
-}
-
-// Opt-in to real-time notifications during divider drag
-func splitTabBar(_ controller: BonsplitController,
-                 shouldNotifyDuringDrag: Bool) -> Bool {
-    return true  // Enable frame-by-frame updates
 }
 ```
 

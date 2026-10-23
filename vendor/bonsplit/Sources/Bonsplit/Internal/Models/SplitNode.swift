@@ -88,25 +88,9 @@ indirect enum SplitNode: Identifiable, Equatable {
             return [PaneBounds(paneId: paneState.id, bounds: availableRect)]
 
         case .split(let splitState):
-            let dividerPos = splitState.dividerPosition
-            let firstRect: CGRect
-            let secondRect: CGRect
-
-            switch splitState.orientation {
-            case .horizontal:  // Side-by-side: first=LEFT, second=RIGHT
-                firstRect = CGRect(x: availableRect.minX, y: availableRect.minY,
-                                   width: availableRect.width * dividerPos, height: availableRect.height)
-                secondRect = CGRect(x: availableRect.minX + availableRect.width * dividerPos, y: availableRect.minY,
-                                    width: availableRect.width * (1 - dividerPos), height: availableRect.height)
-            case .vertical:  // Stacked: first=TOP, second=BOTTOM
-                firstRect = CGRect(x: availableRect.minX, y: availableRect.minY,
-                                   width: availableRect.width, height: availableRect.height * dividerPos)
-                secondRect = CGRect(x: availableRect.minX, y: availableRect.minY + availableRect.height * dividerPos,
-                                    width: availableRect.width, height: availableRect.height * (1 - dividerPos))
-            }
-
-            return splitState.first.computePaneBounds(in: firstRect)
-                 + splitState.second.computePaneBounds(in: secondRect)
+            let childBounds = splitState.childBounds(in: availableRect)
+            return splitState.first.computePaneBounds(in: childBounds.first)
+                 + splitState.second.computePaneBounds(in: childBounds.second)
         }
     }
 }

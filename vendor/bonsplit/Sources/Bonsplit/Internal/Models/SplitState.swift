@@ -34,6 +34,24 @@ final class SplitState: Identifiable {
         self.dividerPosition = dividerPosition
         self.animationOrigin = animationOrigin
     }
+
+    /// Splits `rect` at `dividerPosition`: horizontal puts first on the left, vertical puts first on top.
+    func childBounds(in rect: CGRect) -> (first: CGRect, second: CGRect) {
+        switch orientation {
+        case .horizontal:
+            return (
+                CGRect(x: rect.minX, y: rect.minY, width: rect.width * dividerPosition, height: rect.height),
+                CGRect(x: rect.minX + rect.width * dividerPosition, y: rect.minY,
+                       width: rect.width * (1 - dividerPosition), height: rect.height)
+            )
+        case .vertical:
+            return (
+                CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height * dividerPosition),
+                CGRect(x: rect.minX, y: rect.minY + rect.height * dividerPosition,
+                       width: rect.width, height: rect.height * (1 - dividerPosition))
+            )
+        }
+    }
 }
 
 extension SplitState: Equatable {
