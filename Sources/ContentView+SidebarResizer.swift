@@ -113,6 +113,9 @@ extension ContentView {
               let window = observedWindow,
               let contentView = window.contentView else {
             if isResizerBandActive { isResizerBandActive = false }
+            if let window = observedWindow {
+                SidebarResizeInteraction.windowNumbersInBand.remove(window.windowNumber)
+            }
             scheduleSidebarResizerCursorRelease(force: true)
             return
         }
@@ -124,6 +127,11 @@ extension ContentView {
         let pointInContent = contentView.convert(pointInWindow, from: nil)
         let isInDividerBand = dividerBandContains(pointInContent: pointInContent, contentBounds: contentView.bounds)
         if isResizerBandActive != isInDividerBand { isResizerBandActive = isInDividerBand }
+        if isInDividerBand {
+            SidebarResizeInteraction.windowNumbersInBand.insert(window.windowNumber)
+        } else {
+            SidebarResizeInteraction.windowNumbersInBand.remove(window.windowNumber)
+        }
 
         if isInDividerBand || isResizerDragging {
             activateSidebarResizerCursor()
@@ -204,6 +212,9 @@ extension ContentView {
             sidebarResizerPointerMonitor = nil
         }
         if isResizerBandActive { isResizerBandActive = false }
+        if let window = observedWindow {
+            SidebarResizeInteraction.windowNumbersInBand.remove(window.windowNumber)
+        }
         isSidebarResizerCursorActive = false
         stopSidebarResizerCursorStabilizer()
         // Release synchronously. A deferred work item held in @State captures this view, and
