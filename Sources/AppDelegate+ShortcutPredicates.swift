@@ -80,7 +80,7 @@ func shouldConsumeShortcutWhileCommandPaletteVisible(
 ) -> Bool {
     guard isCommandPaletteVisible else { return false }
 
-    // Escape dismisses the palette, and must not leak through to the
+    // Escape dismisses the palette and must not leak through to the terminal.
     if normalizedFlags.isEmpty, keyCode == 53 {
         return true
     }

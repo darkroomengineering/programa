@@ -417,18 +417,12 @@ extension AppDelegate {
         return nil
     }
 
-    /// Returns the `TabManager` that owns `tabId`, if any.
     func tabManagerFor(tabId: UUID) -> TabManager? {
         contextContainingTabId(tabId)?.tabManager
     }
 
-    private func workspaceForMainActor(tabId: UUID) -> Workspace? {
-        contextContainingTabId(tabId)?.tabManager.tabs.first(where: { $0.id == tabId })
-    }
-
-    /// Returns the `Workspace` that owns `tabId`, if any.
     @MainActor
     func workspaceFor(tabId: UUID) -> Workspace? {
-        workspaceForMainActor(tabId: tabId)
+        contextContainingTabId(tabId)?.tabManager.tabs.first(where: { $0.id == tabId })
     }
 }

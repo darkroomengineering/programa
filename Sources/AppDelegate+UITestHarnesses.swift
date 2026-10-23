@@ -55,7 +55,6 @@ extension AppDelegate {
 
                     _ = tabManager.newSplit(tabId: tab.id, surfaceId: initialPanelId, direction: .right)
                     guard let targetPanelId = tab.focusedPanelId else { return }
-                    // Find another panel that's not the currently focused one
                     let otherPanelId = tab.panels.keys.first(where: { $0 != targetPanelId })
                     if let otherPanelId {
                         tab.focusPanel(otherPanelId)
@@ -85,13 +84,6 @@ extension AppDelegate {
         }
     }
 
-    func recordJumpToUnreadFocus(tabId: UUID, surfaceId: UUID) {
-        writeJumpUnreadTestData([
-            "focusedTabId": tabId.uuidString,
-            "focusedSurfaceId": surfaceId.uuidString
-        ])
-    }
-
     func armJumpUnreadFocusRecord(tabId: UUID, surfaceId: UUID) {
         let env = ProcessInfo.processInfo.environment
         guard let path = env["PROGRAMA_UI_TEST_JUMP_UNREAD_PATH"], !path.isEmpty else { return }
@@ -103,7 +95,10 @@ extension AppDelegate {
         guard let expectation = jumpUnreadFocusExpectation else { return }
         guard expectation.tabId == tabId && expectation.surfaceId == surfaceId else { return }
         jumpUnreadFocusExpectation = nil
-        recordJumpToUnreadFocus(tabId: tabId, surfaceId: surfaceId)
+        writeJumpUnreadTestData([
+            "focusedTabId": tabId.uuidString,
+            "focusedSurfaceId": surfaceId.uuidString
+        ])
         if let jumpUnreadFocusObserver {
             NotificationCenter.default.removeObserver(jumpUnreadFocusObserver)
             self.jumpUnreadFocusObserver = nil
@@ -687,7 +682,6 @@ extension AppDelegate {
             guard let window1 = self.mainWindowContexts.values.first else { return }
             guard let tabId1 = window1.tabManager.selectedTabId ?? window1.tabManager.tabs.first?.id else { return }
 
-            // Create a second main terminal window.
             self.openNewMainWindow(nil)
 
             waitForContexts(minCount: 2) { [weak self] in
