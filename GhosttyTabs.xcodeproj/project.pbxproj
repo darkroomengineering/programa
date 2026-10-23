@@ -36,8 +36,8 @@
 			AGSV0003A1B2C3D4E5F60719 /* TerminalController+AgentSupervision.swift in Sources */ = {isa = PBXBuildFile; fileRef = AGSV0004A1B2C3D4E5F60719 /* TerminalController+AgentSupervision.swift */; };
 			AGRP0001A1B2C3D4E5F60719 /* AgentRPCDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = AGRP0002A1B2C3D4E5F60719 /* AgentRPCDispatcher.swift */; };
 			AGSV0005A1B2C3D4E5F60719 /* AgentSupervisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AGSV0006A1B2C3D4E5F60719 /* AgentSupervisionTests.swift */; };
-			AGOV0001A1B2C3D4E5F60719 /* AgentOverviewWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AGOV0002A1B2C3D4E5F60719 /* AgentOverviewWindow.swift */; };
-			AGOV0003A1B2C3D4E5F60719 /* AgentOverviewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AGOV0004A1B2C3D4E5F60719 /* AgentOverviewTests.swift */; };
+			AGOV0001A1B2C3D4E5F60719 /* AgentHelpersPopover.swift in Sources */ = {isa = PBXBuildFile; fileRef = AGOV0002A1B2C3D4E5F60719 /* AgentHelpersPopover.swift */; };
+			AGOV0003A1B2C3D4E5F60719 /* AgentHelpersPopoverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AGOV0004A1B2C3D4E5F60719 /* AgentHelpersPopoverTests.swift */; };
 			AMDT000001 /* AgentManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = AMDT000002 /* AgentManifest.swift */; };
 			AMDT000003 /* AgentManifestLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = AMDT000004 /* AgentManifestLoader.swift */; };
 			AMDT000005 /* AgentScreenDetectionEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AMDT000006 /* AgentScreenDetectionEngine.swift */; };
@@ -466,8 +466,8 @@
 			AGSV0004A1B2C3D4E5F60719 /* TerminalController+AgentSupervision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+AgentSupervision.swift"; sourceTree = "<group>"; };
 			AGRP0002A1B2C3D4E5F60719 /* AgentRPCDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRPCDispatcher.swift; sourceTree = "<group>"; };
 			AGSV0006A1B2C3D4E5F60719 /* AgentSupervisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentSupervisionTests.swift; sourceTree = "<group>"; };
-			AGOV0002A1B2C3D4E5F60719 /* AgentOverviewWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentOverviewWindow.swift; sourceTree = "<group>"; };
-			AGOV0004A1B2C3D4E5F60719 /* AgentOverviewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentOverviewTests.swift; sourceTree = "<group>"; };
+			AGOV0002A1B2C3D4E5F60719 /* AgentHelpersPopover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentHelpersPopover.swift; sourceTree = "<group>"; };
+			AGOV0004A1B2C3D4E5F60719 /* AgentHelpersPopoverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentHelpersPopoverTests.swift; sourceTree = "<group>"; };
 			AMDT000002 /* AgentManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentManifest.swift; sourceTree = "<group>"; };
 			AMDT000004 /* AgentManifestLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentManifestLoader.swift; sourceTree = "<group>"; };
 			AMDT000006 /* AgentScreenDetectionEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentScreenDetectionEngine.swift; sourceTree = "<group>"; };
@@ -943,7 +943,7 @@
 					7501A0000000000000000004 /* GhosttyApp+ProgramStatus.swift */,
 					C7A3000002 /* AgentEventNormalizer.swift */,
 					AGSV0002A1B2C3D4E5F60719 /* AgentSupervision.swift */,
-					AGOV0002A1B2C3D4E5F60719 /* AgentOverviewWindow.swift */,
+					AGOV0002A1B2C3D4E5F60719 /* AgentHelpersPopover.swift */,
 					AMDT000002 /* AgentManifest.swift */,
 					AMDT000004 /* AgentManifestLoader.swift */,
 					AMDT000006 /* AgentScreenDetectionEngine.swift */,
@@ -1289,7 +1289,7 @@
 					BC39DE4B96D1931C52AF7D68 /* SidebarOrderingTests.swift */,
 					D1A0B0C1A1B2C3D4E5F60719 /* SidebarMarkdownRendererTests.swift */,
 					AGSV0006A1B2C3D4E5F60719 /* AgentSupervisionTests.swift */,
-					AGOV0004A1B2C3D4E5F60719 /* AgentOverviewTests.swift */,
+					AGOV0004A1B2C3D4E5F60719 /* AgentHelpersPopoverTests.swift */,
 					B09C007F42697761B5F1A2AB /* OmnibarAndToolsTests.swift */,
 					D2C075029771815DD5DA1332 /* NotificationAndMenuBarTests.swift */,
 					42092CDB2109E250F7F2A76E /* TabManagerUnitTests.swift */,
@@ -1509,7 +1509,7 @@
 					7501A0000000000000000003 /* GhosttyApp+ProgramStatus.swift in Sources */,
 					C7A3000001 /* AgentEventNormalizer.swift in Sources */,
 					AGSV0001A1B2C3D4E5F60719 /* AgentSupervision.swift in Sources */,
-					AGOV0001A1B2C3D4E5F60719 /* AgentOverviewWindow.swift in Sources */,
+					AGOV0001A1B2C3D4E5F60719 /* AgentHelpersPopover.swift in Sources */,
 					AMDT000001 /* AgentManifest.swift in Sources */,
 					AMDT000003 /* AgentManifestLoader.swift in Sources */,
 					AMDT000005 /* AgentScreenDetectionEngine.swift in Sources */,
@@ -1756,7 +1756,7 @@
 					CB23911D7E131E8FBC9B82B6 /* SidebarOrderingTests.swift in Sources */,
 					D1A0B0C0A1B2C3D4E5F60719 /* SidebarMarkdownRendererTests.swift in Sources */,
 					AGSV0005A1B2C3D4E5F60719 /* AgentSupervisionTests.swift in Sources */,
-					AGOV0003A1B2C3D4E5F60719 /* AgentOverviewTests.swift in Sources */,
+					AGOV0003A1B2C3D4E5F60719 /* AgentHelpersPopoverTests.swift in Sources */,
 					4378399A7C0245EF8186F306 /* OmnibarAndToolsTests.swift in Sources */,
 					734F49D37E543DD01C2F4FEF /* NotificationAndMenuBarTests.swift in Sources */,
 					B6BF3DC98DB1495E57900199 /* TabManagerUnitTests.swift in Sources */,

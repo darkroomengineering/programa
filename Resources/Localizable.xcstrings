@@ -477,74 +477,6 @@
         }
       }
     },
-    "agentOverview.filter.all": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "All"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "すべて"
-          }
-        }
-      }
-    },
-    "agentOverview.search": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Search workspaces and agents"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ワークスペースとエージェントを検索"
-          }
-        }
-      }
-    },
-    "agentOverview.filter": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Agent state"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "エージェントの状態"
-          }
-        }
-      }
-    },
-    "agentOverview.empty.filtered": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Try a different search or agent state."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "検索条件やエージェントの状態を変更してください。"
-          }
-        }
-      }
-    },
     "review.delivery.unavailable": {
       "extractionState": "manual",
       "localizations": {
@@ -2619,75 +2551,7 @@
         }
       }
     },
-    "agentOverview.allWorkspaces": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "All Workspaces"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "すべてのワークスペース"
-          }
-        }
-      }
-    },
-    "agentOverview.cancel": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cancel"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "キャンセル"
-          }
-        }
-      }
-    },
-    "agentOverview.empty.message": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open a workspace in Programa, then check again."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Programa でワークスペースを開いてから、もう一度確認してください。"
-          }
-        }
-      }
-    },
-    "agentOverview.empty.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No workspaces to show"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "表示するワークスペースがありません"
-          }
-        }
-      }
-    },
-    "agentOverview.helper": {
+    "agentHelpers.helper": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -2721,211 +2585,7 @@
         }
       }
     },
-    "agentOverview.hideOutput": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hide Output"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "出力を隠す"
-          }
-        }
-      }
-    },
-    "agentOverview.metadataSeparator": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": " · "
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "・"
-          }
-        }
-      }
-    },
-    "agentOverview.open": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "開く"
-          }
-        }
-      }
-    },
-    "agentOverview.output": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Output"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "出力"
-          }
-        }
-      }
-    },
-    "agentOverview.output.empty": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No output yet."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "出力はまだありません。"
-          }
-        }
-      }
-    },
-    "agentOverview.pullRequest": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PR #%lld"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "PR #%lld"
-          }
-        }
-      }
-    },
-    "agentOverview.reviewChanges": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Review Changes"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "変更をレビュー"
-          }
-        }
-      }
-    },
-    "agentOverview.send": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Send"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "送信"
-          }
-        }
-      }
-    },
-    "agentOverview.sendMessage": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Send Message…"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "メッセージを送信…"
-          }
-        }
-      }
-    },
-    "agentOverview.sendMessage.placeholder": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Type a message"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "メッセージを入力"
-          }
-        }
-      }
-    },
-    "agentOverview.sendMessage.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Send a Message"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "メッセージを送信"
-          }
-        }
-      }
-    },
-    "agentOverview.showOutput": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show Output"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "出力を表示"
-          }
-        }
-      }
-    },
-    "agentOverview.state.done": {
+    "agentHelpers.state.done": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -2942,7 +2602,7 @@
         }
       }
     },
-    "agentOverview.state.failed": {
+    "agentHelpers.state.failed": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -2959,7 +2619,7 @@
         }
       }
     },
-    "agentOverview.state.idle": {
+    "agentHelpers.state.idle": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -2976,7 +2636,7 @@
         }
       }
     },
-    "agentOverview.state.needsInput": {
+    "agentHelpers.state.needsInput": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -2993,7 +2653,7 @@
         }
       }
     },
-    "agentOverview.state.stopped": {
+    "agentHelpers.state.stopped": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -3010,7 +2670,7 @@
         }
       }
     },
-    "agentOverview.state.working": {
+    "agentHelpers.state.working": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -3023,57 +2683,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "作業中"
-          }
-        }
-      }
-    },
-    "agentOverview.stop": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stop"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "停止"
-          }
-        }
-      }
-    },
-    "agentOverview.terminal": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Terminal"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ターミナル"
-          }
-        }
-      }
-    },
-    "agentOverview.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Agent Overview"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "エージェント概要"
           }
         }
       }
@@ -6559,23 +6168,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "新しいワークツリーワークスペース…"
-          }
-        }
-      }
-    },
-    "contextMenu.openAgentOverview": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open Agent Overview"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "エージェント概要を開く"
           }
         }
       }
@@ -16831,23 +16423,6 @@
         }
       }
     },
-    "workspace.agentOverview.sendMessage.unavailable": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This terminal is no longer available. Your message was not sent."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "このターミナルは利用できなくなりました。メッセージは送信されませんでした。"
-          }
-        }
-      }
-    },
     "workspace.notificationSound.none": {
       "extractionState": "manual",
       "localizations": {
@@ -17494,7 +17069,7 @@
         }
       }
     },
-    "agentOverview.helper.report.pending": {
+    "agentHelpers.report.pending": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -17511,7 +17086,7 @@
         }
       }
     },
-    "agentOverview.helper.report.none": {
+    "agentHelpers.report.none": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -17528,41 +17103,92 @@
         }
       }
     },
-    "agentOverview.clearDone": {
+    "agentHelpers.empty": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Clear Done"
+            "value": "No helpers in this workspace."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "完了を消去"
+            "value": "このワークスペースにヘルパーはありません。"
           }
         }
       }
     },
-    "agentOverview.clearDone.help": {
+    "agentHelpers.finished": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Remove done and stopped helpers from the list"
+            "value": "Finished"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "完了または停止したヘルパーを一覧から削除"
+            "value": "完了"
           }
         }
       }
     },
-    "agentOverview.copy": {
+    "agentHelpers.clearFinished": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "消去"
+          }
+        }
+      }
+    },
+    "agentHelpers.clearFinished.help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove finished helpers from this list"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完了したヘルパーを一覧から削除"
+          }
+        }
+      }
+    },
+    "agentHelpers.toggle.hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shows or hides the report"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "レポートの表示と非表示を切り替えます"
+          }
+        }
+      }
+    },
+    "agentHelpers.copyReport": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -17579,240 +17205,70 @@
         }
       }
     },
-    "agentOverview.field.agent": {
+    "agentHelpers.openReport": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Agent"
+            "value": "Open Report"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "エージェント"
+            "value": "レポートを開く"
           }
         }
       }
     },
-    "agentOverview.field.finishedHelpers": {
+    "sidebar.helpers.show": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Finished helpers"
+            "value": "Show helpers and their reports"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "完了したヘルパー"
+            "value": "ヘルパーとレポートを表示"
           }
         }
       }
     },
-    "agentOverview.field.ranFor": {
+    "sidebar.helpers.oneFinished": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ran for"
+            "value": "1 helper finished"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "実行時間"
+            "value": "ヘルパー 1 件が完了"
           }
         }
       }
     },
-    "agentOverview.field.runningFor": {
+    "sidebar.helpers.finished": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Running for"
+            "value": "%lld helpers finished"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "実行中の時間"
-          }
-        }
-      }
-    },
-    "agentOverview.field.runningHelpers": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Running helpers"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "実行中のヘルパー"
-          }
-        }
-      }
-    },
-    "agentOverview.field.started": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Started"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "開始"
-          }
-        }
-      }
-    },
-    "agentOverview.field.terminals": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Terminals"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ターミナル"
-          }
-        }
-      }
-    },
-    "agentOverview.finishedHelpers": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld finished"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld 件完了"
-          }
-        }
-      }
-    },
-    "agentOverview.noSelection.message": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Select a terminal or helper to see its details."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "詳細を表示するには、ターミナルまたはヘルパーを選択してください。"
-          }
-        }
-      }
-    },
-    "agentOverview.noSelection.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No Selection"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "選択なし"
-          }
-        }
-      }
-    },
-    "agentOverview.openWorkspace": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open Workspace"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ワークスペースを開く"
-          }
-        }
-      }
-    },
-    "agentOverview.report": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Report"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "レポート"
-          }
-        }
-      }
-    },
-    "agentOverview.showInWorkspace": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show in Workspace"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ワークスペースで表示"
-          }
-        }
-      }
-    },
-    "agentOverview.workspaceDetails": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show Details"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "詳細を表示"
+            "value": "ヘルパー %lld 件が完了"
           }
         }
       }

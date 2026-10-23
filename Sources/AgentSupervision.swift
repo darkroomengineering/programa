@@ -111,8 +111,11 @@ final class AgentSupervisionRegistry: ObservableObject {
     /// Republished only when a count changes: `updateActiveSurface` runs on every agent
     /// state report, and an unconditional publish would re-render the whole sidebar.
     @Published private(set) var runningHelperCounts: [UUID: Int] = [:]
+    /// Finished `runs_with_parent` helpers per workspace, kept so their reports stay
+    /// reachable from the sidebar until cleared. Same republish rule as the running count.
+    @Published private(set) var finishedHelperCounts: [UUID: Int] = [:]
     private var recordsById: [UUID: AgentTaskRecord] = [:] {
-        didSet { refreshRunningHelperCounts() }
+        didSet { refreshHelperCounts() }
     }
 
     init(capacity: Int = 256) {
@@ -315,12 +318,13 @@ final class AgentSupervisionRegistry: ObservableObject {
         recordsById.removeValue(forKey: id)
     }
 
-    /// Removes done and stopped helpers. Failed ones stay until someone looks at them.
+    /// Removes the workspace's finished in-process helpers.
     @discardableResult
-    func discardSettled(workspaceIds: Set<UUID>) -> Int {
+    func discardFinishedHelpers(workspaceId: UUID) -> Int {
         let ids = recordsById.values.compactMap { record in
-            workspaceIds.contains(record.workspaceId)
-                && (record.state == .completed || record.state == .cancelled)
+            record.workspaceId == workspaceId
+                && record.placement == .runsWithParent
+                && record.state.isFinished
                 ? record.id
                 : nil
         }
@@ -344,12 +348,18 @@ final class AgentSupervisionRegistry: ObservableObject {
         }
     }
 
-    private func refreshRunningHelperCounts() {
-        var counts: [UUID: Int] = [:]
-        for record in recordsById.values where record.placement == .runsWithParent && !record.state.isFinished {
-            counts[record.workspaceId, default: 0] += 1
+    private func refreshHelperCounts() {
+        var running: [UUID: Int] = [:]
+        var finished: [UUID: Int] = [:]
+        for record in recordsById.values where record.placement == .runsWithParent {
+            if record.state.isFinished {
+                finished[record.workspaceId, default: 0] += 1
+            } else {
+                running[record.workspaceId, default: 0] += 1
+            }
         }
-        if counts != runningHelperCounts { runningHelperCounts = counts }
+        if running != runningHelperCounts { runningHelperCounts = running }
+        if finished != finishedHelperCounts { finishedHelperCounts = finished }
     }
 
     private func makeRoomForNewRecord() throws {

@@ -19,5 +19,6 @@ Reductive pass of 2026-09-02, base commit 903027ccef. Core kept: the Ghostty ter
 | cmux upgrade shims (old config paths, defaults migration, env and alias fallbacks) | [cmux-upgrade-shims.md](cmux-upgrade-shims.md) | 100 |
 | Settings options (editor, reorder, opacity and blur overrides, notification command, long-command threshold, sidebar tints, ports, Claude path, workspace colors, hold hints) | [settings-knobs-2026-10.md](settings-knobs-2026-10.md) | 2,100 |
 | omo, omx and omc agent wrappers (`programa omo`, `omx`, `omc`) | [omo-omx-omc-wrappers.md](omo-omx-omc-wrappers.md) | 750 |
+| Agent Overview window (replaced by the sidebar helpers popover) | [agent-overview-window.md](agent-overview-window.md) | 1,550 |
 
 Line counts are git-tracked lines at removal time and include tests and vendored code.
