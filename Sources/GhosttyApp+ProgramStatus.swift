@@ -105,6 +105,10 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
         var lastRootState = panel.programStatus.root?.state
         var transitions: [ProgramStatusRecord?] = []
         var projectRoot = false
+        let touchesChildren = events.contains { event in
+            if case .report(let report) = event { return !report.id.isEmpty || report.state == nil }
+            return true
+        }
         for event in events {
             defer {
                 let root = panel.programStatus.root
@@ -135,6 +139,16 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
 #if DEBUG
                 dlog("programStatus.reset surface=\(key.surfaceId.uuidString.prefix(5))")
 #endif
+            }
+        }
+        if touchesChildren {
+            let newlyBlocked = AgentSupervisionRegistry.shared.syncTerminalHelpers(
+                workspaceId: workspace.id,
+                surfaceId: key.surfaceId,
+                children: panel.programStatus.children
+            )
+            for helper in newlyBlocked {
+                postBlockedHelperNotification(helper, manager: manager, workspace: workspace, surfaceId: key.surfaceId)
             }
         }
         guard projectRoot else { return }
@@ -187,6 +201,33 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
             subtitle: "",
             body: body,
             cooldownKey: "program-status-\(surfaceId.uuidString)",
+            cooldownInterval: 10
+        )
+    }
+
+    /// A child record that enters `blocked` names its program, never its title or message:
+    /// `notification.list` returns notification text over the socket. Socket-reported helpers
+    /// never reach here; their hook posts its own notification.
+    @MainActor
+    private func postBlockedHelperNotification(
+        _ helper: AgentTaskRecord,
+        manager: TabManager,
+        workspace: Workspace,
+        surfaceId: UUID
+    ) {
+        let isFocused = manager.selectedTabId == workspace.id
+            && manager.focusedSurfaceId(for: workspace.id) == surfaceId
+        guard !(isFocused && AppFocusState.isAppFocused()) else { return }
+        let body = helper.role.map {
+            String(localized: "notification.programStatus.childBlocked", defaultValue: "A \($0) task needs your input")
+        } ?? String(localized: "notification.programStatus.childBlockedUnnamed", defaultValue: "A task needs your input")
+        TerminalNotificationStore.shared.addNotification(
+            tabId: workspace.id,
+            surfaceId: surfaceId,
+            title: manager.titleForTab(workspace.id) ?? "Terminal",
+            subtitle: "",
+            body: body,
+            cooldownKey: "program-status-child-\(surfaceId.uuidString)",
             cooldownInterval: 10
         )
     }

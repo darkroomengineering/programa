@@ -227,6 +227,7 @@ extension TabManager {
     }
 
     private func sweepStaleAgentPIDs() {
+        AgentSupervisionRegistry.shared.retainTerminalSurfaces(of: tabs)
         for tab in tabs {
             var keysToRemove: [String] = []
             for (key, pid) in tab.agentPIDs {
