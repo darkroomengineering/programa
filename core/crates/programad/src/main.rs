@@ -1,6 +1,6 @@
 //! `programad`: a headless daemon that owns PTYs, sessions, and a WAL for
-//! Programa, speaking the v2 socket protocol. See `README.md` for the
-//! method list and what this does not do yet.
+//! Programa, speaking the v2 socket protocol. See `core/docs/programad.md`
+//! for the method list and what this does not do yet.
 //!
 //! Unix-only: the daemon owns PTYs and hands off file descriptors over
 //! `SCM_RIGHTS`, neither of which has a Windows equivalent (`core/ABI.md`
@@ -175,7 +175,7 @@ mod unix {
         let ids = state.sessions.ids();
         tracing::info!(count = ids.len(), "terminating sessions");
         for id in ids {
-            let _ = state.sessions.close(&id, true);
+            let _ = state.sessions.close(&id);
         }
         Ok(())
     }

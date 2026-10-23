@@ -2,7 +2,7 @@
 //! `SCM_RIGHTS` ancillary data on the same Unix socket connection the
 //! JSON-lines protocol runs on. The PTY master itself never leaves the daemon.
 //!
-//! Contract (documented in full in `README.md`): after `programad` writes
+//! Contract (documented in full in `core/docs/programad.md`): after `programad` writes
 //! the JSON result line for `session.attach`, it performs exactly one
 //! `sendmsg(2)` on the same socket carrying a raw NUL payload plus one
 //! `SCM_RIGHTS` control message. A raw NUL cannot occur in valid JSON, so the
@@ -57,34 +57,6 @@ pub enum ReadFrameError {
 impl From<io::Error> for ReadFrameError {
     fn from(error: io::Error) -> Self {
         Self::Io(error)
-    }
-}
-
-/// Send one fd to the peer of `stream` as `SCM_RIGHTS` ancillary data on a
-/// one-byte payload. `fd` is duplicated internally, so the caller keeps
-/// ownership of whatever it passes in.
-pub async fn send_fd(stream: &UnixStream, fd: RawFd) -> io::Result<()> {
-    loop {
-        stream.writable().await?;
-        let result = stream.try_io(Interest::WRITABLE, || {
-            let iov = [io::IoSlice::new(FD_MARKER)];
-            let fds = [fd];
-            let cmsg = [ControlMessage::ScmRights(&fds)];
-            socket::sendmsg::<UnixAddr>(stream.as_raw_fd(), &iov, &cmsg, MsgFlags::empty(), None)
-                .and_then(|written| {
-                    if written == FD_MARKER.len() {
-                        Ok(())
-                    } else {
-                        Err(nix::errno::Errno::EIO)
-                    }
-                })
-                .map_err(io::Error::from)
-        });
-        match result {
-            Ok(()) => return Ok(()),
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => continue,
-            Err(e) => return Err(e),
-        }
     }
 }
 
@@ -281,16 +253,9 @@ impl MsgStream {
     /// SCM_RIGHTS are discarded by the kernel because clients never send FDs.
     pub fn new_without_fd_receive(stream: UnixStream) -> Self {
         MsgStream {
-            stream,
-            buf: Vec::new(),
-            scanned: 0,
-            fds: VecDeque::new(),
             accept_fds: false,
+            ..Self::new(stream)
         }
-    }
-
-    pub fn get_ref(&self) -> &UnixStream {
-        &self.stream
     }
 
     /// Read and consume one line (without its trailing `\n`/`\r\n`).
@@ -334,9 +299,39 @@ impl MsgStream {
         self.stream.write_all(data).await
     }
 
-    /// Send one fd as `SCM_RIGHTS`, as documented at the top of this file.
+    /// Send one fd as `SCM_RIGHTS` on a one-byte marker payload, as
+    /// documented at the top of this file. The kernel duplicates `fd` into
+    /// the peer, so the caller keeps ownership of what it passes in.
     pub async fn send_fd(&self, fd: RawFd) -> io::Result<()> {
-        send_fd(&self.stream, fd).await
+        let stream = &self.stream;
+        loop {
+            stream.writable().await?;
+            let result = stream.try_io(Interest::WRITABLE, || {
+                let iov = [io::IoSlice::new(FD_MARKER)];
+                let fds = [fd];
+                let cmsg = [ControlMessage::ScmRights(&fds)];
+                socket::sendmsg::<UnixAddr>(
+                    stream.as_raw_fd(),
+                    &iov,
+                    &cmsg,
+                    MsgFlags::empty(),
+                    None,
+                )
+                .and_then(|written| {
+                    if written == FD_MARKER.len() {
+                        Ok(())
+                    } else {
+                        Err(nix::errno::Errno::EIO)
+                    }
+                })
+                .map_err(io::Error::from)
+            });
+            match result {
+                Ok(()) => return Ok(()),
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => continue,
+                Err(e) => return Err(e),
+            }
+        }
     }
 
     /// Pop one fd received via `SCM_RIGHTS`, reading more from the socket

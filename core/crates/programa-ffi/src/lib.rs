@@ -81,11 +81,11 @@ pub unsafe extern "C" fn programa_core_dispatch(
         let handle = handle(core)?;
         let bytes = input_bytes(request, len)?;
         let command: Command = serde_json::from_slice(bytes)
-            .map_err(|error| ApiError::owned("invalid_json", error.to_string()))?;
+            .map_err(|error| ApiError::new("invalid_json", error.to_string()))?;
         let mut core = handle
             .core
             .lock()
-            .map_err(|_| ApiError::borrowed("internal_error", "core lock is poisoned"))?;
+            .map_err(|_| ApiError::new("internal_error", "core lock is poisoned"))?;
         let snapshot = core.dispatch(command).map_err(ApiError::from)?;
         serialize(&DispatchSuccess { snapshot })
     })
@@ -105,7 +105,7 @@ pub unsafe extern "C" fn programa_core_snapshot(
         let core = handle
             .core
             .lock()
-            .map_err(|_| ApiError::borrowed("internal_error", "core lock is poisoned"))?;
+            .map_err(|_| ApiError::new("internal_error", "core lock is poisoned"))?;
         serialize(core.snapshot())
     })
 }
@@ -145,7 +145,7 @@ unsafe fn ffi_call(
             STATUS_ERROR
         }
         Err(_) => {
-            result.write(into_buffer(error_json(&ApiError::borrowed(
+            result.write(into_buffer(error_json(&ApiError::new(
                 "panic",
                 "internal panic was contained at the ABI boundary",
             ))));
@@ -157,7 +157,7 @@ unsafe fn ffi_call(
 unsafe fn handle<'a>(core: *mut std::ffi::c_void) -> Result<&'a CoreHandle, ApiError> {
     core.cast::<CoreHandle>()
         .as_ref()
-        .ok_or_else(|| ApiError::borrowed("invalid_argument", "core handle must not be null"))
+        .ok_or_else(|| ApiError::new("invalid_argument", "core handle must not be null"))
 }
 
 unsafe fn input_bytes<'a>(request: *const u8, len: usize) -> Result<&'a [u8], ApiError> {
@@ -165,7 +165,7 @@ unsafe fn input_bytes<'a>(request: *const u8, len: usize) -> Result<&'a [u8], Ap
         if len == 0 {
             return Ok(&[]);
         }
-        return Err(ApiError::borrowed(
+        return Err(ApiError::new(
             "invalid_argument",
             "request must not be null when len is nonzero",
         ));
@@ -175,7 +175,7 @@ unsafe fn input_bytes<'a>(request: *const u8, len: usize) -> Result<&'a [u8], Ap
 
 fn serialize(value: &impl Serialize) -> Result<Vec<u8>, ApiError> {
     serde_json::to_vec(value)
-        .map_err(|error| ApiError::owned("serialization_error", error.to_string()))
+        .map_err(|error| ApiError::new("serialization_error", error.to_string()))
 }
 
 fn into_buffer(mut bytes: Vec<u8>) -> ProgramaBuffer {
@@ -207,11 +207,7 @@ struct ApiError {
 }
 
 impl ApiError {
-    fn borrowed(code: &str, message: &str) -> Self {
-        Self::owned(code, message)
-    }
-
-    fn owned(code: impl Into<String>, message: impl Into<String>) -> Self {
+    fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
             code: code.into(),
             message: message.into(),
@@ -221,7 +217,7 @@ impl ApiError {
 
 impl From<DomainError> for ApiError {
     fn from(error: DomainError) -> Self {
-        Self::owned(error.code(), error.message())
+        Self::new(error.code(), error.message())
     }
 }
 

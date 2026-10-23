@@ -1,20 +1,17 @@
 //! Session: one PTY + child process + WAL, owned by the daemon for as long
 //! as the session exists, independent of any client's connection lifetime.
 //!
-//! The resize rule ("smallest attached client wins, last size kept when
-//! none attached") is the same rule the SSH remote daemon
-//! (`programad-remote`'s `main_sessions.go`) already implements and tests,
-//! reused here rather than reinvented: each attachment reports the cols/
-//! rows it wants, the PTY is set to the elementwise minimum across all
-//! currently attached clients, and dropping to zero attachments leaves the
-//! PTY at whatever size it last had (never force-reset).
+//! Resize rule: each attachment reports the cols/rows it wants, the PTY is
+//! set to the elementwise minimum across all currently attached clients,
+//! and dropping to zero attachments leaves the PTY at whatever size it last
+//! had (never force-reset).
 
 use std::collections::HashMap;
 use std::io;
 use std::os::fd::{AsRawFd, OwnedFd, RawFd};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use nix::poll::{poll, PollFd, PollFlags, PollTimeout};
 use nix::unistd::Pid;
@@ -61,6 +58,17 @@ struct ChildState {
     exit: Option<(Option<i32>, Option<i32>)>,
 }
 
+impl ChildState {
+    /// The recorded exit, or a non-blocking `try_wait` whose result is
+    /// recorded so the child is reaped exactly once.
+    fn reap(&mut self) -> io::Result<Option<(Option<i32>, Option<i32>)>> {
+        if self.exit.is_none() {
+            self.exit = self.child.try_wait()?.map(exit_status_parts);
+        }
+        Ok(self.exit)
+    }
+}
+
 struct Attachment {
     cols: u16,
     rows: u16,
@@ -72,7 +80,6 @@ pub struct Session {
     pub id: String,
     pub argv: Vec<String>,
     pub cwd: Option<PathBuf>,
-    pub created_at: SystemTime,
     inner: Arc<Inner>,
 }
 
@@ -132,7 +139,6 @@ impl Session {
             id,
             argv: params.argv,
             cwd: params.cwd,
-            created_at: SystemTime::now(),
             inner,
         })
     }
@@ -260,15 +266,9 @@ impl Session {
     /// a client merely disconnecting (which does nothing to the child —
     /// that's the whole point of detached sessions), this is the one path
     /// that actually terminates the process.
-    pub fn close(&self, kill: bool) -> io::Result<()> {
+    pub fn close(&self) -> io::Result<()> {
         let mut exit = try_reap(&self.inner)?;
-        if !kill && exit.is_none() {
-            return Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "cannot close a running session without terminating its child",
-            ));
-        }
-        if kill && exit.is_none() {
+        if exit.is_none() {
             exit = signal_child(&self.inner, nix::sys::signal::Signal::SIGHUP, false)?;
             exit = wait_for_exit(&self.inner, exit, Duration::from_millis(500))?;
             if exit.is_none() {
@@ -373,7 +373,7 @@ fn cloexec_pipe() -> io::Result<(OwnedFd, OwnedFd)> {
     Ok((read, write))
 }
 
-fn write_all_to_master(master_raw: RawFd, data: &[u8], stop_raw: RawFd) -> io::Result<usize> {
+fn write_all_to_master(master_raw: RawFd, data: &[u8], stop_raw: RawFd) -> io::Result<()> {
     use std::os::fd::BorrowedFd;
     let mut written = 0;
     while written < data.len() {
@@ -413,7 +413,7 @@ fn write_all_to_master(master_raw: RawFd, data: &[u8], stop_raw: RawFd) -> io::R
             Err(error) => return Err(io::Error::from(error)),
         }
     }
-    Ok(written)
+    Ok(())
 }
 
 /// The one and only reader of this session's PTY master, for its entire
@@ -569,18 +569,7 @@ fn fail_session(inner: &Arc<Inner>, error: String) {
 }
 
 fn try_reap(inner: &Inner) -> io::Result<Option<(Option<i32>, Option<i32>)>> {
-    let mut child = inner.child.lock().unwrap();
-    if child.exit.is_some() {
-        return Ok(child.exit);
-    }
-    let status = child.child.try_wait()?;
-    if let Some(status) = status {
-        let exit = exit_status_parts(status);
-        child.exit = Some(exit);
-        Ok(Some(exit))
-    } else {
-        Ok(None)
-    }
+    inner.child.lock().unwrap().reap()
 }
 
 /// Poll `try_reap` at a fixed interval until the child exits or `timeout`
@@ -612,12 +601,7 @@ fn signal_child(
     whole_group: bool,
 ) -> io::Result<Option<(Option<i32>, Option<i32>)>> {
     let mut child = inner.child.lock().unwrap();
-    if let Some(exit) = child.exit {
-        return Ok(Some(exit));
-    }
-    if let Some(status) = child.child.try_wait()? {
-        let exit = exit_status_parts(status);
-        child.exit = Some(exit);
+    if let Some(exit) = child.reap()? {
         return Ok(Some(exit));
     }
 
@@ -638,18 +622,13 @@ fn signal_child(
     };
     match result {
         Ok(()) => Ok(None),
-        Err(nix::errno::Errno::ESRCH) => {
-            if let Some(status) = child.child.try_wait()? {
-                let exit = exit_status_parts(status);
-                child.exit = Some(exit);
-                Ok(Some(exit))
-            } else {
-                Err(io::Error::new(
-                    io::ErrorKind::NotFound,
-                    "child disappeared before it could be signaled",
-                ))
-            }
-        }
+        Err(nix::errno::Errno::ESRCH) => match child.reap()? {
+            Some(exit) => Ok(Some(exit)),
+            None => Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "child disappeared before it could be signaled",
+            )),
+        },
         Err(error) => Err(io::Error::from(error)),
     }
 }
@@ -657,13 +636,6 @@ fn signal_child(
 fn exit_status_parts(status: std::process::ExitStatus) -> (Option<i32>, Option<i32>) {
     use std::os::unix::process::ExitStatusExt;
     (status.code(), status.signal())
-}
-
-pub fn now_unix_ms() -> u128 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
 }
 
 pub struct SessionManager {
@@ -698,14 +670,13 @@ impl SessionManager {
         self.sessions.lock().unwrap().values().cloned().collect()
     }
 
-    /// Remove and close a session. `kill` additionally signals the child;
-    /// without it, `close` just stops tracking it here (used for sessions
-    /// that already exited on their own).
-    pub fn close(&self, id: &str, kill: bool) -> io::Result<bool> {
+    /// Terminate a session's child (unless it already exited), then stop
+    /// tracking the session and delete its directory.
+    pub fn close(&self, id: &str) -> io::Result<bool> {
         let session = self.sessions.lock().unwrap().get(id).cloned();
         match session {
             Some(session) => {
-                session.close(kill)?;
+                session.close()?;
                 self.sessions.lock().unwrap().remove(id);
                 if let Err(error) = crate::paths::remove_session_dir(id) {
                     tracing::warn!(session = id, %error, "failed to remove closed session directory");

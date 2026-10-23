@@ -171,7 +171,8 @@ pub async fn handle_connection(stream: UnixStream, state: Arc<AppState>) {
         if let Some(fd) = fd_to_send {
             use std::os::fd::AsRawFd;
             let raw = fd.as_raw_fd();
-            // Contract (README "fd handoff"): the input-only fd rides as
+            // Contract (core/docs/programad.md "Attach and file-descriptor
+            // handoff"): the input-only fd rides as
             // SCM_RIGHTS ancillary data on this same connection, sent
             // immediately after the session.attach JSON result line.
             if let Err(e) = msg_stream.send_fd(raw).await {
@@ -187,10 +188,8 @@ pub async fn handle_connection(stream: UnixStream, state: Arc<AppState>) {
         }
     }
 
-    for (session_id, attach_id) in my_attachments.drain() {
-        if let Some(session) = state.sessions.get(&session_id) {
-            session.detach(attach_id);
-        }
+    for attachment in my_attachments.drain() {
+        rollback_attachment(&state, Some(attachment));
     }
 }
 
@@ -464,7 +463,7 @@ async fn session_close(req: &Request, state: &Arc<AppState>) -> Result<Value, Er
     }
     let close_state = state.clone();
     let close_id = id.clone();
-    let closed = tokio::task::spawn_blocking(move || close_state.sessions.close(&close_id, kill))
+    let closed = tokio::task::spawn_blocking(move || close_state.sessions.close(&close_id))
         .await
         .map_err(|error| {
             ErrorBody::new(
@@ -487,8 +486,8 @@ async fn session_close(req: &Request, state: &Arc<AppState>) -> Result<Value, Er
     Ok(json!({"closed": true}))
 }
 
-/// Closing semantics (documented in `core/docs/programad.md` "Process
-/// layer"): a domain surface whose `session_id` names a session that just
+/// Closing semantics (documented in `core/ABI.md` "Process layer"): a
+/// domain surface whose `session_id` names a session that just
 /// closed is removed via `close_surface`, the same command a client would
 /// send. We chose "gone" over a `terminated` surface flag because
 /// `programa-domain` has no such flag today (`core/ABI.md`) and closing
@@ -691,9 +690,11 @@ fn workspace_dispatch(req: &Request, state: &Arc<AppState>) -> Result<Value, Err
     validate_command_sessions(&command, state)?;
     reconcile_dead_sessions(state, &mut domain);
     match domain.dispatch(command) {
-        Ok(snapshot) => serde_json::to_value(json!({ "snapshot": snapshot })).map_err(|e| {
-            ErrorBody::new(ErrorCode::InternalError, format!("serialize failed: {e}"))
-        }),
+        Ok(snapshot) => serde_json::to_value(snapshot)
+            .map(|snapshot| json!({ "snapshot": snapshot }))
+            .map_err(|e| {
+                ErrorBody::new(ErrorCode::InternalError, format!("serialize failed: {e}"))
+            }),
         Err(error) => Err(
             ErrorBody::new(ErrorCode::Domain, error.message().to_string())
                 .with_data(json!({"code": error.code(), "message": error.message()})),

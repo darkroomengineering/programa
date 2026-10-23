@@ -193,8 +193,7 @@ impl ErrorCode {
 /// Declares each method name once: as a constant in `method` (matched by the
 /// server's dispatch) and in `IMPLEMENTED_METHODS` (advertised by
 /// `system.capabilities`). The method namespace is intentionally open-ended;
-/// see README for the authoritative list alongside what the macOS app
-/// implements that `programad` does not (yet).
+/// `core/docs/programad.md` lists what `programad` implements.
 macro_rules! methods {
     ($($name:ident = $wire:literal,)*) => {
         pub mod method {
