@@ -108,12 +108,13 @@ final class AgentSupervisionRegistry: ObservableObject {
 
     let capacity: Int
     /// Unfinished `runs_with_parent` helpers per workspace, shown on the sidebar row.
-    /// Republished only when a count changes: `updateActiveSurface` runs on every agent
-    /// state report, and an unconditional publish would re-render the whole sidebar.
-    @Published private(set) var runningHelperCounts: [UUID: Int] = [:]
+    /// Both counts publish together, once, and only when one changes: `updateActiveSurface`
+    /// runs on every agent state report, and finishing a helper moves it between the two
+    /// counts. Either extra publish re-renders the whole sidebar.
+    private(set) var runningHelperCounts: [UUID: Int] = [:]
     /// Finished `runs_with_parent` helpers per workspace, kept so their reports stay
-    /// reachable from the sidebar until cleared. Same republish rule as the running count.
-    @Published private(set) var finishedHelperCounts: [UUID: Int] = [:]
+    /// reachable from the sidebar until cleared.
+    private(set) var finishedHelperCounts: [UUID: Int] = [:]
     private var recordsById: [UUID: AgentTaskRecord] = [:] {
         didSet { refreshHelperCounts() }
     }
@@ -358,8 +359,10 @@ final class AgentSupervisionRegistry: ObservableObject {
                 running[record.workspaceId, default: 0] += 1
             }
         }
-        if running != runningHelperCounts { runningHelperCounts = running }
-        if finished != finishedHelperCounts { finishedHelperCounts = finished }
+        guard running != runningHelperCounts || finished != finishedHelperCounts else { return }
+        objectWillChange.send()
+        runningHelperCounts = running
+        finishedHelperCounts = finished
     }
 
     private func makeRoomForNewRecord() throws {
