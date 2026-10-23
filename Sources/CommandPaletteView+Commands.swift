@@ -638,14 +638,6 @@ extension CommandPaletteView {
 
         contributions.append(
             CommandPaletteCommandContribution(
-                commandId: "palette.openAgentOverview",
-                title: constant(String(localized: "contextMenu.openAgentOverview", defaultValue: "Open Agent Overview")),
-                subtitle: constant(String(localized: "agentOverview.allWorkspaces", defaultValue: "All Workspaces")),
-                keywords: ["agent", "overview", "attention", "helper", "status"]
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
                 commandId: "palette.resumeAgentSession",
                 title: constant(String(localized: "command.resumeAgentSession.title", defaultValue: "Resume Agent Session")),
                 subtitle: terminalPanelSubtitle,
@@ -703,12 +695,6 @@ extension CommandPaletteView {
     }
 
     private func registerCommandPaletteHandlers(_ registry: inout CommandPaletteHandlerRegistry) {
-        registry.register(commandId: "palette.openAgentOverview") {
-            // Let the palette finish restoring focus before presenting the overview.
-            DispatchQueue.main.async {
-                AgentOverviewWindowController.shared.show(tabManager: tabManager, workspaceId: nil)
-            }
-        }
         registry.register(commandId: "palette.newWorkspace") {
             tabManager.addWorkspace()
         }

@@ -201,4 +201,3 @@ apply to digits 1 to 9.
 | `hideFind` | Hide Find Bar | ⇧⌘F | "cmd+shift+f" |
 | `useSelectionForFind` | Use Selection for Find | ⌘E | "cmd+e" |
 | `openReview` | Open Review Panel | (unbound) | (none) |
-| `openAgentOverview` | Open Agent Overview | (unbound) | (none) |

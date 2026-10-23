@@ -274,8 +274,7 @@
               "findPrevious",
               "hideFind",
               "useSelectionForFind",
-              "openReview",
-              "openAgentOverview"
+              "openReview"
             ]
           },
           "additionalProperties": {

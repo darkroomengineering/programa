@@ -83,9 +83,6 @@ Keyboard shortcut settings from Settings > Keyboard Shortcuts.
 |---|---|---|---|
 | `bindings` | object | `{}` | Shortcut overrides keyed by Programa action id. Use a string for a single shortcut or an array for a chord. |
 
-`openAgentOverview` opens the all-workspaces Agent Overview. It is unbound by default;
-set it under `shortcuts.bindings` or use Settings → Keyboard Shortcuts.
-
 ## `windows`
 
 Settings read by the Windows frontend only. The macOS app ignores this section.

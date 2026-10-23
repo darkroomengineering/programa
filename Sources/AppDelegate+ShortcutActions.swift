@@ -165,10 +165,6 @@ extension AppDelegate {
                   let focusedPanelId = workspace.focusedPanelId else { return }
             _ = workspace.newReviewSplit(from: focusedPanelId, orientation: .horizontal, focus: true)
         }),
-        (.openAgentOverview, consume { app, event, _ in
-            guard let context = app.preferredMainWindowContextForShortcuts(event: event) else { return }
-            AgentOverviewWindowController.shared.show(tabManager: context.tabManager, workspaceId: nil)
-        }),
         (.find, consume { app, _, _ in app.tabManager?.startSearch() }),
         (.findNext, consume { app, _, _ in app.tabManager?.findNext() }),
         (.findPrevious, consume { app, _, _ in app.tabManager?.findPrevious() }),
