@@ -56,6 +56,24 @@ final class AgentSupervisionRegistryTests: XCTestCase {
         XCTAssertEqual(finished.payload()["summary"] as? String, "Found 3 call sites.")
     }
 
+    func testDiscardSettledClearsDoneAndStoppedHelpersButKeepsFailedAndRunning() throws {
+        let registry = AgentSupervisionRegistry(capacity: 8)
+        let workspaceId = UUID()
+        let otherWorkspaceId = UUID()
+        func start(_ state: AgentTaskState, in workspace: UUID) throws -> AgentTaskRecord {
+            try registry.start(host: "claude", state: state, placement: .runsWithParent, workspaceId: workspace)
+        }
+        let running = try start(.working, in: workspaceId)
+        let failed = try start(.failed, in: workspaceId)
+        _ = try start(.completed, in: workspaceId)
+        _ = try start(.cancelled, in: workspaceId)
+        let elsewhere = try start(.completed, in: otherWorkspaceId)
+
+        XCTAssertEqual(registry.discardSettled(workspaceIds: [workspaceId]), 2)
+        XCTAssertEqual(Set(registry.records().map(\.id)), [running.id, failed.id, elsewhere.id])
+        XCTAssertEqual(registry.discardSettled(workspaceIds: [workspaceId]), 0)
+    }
+
     func testRunsWithParentNeverClaimsIndependentOutput() throws {
         let registry = AgentSupervisionRegistry(capacity: 2)
         let record = try registry.start(

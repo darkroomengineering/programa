@@ -330,7 +330,7 @@ final class AgentOverviewViewModel: ObservableObject {
             }
         }
         outputGate.reconcile(availableSelections: selections)
-        if selection == nil { output = "" }
+        if selection == nil, !output.isEmpty { output = "" }
     }
 
     weak var requestedTabManager: TabManager?
@@ -347,18 +347,32 @@ final class AgentOverviewViewModel: ObservableObject {
     }
     var canCopyOutput: Bool { isOutputVisible && !output.isEmpty }
 
+    var selectedWorkspace: AgentOverviewWorkspaceSnapshot? {
+        guard let workspaceId = selection?.workspaceId else { return nil }
+        return windows.lazy.flatMap(\.workspaces).first { $0.id == workspaceId }
+    }
+
     var selectedHelper: AgentOverviewHelperSnapshot? {
-        guard case .helper(let workspaceId, let helperId, _, _) = selection else { return nil }
-        return windows.lazy.flatMap(\.workspaces).first { $0.id == workspaceId }?
-            .helpers.first { $0.id == helperId }
+        guard case .helper(_, let helperId, _, _) = selection else { return nil }
+        return selectedWorkspace?.helpers.first { $0.id == helperId }
+    }
+
+    var selectedTerminal: AgentOverviewTerminalSnapshot? {
+        guard case .terminal(_, let panelId) = selection else { return nil }
+        return selectedWorkspace?.terminals.first { $0.id == panelId }
     }
 
     var canCopyReport: Bool { selectedHelper?.summary?.isEmpty == false }
 
-    func toggleSettledHelpers(workspaceId: UUID) {
-        if !expandedSettledHelperWorkspaces.insert(workspaceId).inserted {
-            expandedSettledHelperWorkspaces.remove(workspaceId)
-        }
+    var settledHelperCount: Int {
+        windows.flatMap(\.workspaces).reduce(0) { $0 + $1.helpers.filter(\.isSettled).count }
+    }
+
+    func clearSettledHelpers() {
+        let workspaceIds = Set(windows.flatMap(\.workspaces).map(\.id))
+        AgentSupervisionRegistry.shared.discardSettled(workspaceIds: workspaceIds)
+        expandedSettledHelperWorkspaces.removeAll()
+        rebuildSnapshot()
     }
 
     func copyReport() {
@@ -581,7 +595,9 @@ final class AgentOverviewViewModel: ObservableObject {
             )
         }
 
-        windows = nextWindows
+        // The refresh runs every second; reassigning an equal snapshot would still
+        // re-render every row and reset hover and scroll state.
+        if windows != nextWindows { windows = nextWindows }
         reconcileVisibleSelection()
     }
 
@@ -590,16 +606,20 @@ final class AgentOverviewViewModel: ObservableObject {
         nodes: [AgentOverviewHierarchyNode]
     ) -> Set<UUID>? {
         guard let scopedWorkspaceId else {
-            scopeTitle = nil
+            setScopeTitle(nil)
             return nil
         }
         guard manager === requestedTabManager,
               let workspace = manager.workspace(withId: scopedWorkspaceId) else {
-            scopeTitle = nil
+            setScopeTitle(nil)
             return []
         }
-        scopeTitle = workspace.title
+        setScopeTitle(workspace.title)
         return AgentOverviewHierarchy.scopedIds(nodes, rootId: scopedWorkspaceId)
+    }
+
+    private func setScopeTitle(_ title: String?) {
+        if scopeTitle != title { scopeTitle = title }
     }
 
     private func liveWindowStates() -> [AppDelegate.ScriptableMainWindowState] {
@@ -667,11 +687,12 @@ final class AgentOverviewViewModel: ObservableObject {
         guard let lineLimit = outputGate.readLineLimit,
               let panel = resolveTerminalPanel(),
               outputRefreshGate.shouldRead(now: Date()) else { return }
-        output = TerminalController.shared.readTerminalText(
+        let text = TerminalController.shared.readTerminalText(
             terminalPanel: panel,
             includeScrollback: false,
             lineLimit: lineLimit
         ) ?? ""
+        if text != output { output = text }
     }
 }
 
@@ -682,18 +703,20 @@ final class AgentOverviewWindowController: NSWindowController, NSWindowDelegate 
     private let viewModel = AgentOverviewViewModel()
 
     private init() {
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 900, height: 620),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
+        let hostingController = NSHostingController(rootView: AgentOverviewRootView(viewModel: viewModel))
+        // Puts the SwiftUI title, toolbar and sidebar search field in the window's unified toolbar.
+        hostingController.sceneBridgingOptions = [.title, .toolbars]
+        // Without this the window snaps to the SwiftUI ideal size whenever content changes.
+        hostingController.sizingOptions = [.minSize]
+        let window = NSWindow(contentViewController: hostingController)
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        window.toolbarStyle = .unified
+        window.setContentSize(NSSize(width: 980, height: 640))
         window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 820, height: 420)
         window.title = String(localized: "agentOverview.title", defaultValue: "Agent Overview")
         window.identifier = NSUserInterfaceItemIdentifier("programa.agent-overview")
-        window.center()
-        window.contentView = NSHostingView(rootView: AgentOverviewRootView(viewModel: viewModel))
+        window.setFrameAutosaveName("programa.agent-overview")
+        if !window.setFrameUsingName("programa.agent-overview") { window.center() }
         super.init(window: window)
         window.delegate = self
     }
@@ -729,366 +752,545 @@ final class AgentOverviewWindowController: NSWindowController, NSWindowDelegate 
     }
 }
 
+private extension AgentOverviewFriendlyState {
+    var symbolName: String {
+        switch self {
+        case .idle: return "circle"
+        case .working: return "circle.fill"
+        case .needsInput: return "exclamationmark.circle.fill"
+        case .done: return "checkmark.circle.fill"
+        case .stopped: return "stop.circle"
+        case .failed: return "xmark.circle.fill"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .idle, .stopped: return .secondary
+        case .working: return .blue
+        case .needsInput: return .orange
+        case .done: return .green
+        case .failed: return .red
+        }
+    }
+}
+
+private struct AgentOverviewStateIndicator: View {
+    let state: AgentOverviewFriendlyState
+    var isStale = false
+
+    var body: some View {
+        Image(systemName: state.symbolName)
+            .imageScale(.small)
+            .foregroundStyle(state.tint)
+            .opacity(isStale ? 0.5 : 1)
+            .help(state.label)
+            .accessibilityLabel(state.label)
+    }
+}
+
+private struct AgentOverviewStateBadge: View {
+    let state: AgentOverviewFriendlyState
+
+    var body: some View {
+        Label(state.label, systemImage: state.symbolName)
+            .font(.callout.weight(.medium))
+            .foregroundStyle(state.tint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(state.tint.opacity(0.12), in: Capsule())
+    }
+}
+
+/// Only running helpers tick, and only this text re-renders each second.
+private struct AgentOverviewDurationText: View {
+    let startedAt: Date
+    let endedAt: Date?
+
+    var body: some View {
+        if let endedAt {
+            Text(AgentOverviewFormatting.duration(max(0, endedAt.timeIntervalSince(startedAt))))
+        } else {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                Text(AgentOverviewFormatting.duration(max(0, context.date.timeIntervalSince(startedAt))))
+            }
+        }
+    }
+}
+
 private struct AgentOverviewRootView: View {
     @ObservedObject var viewModel: AgentOverviewViewModel
 
+    private var separator: String {
+        String(localized: "agentOverview.metadataSeparator", defaultValue: " · ")
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            HStack {
-                TextField(String(localized: "agentOverview.search", defaultValue: "Search workspaces and agents"), text: $viewModel.search)
-                    .textFieldStyle(.roundedBorder)
-                    .accessibilityLabel(String(localized: "agentOverview.search", defaultValue: "Search workspaces and agents"))
-                Picker(String(localized: "agentOverview.filter", defaultValue: "Agent state"), selection: $viewModel.filter) {
-                    ForEach(AgentOverviewFilter.allCases, id: \.self) { filter in
-                        Text(filter.label).tag(filter)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 300)
-            }
-            .frame(minHeight: 44)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 8)
-            Divider()
-            HSplitView {
-                workspaceList
-                    .frame(minWidth: 420, idealWidth: 520)
-                if viewModel.isOutputVisible {
-                    outputView
-                        .frame(minWidth: 280)
-                } else if let helper = viewModel.selectedHelper {
-                    helperDetail(helper)
-                        .frame(minWidth: 280)
-                }
-            }
-            Divider()
-            actionBar
+        NavigationSplitView {
+            sidebar
+                .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 460)
+        } detail: {
+            detail
         }
-        .frame(minWidth: 820, minHeight: 420)
+        .navigationTitle(String(localized: "agentOverview.title", defaultValue: "Agent Overview"))
+        .navigationSubtitle(viewModel.scopeTitle
+            ?? String(localized: "agentOverview.allWorkspaces", defaultValue: "All Workspaces"))
+        .searchable(
+            text: $viewModel.search,
+            placement: .sidebar,
+            prompt: Text(String(localized: "agentOverview.search", defaultValue: "Search workspaces and agents"))
+        )
+        .toolbar { toolbarContent }
+        .frame(minWidth: 760, minHeight: 440)
         .sheet(isPresented: $viewModel.isShowingMessageSheet) {
             sendMessageSheet
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(String(localized: "agentOverview.title", defaultValue: "Agent Overview"))
-                    .font(.title2.weight(.semibold))
-                if let scopeTitle = viewModel.scopeTitle {
-                    Text(scopeTitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text(String(localized: "agentOverview.allWorkspaces", defaultValue: "All Workspaces"))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            if viewModel.hasScope {
+                Button {
+                    viewModel.showAllWorkspaces()
+                } label: {
+                    Label(String(localized: "agentOverview.allWorkspaces", defaultValue: "All Workspaces"),
+                          systemImage: "rectangle.stack")
+                }
+                .help(String(localized: "agentOverview.allWorkspaces", defaultValue: "All Workspaces"))
+            }
+            Picker(String(localized: "agentOverview.filter", defaultValue: "Agent state"), selection: $viewModel.filter) {
+                ForEach(AgentOverviewFilter.allCases, id: \.self) { filter in
+                    Text(filter.label).tag(filter)
                 }
             }
-            Spacer()
-            Button(String(localized: "agentOverview.allWorkspaces", defaultValue: "All Workspaces")) {
-                viewModel.showAllWorkspaces()
+            .pickerStyle(.segmented)
+            .help(String(localized: "agentOverview.filter", defaultValue: "Agent state"))
+            Button {
+                viewModel.openSelection()
+            } label: {
+                Label(String(localized: "agentOverview.showInWorkspace", defaultValue: "Show in Workspace"),
+                      systemImage: "arrow.up.forward.app")
             }
-            .disabled(!viewModel.hasScope)
+            .disabled(!viewModel.canOpen)
+            .help(String(localized: "agentOverview.showInWorkspace", defaultValue: "Show in Workspace"))
+            Button {
+                viewModel.clearSettledHelpers()
+            } label: {
+                Label(String(localized: "agentOverview.clearDone", defaultValue: "Clear Done"), systemImage: "eraser")
+            }
+            .disabled(viewModel.settledHelperCount == 0)
+            .help(String(localized: "agentOverview.clearDone.help", defaultValue: "Remove done and stopped helpers from the list"))
         }
-        .padding(16)
     }
 
-    private var workspaceList: some View {
-        List {
-            if viewModel.visibleWindows.isEmpty {
-                ContentUnavailableView(
-                    String(localized: "agentOverview.empty.title", defaultValue: "No workspaces to show"),
-                    systemImage: "rectangle.stack",
-                    description: Text(viewModel.windows.isEmpty
-                        ? String(localized: "agentOverview.empty.message", defaultValue: "Open a workspace in Programa, then check again.")
-                        : String(localized: "agentOverview.empty.filtered", defaultValue: "Try a different search or agent state."))
-                )
+    // MARK: Sidebar
+
+    private var selectionBinding: Binding<AgentOverviewSelection?> {
+        Binding(
+            get: { viewModel.selection },
+            set: { selection in
+                if let selection { viewModel.select(selection) }
             }
-            ForEach(viewModel.visibleWindows) { window in
+        )
+    }
+
+    private var visibleWorkspaces: [AgentOverviewWorkspaceSnapshot] {
+        viewModel.visibleWindows.flatMap(\.workspaces)
+    }
+
+    private var sidebar: some View {
+        List(selection: selectionBinding) {
+            ForEach(visibleWorkspaces) { workspace in
                 Section {
-                    ForEach(window.workspaces) { workspace in
-                        workspaceRows(workspace)
-                    }
+                    workspaceRows(workspace)
                 } header: {
-                    Text(String(
-                        format: String(localized: "agentOverview.window", defaultValue: "Window %lld"),
-                        Int64(window.index + 1)
-                    ))
+                    workspaceHeader(workspace)
                 }
             }
         }
         .listStyle(.sidebar)
+        .contextMenu(forSelectionType: AgentOverviewSelection.self) { selections in
+            if let selection = selections.first {
+                rowMenu(selection)
+            }
+        } primaryAction: { selections in
+            guard let selection = selections.first else { return }
+            viewModel.select(selection)
+            viewModel.openSelection()
+        }
+        .overlay {
+            if visibleWorkspaces.isEmpty {
+                if viewModel.windows.isEmpty {
+                    ContentUnavailableView(
+                        String(localized: "agentOverview.empty.title", defaultValue: "No workspaces to show"),
+                        systemImage: "rectangle.stack",
+                        description: Text(String(localized: "agentOverview.empty.message", defaultValue: "Open a workspace in Programa, then check again."))
+                    )
+                } else {
+                    ContentUnavailableView(
+                        String(localized: "agentOverview.empty.title", defaultValue: "No workspaces to show"),
+                        systemImage: "magnifyingglass",
+                        description: Text(String(localized: "agentOverview.empty.filtered", defaultValue: "Try a different search or agent state."))
+                    )
+                }
+            }
+        }
+    }
+
+    private func workspaceHeader(_ workspace: AgentOverviewWorkspaceSnapshot) -> some View {
+        HStack(spacing: 6) {
+            Text(workspace.title)
+                .lineLimit(1)
+            if let branch = workspace.branchOrPullRequest, !branch.isEmpty {
+                Text(branch)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            AgentOverviewStateIndicator(state: workspace.state)
+        }
+        .padding(.leading, CGFloat(workspace.depth) * 10)
+        .contextMenu {
+            Button(String(localized: "agentOverview.openWorkspace", defaultValue: "Open Workspace")) {
+                viewModel.select(.workspace(workspace.id))
+                viewModel.openSelection()
+            }
+            Button(String(localized: "agentOverview.workspaceDetails", defaultValue: "Show Details")) {
+                viewModel.select(.workspace(workspace.id))
+            }
+        }
     }
 
     @ViewBuilder
     private func workspaceRows(_ workspace: AgentOverviewWorkspaceSnapshot) -> some View {
-        Button {
-            viewModel.select(.workspace(workspace.id))
-        } label: {
-            overviewRow(
-                title: workspace.title,
-                subtitle: [workspace.branchOrPullRequest, workspace.folder]
-                    .compactMap { $0 }
-                    .filter { !$0.isEmpty }
-                    .joined(separator: String(localized: "agentOverview.metadataSeparator", defaultValue: " · ")),
-                state: workspace.state,
-                icon: "rectangle.stack.fill",
-                selected: viewModel.selection == .workspace(workspace.id)
-            )
-            .padding(.leading, CGFloat(workspace.depth) * 14)
-        }
-        .buttonStyle(.plain)
-
         ForEach(workspace.terminals) { terminal in
-            let selection = AgentOverviewSelection.terminal(workspaceId: workspace.id, panelId: terminal.id)
-            Button {
-                viewModel.select(selection)
-            } label: {
-                overviewRow(
-                    title: terminal.title,
-                    subtitle: String(localized: "agentOverview.terminal", defaultValue: "Terminal"),
-                    state: terminal.state,
-                    icon: "terminal",
-                    selected: viewModel.selection == selection,
-                    isStale: terminal.isStale
-                )
-                .padding(.leading, CGFloat(workspace.depth) * 14 + 22)
-            }
-            .buttonStyle(.plain)
+            sidebarRow(
+                title: terminal.title,
+                subtitle: String(localized: "agentOverview.terminal", defaultValue: "Terminal"),
+                icon: "terminal",
+                state: terminal.state,
+                isStale: terminal.isStale
+            )
+            .tag(AgentOverviewSelection.terminal(workspaceId: workspace.id, panelId: terminal.id))
         }
 
         let foldsSettled = viewModel.search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let settled = foldsSettled ? workspace.helpers.filter(\.isSettled) : []
-        let showsSettled = settled.isEmpty || viewModel.expandedSettledHelperWorkspaces.contains(workspace.id)
-
-        ForEach(workspace.helpers.filter { showsSettled || !$0.isSettled }) { helper in
+        ForEach(workspace.helpers.filter { !foldsSettled || !$0.isSettled }) { helper in
             helperRow(helper, workspace: workspace)
         }
-
         if !settled.isEmpty {
-            Button {
-                viewModel.toggleSettledHelpers(workspaceId: workspace.id)
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: showsSettled ? "chevron.down" : "chevron.right")
-                        .font(.caption2.weight(.semibold))
-                        .frame(width: 18)
-                    Text(String(
-                        format: showsSettled
-                            ? String(localized: "agentOverview.hideFinishedHelpers", defaultValue: "Hide %lld finished helpers")
-                            : String(localized: "agentOverview.showFinishedHelpers", defaultValue: "%lld finished helpers"),
-                        Int64(settled.count)
-                    ))
-                    Spacer(minLength: 0)
+            DisclosureGroup(isExpanded: settledExpansion(workspace.id)) {
+                ForEach(settled) { helper in
+                    helperRow(helper, workspace: workspace)
                 }
-                .font(.caption)
+            } label: {
+                Text(String(
+                    format: String(localized: "agentOverview.finishedHelpers", defaultValue: "%lld finished"),
+                    Int64(settled.count)
+                ))
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 7)
-                .frame(minHeight: 44)
-                .contentShape(Rectangle())
-                .padding(.leading, CGFloat(workspace.depth) * 14 + 22)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(showsSettled
-                ? String(localized: "agentOverview.hideFinishedHelpers.a11y", defaultValue: "Hide finished helpers")
-                : String(localized: "agentOverview.showFinishedHelpers.a11y", defaultValue: "Show finished helpers"))
         }
     }
 
+    private func settledExpansion(_ workspaceId: UUID) -> Binding<Bool> {
+        Binding(
+            get: { viewModel.expandedSettledHelperWorkspaces.contains(workspaceId) },
+            set: { expanded in
+                if expanded {
+                    viewModel.expandedSettledHelperWorkspaces.insert(workspaceId)
+                } else {
+                    viewModel.expandedSettledHelperWorkspaces.remove(workspaceId)
+                }
+            }
+        )
+    }
+
     private func helperRow(_ helper: AgentOverviewHelperSnapshot, workspace: AgentOverviewWorkspaceSnapshot) -> some View {
-        let selection = AgentOverviewSelection.helper(
+        let role = helper.role.flatMap { $0 == helper.title ? nil : $0 }
+        return sidebarRow(
+            title: helper.title,
+            subtitle: role ?? String(localized: "agentOverview.helper", defaultValue: "Helper"),
+            icon: helper.summary == nil ? "person.2" : "text.bubble",
+            state: helper.state,
+            startedAt: helper.startedAt,
+            endedAt: helper.endedAt
+        )
+        .tag(AgentOverviewSelection.helper(
             workspaceId: workspace.id,
             helperId: helper.id,
             surfaceId: helper.surfaceId,
             hasIndependentOutput: helper.hasIndependentOutput
-        )
-        let role = helper.role.flatMap { $0 == helper.title ? nil : $0 }
-        let subtitle = [role, AgentOverviewFormatting.duration(helper.duration(now: Date()))]
-            .compactMap { $0 }
-            .filter { !$0.isEmpty }
-            .joined(separator: String(localized: "agentOverview.metadataSeparator", defaultValue: " · "))
-        return Button {
-            viewModel.select(selection)
-        } label: {
-            overviewRow(
-                title: helper.title,
-                subtitle: subtitle,
-                state: helper.state,
-                icon: helper.summary == nil ? "person.2" : "text.bubble",
-                selected: viewModel.selection == selection
-            )
-            .padding(.leading, CGFloat(workspace.depth + helper.depth) * 14 + 22)
-        }
-        .buttonStyle(.plain)
+        ))
     }
 
-    private static let relativeFormatter: RelativeDateTimeFormatter = {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
-        return formatter
-    }()
-
-    /// Reports are markdown; render inline styling and keep the line structure as written.
-    private static func inlineMarkdown(_ text: String) -> AttributedString {
-        (try? AttributedString(
-            markdown: text,
-            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        )) ?? AttributedString(text)
-    }
-
-    private func helperDetail(_ helper: AgentOverviewHelperSnapshot) -> some View {
-        let now = Date()
-        let duration = AgentOverviewFormatting.duration(helper.duration(now: now))
-        let timing: String
-        if let endedAt = helper.endedAt {
-            timing = String(
-                format: String(localized: "agentOverview.helper.finished", defaultValue: "Finished %@ · ran %@"),
-                Self.relativeFormatter.localizedString(for: endedAt, relativeTo: now),
-                duration
-            )
-        } else {
-            timing = String(
-                format: String(localized: "agentOverview.helper.running", defaultValue: "Running for %@"),
-                duration
-            )
-        }
-        return VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(helper.title)
-                    .font(.headline)
-                    .lineLimit(3)
-                Text([helper.role, helper.state.label, timing]
-                    .compactMap { $0 }
-                    .joined(separator: String(localized: "agentOverview.metadataSeparator", defaultValue: " · ")))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(12)
-            Divider()
-            ScrollView {
-                Text(helper.summary.map(Self.inlineMarkdown) ?? AttributedString(helper.endedAt == nil
-                    ? String(localized: "agentOverview.helper.report.pending", defaultValue: "The report appears here when this helper finishes.")
-                    : String(localized: "agentOverview.helper.report.none", defaultValue: "This helper finished without a report.")))
-                    .foregroundStyle(helper.summary == nil ? .secondary : .primary)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .padding(12)
-            }
-        }
-    }
-
-    private func overviewRow(
+    private func sidebarRow(
         title: String,
         subtitle: String,
-        state: AgentOverviewFriendlyState,
         icon: String,
-        selected: Bool,
-        isStale: Bool = false
+        state: AgentOverviewFriendlyState,
+        isStale: Bool = false,
+        startedAt: Date? = nil,
+        endedAt: Date? = nil
     ) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Image(systemName: icon)
-                .frame(width: 18)
                 .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 2) {
+                .frame(width: 18)
+            VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .lineLimit(1)
-                if !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
-            Spacer(minLength: 8)
-            Text(state.label)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(stateColor(state))
-                .opacity(isStale ? 0.55 : 1)
+            Spacer(minLength: 4)
+            if let startedAt {
+                AgentOverviewDurationText(startedAt: startedAt, endedAt: endedAt)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+            }
+            AgentOverviewStateIndicator(state: state, isStale: isStale)
         }
-        .padding(.vertical, 5)
-        .padding(.horizontal, 7)
-        .frame(minHeight: 44)
-        .background(selected ? Color.accentColor.opacity(0.16) : Color.clear, in: RoundedRectangle(cornerRadius: 7))
-        .contentShape(Rectangle())
+        .padding(.vertical, 3)
     }
 
-    private func stateColor(_ state: AgentOverviewFriendlyState) -> Color {
-        switch state {
-        case .idle: return .secondary
-        case .working: return .blue
-        case .needsInput: return .orange
-        case .done: return .green
-        case .stopped: return .secondary
-        case .failed: return .red
+    @ViewBuilder
+    private func rowMenu(_ selection: AgentOverviewSelection) -> some View {
+        Button(String(localized: "agentOverview.open", defaultValue: "Open")) {
+            viewModel.select(selection)
+            viewModel.openSelection()
         }
-    }
-
-    private var outputView: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(String(localized: "agentOverview.output", defaultValue: "Output"))
-                    .font(.headline)
-                Spacer()
-                Button(String(localized: "agentOverview.hideOutput", defaultValue: "Hide Output")) {
-                    viewModel.hideOutput()
-                }
-            }
-            .padding(12)
+        if selection.allowsTerminalControl {
             Divider()
-            ScrollView {
-                Text(viewModel.output.isEmpty
-                    ? String(localized: "agentOverview.output.empty", defaultValue: "No output yet.")
-                    : viewModel.output)
-                    .font(.system(.body, design: .monospaced))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .padding(12)
-            }
-        }
-    }
-
-    private var actionBar: some View {
-        HStack(spacing: 8) {
-            Text(String(localized: "agentOverview.programaOnly", defaultValue: "Shows Programa workspaces and helpers only."))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Button(String(localized: "agentOverview.open", defaultValue: "Open")) {
-                viewModel.openSelection()
-            }
-            .disabled(!viewModel.canOpen)
             Button(String(localized: "agentOverview.sendMessage", defaultValue: "Send Message…")) {
+                viewModel.select(selection)
                 viewModel.beginSendingMessage()
             }
-            .disabled(!viewModel.canUseTerminalActions)
-            Button(String(localized: "agentOverview.stop", defaultValue: "Stop")) {
-                viewModel.stopTerminal()
-            }
-            .disabled(!viewModel.canUseTerminalActions)
             Button(String(localized: "agentOverview.reviewChanges", defaultValue: "Review Changes")) {
+                viewModel.select(selection)
                 viewModel.reviewChanges()
             }
-            .disabled(!viewModel.canUseTerminalActions)
-            if viewModel.canShowOutput {
-                Button(String(localized: "agentOverview.showOutput", defaultValue: "Show Output")) {
-                    viewModel.showOutput()
-                }
-            }
-            if !viewModel.isOutputVisible, viewModel.selectedHelper != nil {
-                Button(String(localized: "agentOverview.copyReport", defaultValue: "Copy Report")) {
-                    viewModel.copyReport()
-                }
-                .disabled(!viewModel.canCopyReport)
-            } else {
-                Button(String(localized: "agentOverview.copyOutput", defaultValue: "Copy Output")) {
-                    viewModel.copyOutput()
-                }
-                .disabled(!viewModel.canCopyOutput)
+            Button(String(localized: "agentOverview.stop", defaultValue: "Stop")) {
+                viewModel.select(selection)
+                viewModel.stopTerminal()
             }
         }
-        .padding(12)
+    }
+
+    // MARK: Detail
+
+    @ViewBuilder
+    private var detail: some View {
+        if let workspace = viewModel.selectedWorkspace {
+            if let helper = viewModel.selectedHelper {
+                helperDetail(helper, workspace: workspace)
+            } else if let terminal = viewModel.selectedTerminal {
+                terminalDetail(terminal, workspace: workspace)
+            } else if case .workspace = viewModel.selection {
+                workspaceDetail(workspace)
+            } else {
+                noSelection
+            }
+        } else {
+            noSelection
+        }
+    }
+
+    private var noSelection: some View {
+        ContentUnavailableView(
+            String(localized: "agentOverview.noSelection.title", defaultValue: "No Selection"),
+            systemImage: "sidebar.left",
+            description: Text(String(localized: "agentOverview.noSelection.message", defaultValue: "Select a terminal or helper to see its details.")
+            )
+        )
+    }
+
+    private func detailHeader(title: String, subtitle: String, icon: String, state: AgentOverviewFriendlyState) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundStyle(.secondary)
+                .frame(width: 40, height: 40)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.title3.weight(.semibold))
+                    .lineLimit(2)
+                Text(subtitle)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            AgentOverviewStateBadge(state: state)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func helperDetail(_ helper: AgentOverviewHelperSnapshot, workspace: AgentOverviewWorkspaceSnapshot) -> some View {
+        Form {
+            Section {
+                detailHeader(
+                    title: helper.title,
+                    subtitle: workspace.title,
+                    icon: helper.summary == nil ? "person.2" : "text.bubble",
+                    state: helper.state
+                )
+            }
+            Section {
+                if let role = helper.role {
+                    LabeledContent(String(localized: "agentOverview.field.agent", defaultValue: "Agent"), value: role)
+                }
+                LabeledContent(String(localized: "agentOverview.field.started", defaultValue: "Started")) {
+                    Text(helper.startedAt, format: .dateTime.hour().minute().second())
+                }
+                LabeledContent(helper.endedAt == nil
+                    ? String(localized: "agentOverview.field.runningFor", defaultValue: "Running for")
+                    : String(localized: "agentOverview.field.ranFor", defaultValue: "Ran for")) {
+                    AgentOverviewDurationText(startedAt: helper.startedAt, endedAt: helper.endedAt)
+                        .monospacedDigit()
+                }
+            }
+            Section {
+                if let summary = helper.summary, !summary.isEmpty {
+                    Text(Self.inlineMarkdown(summary))
+                        .textSelection(.enabled)
+                        .lineSpacing(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Text(helper.endedAt == nil
+                        ? String(localized: "agentOverview.helper.report.pending", defaultValue: "The report appears here when this helper finishes.")
+                        : String(localized: "agentOverview.helper.report.none", defaultValue: "This helper finished without a report."))
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                HStack {
+                    Text(String(localized: "agentOverview.report", defaultValue: "Report"))
+                    Spacer()
+                    if viewModel.canCopyReport {
+                        Button(String(localized: "agentOverview.copy", defaultValue: "Copy")) {
+                            viewModel.copyReport()
+                        }
+                        .buttonStyle(.borderless)
+                        .controlSize(.small)
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func terminalDetail(_ terminal: AgentOverviewTerminalSnapshot, workspace: AgentOverviewWorkspaceSnapshot) -> some View {
+        Form {
+            Section {
+                detailHeader(
+                    title: terminal.title,
+                    subtitle: workspace.title,
+                    icon: "terminal",
+                    state: terminal.state
+                )
+                HStack(spacing: 8) {
+                    Button(String(localized: "agentOverview.open", defaultValue: "Open")) {
+                        viewModel.openSelection()
+                    }
+                    .disabled(!viewModel.canOpen)
+                    Button(String(localized: "agentOverview.sendMessage", defaultValue: "Send Message…")) {
+                        viewModel.beginSendingMessage()
+                    }
+                    Button(String(localized: "agentOverview.reviewChanges", defaultValue: "Review Changes")) {
+                        viewModel.reviewChanges()
+                    }
+                    Spacer()
+                    Button(String(localized: "agentOverview.stop", defaultValue: "Stop"), role: .destructive) {
+                        viewModel.stopTerminal()
+                    }
+                }
+                .disabled(!viewModel.canUseTerminalActions)
+            }
+            Section {
+                if viewModel.isOutputVisible {
+                    Text(viewModel.output.isEmpty
+                        ? String(localized: "agentOverview.output.empty", defaultValue: "No output yet.")
+                        : viewModel.output)
+                        .font(.system(.callout, design: .monospaced))
+                        .foregroundStyle(viewModel.output.isEmpty ? .secondary : .primary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Button(String(localized: "agentOverview.showOutput", defaultValue: "Show Output")) {
+                        viewModel.showOutput()
+                    }
+                    .disabled(!viewModel.canShowOutput)
+                }
+            } header: {
+                HStack {
+                    Text(String(localized: "agentOverview.output", defaultValue: "Output"))
+                    Spacer()
+                    if viewModel.isOutputVisible {
+                        Button(String(localized: "agentOverview.copy", defaultValue: "Copy")) {
+                            viewModel.copyOutput()
+                        }
+                        .disabled(!viewModel.canCopyOutput)
+                        Button(String(localized: "agentOverview.hideOutput", defaultValue: "Hide Output")) {
+                            viewModel.hideOutput()
+                        }
+                    }
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func workspaceDetail(_ workspace: AgentOverviewWorkspaceSnapshot) -> some View {
+        let running = workspace.helpers.filter { !$0.isSettled && $0.state != .failed }.count
+        return Form {
+            Section {
+                detailHeader(
+                    title: workspace.title,
+                    subtitle: [workspace.branchOrPullRequest, workspace.folder]
+                        .compactMap { $0 }
+                        .filter { !$0.isEmpty }
+                        .joined(separator: separator),
+                    icon: "rectangle.stack",
+                    state: workspace.state
+                )
+            }
+            Section {
+                LabeledContent(String(localized: "agentOverview.field.terminals", defaultValue: "Terminals"),
+                               value: workspace.terminals.count.formatted())
+                LabeledContent(String(localized: "agentOverview.field.runningHelpers", defaultValue: "Running helpers"),
+                               value: running.formatted())
+                LabeledContent(String(localized: "agentOverview.field.finishedHelpers", defaultValue: "Finished helpers"),
+                               value: (workspace.helpers.count - running).formatted())
+            }
+            Section {
+                Button(String(localized: "agentOverview.openWorkspace", defaultValue: "Open Workspace")) {
+                    viewModel.openSelection()
+                }
+                .disabled(!viewModel.canOpen)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    /// Reports are markdown; render inline styling, show headings as bold lines, and keep
+    /// the line structure as written.
+    private static func inlineMarkdown(_ text: String) -> AttributedString {
+        let source = text.replacingOccurrences(
+            of: "(?m)^#{1,6}[ \\t]+(.+?)[ \\t#]*$",
+            with: "**$1**",
+            options: .regularExpression
+        )
+        return (try? AttributedString(
+            markdown: source,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(text)
     }
 
     private var sendMessageSheet: some View {
@@ -1101,6 +1303,7 @@ private struct AgentOverviewRootView: View {
                 axis: .vertical
             )
             .lineLimit(3...8)
+            .textFieldStyle(.roundedBorder)
             if let error = viewModel.messageSendError {
                 Text(error)
                     .font(.callout)
@@ -1112,6 +1315,7 @@ private struct AgentOverviewRootView: View {
                 Button(String(localized: "agentOverview.cancel", defaultValue: "Cancel")) {
                     viewModel.isShowingMessageSheet = false
                 }
+                .keyboardShortcut(.cancelAction)
                 Button(String(localized: "agentOverview.send", defaultValue: "Send")) {
                     viewModel.sendMessage()
                 }

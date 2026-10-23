@@ -315,6 +315,20 @@ final class AgentSupervisionRegistry: ObservableObject {
         recordsById.removeValue(forKey: id)
     }
 
+    /// Removes done and stopped helpers. Failed ones stay until someone looks at them.
+    @discardableResult
+    func discardSettled(workspaceIds: Set<UUID>) -> Int {
+        let ids = recordsById.values.compactMap { record in
+            workspaceIds.contains(record.workspaceId)
+                && (record.state == .completed || record.state == .cancelled)
+                ? record.id
+                : nil
+        }
+        guard !ids.isEmpty else { return 0 }
+        recordsById = recordsById.filter { !ids.contains($0.key) }
+        return ids.count
+    }
+
     func retainWorkspaces(_ liveWorkspaceIds: Set<UUID>) {
         recordsById = recordsById.filter { liveWorkspaceIds.contains($0.value.workspaceId) }
     }
