@@ -108,9 +108,9 @@ enum AgentStateWaitCondition: String {
 
     /// Whether a *transition* to `newState` should fire a registered waiter. Differs from
     /// `isSatisfied(by:)` in exactly one case: `any_change` is never satisfied by the state at
-    /// registration time, but every subsequent transition fires it. Reusing `isSatisfied` in
-    /// `AgentStateWaitRegistry.notify` made `any_change` waiters unfireable (caught by
-    /// tests_v2/test_agent_state_wait_and_prompt.py on its first CI run).
+    /// registration time, but every subsequent transition fires it. Do not use `isSatisfied`
+    /// in `AgentStateWaitRegistry.notify`: `any_change` waiters would never fire
+    /// (tests_v2/test_agent_state_wait_and_prompt.py covers this).
     func firesOn(transitionTo newState: AgentActivityState?) -> Bool {
         if self == .anyChange { return true }
         return isSatisfied(by: newState)

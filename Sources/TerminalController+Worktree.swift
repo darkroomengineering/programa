@@ -129,26 +129,14 @@ extension TerminalController {
     }
 
     nonisolated func v2WorktreeOpen(params: [String: Any]) -> V2CallResult {
-        guard let windowId = v2ResolveWorktreeWindowId(params: params) else {
-            return .err(code: "unavailable", message: "TabManager not available", data: nil)
-        }
-        guard let repoRoot = v2ResolveWorktreeRepoRoot(params: params) else {
-            return .err(code: "not_a_git_repo", message: "Could not resolve a git repository from 'repo'", data: nil)
-        }
-        let pathParam = v2String(params, "path")
-        let branchParam = v2String(params, "branch")
-        guard pathParam != nil || branchParam != nil else {
-            return v2InvalidParam("path or branch")
-        }
-
-        let entry: GitWorktreeManager.WorktreeEntry?
-        if let pathParam {
-            entry = GitWorktreeManager.worktreeEntry(atPath: v2ExpandedPath(pathParam), repoRoot: repoRoot)
-        } else {
-            entry = GitWorktreeManager.worktreeEntry(forBranch: branchParam!, repoRoot: repoRoot)
-        }
-        guard let entry else {
-            return .err(code: "worktree_not_found", message: "No matching worktree found", data: nil)
+        let windowId: UUID
+        let repoRoot: String
+        let entry: GitWorktreeManager.WorktreeEntry
+        switch v2ResolveExistingWorktree(params: params) {
+        case .failed(let error):
+            return error
+        case .resolved(let target):
+            (windowId, repoRoot, entry) = target
         }
 
         let focusRequested = v2Bool(params, "focus") ?? false
@@ -189,26 +177,14 @@ extension TerminalController {
     }
 
     nonisolated func v2WorktreeRemove(params: [String: Any]) -> V2CallResult {
-        guard let windowId = v2ResolveWorktreeWindowId(params: params) else {
-            return .err(code: "unavailable", message: "TabManager not available", data: nil)
-        }
-        guard let repoRoot = v2ResolveWorktreeRepoRoot(params: params) else {
-            return .err(code: "not_a_git_repo", message: "Could not resolve a git repository from 'repo'", data: nil)
-        }
-        let pathParam = v2String(params, "path")
-        let branchParam = v2String(params, "branch")
-        guard pathParam != nil || branchParam != nil else {
-            return v2InvalidParam("path or branch")
-        }
-
-        let entry: GitWorktreeManager.WorktreeEntry?
-        if let pathParam {
-            entry = GitWorktreeManager.worktreeEntry(atPath: v2ExpandedPath(pathParam), repoRoot: repoRoot)
-        } else {
-            entry = GitWorktreeManager.worktreeEntry(forBranch: branchParam!, repoRoot: repoRoot)
-        }
-        guard let entry else {
-            return .err(code: "worktree_not_found", message: "No matching worktree found", data: nil)
+        let windowId: UUID
+        let repoRoot: String
+        let entry: GitWorktreeManager.WorktreeEntry
+        switch v2ResolveExistingWorktree(params: params) {
+        case .failed(let error):
+            return error
+        case .resolved(let target):
+            (windowId, repoRoot, entry) = target
         }
 
         switch GitWorktreeManager.remove(repoRoot: repoRoot, path: entry.path, force: v2Bool(params, "force") ?? false) {
@@ -286,6 +262,35 @@ extension TerminalController {
     }
 
     // MARK: - Shared helpers
+
+    /// Resolves the window, repository, and existing worktree (by `path` or `branch`) a
+    /// worktree command targets.
+    private nonisolated func v2ResolveExistingWorktree(
+        params: [String: Any]
+    ) -> V2Resolution<(UUID, String, GitWorktreeManager.WorktreeEntry)> {
+        guard let windowId = v2ResolveWorktreeWindowId(params: params) else {
+            return .failed(.err(code: "unavailable", message: "TabManager not available", data: nil))
+        }
+        guard let repoRoot = v2ResolveWorktreeRepoRoot(params: params) else {
+            return .failed(.err(code: "not_a_git_repo", message: "Could not resolve a git repository from 'repo'", data: nil))
+        }
+        let pathParam = v2String(params, "path")
+        let branchParam = v2String(params, "branch")
+        guard pathParam != nil || branchParam != nil else {
+            return .failed(v2InvalidParam("path or branch"))
+        }
+
+        let entry: GitWorktreeManager.WorktreeEntry?
+        if let pathParam {
+            entry = GitWorktreeManager.worktreeEntry(atPath: v2ExpandedPath(pathParam), repoRoot: repoRoot)
+        } else {
+            entry = GitWorktreeManager.worktreeEntry(forBranch: branchParam!, repoRoot: repoRoot)
+        }
+        guard let entry else {
+            return .failed(.err(code: "worktree_not_found", message: "No matching worktree found", data: nil))
+        }
+        return .resolved((windowId, repoRoot, entry))
+    }
 
     private nonisolated func v2ResolveWorktreeWindowId(params: [String: Any]) -> UUID? {
         v2MainSync {

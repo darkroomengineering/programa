@@ -7,13 +7,8 @@ import Bonsplit
 extension TerminalController {
     // MARK: - V2 Workspace Methods
 
-    private func v2WorkspaceSummaryPayload(
-        workspace: Workspace,
-        index: Int?,
-        selected: Bool
-    ) -> [String: Any] {
-        let branch = workspace.gitBranch?.branch ?? workspace.worktreeBranch
-        let pullRequest = workspace.pullRequest.map { pullRequest in
+    func v2PullRequestPayload(_ workspace: Workspace) -> [String: Any]? {
+        workspace.pullRequest.map { pullRequest in
             [
                 "number": pullRequest.number,
                 "label": pullRequest.label,
@@ -23,6 +18,15 @@ extension TerminalController {
                 "checks": v2OrNull(pullRequest.checks?.rawValue),
             ] as [String: Any]
         }
+    }
+
+    private func v2WorkspaceSummaryPayload(
+        workspace: Workspace,
+        index: Int?,
+        selected: Bool
+    ) -> [String: Any] {
+        let branch = workspace.gitBranch?.branch ?? workspace.worktreeBranch
+        let pullRequest = v2PullRequestPayload(workspace)
         let helpers = AgentSupervisionMetadata.relatedRecords(for: workspace)
         var payload: [String: Any] = [
             "id": workspace.id.uuidString,
@@ -357,32 +361,17 @@ extension TerminalController {
         }
     }
     nonisolated func v2WorkspaceNext(params: [String: Any]) -> V2CallResult {
-        return v2MainSync {
-            guard let tabManager = v2ResolveTabManager(params: params) else {
-                return .err(code: "unavailable", message: "TabManager not available", data: nil)
-            }
-            guard tabManager.selectedTabId != nil else {
-                return .err(code: "not_found", message: "No workspace selected", data: nil)
-            }
-            if let windowId = v2ResolveWindowId(tabManager: tabManager) {
-                _ = AppDelegate.shared?.focusMainWindow(windowId: windowId)
-                setActiveTabManager(tabManager)
-            }
-            tabManager.selectNextTab()
-            guard let workspaceId = tabManager.selectedTabId else {
-                return .err(code: "not_found", message: "No workspace selected", data: nil)
-            }
-            let windowId = v2ResolveWindowId(tabManager: tabManager)
-            return .ok([
-                "workspace_id": workspaceId.uuidString,
-                "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
-                "window_id": v2OrNull(windowId?.uuidString),
-                "window_ref": v2Ref(kind: .window, uuid: windowId)
-            ])
-        }
+        v2WorkspaceSelectAdjacent(params: params) { $0.selectNextTab() }
     }
 
     nonisolated func v2WorkspacePrevious(params: [String: Any]) -> V2CallResult {
+        v2WorkspaceSelectAdjacent(params: params) { $0.selectPreviousTab() }
+    }
+
+    private nonisolated func v2WorkspaceSelectAdjacent(
+        params: [String: Any],
+        _ select: @MainActor (TabManager) -> Void
+    ) -> V2CallResult {
         return v2MainSync {
             guard let tabManager = v2ResolveTabManager(params: params) else {
                 return .err(code: "unavailable", message: "TabManager not available", data: nil)
@@ -394,7 +383,7 @@ extension TerminalController {
                 _ = AppDelegate.shared?.focusMainWindow(windowId: windowId)
                 setActiveTabManager(tabManager)
             }
-            tabManager.selectPreviousTab()
+            select(tabManager)
             guard let workspaceId = tabManager.selectedTabId else {
                 return .err(code: "not_found", message: "No workspace selected", data: nil)
             }
@@ -493,13 +482,6 @@ extension TerminalController {
         return didEqualize || l || r
     }
 
-    // `surface.report_tty` and `surface.ports_kick` are high-frequency telemetry commands (see
-    // CLAUDE.md "Socket command threading policy"): they must not block the calling socket
-    // thread with `DispatchQueue.main.sync`. Both handlers now follow the same off-main-parse +
-    // main.async-mutate shape as `v2ScheduleTelemetryMutation` callers (e.g. `workspace.set_status`,
-    // `workspace.report_meta_block`) — surface resolution and the model mutation happen entirely
-    // inside the async block, and the JSON-RPC response is an optimistic `ok` echoing the request
-    // params, not the value resolved on main. Refs #82.
     nonisolated func v2WorkspaceAction(params: [String: Any]) -> V2CallResult {
         return v2MainSync {
             guard let tabManager = v2ResolveTabManager(params: params) else {

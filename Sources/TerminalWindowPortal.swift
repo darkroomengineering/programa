@@ -179,7 +179,7 @@ final class WindowTerminalPortal: HostedViewPortalRegistry {
         // which can change divider geometry without changing the host frame — so the
         // host's frame hooks never run. Force a cursor-rect rebuild so the host drops
         // its stale divider-region cache (see resetCursorRects) and the new divider is
-        // grabbable (#6587 review).
+        // grabbable.
         hostView.window?.invalidateCursorRects(for: hostView)
     }
 

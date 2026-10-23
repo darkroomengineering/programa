@@ -7,12 +7,12 @@ import Bonsplit
 extension TerminalController {
     // MARK: - V2 Telemetry Scheduling (off-main parse, main.async mutate)
     //
-    // Mirrors the socket command threading policy (see CLAUDE.md "Socket command threading
-    // policy"): high-frequency telemetry commands (report_*/ports/log/progress/status) must not
-    // block their calling thread with `DispatchQueue.main.sync`. These helpers resolve the
-    // workspace/surface the same way the v1 explicit-scope fast paths do (`AppDelegate.shared?
-    // .tabManagerFor(tabId:)` + linear tab lookup) but dispatch the mutation asynchronously and
-    // return an optimistic `ok` result immediately, matching v1's fire-and-forget "OK" semantics.
+    // Socket command threading policy (see CLAUDE.md "Socket command threading policy"):
+    // high-frequency telemetry commands (report_*/ports/log/progress/status) must not block
+    // their calling thread with `DispatchQueue.main.sync`. These helpers resolve the
+    // workspace/surface via `AppDelegate.shared?.tabManagerFor(tabId:)` + linear tab lookup,
+    // dispatch the mutation asynchronously, and return an optimistic fire-and-forget `ok`
+    // result immediately.
     private nonisolated func v2ScheduleTelemetryMutation(
         workspaceId: UUID,
         _ mutation: @escaping @MainActor @Sendable (TabManager, Workspace) -> Void
@@ -45,6 +45,14 @@ extension TerminalController {
             mutation(tabManager, tab, surfaceId)
         }
     }
+
+    // `surface.report_tty` and `surface.ports_kick` are high-frequency telemetry commands (see
+    // CLAUDE.md "Socket command threading policy"): they must not block the calling socket
+    // thread with `DispatchQueue.main.sync`. Both handlers follow the same off-main-parse +
+    // main.async-mutate shape as `v2ScheduleTelemetryMutation` callers (e.g. `workspace.set_status`,
+    // `workspace.report_meta_block`) — surface resolution and the model mutation happen entirely
+    // inside the async block, and the JSON-RPC response is an optimistic `ok` echoing the request
+    // params, not the value resolved on main. Refs #82.
     nonisolated func v2SurfaceReportTTY(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2CachedUUID(params, "workspace_id") else {
             return v2InvalidParam("workspace_id")
@@ -132,13 +140,8 @@ extension TerminalController {
 
     // MARK: - V2 Surface Telemetry (report_*/ports/git/pr) — off-main parse, main.async mutate.
     //
-    // These adapt what were v1's explicit-scope ("shell integration always includes explicit
-    // workspace/panel IDs") fast paths (report_pwd/report_shell_state/report_git_branch/
-    // clear_git_branch/report_pr/clear_pr/report_ports/clear_ports — removed along with the
-    // rest of the v1 protocol; see docs/socket-api.md) to the v2 handle-based protocol.
-    // v2 always requires explicit workspace_id + surface_id (no implicit "selected tab"
-    // fallback), so they always take the async fast path v1 took when both --tab and --panel
-    // were supplied explicitly.
+    // Shell integration always passes explicit workspace_id + surface_id (there is no implicit
+    // "selected tab" fallback), so every call in this family takes the async fast path.
 
     nonisolated func v2SurfaceReportPwd(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2CachedUUID(params, "workspace_id") else {
@@ -192,9 +195,9 @@ extension TerminalController {
             "state": rawState.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
         ]
 
-        // Fast-path dedup check, mirroring v1's reportShellState: skip dispatch if we
-        // already know this state is current. Only READ here; recording happens after
-        // the update is confirmed applied on the main thread (see recordShellActivity below).
+        // Fast-path dedup check: skip dispatch if we already know this state is current.
+        // Only READ here; recording happens after the update is confirmed applied on the
+        // main thread (see recordShellActivity below).
         guard Self.socketFastPathState.shouldPublishShellActivity(
             workspaceId: workspaceId,
             panelId: surfaceId,
@@ -236,7 +239,7 @@ extension TerminalController {
                 data: nil
             )
         }
-        // Shell integration no longer sends `dirty`; the app's git probe owns it, so an absent
+        // Shell integration does not send `dirty`; the app's git probe owns it, so an absent
         // value keeps what the probe last reported.
         let isDirty = v2Bool(params, "dirty")
 
@@ -293,8 +296,8 @@ extension TerminalController {
         // Callers (the shipped hook wrappers) never pass this -- it defaults to `.hooks`, which
         // is what makes hook reports authoritative over the screen-manifest engine's `.inferred`
         // writes (see Workspace.updatePanelAgentState). Accepting it explicitly here (rather than
-        // hardcoding `.hooks`) keeps the wire symmetric with the `source` sibling field this
-        // response now echoes.
+        // hardcoding `.hooks`) keeps the wire symmetric with the `source` field the response
+        // echoes.
         let source: AgentStateSource
         if let rawSource = v2RawString(params, "source") {
             guard let parsedSource = AgentStateSource(rawValue: rawSource.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()),
@@ -306,22 +309,15 @@ extension TerminalController {
             source = .hooks
         }
 
-        // Optional session/pid identity, additive per docs/plans/agent-state-unification.md T2:
-        // older CLI builds omit these and get `sessionKey == nil`, unchanged from today.
-        let provider = v2RawString(params, "provider")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let sessionId = v2RawString(params, "session_id")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let provider: String?
         let reportedPid: pid_t?
-        if v2HasNonNullParam(params, "pid") {
-            guard let rawPid = v2Int(params, "pid"), (1...Int(pid_t.max)).contains(rawPid) else {
-                return .err(code: "invalid_params", message: "pid must be an integer from 1 through \(Int(pid_t.max))", data: nil)
-            }
-            reportedPid = pid_t(rawPid)
-        } else {
-            reportedPid = nil
+        let sessionKey: AgentSessionKey?
+        switch v2AgentSessionIdentity(params) {
+        case .failed(let error):
+            return error
+        case .resolved(let identity):
+            (provider, reportedPid, sessionKey) = identity
         }
-        let sessionKey: AgentSessionKey? = (sessionId != nil || reportedPid != nil)
-            ? AgentSessionKey(provider: provider ?? "unknown", sessionId: sessionId, pid: reportedPid)
-            : nil
 
         v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { [weak self] tabManager, tab, sid in
             tabManager.updateSurfaceAgentState(tabId: workspaceId, surfaceId: sid, state: state, source: source, sessionKey: sessionKey)
@@ -345,6 +341,28 @@ extension TerminalController {
             "state": state.rawValue,
             "source": source.rawValue,
         ])
+    }
+
+    /// Optional session/pid identity, additive per docs/plans/agent-state-unification.md T2:
+    /// older CLI builds omit these and get `sessionKey == nil`.
+    private nonisolated func v2AgentSessionIdentity(
+        _ params: [String: Any]
+    ) -> V2Resolution<(String?, pid_t?, AgentSessionKey?)> {
+        let provider = v2RawString(params, "provider")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sessionId = v2RawString(params, "session_id")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let reportedPid: pid_t?
+        if v2HasNonNullParam(params, "pid") {
+            guard let rawPid = v2Int(params, "pid"), (1...Int(pid_t.max)).contains(rawPid) else {
+                return .failed(.err(code: "invalid_params", message: "pid must be an integer from 1 through \(Int(pid_t.max))", data: nil))
+            }
+            reportedPid = pid_t(rawPid)
+        } else {
+            reportedPid = nil
+        }
+        let sessionKey: AgentSessionKey? = (sessionId != nil || reportedPid != nil)
+            ? AgentSessionKey(provider: provider ?? "unknown", sessionId: sessionId, pid: reportedPid)
+            : nil
+        return .resolved((provider, reportedPid, sessionKey))
     }
 
     /// Maps a hook-reported `provider` string to the flat status/PID key
@@ -386,22 +404,15 @@ extension TerminalController {
         }
         let eventType = rawEventType.lowercased()
 
-        // Optional session/pid identity, additive per docs/plans/agent-state-unification.md T2:
-        // older CLI builds omit these and get `sessionKey == nil`, unchanged from today.
-        let provider = v2RawString(params, "provider")?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let sessionId = v2RawString(params, "session_id")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let provider: String?
         let reportedPid: pid_t?
-        if v2HasNonNullParam(params, "pid") {
-            guard let rawPid = v2Int(params, "pid"), (1...Int(pid_t.max)).contains(rawPid) else {
-                return .err(code: "invalid_params", message: "pid must be an integer from 1 through \(Int(pid_t.max))", data: nil)
-            }
-            reportedPid = pid_t(rawPid)
-        } else {
-            reportedPid = nil
+        let sessionKey: AgentSessionKey?
+        switch v2AgentSessionIdentity(params) {
+        case .failed(let error):
+            return error
+        case .resolved(let identity):
+            (provider, reportedPid, sessionKey) = identity
         }
-        let sessionKey: AgentSessionKey? = (sessionId != nil || reportedPid != nil)
-            ? AgentSessionKey(provider: provider ?? "unknown", sessionId: sessionId, pid: reportedPid)
-            : nil
 
         var response: [String: Any] = [
             "workspace_id": workspaceId.uuidString,
@@ -725,8 +736,7 @@ extension TerminalController {
                 tab.recomputeListeningPorts()
             }
         } else {
-            // No surface_id means "clear ALL ports for the workspace" — mirrors v1's
-            // clearPorts special case when no --panel is supplied.
+            // No surface_id means "clear ALL ports for the workspace".
             v2ScheduleTelemetryMutation(workspaceId: workspaceId) { _, tab in
                 let validSurfaceIds = Set(tab.panels.keys)
                 tab.pruneSurfaceMetadata(validSurfaceIds: validSurfaceIds)
@@ -764,10 +774,7 @@ extension TerminalController {
 
     // MARK: - V2 Workspace Sidebar Metadata (set_status/log/progress/sidebar_state)
     //
-    // What were v1's set_status/clear_status/list_status/log/clear_log/list_log/set_progress/
-    // clear_progress/sidebar_state verbs were workspace(tab)-scoped, not surface-scoped (their
-    // v1 handlers resolved a `Tab` via a helper rather than a specific panel — removed along
-    // with the rest of the v1 protocol; see docs/socket-api.md). Mutations follow the same
+    // These verbs are workspace-scoped, not surface-scoped. Mutations follow the same
     // off-main-parse + main.async-mutate telemetry policy as the surface.report_* family;
     // reads (list_status/list_log/sidebar_state) are exact-snapshot queries and use the
     // v2MainSync pattern shared by sibling v2 read methods.
@@ -1212,9 +1219,8 @@ extension TerminalController {
         ])
     }
 
-    /// Mirrors v1's `set_agent_pid <key> <pid> [--tab=X]`: registers a PID for stale-session
-    /// detection/OSC suppression without setting a visible status entry (unlike
-    /// `workspace.set_status`, which also accepts an optional `pid`).
+    /// Registers a PID for stale-session detection/OSC suppression without setting a visible
+    /// status entry (unlike `workspace.set_status`, which also accepts an optional `pid`).
     nonisolated func v2WorkspaceSetAgentPID(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2CachedUUID(params, "workspace_id") else {
             return v2InvalidParam("workspace_id")
@@ -1254,9 +1260,8 @@ extension TerminalController {
         ])
     }
 
-    /// Mirrors v1's `report_meta_block <key> [--priority=N] [--tab=X] -- <markdown>`: sets a
-    /// freeform sidebar markdown block, distinct from `workspace.set_status`'s single-line
-    /// key/value entries.
+    /// Sets a freeform sidebar markdown block, distinct from `workspace.set_status`'s
+    /// single-line key/value entries.
     nonisolated func v2WorkspaceReportMetaBlock(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2CachedUUID(params, "workspace_id") else {
             return v2InvalidParam("workspace_id")
@@ -1324,11 +1329,10 @@ extension TerminalController {
         ])
     }
 
-    /// Mirrors v1's `clear_meta_block <key> [--tab=X]`. Unlike the telemetry-mutation family
-    /// above, this needs to report whether the key existed, so — like v1's synchronous
-    /// `DispatchQueue.main.sync` implementation — it resolves and mutates on the main actor via
-    /// `v2MainSync` rather than firing an async `v2ScheduleTelemetryMutation`. This is a rare,
-    /// agent/test-triggered command, not a high-frequency telemetry path.
+    /// Unlike the telemetry-mutation family above, this reports whether the key existed, so
+    /// it resolves and mutates on the main actor via `v2MainSync` rather than firing an async
+    /// `v2ScheduleTelemetryMutation`. This is a rare, agent/test-triggered command, not a
+    /// high-frequency telemetry path.
     nonisolated func v2WorkspaceClearMetaBlock(params: [String: Any]) -> V2CallResult {
         return v2MainSync {
             guard let tabManager = v2ResolveTabManager(params: params) else {
@@ -1350,7 +1354,6 @@ extension TerminalController {
         }
     }
 
-    /// Mirrors v1's `list_meta_blocks [--tab=X]`.
     nonisolated func v2WorkspaceListMetaBlocks(params: [String: Any]) -> V2CallResult {
         return v2MainSync {
             guard let tabManager = v2ResolveTabManager(params: params) else {
@@ -1370,7 +1373,6 @@ extension TerminalController {
         }
     }
 
-    /// Mirrors v1's `reset_sidebar [--tab=X]`.
     nonisolated func v2WorkspaceResetSidebar(params: [String: Any]) -> V2CallResult {
         return v2MainSync {
             guard let tabManager = v2ResolveTabManager(params: params) else {

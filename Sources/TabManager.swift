@@ -1557,8 +1557,8 @@ class TabManager: ObservableObject {
         let isDirty = reportedDirty ?? current?.isDirty ?? false
         let normalizedBranch = GitMetadataProber.normalizedBranchName(branch) ?? branch
         guard current?.branch != normalizedBranch || current?.isDirty != isDirty else {
-            // A shell report without `dirty` is the prompt-time cue to re-check it: the shell no
-            // longer runs `git status`. A probe already in flight for this panel covers it.
+            // A shell report without `dirty` is the prompt-time cue to re-check it: the shell
+            // does not run `git status`. A probe already in flight for this panel covers it.
             let probeKey = WorkspaceGitProbeKey(workspaceId: tabId, panelId: surfaceId)
             if reportedDirty == nil, workspaceGitProbeGenerationByKey[probeKey] == nil {
                 scheduleWorkspaceGitMetadataRefreshIfPossible(
@@ -1935,7 +1935,6 @@ class TabManager: ObservableObject {
         if let confirmCloseHandler {
             return confirmCloseHandler(title, message, acceptCmdD)
         }
-        _ = acceptCmdD
 
         let alert = NSAlert()
         alert.messageText = title
@@ -2927,7 +2926,7 @@ enum SplitDirection {
 }
 
 /// Core direction type used when resizing a pane's divider.
-enum ResizeDirection {
+enum ResizeDirection: String {
     case left, right, up, down
 
     var splitOrientation: String {

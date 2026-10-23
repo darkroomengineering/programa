@@ -139,8 +139,8 @@ extension TerminalController {
         return ["notifications": items]
     }
 
-    /// Mirrors v1's `clear_notifications [--tab=X]`: with a `workspace_id`, scopes the clear
-    /// to that workspace's notifications only; without one, clears all notifications globally.
+    /// With a `workspace_id`, scopes the clear to that workspace's notifications only;
+    /// without one, clears all notifications globally.
     nonisolated func v2NotificationClear(params: [String: Any]) -> V2CallResult {
         let workspaceId = v2UUID(params, "workspace_id")
         if v2HasNonNullParam(params, "workspace_id"), workspaceId == nil {

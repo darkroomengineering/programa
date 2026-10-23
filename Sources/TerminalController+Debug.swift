@@ -81,28 +81,8 @@ extension TerminalController {
         return resp == "OK" ? .ok([:]) : .err(code: "internal_error", message: resp, data: nil)
     }
 
-    nonisolated func v2DebugToggleCommandPalette(params: [String: Any]) -> V2CallResult {
-        let requestedWindowId = v2UUID(params, "window_id")
-        return v2MainSync {
-            let targetWindow: NSWindow?
-            if let requestedWindowId {
-                guard let window = AppDelegate.shared?.mainWindow(for: requestedWindowId) else {
-                    return .err(
-                        code: "not_found",
-                        message: "Window not found",
-                        data: ["window_id": requestedWindowId.uuidString, "window_ref": v2Ref(kind: .window, uuid: requestedWindowId)]
-                    )
-                }
-                targetWindow = window
-            } else {
-                targetWindow = NSApp.keyWindow ?? NSApp.mainWindow
-            }
-            NotificationCenter.default.post(name: .commandPaletteToggleRequested, object: targetWindow)
-            return .ok([:])
-        }
-    }
-
-    nonisolated func v2DebugOpenCommandPaletteRenameTabInput(params: [String: Any]) -> V2CallResult {
+    /// Posts `name` with the window named by `window_id`, or the key/main window when none is given.
+    private nonisolated func v2DebugPostToRequestedWindow(_ name: Notification.Name, params: [String: Any]) -> V2CallResult {
         let requestedWindowId = v2UUID(params, "window_id")
         return v2MainSync {
             let targetWindow: NSWindow?
@@ -121,9 +101,17 @@ extension TerminalController {
             } else {
                 targetWindow = NSApp.keyWindow ?? NSApp.mainWindow
             }
-            NotificationCenter.default.post(name: .commandPaletteRenameTabRequested, object: targetWindow)
+            NotificationCenter.default.post(name: name, object: targetWindow)
             return .ok([:])
         }
+    }
+
+    nonisolated func v2DebugToggleCommandPalette(params: [String: Any]) -> V2CallResult {
+        v2DebugPostToRequestedWindow(.commandPaletteToggleRequested, params: params)
+    }
+
+    nonisolated func v2DebugOpenCommandPaletteRenameTabInput(params: [String: Any]) -> V2CallResult {
+        v2DebugPostToRequestedWindow(.commandPaletteRenameTabRequested, params: params)
     }
 
     nonisolated func v2DebugCommandPaletteVisible(params: [String: Any]) -> V2CallResult {
@@ -190,51 +178,11 @@ extension TerminalController {
     }
 
     nonisolated func v2DebugCommandPaletteRenameInputInteraction(params: [String: Any]) -> V2CallResult {
-        let requestedWindowId = v2UUID(params, "window_id")
-        return v2MainSync {
-            let targetWindow: NSWindow?
-            if let requestedWindowId {
-                guard let window = AppDelegate.shared?.mainWindow(for: requestedWindowId) else {
-                    return .err(
-                        code: "not_found",
-                        message: "Window not found",
-                        data: [
-                            "window_id": requestedWindowId.uuidString,
-                            "window_ref": v2Ref(kind: .window, uuid: requestedWindowId)
-                        ]
-                    )
-                }
-                targetWindow = window
-            } else {
-                targetWindow = NSApp.keyWindow ?? NSApp.mainWindow
-            }
-            NotificationCenter.default.post(name: .commandPaletteRenameInputInteractionRequested, object: targetWindow)
-            return .ok([:])
-        }
+        v2DebugPostToRequestedWindow(.commandPaletteRenameInputInteractionRequested, params: params)
     }
 
     nonisolated func v2DebugCommandPaletteRenameInputDeleteBackward(params: [String: Any]) -> V2CallResult {
-        let requestedWindowId = v2UUID(params, "window_id")
-        return v2MainSync {
-            let targetWindow: NSWindow?
-            if let requestedWindowId {
-                guard let window = AppDelegate.shared?.mainWindow(for: requestedWindowId) else {
-                    return .err(
-                        code: "not_found",
-                        message: "Window not found",
-                        data: [
-                            "window_id": requestedWindowId.uuidString,
-                            "window_ref": v2Ref(kind: .window, uuid: requestedWindowId)
-                        ]
-                    )
-                }
-                targetWindow = window
-            } else {
-                targetWindow = NSApp.keyWindow ?? NSApp.mainWindow
-            }
-            NotificationCenter.default.post(name: .commandPaletteRenameInputDeleteBackwardRequested, object: targetWindow)
-            return .ok([:])
-        }
+        v2DebugPostToRequestedWindow(.commandPaletteRenameInputDeleteBackwardRequested, params: params)
     }
 
     nonisolated func v2DebugCommandPaletteRenameInputSelection(params: [String: Any]) -> V2CallResult {
@@ -1162,7 +1110,6 @@ extension TerminalController {
         let panelArg = parts.first ?? ""
         let label = parts.count > 1 ? parts[1] : ""
 
-        // Generate unique ID for this snapshot/screenshot
         let timestamp = ISO8601DateFormatter().string(from: Date())
             .replacingOccurrences(of: ":", with: "-")
             .replacingOccurrences(of: "+", with: "_")
@@ -1458,17 +1405,14 @@ extension TerminalController {
     }
 
     private nonisolated func captureScreenshot(_ args: String) -> String {
-        // Parse optional label from args
         let label = args.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Generate unique ID for this screenshot
         let timestamp = ISO8601DateFormatter().string(from: Date())
             .replacingOccurrences(of: ":", with: "-")
             .replacingOccurrences(of: "+", with: "_")
         let shortId = UUID().uuidString.prefix(8)
         let screenshotId = "\(timestamp)_\(shortId)"
 
-        // Determine output path
         let outputPath = Self.debugCaptureOutputURL(label: label, captureID: screenshotId)
         let outputDir = outputPath.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
@@ -1509,7 +1453,6 @@ extension TerminalController {
             return "ERROR: Failed to write file: \(error.localizedDescription)"
         }
 
-        // Return OK with screenshot ID and path for easy reference
         return "OK \(screenshotId) \(outputPath.path)"
     }
 #endif

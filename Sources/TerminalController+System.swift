@@ -364,16 +364,7 @@ extension TerminalController {
             ]
         }
 
-        let pullRequest = workspace.pullRequest.map { pullRequest in
-            [
-                "number": pullRequest.number,
-                "label": pullRequest.label,
-                "url": pullRequest.url.absoluteString,
-                "status": pullRequest.status.rawValue,
-                "branch": v2OrNull(pullRequest.branch),
-                "checks": v2OrNull(pullRequest.checks?.rawValue),
-            ] as [String: Any]
-        }
+        let pullRequest = v2PullRequestPayload(workspace)
         return [
             "id": workspace.id.uuidString,
             "ref": v2Ref(kind: .workspace, uuid: workspace.id),
@@ -509,9 +500,8 @@ extension TerminalController {
         return .ok([:])
     }
 
-    /// Mirrors v1's `reload_config`: this is a rare, user/agent-triggered configuration
-    /// reload rather than high-frequency telemetry, so — matching the v1 handler, which
-    /// itself calls `v2MainSync` directly — it is allowed to synchronize with the main actor.
+    /// A rare, user/agent-triggered configuration reload rather than high-frequency
+    /// telemetry, so it is allowed to synchronize with the main actor.
     nonisolated func v2AppReloadConfig(params: [String: Any]) -> V2CallResult {
         v2MainSync {
             GhosttyApp.shared.reloadConfiguration(source: "socket.v2.app.reload_config")

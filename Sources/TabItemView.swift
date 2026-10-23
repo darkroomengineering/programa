@@ -597,10 +597,9 @@ struct TabItemView: View, Equatable {
                 }
             }
 
-            // The agent badge above is the single source for agent state now; drop any
-            // status entry that's still carrying the old duplicate phrasing (older CLI
-            // builds may still send it). Other status entries (verbose tool descriptions,
-            // progress, ports, PR) render unchanged.
+            // The agent badge above is the single source for agent state, so drop status
+            // entries that repeat it (older CLI builds still send them). Other status
+            // entries (verbose tool descriptions, progress, ports, PR) render as is.
             let metadataEntries = tab.sidebarStatusEntriesInDisplayOrder().filter { entry in
                 !(Self.agentStateStatusKeys.contains(entry.key) && Self.agentStateStatusValues.contains(entry.value))
             }
@@ -622,7 +621,6 @@ struct TabItemView: View, Equatable {
                 .transition(.opacity)
             }
 
-            // Latest log entry
             if let latestLog = tab.logEntries.last {
                 HStack(spacing: 4) {
                     Image(systemName: logLevelIcon(latestLog.level))
@@ -637,7 +635,6 @@ struct TabItemView: View, Equatable {
                 .transition(.opacity)
             }
 
-            // Progress bar
             if let progress = tab.progress {
                 VStack(alignment: .leading, spacing: 2) {
                     GeometryReader { geo in
@@ -661,7 +658,6 @@ struct TabItemView: View, Equatable {
                 .transition(.opacity)
             }
 
-            // Branch + directory row
             if !branchDirectoryLines.isEmpty {
                 HStack(alignment: .top, spacing: 3) {
                     if sidebarShowGitBranchIcon, branchLinesContainBranch {
@@ -698,7 +694,6 @@ struct TabItemView: View, Equatable {
                 }
             }
 
-            // Pull request rows
             if !pullRequestRows.isEmpty {
                 VStack(alignment: .leading, spacing: 1) {
                     ForEach(pullRequestRows) { pullRequest in
@@ -752,7 +747,6 @@ struct TabItemView: View, Equatable {
                 .safeHelp(String(localized: "sidebar.reviewNudge.tooltip", defaultValue: "Open the review panel for these changes"))
             }
 
-            // Ports row
             if !tab.listeningPorts.isEmpty {
                 HStack(spacing: 4) {
                     ForEach(tab.listeningPorts, id: \.self) { port in
@@ -1434,9 +1428,6 @@ struct TabItemView: View, Equatable {
         syncSelectionAfterMutation()
     }
 
-    // latestNotificationText is now passed as a parameter from the parent view
-    // to avoid subscribing to notificationStore changes in every TabItemView.
-
     private struct VerticalBranchDirectoryLine {
         let branch: String?
         let directory: String?
@@ -1971,7 +1962,6 @@ private final class SidebarRowContextMenuCaptureView: NSView {
         NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
 
-    // VoiceOver "Show menu" support for this view.
     override func accessibilityPerformShowMenu() -> Bool {
         guard let menu = buildMenu?() else { return false }
         menu.popUp(positioning: nil, at: NSPoint(x: bounds.midX, y: bounds.midY), in: self)
