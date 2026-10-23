@@ -54,6 +54,7 @@ public sealed class TerminalView : UserControl, IDisposable
     private bool _selecting;
     private bool _exitRaised;
     private ulong _paintedGeneration;
+    private ulong _programStatusGeneration;
     private DateTimeOffset _lastClick;
     private Point _lastClickPoint;
     private uint _clickCount;
@@ -132,6 +133,13 @@ public sealed class TerminalView : UserControl, IDisposable
 
     /// <summary>Raised on the UI thread with the surface id when <see cref="Title"/> changes.</summary>
     internal event Action<string>? TitleChanged;
+
+    /// <summary>The program's own status record (OSC 7501), or null when it has not reported one.
+    /// Kept current for hidden surfaces too.</summary>
+    internal ProgramStatusRecord? ProgramStatus { get; private set; }
+
+    /// <summary>Raised on the UI thread with the surface id when <see cref="ProgramStatus"/> changes.</summary>
+    internal event Action<string>? ProgramStatusChanged;
 
     /// <summary>True once at least one terminal snapshot has been painted. Used by the
     /// `--smoke` CI launch check to confirm the native terminal session actually produced
@@ -219,6 +227,12 @@ public sealed class TerminalView : UserControl, IDisposable
         RetireCurrentSession();
         _paintedGeneration = 0;
         _exitRaised = false;
+        _programStatusGeneration = 0;
+        if (ProgramStatus is not null)
+        {
+            ProgramStatus = null;
+            ProgramStatusChanged?.Invoke(SurfaceId);
+        }
         lock (_snapshotGate) _snapshot = null;
         _automationValue = string.Empty;
         _spawnFailure.Visibility = Visibility.Collapsed;
@@ -250,6 +264,8 @@ public sealed class TerminalView : UserControl, IDisposable
             _exitRaised = true;
             Exited?.Invoke(SurfaceId);
         }
+        var statusGeneration = NativeTerminal.ProgramStatusGeneration(session);
+        if (statusGeneration != _programStatusGeneration) RefreshProgramStatus(session, statusGeneration);
         if (!IsLoaded || Visibility != Visibility.Visible)
         {
             AcknowledgeAndArm(session, generation);
@@ -356,6 +372,25 @@ public sealed class TerminalView : UserControl, IDisposable
         _input.Margin = new Thickness(x, y, 0, 0);
         _input.Width = composing ? Math.Max(1, Math.Min(320, viewportWidth - x)) : 1;
         _input.Height = height;
+    }
+
+    private void RefreshProgramStatus(NativeTerminal.SafeSessionHandle session, ulong generation)
+    {
+        _programStatusGeneration = generation;
+        if (!NativeTerminal.TryProgramStatus(session, out var json)) return;
+        try
+        {
+            var status = JsonSerializer.Deserialize<ProgramStatusSnapshot>(json, TerminalJson.Options);
+            if (status is null) return;
+            _programStatusGeneration = status.Generation;
+            if (status.Root == ProgramStatus) return;
+            ProgramStatus = status.Root;
+            ProgramStatusChanged?.Invoke(SurfaceId);
+        }
+        catch (JsonException error)
+        {
+            System.Diagnostics.Debug.WriteLine($"Program status was invalid: {error}");
+        }
     }
 
     private void ArmWait(NativeTerminal.SafeSessionHandle session)
@@ -664,6 +699,8 @@ internal static class NativeTerminal
     [DllImport(Dll, EntryPoint = "programa_terminal_scroll")] internal static extern int Scroll(SafeSessionHandle session, int lines);
     [DllImport(Dll, EntryPoint = "programa_terminal_snapshot_json")] internal static extern int Snapshot(SafeSessionHandle session, out Buffer buffer);
     [DllImport(Dll, EntryPoint = "programa_terminal_generation")] internal static extern ulong Generation(SafeSessionHandle session);
+    [DllImport(Dll, EntryPoint = "programa_terminal_program_status_generation")] internal static extern ulong ProgramStatusGeneration(SafeSessionHandle session);
+    [DllImport(Dll, EntryPoint = "programa_terminal_program_status_json")] private static extern int ProgramStatusJson(SafeSessionHandle session, out Buffer buffer);
     [DllImport(Dll, EntryPoint = "programa_terminal_application_cursor")]
     [return: MarshalAs(UnmanagedType.I1)] internal static extern bool ApplicationCursor(SafeSessionHandle session);
     [DllImport(Dll, EntryPoint = "programa_terminal_event_handle")] internal static extern nint EventHandle(SafeSessionHandle session);
@@ -693,6 +730,12 @@ internal static class NativeTerminal
         value = ReadAndFree(buffer);
         return status == 0;
     }
+    internal static bool TryProgramStatus(SafeSessionHandle session, out string value)
+    {
+        var status = ProgramStatusJson(session, out var buffer);
+        value = ReadAndFree(buffer);
+        return status == 0;
+    }
     internal static bool TrySnapshot(SafeSessionHandle session, out string value)
     {
         var status = Snapshot(session, out var buffer);
@@ -716,6 +759,8 @@ internal sealed record TerminalSnapshot(ulong Generation, int Columns, int Rows,
 internal sealed record TerminalCursor(int Column, int Row, bool Visible);
 internal sealed record TerminalSelection(int StartColumn, int StartRow, int EndColumn, int EndRow, bool Block);
 internal sealed record TerminalCell(int Column, int Row, string Text, int Width, TerminalColor Foreground, bool ExplicitForeground, TerminalColor Background, bool ExplicitBackground, bool Selected, bool Bold, bool Italic, bool Underline, bool Undercurl, bool Strikethrough);
+internal sealed record ProgramStatusSnapshot(ulong Generation, ProgramStatusRecord? Root);
+internal sealed record ProgramStatusRecord(string State, string? Kind, int? Progress, string? App, string? Title, string? Msg);
 internal sealed record TerminalColor(byte R, byte G, byte B, byte A) { internal Color ToColor() => Color.FromArgb(A, R, G, B); }
 
 internal static class KeyboardLayout

@@ -141,13 +141,45 @@ selection is null when nothing is selected. The cursor is hidden while the view
 is scrolled into scrollback. terminated is true once the shell has exited. title is the window title the
 program set (OSC 0/2), or null when none is set.
 
-Generation increases on every screen, title, selection, size, or lifecycle
-change. On Windows, event_handle returns a manual-reset event HANDLE owned by
+Generation increases on every screen, title, selection, size, lifecycle, or
+program status change. On Windows, event_handle returns a manual-reset event HANDLE owned by
 the session (valid until free; do not close it) that is signaled whenever the
 generation changes. On other platforms it returns null. A client waits on the
 handle, reads a snapshot, then calls acknowledge_generation with the snapshot's
 generation: this resets the event, and sets it again if the generation moved
 in between, so no change is lost.
+
+## Program status (OSC 7501)
+
+    uint64_t programa_terminal_program_status_generation(session);
+    int32_t programa_terminal_program_status_json(session, ProgramaTerminalBuffer *out);
+
+The library keeps the session's Program Status Protocol records with the same
+rules as the macOS app (see `docs/program-status.md`): reports are validated
+and applied, OSC 133;A drops `working` and `blocked` records, a full reset
+(`ESC c`) removes them all, and a feature query (`OSC 7501 ; ? ST`) is answered
+on the PTY with the same terminator. Sequences longer than 4096 bytes are
+dropped.
+
+The status generation starts at 0 and increases whenever the records change;
+each change also advances the main generation and signals the event, so a
+client can check the cheap status generation on every wake, including for
+surfaces it is not painting, and read the JSON only when it moved:
+
+    {
+      "generation": 3,
+      "root": {"id": "", "state": "working", "kind": null, "progress": 40,
+               "app": "cargo", "title": null, "msg": null},
+      "children": [{"id": "deploy/us-east", "state": "blocked",
+                    "kind": "permission", "progress": null, "app": "cargo",
+                    "title": "US East", "msg": "Approve the plan?"}]
+    }
+
+root is null when the program has not reported on itself. children lists every
+other record sorted by id; their app is resolved through the nearest ancestor
+that has one. state is `idle`, `working`, `done`, `blocked` or `error`; kind is
+`permission`, `question`, `auth` or null. title and msg are decoded text from
+the program; show them as untrusted text.
 
 ## Selection
 
