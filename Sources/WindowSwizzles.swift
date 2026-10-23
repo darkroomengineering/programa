@@ -393,6 +393,7 @@ extension NSWindow {
     static func programaIsTitlebarBackgroundDragTarget(_ hitView: NSView, in window: NSWindow) -> Bool {
         guard let contentView = window.contentView else { return false }
         guard programaIsTitlebarChromeHit(hitView, contentView: contentView) else { return false }
+        if SidebarResizeInteraction.windowNumbersInBand.contains(window.windowNumber) { return false }
         if programaIsControlOrControlDescendant(hitView) { return false }
         if programaIsWithinTitlebarControlsAccessory(hitView, in: window) { return false }
         return true

@@ -40,6 +40,13 @@ enum SidebarResizeInteraction {
     static var totalHitWidth: CGFloat {
         sidebarSideHitWidth + contentSideHitWidth
     }
+
+    /// Window numbers whose pointer is over the resizer band. The band is a SwiftUI
+    /// gesture with no NSView, so a press there hits the bare content host, which the
+    /// chrome-drag fallback in `NSWindow.programa_sendEvent` would turn into a window
+    /// move. ContentView's local event monitor updates this before the window
+    /// dispatches the press. Main thread only.
+    static var windowNumbersInBand: Set<Int> = []
 }
 
 struct SidebarResizerAccessibilityModifier: ViewModifier {
