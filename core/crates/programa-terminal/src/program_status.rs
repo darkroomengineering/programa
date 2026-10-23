@@ -105,6 +105,9 @@ pub(crate) fn parse(body: &[u8], terminator: Terminator) -> Option<Command> {
         }
         let value = trim(&pair[eq + 1..]);
         if !value.iter().all(|&byte| is_value_byte(byte)) {
+            if key == b"id" {
+                return None;
+            }
             continue;
         }
         // Every limit applies to each repeat, even one a later pair replaces.
@@ -598,6 +601,12 @@ mod tests {
         assert_eq!(report.app.as_deref(), Some("terraform"));
         assert_eq!(report.title.as_deref(), Some("Plan"));
         assert_eq!(report.msg.as_deref(), Some("Apply 3 to add?"));
+    }
+
+    #[test]
+    fn id_with_a_disallowed_byte_discards_the_report_instead_of_clearing_the_root() {
+        assert!(report("state=clear:id=bad@id").is_none());
+        assert!(report("state=clear:id=ok:id=bad@id").is_none());
     }
 
     #[test]

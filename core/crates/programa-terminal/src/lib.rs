@@ -1263,7 +1263,8 @@ mod tests {
         assert_eq!(status["children"][0]["id"], "a/b");
         assert_eq!(status["children"][0]["state"], "done");
         assert_eq!(status["children"][0]["app"], "cargo");
-        assert!(status["generation"].as_u64().unwrap() >= 2);
+        // One bump per changed PTY read, and both reports can arrive in a single read.
+        assert!(status["generation"].as_u64().unwrap() >= 1);
         assert_eq!(
             unsafe { programa_terminal_program_status_generation(session.0) },
             status["generation"].as_u64().unwrap()
