@@ -241,6 +241,7 @@ name = "programa-terminal"
 version = "0.1.0"
 dependencies = [
  "alacritty_terminal",
+ "base64",
  "serde",
  "serde_json",
  "windows-sys 0.61.2",

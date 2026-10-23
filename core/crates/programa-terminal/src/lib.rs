@@ -20,6 +20,9 @@ use alacritty_terminal::tty::{self, Options as PtyOptions, Shell};
 use alacritty_terminal::vte::ansi::{Color, NamedColor};
 use serde::{Deserialize, Serialize};
 
+mod program_status;
+use program_status::ProgramStatus;
+
 const STATUS_OK: i32 = 0;
 const STATUS_INVALID_ARGUMENT: i32 = 1;
 const STATUS_FAILED: i32 = 2;
@@ -156,6 +159,8 @@ struct SharedState {
     terminated: AtomicBool,
     error: Mutex<Option<String>>,
     title: Mutex<Option<String>>,
+    program_status: Mutex<ProgramStatus>,
+    program_status_generation: AtomicU64,
     signal: Signal,
     sender: Mutex<Option<EventLoopSender>>,
 }
@@ -169,6 +174,14 @@ impl SharedState {
     fn fail(&self, message: String) {
         *lock(&self.error) = Some(message);
         self.changed();
+    }
+
+    fn write_to_pty(&self, bytes: Vec<u8>) {
+        if let Some(sender) = lock(&self.sender).as_ref() {
+            if let Err(error) = sender.send(Msg::Input(Cow::Owned(bytes))) {
+                self.fail(error.to_string());
+            }
+        }
     }
 }
 
@@ -193,14 +206,21 @@ impl EventListener for EventProxy {
                 self.0.terminated.store(true, Ordering::Release);
                 self.0.changed();
             }
-            Event::PtyWrite(text) => {
-                if let Some(sender) = lock(&self.0.sender).as_ref() {
-                    if let Err(error) = sender.send(Msg::Input(Cow::Owned(text.into_bytes()))) {
-                        self.0.fail(error.to_string());
-                    }
-                }
-            }
+            Event::PtyWrite(text) => self.0.write_to_pty(text.into_bytes()),
             _ => {}
+        }
+    }
+
+    fn pty_output(&self, bytes: &[u8]) {
+        let result = lock(&self.0.program_status).feed(bytes);
+        if result.changed {
+            self.0
+                .program_status_generation
+                .fetch_add(1, Ordering::Release);
+            self.0.changed();
+        }
+        if !result.reply.is_empty() {
+            self.0.write_to_pty(result.reply);
         }
     }
 }
@@ -260,6 +280,8 @@ impl ProgramaTerminalSession {
             terminated: AtomicBool::new(false),
             error: Mutex::new(None),
             title: Mutex::new(None),
+            program_status: Mutex::new(ProgramStatus::default()),
+            program_status_generation: AtomicU64::new(0),
             signal: Signal::new()?,
             sender: Mutex::new(None),
         });
@@ -782,6 +804,44 @@ pub unsafe extern "C" fn programa_terminal_generation(value: *mut ProgramaTermin
     .unwrap_or(0)
 }
 
+/// # Safety
+///
+/// `value` is null or a live handle from `programa_terminal_create`.
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_program_status_generation(
+    value: *mut ProgramaTerminalSession,
+) -> u64 {
+    catch_unwind(AssertUnwindSafe(|| {
+        session(value)
+            .map(|v| v.state.program_status_generation.load(Ordering::Acquire))
+            .unwrap_or(0)
+    }))
+    .unwrap_or(0)
+}
+
+/// # Safety
+///
+/// `value` is null or a live handle from `programa_terminal_create`; `out` is null or writable.
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_program_status_json(
+    value: *mut ProgramaTerminalSession,
+    out: *mut ProgramaTerminalBuffer,
+) -> i32 {
+    ffi_status(|| {
+        clear_buffer(out)?;
+        let state = &session(value)?.state;
+        let status = lock(&state.program_status);
+        let generation = state.program_status_generation.load(Ordering::Acquire);
+        let encoded =
+            serde_json::to_vec(&status.store.snapshot(generation)).map_err(|_| STATUS_FAILED)?;
+        drop(status);
+        match set_buffer(out, encoded) {
+            STATUS_OK => Ok(()),
+            code => Err(code),
+        }
+    })
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn programa_terminal_application_cursor(
     value: *mut ProgramaTerminalSession,
@@ -985,6 +1045,8 @@ mod tests {
             terminated: AtomicBool::new(false),
             error: Mutex::new(None),
             title: Mutex::new(None),
+            program_status: Mutex::new(ProgramStatus::default()),
+            program_status_generation: AtomicU64::new(0),
             signal: Signal::new().unwrap(),
             sender: Mutex::new(None),
         });
@@ -1152,6 +1214,61 @@ mod tests {
 
         assert!(marker_seen, "PTY output never contained the marker");
         assert!(terminated, "PTY termination event was not observed");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn public_abi_reports_program_status_from_pty_output() {
+        let config = serde_json::to_vec(&serde_json::json!({
+            "shell": "/bin/sh",
+            "cols": 80,
+            "rows": 24
+        }))
+        .unwrap();
+        let mut error = ProgramaTerminalBuffer::default();
+        let raw = unsafe { programa_terminal_create(config.as_ptr(), config.len(), &mut error) };
+        let error_text = take_buffer(error);
+        assert!(!raw.is_null(), "PTY spawn failed: {error_text}");
+        let session = SessionGuard(raw);
+        assert_eq!(
+            unsafe { programa_terminal_program_status_generation(session.0) },
+            0
+        );
+
+        let input = "printf '\\033]7501;state=working:progress=40:app=cargo\\033\\\\'; \
+                     printf '\\033]7501;state=done:id=a/b\\007'\n";
+        assert_eq!(
+            unsafe { programa_terminal_write(session.0, input.as_ptr(), input.len()) },
+            STATUS_OK
+        );
+
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut status = serde_json::Value::Null;
+        while Instant::now() < deadline {
+            let mut output = ProgramaTerminalBuffer::default();
+            assert_eq!(
+                unsafe { programa_terminal_program_status_json(session.0, &mut output) },
+                STATUS_OK
+            );
+            status = serde_json::from_slice(take_buffer(output).as_bytes()).unwrap();
+            if status["children"].as_array().is_some_and(|c| !c.is_empty()) {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        assert_eq!(status["root"]["state"], "working", "{status}");
+        assert_eq!(status["root"]["progress"], 40);
+        assert_eq!(status["root"]["app"], "cargo");
+        assert_eq!(status["children"][0]["id"], "a/b");
+        assert_eq!(status["children"][0]["state"], "done");
+        assert_eq!(status["children"][0]["app"], "cargo");
+        // One bump per changed PTY read, and both reports can arrive in a single read.
+        assert!(status["generation"].as_u64().unwrap() >= 1);
+        assert_eq!(
+            unsafe { programa_terminal_program_status_generation(session.0) },
+            status["generation"].as_u64().unwrap()
+        );
     }
 
     struct SessionGuard(*mut ProgramaTerminalSession);

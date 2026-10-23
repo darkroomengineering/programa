@@ -28,6 +28,8 @@ PROGRAMA_TERMINAL_API int32_t programa_terminal_resize(ProgramaTerminalSession *
 PROGRAMA_TERMINAL_API int32_t programa_terminal_scroll(ProgramaTerminalSession *session, int32_t lines);
 PROGRAMA_TERMINAL_API int32_t programa_terminal_snapshot_json(ProgramaTerminalSession *session, ProgramaTerminalBuffer *out);
 PROGRAMA_TERMINAL_API uint64_t programa_terminal_generation(ProgramaTerminalSession *session);
+PROGRAMA_TERMINAL_API uint64_t programa_terminal_program_status_generation(ProgramaTerminalSession *session);
+PROGRAMA_TERMINAL_API int32_t programa_terminal_program_status_json(ProgramaTerminalSession *session, ProgramaTerminalBuffer *out);
 PROGRAMA_TERMINAL_API bool programa_terminal_application_cursor(ProgramaTerminalSession *session);
 PROGRAMA_TERMINAL_API void *programa_terminal_event_handle(ProgramaTerminalSession *session);
 PROGRAMA_TERMINAL_API int32_t programa_terminal_acknowledge_generation(ProgramaTerminalSession *session, uint64_t generation);

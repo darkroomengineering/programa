@@ -31,3 +31,9 @@ backs off after a bounded number of idle attempts (~100 ms), so the last
 chunk of output is not dropped on a loaded CI runner. `pty_read` now returns
 whether it read any bytes (`io::Result<bool>`) instead of `io::Result<()>`
 so the retry loop can tell idle reads from EOF.
+
+Programa adds `EventListener::pty_output`, a default no-op method that
+`EventLoop::pty_read` calls with each chunk of PTY output just before the
+parser sees it. vte drops OSC numbers it does not know, so the OSC 7501
+Program Status scanner in `programa-terminal` reads the raw bytes through this
+hook instead of through the `Handler`.

@@ -161,6 +161,8 @@ where
                 writer.write_all(&buf[..unprocessed]).unwrap();
             }
 
+            self.event_proxy.pty_output(&buf[..unprocessed]);
+
             // Parse the incoming bytes.
             state.parser.advance(&mut **terminal, &buf[..unprocessed]);
 

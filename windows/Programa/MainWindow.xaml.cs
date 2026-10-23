@@ -234,18 +234,20 @@ public sealed partial class MainWindow : Window
             {
                 terminal = new TerminalView(surface.Id);
                 terminal.Exited += OnTerminalExited;
-                terminal.TitleChanged += OnTerminalTitleChanged;
+                terminal.TitleChanged += OnTerminalHeaderChanged;
+                terminal.ProgramStatusChanged += OnTerminalHeaderChanged;
                 _terminals.Add(surface.Id, terminal);
             }
             var item = new TabViewItem
             {
                 Header = TabTitle(terminal),
-                IconSource = new SymbolIconSource { Symbol = Symbol.Document },
+                IconSource = new SymbolIconSource { Symbol = ProgramStatusSymbol(terminal.ProgramStatus) },
                 IsClosable = true,
                 Content = terminal,
                 Tag = new SurfaceTag(workspaceId, pane.Id, surface.Id),
             };
             AutomationProperties.SetName(item, string.IsNullOrEmpty(terminal.Title) ? $"{Localizer.Get("Terminal")} {surfaceIndex + 1}" : terminal.Title);
+            ApplyProgramStatusLabel(item, terminal);
             _tabItems[surface.Id] = item;
             tabs.TabItems.Add(item);
             if (surface.Id == pane.SelectedSurfaceId) tabs.SelectedItem = item;
@@ -253,14 +255,43 @@ public sealed partial class MainWindow : Window
         return tabs;
     }
 
-    private static string TabTitle(TerminalView terminal) =>
-        string.IsNullOrEmpty(terminal.Title) ? Localizer.Get("Terminal") : terminal.Title;
+    private static string TabTitle(TerminalView terminal)
+    {
+        var title = string.IsNullOrEmpty(terminal.Title) ? Localizer.Get("Terminal") : terminal.Title;
+        return terminal.ProgramStatus?.Progress is int progress ? string.Format(Localizer.Get("ProgramStatusProgressFormat"), title, progress) : title;
+    }
 
-    private void OnTerminalTitleChanged(string surfaceId)
+    private static Symbol ProgramStatusSymbol(ProgramStatusRecord? status) => status?.State switch
+    {
+        "working" => Symbol.Sync,
+        "blocked" => Symbol.Help,
+        "done" => Symbol.Accept,
+        "error" => Symbol.Important,
+        _ => Symbol.Document,
+    };
+
+    private static void ApplyProgramStatusLabel(TabViewItem item, TerminalView terminal)
+    {
+        var label = terminal.ProgramStatus?.State switch
+        {
+            "working" => Localizer.Get("ProgramStatusWorking"),
+            "blocked" => Localizer.Get("ProgramStatusBlocked"),
+            "done" => Localizer.Get("ProgramStatusDone"),
+            "error" => Localizer.Get("ProgramStatusError"),
+            _ => null,
+        };
+        AutomationProperties.SetItemStatus(item, label ?? string.Empty);
+        if (label is null) item.ClearValue(ToolTipService.ToolTipProperty);
+        else ToolTipService.SetToolTip(item, label);
+    }
+
+    private void OnTerminalHeaderChanged(string surfaceId)
     {
         if (_tabItems.TryGetValue(surfaceId, out var item) && _terminals.TryGetValue(surfaceId, out var terminal))
         {
             item.Header = TabTitle(terminal);
+            item.IconSource = new SymbolIconSource { Symbol = ProgramStatusSymbol(terminal.ProgramStatus) };
+            ApplyProgramStatusLabel(item, terminal);
             if (!string.IsNullOrEmpty(terminal.Title)) AutomationProperties.SetName(item, terminal.Title);
         }
     }
