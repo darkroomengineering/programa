@@ -2212,18 +2212,75 @@ final class TerminalSurface: Identifiable, ObservableObject {
                 // own, replacing the manual window-resize users otherwise do today.
                 // SIGWINCH's default disposition is ignore, so delivering it to a
                 // stale/reused pgid or pid is a silent no-op, not a hazard.
+                var signalledChild = false
                 if let pgid, pgid > 0 {
                     killpg(pgid, SIGWINCH)
+                    signalledChild = true
                     #if DEBUG
                     dlog("session.escrow.revive.winch surface=\(surfaceIdString.prefix(8)) pgid=\(pgid) child=0")
                     #endif
                 } else if let childPID, childPID > 0 {
                     kill(pid_t(childPID), SIGWINCH)
+                    signalledChild = true
                     #if DEBUG
                     dlog("session.escrow.revive.winch surface=\(surfaceIdString.prefix(8)) pgid=0 child=\(childPID)")
                     #endif
                 }
+                if signalledChild {
+                    self.nudgeWidthForRevivedTUI(capturedSurface)
+                }
             }
+        }
+    }
+
+    /// How long the revived surface stays one cell narrower before the real
+    /// width is restored. The PTY resize reaches the child through the IO
+    /// thread and the kernel's SIGWINCH, so the restore must land after the
+    /// child has had time to read the narrower size.
+    private static let reviveWidthNudgeRestoreDelay: TimeInterval = 0.15
+
+    /// Shrinks the core surface by one cell width, then restores it from the
+    /// view's current frame. A same-size SIGWINCH can be ignored by TUIs that
+    /// diff against their last frame; a real width change makes them repaint
+    /// in full, which is what the manual window resize users otherwise do.
+    /// Both steps go through `updateSize`'s bookkeeping (`lastPixelWidth`), so a
+    /// user resize that lands in between is applied as-is and the restore then
+    /// finds nothing left to do.
+    private func nudgeWidthForRevivedTUI(_ capturedSurface: ghostty_surface_t) {
+        guard surface == capturedSurface else { return }
+        let size = ghostty_surface_size(capturedSurface)
+        let cellWidth = size.cell_width_px
+        guard lastPixelWidth > 0, lastPixelHeight > 0,
+              cellWidth > 0, lastPixelWidth > cellWidth * 2 else { return }
+        let originalWidth = lastPixelWidth
+        let nudgedWidth = originalWidth - cellWidth
+        ghostty_surface_set_size(capturedSurface, nudgedWidth, lastPixelHeight)
+        lastPixelWidth = nudgedWidth
+        #if DEBUG
+        dlog(
+            "session.escrow.revive.nudge surface=\(id.uuidString.prefix(8)) phase=shrink " +
+            "width=\(originalWidth)->\(nudgedWidth) cell=\(cellWidth)"
+        )
+        #endif
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.reviveWidthNudgeRestoreDelay) { [weak self] in
+            guard let self, self.surface == capturedSurface else { return }
+            // Anything other than our nudged width means a real resize already
+            // pushed the newest size.
+            guard self.lastPixelWidth == nudgedWidth else { return }
+            let restored = self.attachedView?.forceRefreshSurface() ?? false
+            if !restored, self.lastPixelWidth == nudgedWidth {
+                // The view could not report a size (detached or mid-drag), and no
+                // later layout is guaranteed; never leave the pane one cell short.
+                ghostty_surface_set_size(capturedSurface, originalWidth, self.lastPixelHeight)
+                self.lastPixelWidth = originalWidth
+            }
+            #if DEBUG
+            dlog(
+                "session.escrow.revive.nudge surface=\(self.id.uuidString.prefix(8)) phase=restore " +
+                "width=\(self.lastPixelWidth) viaView=\(restored ? 1 : 0)"
+            )
+            #endif
         }
     }
 
