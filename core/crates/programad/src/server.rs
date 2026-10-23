@@ -776,8 +776,8 @@ mod tests {
         for method in IMPLEMENTED_METHODS {
             if let Err(error) = call(method).await {
                 assert_ne!(
-                    error.code.as_str(),
-                    ErrorCode::MethodNotFound.as_str(),
+                    error.code,
+                    ErrorCode::MethodNotFound,
                     "{method} is advertised but not dispatched"
                 );
             }
@@ -785,7 +785,7 @@ mod tests {
         let unknown = call("system.not_a_method")
             .await
             .err()
-            .map(|e| e.code.as_str());
-        assert_eq!(unknown, Some(ErrorCode::MethodNotFound.as_str()));
+            .map(|e| e.code);
+        assert_eq!(unknown, Some(ErrorCode::MethodNotFound));
     }
 }
