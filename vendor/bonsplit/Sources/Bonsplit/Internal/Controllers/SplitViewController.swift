@@ -352,8 +352,7 @@ final class SplitViewController {
     func selectPreviousTab() {
         guard let pane = focusedPane,
               let selectedTabId = pane.selectedTabId,
-              let currentIndex = pane.tabs.firstIndex(where: { $0.id == selectedTabId }),
-              !pane.tabs.isEmpty else { return }
+              let currentIndex = pane.tabs.firstIndex(where: { $0.id == selectedTabId }) else { return }
 
         let newIndex = currentIndex > 0 ? currentIndex - 1 : pane.tabs.count - 1
         pane.selectTab(pane.tabs[newIndex].id)
@@ -363,8 +362,7 @@ final class SplitViewController {
     func selectNextTab() {
         guard let pane = focusedPane,
               let selectedTabId = pane.selectedTabId,
-              let currentIndex = pane.tabs.firstIndex(where: { $0.id == selectedTabId }),
-              !pane.tabs.isEmpty else { return }
+              let currentIndex = pane.tabs.firstIndex(where: { $0.id == selectedTabId }) else { return }
 
         let newIndex = currentIndex < pane.tabs.count - 1 ? currentIndex + 1 : 0
         pane.selectTab(pane.tabs[newIndex].id)

@@ -1,13 +1,8 @@
-import Foundation
-import SwiftUI
+import AppKit
 import UniformTypeIdentifiers
 
-/// Custom UTTypes for tab drag and drop
+/// Custom UTType for tab drag and drop
 extension UTType {
-    static var tabItem: UTType {
-        UTType(exportedAs: "com.splittabbar.tabitem")
-    }
-
     static var tabTransfer: UTType {
         UTType(exportedAs: "com.splittabbar.tabtransfer", conformingTo: .data)
     }
@@ -129,16 +124,20 @@ struct TabItem: Identifiable, Hashable, Codable {
     }
 }
 
-// MARK: - Transferable for Drag & Drop
-
-extension TabItem: Transferable {
-    static var transferRepresentation: some TransferRepresentation {
-        CodableRepresentation(contentType: .tabItem)
+extension TabItem {
+    /// Localized state names announced as the tab's accessibility value.
+    var accessibilityStates: [String] {
+        var states: [String] = []
+        if isLoading { states.append(BonsplitStrings.tabLoading) }
+        if isPinned { states.append(BonsplitStrings.tabPinned) }
+        if showsNotificationBadge { states.append(BonsplitStrings.tabUnread) }
+        if isDirty { states.append(BonsplitStrings.tabModified) }
+        return states
     }
 }
 
 /// Transfer data that includes source pane information for cross-pane moves
-struct TabTransferData: Codable, Transferable {
+struct TabTransferData: Codable {
     let tab: TabItem
     let sourcePaneId: UUID
     let sourceProcessId: Int32
@@ -174,7 +173,18 @@ struct TabTransferData: Codable, Transferable {
         try container.encode(sourceProcessId, forKey: .sourceProcessId)
     }
 
-    static var transferRepresentation: some TransferRepresentation {
-        CodableRepresentation(contentType: .tabTransfer)
+    /// Decodes the payload of the drag in progress, written as data or as a JSON string.
+    static func fromDragPasteboard() -> TabTransferData? {
+        let pasteboard = NSPasteboard(name: .drag)
+        let type = NSPasteboard.PasteboardType(UTType.tabTransfer.identifier)
+        if let data = pasteboard.data(forType: type),
+           let transfer = try? JSONDecoder().decode(TabTransferData.self, from: data) {
+            return transfer
+        }
+        if let raw = pasteboard.string(forType: type),
+           let data = raw.data(using: .utf8) {
+            return try? JSONDecoder().decode(TabTransferData.self, from: data)
+        }
+        return nil
     }
 }
