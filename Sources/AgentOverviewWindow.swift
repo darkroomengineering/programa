@@ -187,6 +187,34 @@ struct AgentOverviewHelperSnapshot: Identifiable, Equatable, Sendable {
     let hasIndependentOutput: Bool
     let runsWithParent: Bool
     let depth: Int
+    /// The agent type (planner, implementer), shown under a task title that differs from it.
+    let role: String?
+    let summary: String?
+    let startedAt: Date
+    let endedAt: Date?
+
+    init(
+        id: UUID, title: String, state: AgentOverviewFriendlyState, surfaceId: UUID?,
+        hasIndependentOutput: Bool, runsWithParent: Bool, depth: Int,
+        role: String? = nil, summary: String? = nil, startedAt: Date = Date(), endedAt: Date? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.state = state
+        self.surfaceId = surfaceId
+        self.hasIndependentOutput = hasIndependentOutput
+        self.runsWithParent = runsWithParent
+        self.depth = depth
+        self.role = role
+        self.summary = summary
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+    }
+
+    /// Done and stopped helpers fold into one row; failed ones stay visible.
+    var isSettled: Bool { state == .done || state == .stopped }
+
+    func duration(now: Date) -> TimeInterval { max(0, (endedAt ?? now).timeIntervalSince(startedAt)) }
 }
 
 struct AgentOverviewWorkspaceSnapshot: Identifiable, Equatable, Sendable {
@@ -217,6 +245,18 @@ enum AgentOverviewFormatting {
         }
         return "…/" + components.suffix(maximumComponents).joined(separator: "/")
     }
+
+    private static let durationFormatter: DateComponentsFormatter = {
+        let formatter = DateComponentsFormatter()
+        formatter.unitsStyle = .abbreviated
+        formatter.allowedUnits = [.hour, .minute, .second]
+        formatter.maximumUnitCount = 2
+        return formatter
+    }()
+
+    static func duration(_ interval: TimeInterval) -> String {
+        durationFormatter.string(from: interval.rounded(.down)) ?? ""
+    }
 }
 
 enum AgentOverviewFilter: String, CaseIterable {
@@ -246,7 +286,7 @@ enum AgentOverviewFilter: String, CaseIterable {
                     matchesState($0.state) && (workspaceMatches || matchesName($0.title))
                 }
                 let helpers = workspace.helpers.filter {
-                    matchesState($0.state) && (workspaceMatches || matchesName($0.title))
+                    matchesState($0.state) && (workspaceMatches || matchesName($0.title) || matchesName($0.role ?? ""))
                 }
                 guard (workspaceMatches && matchesState(workspace.state)) || !terminals.isEmpty || !helpers.isEmpty else { return nil }
                 return AgentOverviewWorkspaceSnapshot(
@@ -273,6 +313,7 @@ final class AgentOverviewViewModel: ObservableObject {
     @Published var messageSendError: String?
     @Published var filter = AgentOverviewFilter.all { didSet { reconcileVisibleSelection() } }
     @Published var search = "" { didSet { reconcileVisibleSelection() } }
+    @Published var expandedSettledHelperWorkspaces: Set<UUID> = []
 
     var visibleWindows: [AgentOverviewWindowSnapshot] { filter.apply(to: windows, search: search) }
 
@@ -305,6 +346,26 @@ final class AgentOverviewViewModel: ObservableObject {
         selection?.allowsTerminalControl == true && resolveTerminalPanel() != nil
     }
     var canCopyOutput: Bool { isOutputVisible && !output.isEmpty }
+
+    var selectedHelper: AgentOverviewHelperSnapshot? {
+        guard case .helper(let workspaceId, let helperId, _, _) = selection else { return nil }
+        return windows.lazy.flatMap(\.workspaces).first { $0.id == workspaceId }?
+            .helpers.first { $0.id == helperId }
+    }
+
+    var canCopyReport: Bool { selectedHelper?.summary?.isEmpty == false }
+
+    func toggleSettledHelpers(workspaceId: UUID) {
+        if !expandedSettledHelperWorkspaces.insert(workspaceId).inserted {
+            expandedSettledHelperWorkspaces.remove(workspaceId)
+        }
+    }
+
+    func copyReport() {
+        guard let summary = selectedHelper?.summary, !summary.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(summary, forType: .string)
+    }
 
     func configure(tabManager: TabManager, workspaceId: UUID?) {
         requestedTabManager = tabManager
@@ -482,7 +543,11 @@ final class AgentOverviewViewModel: ObservableObject {
                         surfaceId: record.surfaceId,
                         hasIndependentOutput: record.hasIndependentOutput,
                         runsWithParent: record.placement == .runsWithParent,
-                        depth: helperDepth(record, recordsById: recordsById)
+                        depth: helperDepth(record, recordsById: recordsById),
+                        role: record.role,
+                        summary: record.summary,
+                        startedAt: record.startedAt,
+                        endedAt: record.endedAt
                     )
                 }
                 workspaceSnapshots.append(
@@ -692,6 +757,9 @@ private struct AgentOverviewRootView: View {
                 if viewModel.isOutputVisible {
                     outputView
                         .frame(minWidth: 280)
+                } else if let helper = viewModel.selectedHelper {
+                    helperDetail(helper)
+                        .frame(minWidth: 280)
                 }
             }
             Divider()
@@ -791,28 +859,123 @@ private struct AgentOverviewRootView: View {
             .buttonStyle(.plain)
         }
 
-        ForEach(workspace.helpers) { helper in
-            let selection = AgentOverviewSelection.helper(
-                workspaceId: workspace.id,
-                helperId: helper.id,
-                surfaceId: helper.surfaceId,
-                hasIndependentOutput: helper.hasIndependentOutput
-            )
+        let foldsSettled = viewModel.search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let settled = foldsSettled ? workspace.helpers.filter(\.isSettled) : []
+        let showsSettled = settled.isEmpty || viewModel.expandedSettledHelperWorkspaces.contains(workspace.id)
+
+        ForEach(workspace.helpers.filter { showsSettled || !$0.isSettled }) { helper in
+            helperRow(helper, workspace: workspace)
+        }
+
+        if !settled.isEmpty {
             Button {
-                viewModel.select(selection)
+                viewModel.toggleSettledHelpers(workspaceId: workspace.id)
             } label: {
-                overviewRow(
-                    title: helper.title,
-                    subtitle: helper.runsWithParent
-                        ? String(localized: "agentOverview.runsWithParent", defaultValue: "Runs with parent — output is shared.")
-                        : String(localized: "agentOverview.helper", defaultValue: "Helper"),
-                    state: helper.state,
-                    icon: "person.2",
-                    selected: viewModel.selection == selection
-                )
-                .padding(.leading, CGFloat(workspace.depth + helper.depth) * 14 + 22)
+                HStack(spacing: 6) {
+                    Image(systemName: showsSettled ? "chevron.down" : "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .frame(width: 18)
+                    Text(String(
+                        format: showsSettled
+                            ? String(localized: "agentOverview.hideFinishedHelpers", defaultValue: "Hide %lld finished helpers")
+                            : String(localized: "agentOverview.showFinishedHelpers", defaultValue: "%lld finished helpers"),
+                        Int64(settled.count)
+                    ))
+                    Spacer(minLength: 0)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 7)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+                .padding(.leading, CGFloat(workspace.depth) * 14 + 22)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(showsSettled
+                ? String(localized: "agentOverview.hideFinishedHelpers.a11y", defaultValue: "Hide finished helpers")
+                : String(localized: "agentOverview.showFinishedHelpers.a11y", defaultValue: "Show finished helpers"))
+        }
+    }
+
+    private func helperRow(_ helper: AgentOverviewHelperSnapshot, workspace: AgentOverviewWorkspaceSnapshot) -> some View {
+        let selection = AgentOverviewSelection.helper(
+            workspaceId: workspace.id,
+            helperId: helper.id,
+            surfaceId: helper.surfaceId,
+            hasIndependentOutput: helper.hasIndependentOutput
+        )
+        let role = helper.role.flatMap { $0 == helper.title ? nil : $0 }
+        let subtitle = [role, AgentOverviewFormatting.duration(helper.duration(now: Date()))]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .joined(separator: String(localized: "agentOverview.metadataSeparator", defaultValue: " · "))
+        return Button {
+            viewModel.select(selection)
+        } label: {
+            overviewRow(
+                title: helper.title,
+                subtitle: subtitle,
+                state: helper.state,
+                icon: helper.summary == nil ? "person.2" : "text.bubble",
+                selected: viewModel.selection == selection
+            )
+            .padding(.leading, CGFloat(workspace.depth + helper.depth) * 14 + 22)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        return formatter
+    }()
+
+    /// Reports are markdown; render inline styling and keep the line structure as written.
+    private static func inlineMarkdown(_ text: String) -> AttributedString {
+        (try? AttributedString(
+            markdown: text,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(text)
+    }
+
+    private func helperDetail(_ helper: AgentOverviewHelperSnapshot) -> some View {
+        let now = Date()
+        let duration = AgentOverviewFormatting.duration(helper.duration(now: now))
+        let timing: String
+        if let endedAt = helper.endedAt {
+            timing = String(
+                format: String(localized: "agentOverview.helper.finished", defaultValue: "Finished %@ · ran %@"),
+                Self.relativeFormatter.localizedString(for: endedAt, relativeTo: now),
+                duration
+            )
+        } else {
+            timing = String(
+                format: String(localized: "agentOverview.helper.running", defaultValue: "Running for %@"),
+                duration
+            )
+        }
+        return VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(helper.title)
+                    .font(.headline)
+                    .lineLimit(3)
+                Text([helper.role, helper.state.label, timing]
+                    .compactMap { $0 }
+                    .joined(separator: String(localized: "agentOverview.metadataSeparator", defaultValue: " · ")))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(12)
+            Divider()
+            ScrollView {
+                Text(helper.summary.map(Self.inlineMarkdown) ?? AttributedString(helper.endedAt == nil
+                    ? String(localized: "agentOverview.helper.report.pending", defaultValue: "The report appears here when this helper finishes.")
+                    : String(localized: "agentOverview.helper.report.none", defaultValue: "This helper finished without a report.")))
+                    .foregroundStyle(helper.summary == nil ? .secondary : .primary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .padding(12)
+            }
         }
     }
 
@@ -913,10 +1076,17 @@ private struct AgentOverviewRootView: View {
                     viewModel.showOutput()
                 }
             }
-            Button(String(localized: "agentOverview.copyOutput", defaultValue: "Copy Output")) {
-                viewModel.copyOutput()
+            if !viewModel.isOutputVisible, viewModel.selectedHelper != nil {
+                Button(String(localized: "agentOverview.copyReport", defaultValue: "Copy Report")) {
+                    viewModel.copyReport()
+                }
+                .disabled(!viewModel.canCopyReport)
+            } else {
+                Button(String(localized: "agentOverview.copyOutput", defaultValue: "Copy Output")) {
+                    viewModel.copyOutput()
+                }
+                .disabled(!viewModel.canCopyOutput)
             }
-            .disabled(!viewModel.canCopyOutput)
         }
         .padding(12)
     }

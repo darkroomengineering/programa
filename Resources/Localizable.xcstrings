@@ -2874,23 +2874,6 @@
         }
       }
     },
-    "agentOverview.runsWithParent": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Runs with parent — output is shared."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "親と一緒に実行 — 出力は共有されます。"
-          }
-        }
-      }
-    },
     "agentOverview.send": {
       "extractionState": "manual",
       "localizations": {
@@ -17558,6 +17541,159 @@
           "stringUnit": {
             "state": "translated",
             "value": "ヘルパー %lld 件が実行中"
+          }
+        }
+      }
+    },
+    "agentOverview.showFinishedHelpers": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld finished helpers"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完了したヘルパー %lld 件"
+          }
+        }
+      }
+    },
+    "agentOverview.hideFinishedHelpers": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide %lld finished helpers"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完了したヘルパー %lld 件を隠す"
+          }
+        }
+      }
+    },
+    "agentOverview.showFinishedHelpers.a11y": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show finished helpers"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完了したヘルパーを表示"
+          }
+        }
+      }
+    },
+    "agentOverview.hideFinishedHelpers.a11y": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide finished helpers"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完了したヘルパーを隠す"
+          }
+        }
+      }
+    },
+    "agentOverview.helper.finished": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finished %@ · ran %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@に完了 · 実行時間 %@"
+          }
+        }
+      }
+    },
+    "agentOverview.helper.running": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Running for %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 実行中"
+          }
+        }
+      }
+    },
+    "agentOverview.helper.report.pending": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The report appears here when this helper finishes."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このヘルパーが完了すると、ここにレポートが表示されます。"
+          }
+        }
+      }
+    },
+    "agentOverview.helper.report.none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This helper finished without a report."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このヘルパーはレポートなしで完了しました。"
+          }
+        }
+      }
+    },
+    "agentOverview.copyReport": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Report"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "レポートをコピー"
           }
         }
       }

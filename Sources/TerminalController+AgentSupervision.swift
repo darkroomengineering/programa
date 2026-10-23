@@ -15,6 +15,7 @@ extension TerminalController {
             let session = try agentText(params, key: "session", required: false, maximumLength: 512)
             let task = try agentText(params, key: "task", required: false, maximumLength: 2_048)
             let role = try agentText(params, key: "role", required: false, maximumLength: 256)
+            let summary = try agentText(params, key: "summary", required: false, maximumLength: 16_384)
             let state = try agentState(params, default: .working)
             let placement = try agentPlacement(params, default: .runsWithParent)
 
@@ -46,6 +47,7 @@ extension TerminalController {
                         session: session,
                         task: task,
                         role: role,
+                        summary: summary,
                         state: state,
                         placement: placement,
                         workspaceId: workspaceId,
@@ -119,6 +121,8 @@ extension TerminalController {
         do {
             let agentId = try agentIdentifier(params, key: "agent_id", required: true)!
             let state = try agentState(params, default: .completed)
+            let task = try agentText(params, key: "task", required: false, maximumLength: 2_048)
+            let summary = try agentText(params, key: "summary", required: false, maximumLength: 16_384)
             guard state.isFinished else {
                 return .err(
                     code: "invalid_params",
@@ -128,7 +132,9 @@ extension TerminalController {
             }
             return v2MainSync {
                 do {
-                    let record = try AgentSupervisionRegistry.shared.finish(id: agentId, state: state)
+                    let record = try AgentSupervisionRegistry.shared.finish(
+                        id: agentId, state: state, task: task, summary: summary
+                    )
                     return .ok(["agent": record.payload()])
                 } catch {
                     return agentRegistryError(error)

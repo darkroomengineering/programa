@@ -38,6 +38,24 @@ final class AgentSupervisionRegistryTests: XCTestCase {
         XCTAssertEqual(finished.endedAt, endedAt)
     }
 
+    func testFinishRecordsTheReportAndFinalTaskWithoutLosingTheRole() throws {
+        let registry = AgentSupervisionRegistry(capacity: 4)
+        let started = try registry.start(
+            host: "claude",
+            task: "planner",
+            role: "planner",
+            placement: .runsWithParent,
+            workspaceId: UUID()
+        )
+        XCTAssertNil(started.summary)
+
+        let finished = try registry.finish(id: started.id, task: "Plan the sidebar cut", summary: "Found 3 call sites.")
+        XCTAssertEqual(finished.task, "Plan the sidebar cut")
+        XCTAssertEqual(finished.role, "planner")
+        XCTAssertEqual(finished.summary, "Found 3 call sites.")
+        XCTAssertEqual(finished.payload()["summary"] as? String, "Found 3 call sites.")
+    }
+
     func testRunsWithParentNeverClaimsIndependentOutput() throws {
         let registry = AgentSupervisionRegistry(capacity: 2)
         let record = try registry.start(

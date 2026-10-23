@@ -98,6 +98,28 @@ final class AgentOverviewPresentationTests: XCTestCase {
         XCTAssertTrue(AgentOverviewFilter.all.apply(to: windows, search: "unmatched").isEmpty)
     }
 
+    func testHelpersMatchSearchByAgentTypeAndOnlyDoneOrStoppedOnesFold() {
+        let startedAt = Date(timeIntervalSince1970: 1_000)
+        func helper(_ title: String, _ state: AgentOverviewFriendlyState, endedAt: Date? = nil) -> AgentOverviewHelperSnapshot {
+            AgentOverviewHelperSnapshot(id: UUID(), title: title, state: state, surfaceId: nil,
+                                        hasIndependentOutput: false, runsWithParent: true, depth: 0,
+                                        role: "implementer", startedAt: startedAt, endedAt: endedAt)
+        }
+        let running = helper("Fix restore race", .working)
+        let done = helper("Plan sidebar cut", .done, endedAt: startedAt.addingTimeInterval(220))
+        let failed = helper("Port the parser", .failed, endedAt: startedAt.addingTimeInterval(5))
+        let workspace = AgentOverviewWorkspaceSnapshot(id: UUID(), title: "Programa", state: .working,
+                                                      branchOrPullRequest: nil, folder: "repo", depth: 0,
+                                                      terminals: [], helpers: [running, done, failed])
+        let windows = [AgentOverviewWindowSnapshot(id: UUID(), index: 0, workspaces: [workspace])]
+
+        XCTAssertEqual(AgentOverviewFilter.all.apply(to: windows, search: "IMPLEMENTER").first?.workspaces.first?.helpers,
+                       [running, done, failed])
+        XCTAssertEqual([running, done, failed].map(\.isSettled), [false, true, false])
+        XCTAssertEqual(done.duration(now: startedAt.addingTimeInterval(9_999)), 220)
+        XCTAssertEqual(running.duration(now: startedAt.addingTimeInterval(72)), 72)
+    }
+
     func testTaskStatesUsePlainUserFacingLabels() {
         XCTAssertEqual(AgentOverviewFriendlyState.from(activityState: nil).label, "Idle")
         XCTAssertEqual(AgentOverviewFriendlyState.from(taskState: .working).label, "Working")

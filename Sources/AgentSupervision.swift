@@ -42,6 +42,8 @@ struct AgentTaskRecord: Sendable {
     let session: String?
     let task: String?
     let role: String?
+    /// The helper's final report, as handed back to its parent.
+    let summary: String?
     let state: AgentTaskState
     let placement: AgentTaskPlacement
     let workspaceId: UUID
@@ -66,6 +68,7 @@ struct AgentTaskRecord: Sendable {
             "session": Self.jsonValue(session),
             "task": Self.jsonValue(task),
             "role": Self.jsonValue(role),
+            "summary": Self.jsonValue(summary),
             "state": state.rawValue,
             "placement": placement.rawValue,
             "workspace_id": workspaceId.uuidString,
@@ -145,6 +148,7 @@ final class AgentSupervisionRegistry: ObservableObject {
         session: String? = nil,
         task: String? = nil,
         role: String? = nil,
+        summary: String? = nil,
         state: AgentTaskState = .working,
         placement: AgentTaskPlacement,
         workspaceId: UUID,
@@ -166,6 +170,7 @@ final class AgentSupervisionRegistry: ObservableObject {
             session: session,
             task: task,
             role: role,
+            summary: summary,
             state: state,
             placement: placement,
             workspaceId: workspaceId,
@@ -185,6 +190,7 @@ final class AgentSupervisionRegistry: ObservableObject {
         session: String? = nil,
         task: String? = nil,
         role: String? = nil,
+        summary: String? = nil,
         workspaceId: UUID? = nil,
         surfaceId: UUID? = nil,
         now: Date = Date()
@@ -213,6 +219,7 @@ final class AgentSupervisionRegistry: ObservableObject {
             session: session ?? existing.session,
             task: task ?? existing.task,
             role: role ?? existing.role,
+            summary: summary ?? existing.summary,
             state: nextState,
             placement: existing.placement,
             workspaceId: workspaceId ?? existing.workspaceId,
@@ -229,12 +236,14 @@ final class AgentSupervisionRegistry: ObservableObject {
     func finish(
         id: UUID,
         state: AgentTaskState = .completed,
+        task: String? = nil,
+        summary: String? = nil,
         now: Date = Date()
     ) throws -> AgentTaskRecord {
         guard state.isFinished else {
             throw AgentSupervisionRegistryError.finishStateRequired
         }
-        return try update(id: id, state: state, now: now)
+        return try update(id: id, state: state, task: task, summary: summary, now: now)
     }
 
     func finishSession(

@@ -892,6 +892,9 @@ extension ProgramaCLI {
             externalAgentId: externalAgentId
         )
         let agentType = firstString(in: ctx.parsed.object ?? [:], keys: ["agent_type"])
+        let description = ctx.parsed.transcriptPath
+            .flatMap { ClaudeSubagentTranscript.transcriptPath(sessionTranscriptPath: $0, agentId: externalAgentId) }
+            .flatMap(ClaudeSubagentTranscript.description(transcriptPath:))
         var startParams: [String: Any] = [
             "agent_id": taskId,
             "workspace_id": workspaceId,
@@ -901,19 +904,15 @@ extension ProgramaCLI {
         ]
         if let surfaceId { startParams["surface_id"] = surfaceId }
         if let sessionId = ctx.parsed.sessionId { startParams["session"] = sessionId }
-        if let agentType {
-            startParams["role"] = agentType
-            startParams["task"] = agentType
-        }
+        if let agentType { startParams["role"] = agentType }
+        if let task = description ?? agentType { startParams["task"] = task }
         do {
             _ = try client.sendV2(method: V2MethodNames.agentTaskStart, params: startParams)
         } catch {
             var updateParams: [String: Any] = ["agent_id": taskId, "state": "working"]
             if let sessionId = ctx.parsed.sessionId { updateParams["session"] = sessionId }
-            if let agentType {
-                updateParams["role"] = agentType
-                updateParams["task"] = agentType
-            }
+            if let agentType { updateParams["role"] = agentType }
+            if let task = description ?? agentType { updateParams["task"] = task }
             _ = try? client.sendV2(method: V2MethodNames.agentTaskUpdate, params: updateParams)
         }
     }
@@ -933,10 +932,21 @@ extension ProgramaCLI {
             scope: ctx.parsed.sessionId ?? workspaceId,
             externalAgentId: externalAgentId
         )
-        if (try? client.sendV2(method: V2MethodNames.agentTaskFinish, params: [
-            "agent_id": taskId,
-            "state": "completed",
-        ])) == nil {
+        let object = ctx.parsed.object ?? [:]
+        let agentTranscriptPath = firstString(in: object, keys: ["agent_transcript_path"]).map {
+            ($0 as NSString).expandingTildeInPath
+        } ?? ctx.parsed.transcriptPath.flatMap {
+            ClaudeSubagentTranscript.transcriptPath(sessionTranscriptPath: $0, agentId: externalAgentId)
+        }
+        let description = agentTranscriptPath.flatMap(ClaudeSubagentTranscript.description(transcriptPath:))
+        let report = agentTranscriptPath.flatMap(ClaudeSubagentTranscript.handbackMessage(transcriptPath:))
+            ?? firstString(in: object, keys: ["last_assistant_message"])
+        // The socket caps a summary at 16 KiB; cut bytes, not characters.
+        let summary = report.map { String(decoding: Data($0.utf8.prefix(16_000)), as: UTF8.self) }
+        var finishParams: [String: Any] = ["agent_id": taskId, "state": "completed"]
+        if let description { finishParams["task"] = description }
+        if let summary { finishParams["summary"] = summary }
+        if (try? client.sendV2(method: V2MethodNames.agentTaskFinish, params: finishParams)) == nil {
             let surfaceId = try? resolvePreferredSurfaceIdForClaudeHook(
                 preferred: mappedSession?.surfaceId,
                 fallback: ctx.surfaceArg,
@@ -953,10 +963,9 @@ extension ProgramaCLI {
             ]
             if let surfaceId { completedParams["surface_id"] = surfaceId }
             if let sessionId = ctx.parsed.sessionId { completedParams["session"] = sessionId }
-            if let agentType {
-                completedParams["role"] = agentType
-                completedParams["task"] = agentType
-            }
+            if let agentType { completedParams["role"] = agentType }
+            if let task = description ?? agentType { completedParams["task"] = task }
+            if let summary { completedParams["summary"] = summary }
             _ = try? client.sendV2(method: V2MethodNames.agentTaskStart, params: completedParams)
         }
     }
