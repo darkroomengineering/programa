@@ -3,8 +3,6 @@ import SwiftUI
 import AppKit
 import Bonsplit
 import Combine
-import Darwin
-import CoreText
 
 /// Workspace represents a sidebar tab.
 /// Each workspace contains one BonsplitController that manages split panes and nested surfaces.
@@ -45,13 +43,10 @@ final class Workspace: Identifiable, ObservableObject {
     /// Ordinal for PROGRAMA_PORT range assignment (monotonically increasing per app session)
     var portOrdinal: Int = 0
 
-    /// The bonsplit controller managing the split panes for this workspace
     let bonsplitController: BonsplitController
 
-    /// Mapping from bonsplit TabID to our Panel instances
     @Published var panels: [UUID: any Panel] = [:]
 
-    /// Subscriptions for panel updates
     var panelSubscriptions: [UUID: AnyCancellable] = [:]
 
     /// When true, suppresses auto-creation in didSplitPane (programmatic splits handle their own panels)
@@ -76,9 +71,6 @@ final class Workspace: Identifiable, ObservableObject {
 
     weak var owningTabManager: TabManager?
 
-    // Closing tabs mutates split layout immediately; terminal views handle their own AppKit
-    // layout/size synchronization.
-
     /// The currently focused pane's panel ID
     var focusedPanelId: UUID? {
         guard let paneId = bonsplitController.focusedPaneId,
@@ -88,7 +80,6 @@ final class Workspace: Identifiable, ObservableObject {
         return panelIdFromSurfaceId(tab.id)
     }
 
-    /// The currently focused terminal panel (if any)
     var focusedTerminalPanel: TerminalPanel? {
         guard let panelId = focusedPanelId,
               let panel = panels[panelId] as? TerminalPanel else {
@@ -106,7 +97,6 @@ final class Workspace: Identifiable, ObservableObject {
         case terminalFirstResponder
     }
 
-    /// Published directory for each panel
     @Published var panelDirectories: [UUID: String] = [:]
     @Published var panelTitles: [UUID: String] = [:]
     /// Panels whose `panelTitles` entry came from a real title update (OSC or
@@ -156,9 +146,8 @@ final class Workspace: Identifiable, ObservableObject {
     /// deletes its checkpoints there.
     var reviewCheckpointDirectories: Set<String> = []
     /// Per-surface agent presence (state, source, timestamp, session key), reported exclusively
-    /// through `updatePanelAgentState`/`clearPanelAgentState` (issue #164 v1 hook tier, extended
-    /// by the agent-state-unification plan). This is the stored source of truth; `panelAgentStates`
-    /// and `panelAgentStateSources` below are derived, read-only mirrors kept for the existing
+    /// through `updatePanelAgentState`/`clearPanelAgentState`. This is the stored source of truth;
+    /// `panelAgentStates` and `panelAgentStateSources` below are derived, read-only mirrors for the
     /// wire shapes (`agent_state`/`agent_state_source`) and call sites. See AgentActivityState.swift.
     @Published var panelAgentPresence: [UUID: AgentPresence] = [:] {
         didSet { syncTerminalTabAgentIconAssets(previous: oldValue) }
@@ -335,10 +324,6 @@ final class Workspace: Identifiable, ObservableObject {
         // runs for socket/CLI workspace creation and can cause visible typing lag.
         self.bonsplitController = Self.makeBonsplitController()
 
-        // Remove the default "Welcome" tab that bonsplit creates
-        let welcomeTabIds = bonsplitController.allTabIds
-
-        // Create initial terminal panel
         let terminalPanel = TerminalPanel(
             workspaceId: id,
             context: GHOSTTY_SURFACE_CONTEXT_TAB,
@@ -348,57 +333,7 @@ final class Workspace: Identifiable, ObservableObject {
             initialCommand: initialTerminalCommand,
             initialEnvironmentOverrides: initialTerminalEnvironment
         )
-        panels[terminalPanel.id] = terminalPanel
-        panelTitles[terminalPanel.id] = terminalPanel.displayTitle
-        seedTerminalInheritanceFontPoints(panelId: terminalPanel.id, configTemplate: configTemplate)
-
-        // Create initial tab in bonsplit and store the mapping
-        var initialTabId: TabID?
-        if let tabId = bonsplitController.createTab(
-            title: title,
-            icon: "terminal.fill",
-            kind: SurfaceKind.terminal,
-            isDirty: false,
-            isPinned: false
-        ) {
-            surfaceIdToPanelId[tabId] = terminalPanel.id
-            initialTabId = tabId
-        }
-
-        // Close the default Welcome tab(s)
-        for welcomeTabId in welcomeTabIds {
-            bonsplitController.closeTab(welcomeTabId)
-        }
-
-        bonsplitController.onExternalTabDrop = { [weak self] request in
-            self?.handleExternalTabDrop(request) ?? false
-        }
-        bonsplitController.onTabCloseRequest = { [weak self] tabId, _ in
-            self?.markExplicitClose(surfaceId: tabId)
-        }
-
-        // Set ourselves as delegate
-        bonsplitController.delegate = self
-        bonsplitController.tabColorPaletteProvider = { WorkspaceTabColorSettings.tabColorSwatches() }
-
-        // Ensure bonsplit has a focused pane and our didSelectTab handler runs for the
-        // initial terminal. bonsplit's createTab selects internally but does not emit
-        // didSelectTab, and focusedPaneId can otherwise be nil until user interaction.
-        if let initialTabId {
-            // Focus the pane containing the initial tab (or the first pane as fallback).
-            let paneToFocus: PaneID? = {
-                for paneId in bonsplitController.allPaneIds {
-                    if bonsplitController.tabs(inPane: paneId).contains(where: { $0.id == initialTabId }) {
-                        return paneId
-                    }
-                }
-                return bonsplitController.allPaneIds.first
-            }()
-            if let paneToFocus {
-                bonsplitController.focusPane(paneToFocus)
-            }
-            bonsplitController.selectTab(initialTabId)
-        }
+        installInitialTerminalPanel(terminalPanel, title: title, configTemplate: configTemplate)
     }
 
     /// Initialize a workspace using a pre-warmed terminal panel from the surface pool.
@@ -425,25 +360,31 @@ final class Workspace: Identifiable, ObservableObject {
 
         self.bonsplitController = Self.makeBonsplitController()
 
-        let welcomeTabIds = bonsplitController.allTabIds
-
-        // Use the pre-warmed panel, updating its workspace ID to ours
         claimedPanel.updateWorkspaceId(id)
-        let terminalPanel = claimedPanel
+        installInitialTerminalPanel(claimedPanel, title: title, configTemplate: configTemplate)
+    }
+
+    /// Registers `terminalPanel` as the first tab and closes the default "Welcome" tab(s)
+    /// bonsplit creates.
+    private func installInitialTerminalPanel(
+        _ terminalPanel: TerminalPanel,
+        title: String,
+        configTemplate: ProgramaSurfaceConfigTemplate?
+    ) {
+        let welcomeTabIds = bonsplitController.allTabIds
         panels[terminalPanel.id] = terminalPanel
         panelTitles[terminalPanel.id] = terminalPanel.displayTitle
         seedTerminalInheritanceFontPoints(panelId: terminalPanel.id, configTemplate: configTemplate)
 
-        var initialTabId: TabID?
-        if let tabId = bonsplitController.createTab(
+        let initialTabId = bonsplitController.createTab(
             title: title,
             icon: "terminal.fill",
             kind: SurfaceKind.terminal,
             isDirty: false,
             isPinned: false
-        ) {
-            surfaceIdToPanelId[tabId] = terminalPanel.id
-            initialTabId = tabId
+        )
+        if let initialTabId {
+            surfaceIdToPanelId[initialTabId] = terminalPanel.id
         }
 
         for welcomeTabId in welcomeTabIds {
@@ -460,15 +401,13 @@ final class Workspace: Identifiable, ObservableObject {
         bonsplitController.delegate = self
         bonsplitController.tabColorPaletteProvider = { WorkspaceTabColorSettings.tabColorSwatches() }
 
+        // Ensure bonsplit has a focused pane and our didSelectTab handler runs for the
+        // initial terminal. bonsplit's createTab selects internally but does not emit
+        // didSelectTab, and focusedPaneId can otherwise be nil until user interaction.
         if let initialTabId {
-            let paneToFocus: PaneID? = {
-                for paneId in bonsplitController.allPaneIds {
-                    if bonsplitController.tabs(inPane: paneId).contains(where: { $0.id == initialTabId }) {
-                        return paneId
-                    }
-                }
-                return bonsplitController.allPaneIds.first
-            }()
+            let paneToFocus = bonsplitController.allPaneIds.first { paneId in
+                bonsplitController.tabs(inPane: paneId).contains(where: { $0.id == initialTabId })
+            } ?? bonsplitController.allPaneIds.first
             if let paneToFocus {
                 bonsplitController.focusPane(paneToFocus)
             }
@@ -478,7 +417,6 @@ final class Workspace: Identifiable, ObservableObject {
 
     // MARK: - Surface ID to Panel ID Mapping
 
-    /// Mapping from bonsplit TabID (surface ID) to panel UUID
     var surfaceIdToPanelId: [TabID: UUID] = [:]
 
     /// Tab IDs that are allowed to close even if they would normally require confirmation.
@@ -1517,7 +1455,6 @@ final class Workspace: Identifiable, ObservableObject {
 
     // MARK: - Surface Navigation
 
-    /// Select the next surface in the currently focused pane
     func selectNextSurface() {
         bonsplitController.selectNextTab()
 
@@ -1527,7 +1464,6 @@ final class Workspace: Identifiable, ObservableObject {
         }
     }
 
-    /// Select the previous surface in the currently focused pane
     func selectPreviousSurface() {
         bonsplitController.selectPreviousTab()
 
@@ -1537,7 +1473,6 @@ final class Workspace: Identifiable, ObservableObject {
         }
     }
 
-    /// Select a surface by index in the currently focused pane
     func selectSurface(at index: Int) {
         guard let focusedPaneId = bonsplitController.focusedPaneId else { return }
         let tabs = bonsplitController.tabs(inPane: focusedPaneId)
@@ -1549,7 +1484,6 @@ final class Workspace: Identifiable, ObservableObject {
         }
     }
 
-    /// Select the last surface in the currently focused pane
     func selectLastSurface() {
         guard let focusedPaneId = bonsplitController.focusedPaneId else { return }
         let tabs = bonsplitController.tabs(inPane: focusedPaneId)
@@ -1561,7 +1495,6 @@ final class Workspace: Identifiable, ObservableObject {
         }
     }
 
-    /// Create a new terminal surface in the currently focused pane
     @discardableResult
     func newTerminalSurfaceInFocusedPane(focus: Bool? = nil) -> TerminalPanel? {
         guard let focusedPaneId = bonsplitController.focusedPaneId else { return nil }
@@ -1630,7 +1563,6 @@ final class Workspace: Identifiable, ObservableObject {
         panelTitles[newPanel.id] = newPanel.displayTitle
         seedTerminalInheritanceFontPoints(panelId: newPanel.id, configTemplate: inheritedConfig)
 
-        // Create tab in bonsplit
         if let newTabId = bonsplitController.createTab(
             title: newPanel.displayTitle,
             icon: newPanel.displayIcon,
@@ -1644,7 +1576,6 @@ final class Workspace: Identifiable, ObservableObject {
         return newPanel
     }
 
-    /// Check if any panel needs close confirmation
     func needsConfirmClose() -> Bool {
         for (panelId, panel) in panels {
             if let terminalPanel = panel as? TerminalPanel,

@@ -4,8 +4,6 @@ import Foundation
 import SwiftUI
 import AppKit
 import Bonsplit
-import Darwin
-import CoreText
 
 /// One predicate for the workspace split cap: the pane-chrome split buttons
 /// disable at this count, and the delegate veto below enforces it for every
@@ -197,7 +195,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         syncPinnedStateForTab(selectedTabId, panelId: selectedPanelId)
         syncUnreadBadgeStateForPanel(selectedPanelId)
 
-        // Unfocus all other panels
         for (id, p) in panels where id != effectiveFocusedPanelId {
             p.unfocus()
         }
@@ -276,7 +273,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         gitBranch = panelGitBranches[panelId]
         pullRequest = panelPullRequests[panelId]
 
-        // Post notification
         NotificationCenter.default.post(
             name: .ghosttyDidFocusSurface,
             object: nil,
@@ -452,7 +448,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
             return false
         }
 
-        // Check if the panel needs close confirmation
         guard let panelId = panelIdFromSurfaceId(tab.id),
               let terminalPanel = terminalPanel(for: panelId) else {
             recordPostCloseSelection()
@@ -501,7 +496,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         let isUndoStaging = undoStageOriginalIndex != nil
         let isDetaching = detachingTabIds.remove(tabId) != nil || isDetachingCloseTransaction || isUndoStaging
 
-        // Clean up our panel
         guard let panelId = panelIdFromSurfaceId(tabId) else {
             #if DEBUG
             NSLog("[Workspace] didCloseTab: no panelId for tabId")
@@ -672,18 +666,15 @@ extension Workspace: @preconcurrency BonsplitDelegate {
 #endif
         applyTabSelection(tabId: tab.id, inPane: pane)
 
-        // Apply window background for terminal
         if let panelId = panelIdFromSurfaceId(tab.id),
            let terminalPanel = panels[panelId] as? TerminalPanel {
             terminalPanel.applyWindowBackgroundIfActive()
         }
     }
 
-    /// Canonical per-panel metadata teardown shared by every close path.
-    /// Every close path calls this one list so none can drift (a hand-copied
-    /// pane-close list leaked inheritance font points and never cleared
-    /// notifications). Aggregate recomputes (recomputeListeningPorts)
-    /// stay at the call sites.
+    /// Canonical per-panel metadata teardown. Every close path calls this one
+    /// list so none can drift; do not hand-copy it into a close path.
+    /// Aggregate recomputes (recomputeListeningPorts) stay at the call sites.
     private func removeSurfaceMetadata(panelId: UUID, isDetaching: Bool = false) {
         panelDirectories.removeValue(forKey: panelId)
         panelGitBranches.removeValue(forKey: panelId)
@@ -761,7 +752,6 @@ extension Workspace: @preconcurrency BonsplitDelegate {
     }
 
     func splitTabBar(_ controller: BonsplitController, shouldClosePane pane: PaneID) -> Bool {
-        // Check if any panel in this pane needs close confirmation
         let tabs = controller.tabs(inPane: pane)
         for tab in tabs {
             if forceCloseTabIds.contains(tab.id) { continue }

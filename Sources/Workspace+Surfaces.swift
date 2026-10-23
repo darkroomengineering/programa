@@ -5,14 +5,8 @@ import Foundation
 import SwiftUI
 import AppKit
 import Bonsplit
-import Darwin
-import CoreText
 
 extension Workspace {
-    /// Send route for a review panel's comments. Resolves the workspace currently holding the
-    /// source terminal at send time (same lookup as `installReviewPanelSubscription`) rather
-    /// than capturing the creating or restoring workspace, so comments keep delivering after
-    /// either panel moves. Falls back to this workspace when the source can't be located.
     /// Bonsplit selects every tab it creates. Re-selects `tabId` in its pane and restores the
     /// previously focused pane without running the select/focus delegate side effects, so a
     /// background tab creation leaves selection and focus exactly as they were.
@@ -32,6 +26,10 @@ extension Workspace {
         isRestoringSessionLayout || bonsplitController.allPaneIds.count < SplitPolicy.maxPanesPerWorkspace
     }
 
+    /// Send route for a review panel's comments. Resolves the workspace currently holding the
+    /// source terminal at send time (same lookup as `installReviewPanelSubscription`) rather
+    /// than capturing the creating or restoring workspace, so comments keep delivering after
+    /// either panel moves. Falls back to this workspace when the source can't be located.
     func makeReviewSendClosure(for reviewPanel: ReviewPanel) -> (String) -> Bool {
         { [weak self, weak reviewPanel] text in
             guard let reviewPanel else { return false }
@@ -213,7 +211,6 @@ extension Workspace {
         return nil
     }
 
-    /// Create a new split with a terminal panel
     @discardableResult
     func newTerminalSplit(
         from panelId: UUID,
@@ -221,18 +218,7 @@ extension Workspace {
         insertFirst: Bool = false,
         focus: Bool = true
     ) -> TerminalPanel? {
-        // Find the pane containing the source panel
-        guard let sourceTabId = surfaceIdFromPanelId(panelId) else { return nil }
-        var sourcePaneId: PaneID?
-        for paneId in bonsplitController.allPaneIds {
-            let tabs = bonsplitController.tabs(inPane: paneId)
-            if tabs.contains(where: { $0.id == sourceTabId }) {
-                sourcePaneId = paneId
-                break
-            }
-        }
-
-        guard let paneId = sourcePaneId else { return nil }
+        guard let paneId = paneId(forPanelId: panelId) else { return nil }
         // Veto at the pane cap before constructing a panel.
         guard canAddSplitPane else { return nil }
         let inheritedConfig = inheritedTerminalConfig(preferredPanelId: panelId, inPane: paneId)
@@ -260,7 +246,6 @@ extension Workspace {
         )
 #endif
 
-        // Create the new terminal panel.
         let newPanel = TerminalPanel(
             workspaceId: id,
             context: GHOSTTY_SURFACE_CONTEXT_SPLIT,
@@ -352,7 +337,6 @@ extension Workspace {
 
         let inheritedConfig = inheritedTerminalConfig(inPane: paneId)
 
-        // Create new terminal panel
         let newPanel = TerminalPanel(
             workspaceId: id,
             context: GHOSTTY_SURFACE_CONTEXT_SPLIT,
@@ -367,7 +351,6 @@ extension Workspace {
         panelTitles[newPanel.id] = newPanel.displayTitle
         seedTerminalInheritanceFontPoints(panelId: newPanel.id, configTemplate: inheritedConfig)
 
-        // Create tab in bonsplit
         guard let newTabId = bonsplitController.createTab(
             title: newPanel.displayTitle,
             icon: newPanel.displayIcon,
@@ -419,17 +402,7 @@ extension Workspace {
         filePath: String,
         focus: Bool = true
     ) -> MarkdownPanel? {
-        guard let sourceTabId = surfaceIdFromPanelId(panelId) else { return nil }
-        var sourcePaneId: PaneID?
-        for paneId in bonsplitController.allPaneIds {
-            let tabs = bonsplitController.tabs(inPane: paneId)
-            if tabs.contains(where: { $0.id == sourceTabId }) {
-                sourcePaneId = paneId
-                break
-            }
-        }
-
-        guard let paneId = sourcePaneId else { return nil }
+        guard let paneId = paneId(forPanelId: panelId) else { return nil }
         // Veto at the pane cap before constructing a panel.
         guard canAddSplitPane else { return nil }
 
@@ -485,17 +458,7 @@ extension Workspace {
         baseBranch: String = "origin/main",
         focus: Bool = false
     ) -> ReviewPanel? {
-        guard let sourceTabId = surfaceIdFromPanelId(panelId) else { return nil }
-        var sourcePaneId: PaneID?
-        for paneId in bonsplitController.allPaneIds {
-            let tabs = bonsplitController.tabs(inPane: paneId)
-            if tabs.contains(where: { $0.id == sourceTabId }) {
-                sourcePaneId = paneId
-                break
-            }
-        }
-
-        guard let paneId = sourcePaneId else { return nil }
+        guard let paneId = paneId(forPanelId: panelId) else { return nil }
         // Veto at the pane cap before constructing a panel.
         guard canAddSplitPane else { return nil }
 

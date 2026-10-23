@@ -61,7 +61,7 @@ class UpdateDriver: NSObject, SPUUserDriver {
     }
 
     func showUpdateReleaseNotes(with downloadData: SPUDownloadData) {
-        // programa uses Sparkle's UI for release notes links instead.
+        // Release notes are handled via link buttons.
     }
 
     func showUpdateReleaseNotesFailedToDownloadWithError(_ error: any Error) {

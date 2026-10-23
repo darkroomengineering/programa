@@ -1,7 +1,6 @@
 import AppKit
 import SwiftUI
 import Bonsplit
-import CoreServices
 import ObjectiveC.runtime
 
 private var programaFirstResponderGuardHitViewContext: NSView?

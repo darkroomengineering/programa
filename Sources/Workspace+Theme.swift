@@ -5,8 +5,6 @@ import Foundation
 import SwiftUI
 import AppKit
 import Bonsplit
-import Darwin
-import CoreText
 
 extension Workspace {
     static func currentSplitButtonTooltips() -> BonsplitConfiguration.SplitButtonTooltips {

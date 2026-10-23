@@ -29,10 +29,8 @@ final class NonDraggableHostingView<Content: View>: NSHostingView<Content> {
 private enum TitlebarControlsRhythm {
     static let trafficLightGap: CGFloat = 8
 
-    /// Relative tightness preserved from the original hand-tuned spacing values
-    /// (classic=10, compact=6, roomy=14, pillGroup/softButtons=8), re-expressed as
-    /// multiples of the traffic-light gap so every preset derives from the same rule
-    /// instead of its own magic number.
+    /// Per-preset spacing as multiples of the traffic-light gap, so every preset derives
+    /// from the same rule instead of its own magic number.
     enum ScaleFactor {
         static let classic: CGFloat = 1.0
         static let compact: CGFloat = 0.625
