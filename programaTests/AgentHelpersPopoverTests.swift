@@ -123,6 +123,25 @@ final class AgentHelpersPopoverTests: XCTestCase {
         )
     }
 
+    func testChildInAnotherWorkspaceLeavesASocketHelperAlone() throws {
+        let helper = try startHelper(task: "Review the diff", role: "reviewer", state: .working, at: 100)
+        let otherWorkspaceId = UUID()
+        let otherSurfaceId = UUID()
+        defer {
+            AgentSupervisionRegistry.shared.syncTerminalHelpers(
+                workspaceId: otherWorkspaceId, surfaceId: otherSurfaceId, children: []
+            )
+        }
+        AgentSupervisionRegistry.shared.syncTerminalHelpers(workspaceId: otherWorkspaceId, surfaceId: otherSurfaceId, children: [
+            child("agents/\(helper.id.uuidString)", .blocked, title: "Spoofed", at: 120),
+        ])
+        XCTAssertEqual(AgentSupervisionRegistry.shared.record(id: helper.id)?.state, .working)
+        XCTAssertEqual(
+            AgentSupervisionRegistry.shared.helperRecords(workspaceId: otherWorkspaceId, surfaceIds: [otherSurfaceId]).map(\.task),
+            ["Spoofed"]
+        )
+    }
+
     func testClearFinishedAlsoDropsFinishedTerminalHelpers() {
         AgentSupervisionRegistry.shared.syncTerminalHelpers(workspaceId: workspaceId, surfaceId: surfaceId, children: [
             child("build", .done, at: 100),

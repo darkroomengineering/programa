@@ -496,7 +496,7 @@ extension AgentSupervisionRegistry {
         for child in children {
             let lastSegment = child.id.split(separator: "/").last.map(String.init) ?? child.id
             let namedId = Self.uuid(fromSegment: lastSegment)
-            if let namedId, let socketRecord = record(id: namedId) {
+            if let namedId, let socketRecord = record(id: namedId), socketRecord.workspaceId == workspaceId {
                 applyLiveState(child, to: socketRecord, now: now)
                 continue
             }
