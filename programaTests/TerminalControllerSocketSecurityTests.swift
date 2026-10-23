@@ -2586,6 +2586,16 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
                 ]
             ),
             (
+                "surface.report_agent_title",
+                "title",
+                SidebarTelemetryLimits.maxAgentTitleBytes,
+                [
+                    "workspace_id": workspace.id.uuidString,
+                    "surface_id": surfaceId.uuidString,
+                    "title": String(repeating: "t", count: SidebarTelemetryLimits.maxAgentTitleBytes + 1),
+                ]
+            ),
+            (
                 "surface.report_git_branch",
                 "branch",
                 SidebarTelemetryLimits.maxGitBranchBytes,

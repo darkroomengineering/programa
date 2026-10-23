@@ -67,3 +67,74 @@ final class AgentEventNormalizerTests: XCTestCase {
         XCTAssertEqual(AgentEventNormalizer.classify(eventType: "REQUEST.OPENED"), .applyState(.blocked))
     }
 }
+
+/// The Claude transcript title reader the Claude hooks use to name a pane (compiled into the
+/// app and the CLI; the CLI has no test target of its own).
+final class ClaudeTranscriptTitleTests: XCTestCase {
+    private func transcript(_ lines: [String]) -> Data {
+        Data((lines.joined(separator: "\n") + "\n").utf8)
+    }
+
+    private func ai(_ title: String) -> String {
+        #"{"type":"ai-title","aiTitle":"\#(title)","sessionId":"s1"}"#
+    }
+
+    private func custom(_ title: String) -> String {
+        #"{"type":"custom-title","customTitle":"\#(title)","sessionId":"s1"}"#
+    }
+
+    /// Carries the `ai-title` marker text without being a title line.
+    private let noise = #"{"type":"user","tool":{"type":"ai-title"}}"#
+
+    func testCustomTitleBeatsAITitleEvenWhenTheAITitleIsNewer() {
+        let data = transcript([noise, custom("Reviewing proposal"), ai("Drive capital proposal"), noise])
+        XCTAssertEqual(ClaudeTranscriptTitle.latestTitle(in: data), "Reviewing proposal")
+    }
+
+    func testLatestTitleOfEachKindWins() {
+        XCTAssertEqual(
+            ClaudeTranscriptTitle.latestTitle(in: transcript([ai("First"), noise, ai("Second")])),
+            "Second"
+        )
+        XCTAssertEqual(
+            ClaudeTranscriptTitle.latestTitle(in: transcript([custom("Old name"), ai("Topic"), custom("New name")])),
+            "New name"
+        )
+    }
+
+    func testNoTitleLinesAndGarbageReturnNil() {
+        XCTAssertNil(ClaudeTranscriptTitle.latestTitle(in: Data()))
+        XCTAssertNil(ClaudeTranscriptTitle.latestTitle(in: transcript([noise, "not json at all", "{"])))
+        XCTAssertNil(ClaudeTranscriptTitle.latestTitle(in: transcript([#"{"type":"ai-title","aiTitle":"   "}"#])))
+        XCTAssertNil(ClaudeTranscriptTitle.latestTitle(in: transcript([#"{"type":"ai-title","aiTitle":42}"#])))
+    }
+
+    func testMalformedNewestTitleLineFallsBackToAnOlderOne() {
+        let data = transcript([ai("Good topic"), #"{"type":"ai-title","aiTitle":"cut off"#])
+        XCTAssertEqual(ClaudeTranscriptTitle.latestTitle(in: data), "Good topic")
+    }
+
+    func testTitlesAreTrimmedAndKeepEscapedCharacters() {
+        let data = transcript([#"{"type":"custom-title","customTitle":"  Fix \"quotes\" and café  "}"#])
+        XCTAssertEqual(ClaudeTranscriptTitle.latestTitle(in: data), #"Fix "quotes" and café"#)
+    }
+
+    func testMissingFileReturnsNil() {
+        let path = NSTemporaryDirectory() + "claude-transcript-\(UUID().uuidString).jsonl"
+        XCTAssertNil(ClaudeTranscriptTitle.latestTitle(atPath: path))
+    }
+
+    func testTailReadSeesRecentTitlesOnlyAndWholeFileReadSeesAll() throws {
+        let path = NSTemporaryDirectory() + "claude-transcript-\(UUID().uuidString).jsonl"
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let filler = #"{"type":"assistant","message":"\#(String(repeating: "x", count: 200))"}"#
+        var lines = [custom("Too old to see")]
+        lines += Array(repeating: filler, count: 200)
+        lines += [ai("Recent topic")]
+        lines += Array(repeating: filler, count: 5)
+        try transcript(lines).write(to: URL(fileURLWithPath: path))
+
+        XCTAssertEqual(ClaudeTranscriptTitle.latestTitle(atPath: path, tailBytes: 4 * 1024), "Recent topic")
+        XCTAssertEqual(ClaudeTranscriptTitle.latestTitle(atPath: path), "Too old to see")
+    }
+}

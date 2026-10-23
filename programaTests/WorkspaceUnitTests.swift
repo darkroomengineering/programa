@@ -3204,6 +3204,65 @@ final class WorkspacePanelGitBranchTests: XCTestCase {
         assertPanelAndTabTitle("~/gitlab/project", workspace: restored, panelId: restoredPanelId)
     }
 
+    func testAgentTitleSetsTabTitleAndHoldsAgainstTerminalStartupTitles() throws {
+        let workspace = Workspace()
+        defer { workspace.teardownAllPanels() }
+        let panelId = try XCTUnwrap(workspace.focusedPanelId)
+        XCTAssertTrue(workspace.updatePanelTitle(panelId: panelId, title: "~/gitlab/project"))
+
+        XCTAssertTrue(workspace.applyAgentTitle(panelId: panelId, title: "Programa repo git pull"))
+        assertPanelAndTabTitle("Programa repo git pull", workspace: workspace, panelId: panelId)
+        XCTAssertEqual(workspace.title, "Programa repo git pull")
+
+        for placeholder in [
+            "/Users/someone/gitlab/project",
+            "cd -- '/Users/someone/gitlab/project' && claude --resume 3a8f89e1 '--permission-mode' 'auto'",
+            "Claude Code",
+        ] {
+            workspace.updatePanelTitle(panelId: panelId, title: placeholder)
+            assertPanelAndTabTitle("Programa repo git pull", workspace: workspace, panelId: panelId)
+        }
+
+        XCTAssertTrue(workspace.applyAgentTitle(panelId: panelId, title: "Reviewing drive capital proposal"))
+        assertPanelAndTabTitle("Reviewing drive capital proposal", workspace: workspace, panelId: panelId)
+        XCTAssertFalse(
+            workspace.applyAgentTitle(panelId: panelId, title: "Reviewing drive capital proposal"),
+            "Re-sending the same agent title must not change anything"
+        )
+        XCTAssertFalse(workspace.applyAgentTitle(panelId: panelId, title: "   "))
+        assertPanelAndTabTitle("Reviewing drive capital proposal", workspace: workspace, panelId: panelId)
+
+        XCTAssertTrue(workspace.updatePanelTitle(panelId: panelId, title: "Fixing the tab strip"))
+        assertPanelAndTabTitle("Fixing the tab strip", workspace: workspace, panelId: panelId)
+
+        XCTAssertTrue(workspace.updatePanelTitle(panelId: panelId, title: "~/gitlab/project"))
+        assertPanelAndTabTitle("~/gitlab/project", workspace: workspace, panelId: panelId)
+    }
+
+    func testAgentTitleReleasesRestoredTitleHoldAndYieldsToManualRename() throws {
+        let source = Workspace()
+        let restored = Workspace()
+        defer {
+            source.teardownAllPanels()
+            restored.teardownAllPanels()
+        }
+        let panelId = try XCTUnwrap(source.focusedPanelId)
+        XCTAssertTrue(source.updatePanelTitle(panelId: panelId, title: "Old restored topic"))
+        restored.restoreSessionSnapshot(source.sessionSnapshot(includeScrollback: false))
+        let restoredPanelId = try XCTUnwrap(restored.focusedPanelId)
+        assertPanelAndTabTitle("Old restored topic", workspace: restored, panelId: restoredPanelId)
+
+        XCTAssertTrue(restored.applyAgentTitle(panelId: restoredPanelId, title: "Renamed in Claude"))
+        assertPanelAndTabTitle("Renamed in Claude", workspace: restored, panelId: restoredPanelId)
+
+        restored.setPanelCustomTitle(panelId: restoredPanelId, title: "My own name")
+        restored.applyAgentTitle(panelId: restoredPanelId, title: "Another Claude topic")
+        assertPanelAndTabTitle("My own name", workspace: restored, panelId: restoredPanelId)
+
+        restored.setPanelCustomTitle(panelId: restoredPanelId, title: nil)
+        assertPanelAndTabTitle("Another Claude topic", workspace: restored, panelId: restoredPanelId)
+    }
+
     func testSessionRestoredPathTitleYieldsToTheShell() throws {
         let source = Workspace()
         let restored = Workspace()
