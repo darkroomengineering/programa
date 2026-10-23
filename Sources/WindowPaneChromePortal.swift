@@ -796,7 +796,7 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
     }
 
     /// Fades the edge that has hidden tabs. The mask exists only while the row
-    /// overflows so a row that fits renders exactly as before.
+    /// overflows so a row that fits renders unmasked.
     private func updateEdgeFades() {
         let bounds = scrollView.contentView.bounds
         let hasLeading = bounds.minX > 0.5

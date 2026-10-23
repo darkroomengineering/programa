@@ -124,9 +124,6 @@ final class Workspace: Identifiable, ObservableObject {
     /// bookkeeping for `removeSurfaceMetadata` so a closed surface can't leave a stuck bar
     /// without clearing progress still owned by a different, still-alive surface.
     var progressSourcePanelId: UUID?
-    /// Exit code + duration of the most recently finished shell command (OSC 133), reported
-    /// via `GHOSTTY_ACTION_COMMAND_FINISHED`. Plumbing-only for now -- no UI reads this yet.
-    @Published var lastCommand: LastCommandOutcome?
     @Published var gitBranch: SidebarGitBranchState?
     @Published var panelGitBranches: [UUID: SidebarGitBranchState] = [:]
     @Published var pullRequest: SidebarPullRequestState?

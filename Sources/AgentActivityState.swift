@@ -5,8 +5,8 @@
 // inference (AgentScreenDetectionEngine.swift) as the fallback for surfaces no hook reports on.
 //
 // Strict-blocked rule for hooks: `.blocked` is only ever set by an explicit hook report of a
-// permission/approval/question prompt (see CLI+Hooks.swift's classifyClaudeNotification /
-// classifyCodexNotification, and OpenCode's permission.asked event, which is unconditionally
+// permission/approval/question prompt (see CLI+Hooks.swift's summarizeAgentHookNotification /
+// classifyAgentNotification, and OpenCode's permission.asked event, which is unconditionally
 // a permission prompt). Anything ambiguous or unclassified defaults to `.idle` — a false
 // "blocked" trains users to ignore the badge.
 import Foundation

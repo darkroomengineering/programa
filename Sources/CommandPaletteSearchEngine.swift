@@ -656,7 +656,6 @@ enum CommandPaletteFuzzyMatcher {
 
         if mismatchOffset == segmentLength {
             let prefixLength = tokenChars.count - 1
-            guard prefixLength > 0 else { return nil }
             guard tokenChars.count == segmentLength + 1 else { return nil }
             return SingleEditWordPrefixMatch(
                 matchedIndices: Set(segment.start..<(segment.start + prefixLength)),

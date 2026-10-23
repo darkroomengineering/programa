@@ -61,12 +61,10 @@ extension Workspace {
         let luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
 
         if luminance < 0.5 {
-            // Dark background: lighten 28% toward white
             r += (1.0 - r) * 0.28
             g += (1.0 - g) * 0.28
             b += (1.0 - b) * 0.28
         } else {
-            // Light background: darken 20% toward black
             r *= 0.80
             g *= 0.80
             b *= 0.80

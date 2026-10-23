@@ -71,7 +71,7 @@ extension Workspace {
 
     func rememberTerminalConfigInheritanceSource(_ terminalPanel: TerminalPanel) {
         lastTerminalConfigInheritancePanelId = terminalPanel.id
-        if terminalPanel.surface.isSurfaceLive,
+        if terminalPanel.surface.hasLiveSurface,
            let sourceSurface = terminalPanel.surface.surface,
            let runtimePoints = programaCurrentSurfaceFontSizePoints(sourceSurface) {
             let existing = terminalInheritanceFontPointsByPanelId[terminalPanel.id]

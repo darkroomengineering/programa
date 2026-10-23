@@ -2304,8 +2304,7 @@ class GhosttyApp {
             )
             return true
         case GHOSTTY_ACTION_COMMAND_FINISHED:
-            // OSC 133 semantic prompt tracking. Plumbing-only: stores exit code + duration on
-            // `Workspace.lastCommand`; no UI reads this yet.
+            // OSC 133 semantic prompt tracking: drives the long-running command notification.
             guard let tabId = callbackTabId,
                   let surfaceId = callbackSurfaceId else { return true }
             let commandFinished = action.action.command_finished
@@ -2319,10 +2318,8 @@ class GhosttyApp {
                       let workspace = owningManager.tabs.first(where: { $0.id == tabId }) else { return }
                 let outcome = LastCommandOutcome.from(
                     exitCode: exitCode,
-                    durationNanoseconds: durationNanoseconds,
-                    sourcePanelId: surfaceId
+                    durationNanoseconds: durationNanoseconds
                 )
-                workspace.lastCommand = outcome
 
                 // Experimental: notify when a long-running command finishes in a pane the
                 // user isn't looking at. Fires at or above LongCommandNotificationSettings.thresholdSeconds.

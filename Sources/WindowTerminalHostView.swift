@@ -68,7 +68,7 @@ final class WindowTerminalHostView: NSView {
     override func resetCursorRects() {
         super.resetCursorRects()
         // A split add/remove can change divider geometry without changing the host
-        // frame, so the frame-hook invalidation alone is insufficient (#6587 review).
+        // frame, so the frame-hook invalidation alone is insufficient.
         // Drop the cache here so the warm below always reflects current structure;
         // resetCursorRects is driven by invalidateCursorRects, not per pointer event,
         // so this keeps the cache fresh per cursor-rect cycle without re-walking the
@@ -169,7 +169,7 @@ final class WindowTerminalHostView: NSView {
         // hitTest the drag-pasteboard branch would have produced. Drag events and
         // a nil/ambiguous currentEvent (e.g. mid NSDraggingSession, where the
         // pasteboard check may be the only signal) are untouched and still read
-        // the pasteboard exactly as before.
+        // the pasteboard.
         if DragOverlayRoutingPolicy.isPassiveMouseEventType(eventType) {
             let hitView = super.hitTest(point)
 #if DEBUG

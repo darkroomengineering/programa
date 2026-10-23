@@ -12,8 +12,6 @@ import Bonsplit
 /// Mouse events are forwarded to the views below via a hide-send-unhide pattern so clicks,
 /// scrolls, and other interactions pass through normally.
 final class FileDropOverlayView: NSView {
-    /// Fallback handler when no terminal is found under the drop point.
-    var onDrop: (([URL]) -> Bool)?
     private var isForwardingMouseEvent = false
     private weak var forwardedMouseDragTarget: NSView?
     private var forwardedMouseDragButton: ForwardedMouseDragButton?

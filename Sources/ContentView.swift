@@ -472,10 +472,10 @@ struct ContentView: View {
                 if let snapshot = tabManager.debugCurrentWorkspaceSwitchSnapshot() {
                     let dtMs = (CACurrentMediaTime() - snapshot.startedAt) * 1000
                     dlog(
-                        "ws.view.selectedChange id=\(snapshot.id) dt=\(debugMsText(dtMs)) selected=\(debugShortWorkspaceId(newValue))"
+                        "ws.view.selectedChange id=\(snapshot.id) dt=\(TabManager.debugMsText(dtMs)) selected=\(TabManager.debugShortWorkspaceId(newValue))"
                     )
                 } else {
-                    dlog("ws.view.selectedChange id=none selected=\(debugShortWorkspaceId(newValue))")
+                    dlog("ws.view.selectedChange id=none selected=\(TabManager.debugShortWorkspaceId(newValue))")
                 }
     #endif
                 tabManager.applyWindowBackgroundForSelectedTab()
@@ -505,7 +505,7 @@ struct ContentView: View {
                 if let snapshot = tabManager.debugCurrentWorkspaceSwitchSnapshot() {
                     let dtMs = (CACurrentMediaTime() - snapshot.startedAt) * 1000
                     dlog(
-                        "ws.view.hotChange id=\(snapshot.id) dt=\(debugMsText(dtMs)) hot=\(tabManager.isWorkspaceCycleHot ? 1 : 0)"
+                        "ws.view.hotChange id=\(snapshot.id) dt=\(TabManager.debugMsText(dtMs)) hot=\(tabManager.isWorkspaceCycleHot ? 1 : 0)"
                     )
                 } else {
                     dlog("ws.view.hotChange id=none hot=\(tabManager.isWorkspaceCycleHot ? 1 : 0)")
@@ -596,7 +596,7 @@ struct ContentView: View {
                 sidebarDraggedTabId = tabId
     #if DEBUG
                 dlog(
-                    "sidebar.dragState.content tab=\(debugShortWorkspaceId(tabId)) " +
+                    "sidebar.dragState.content tab=\(TabManager.debugShortWorkspaceId(tabId)) " +
                     "reason=\(SidebarDragLifecycleNotification.reason(from: notification))"
                 )
     #endif
@@ -816,14 +816,14 @@ struct ContentView: View {
             if let snapshot = tabManager.debugCurrentWorkspaceSwitchSnapshot() {
                 let dtMs = (CACurrentMediaTime() - snapshot.startedAt) * 1000
                 dlog(
-                    "ws.mount.reconcile id=\(snapshot.id) dt=\(debugMsText(dtMs)) hot=\(isCycleHot ? 1 : 0) " +
-                    "selected=\(debugShortWorkspaceId(effectiveSelectedId)) " +
+                    "ws.mount.reconcile id=\(snapshot.id) dt=\(TabManager.debugMsText(dtMs)) hot=\(isCycleHot ? 1 : 0) " +
+                    "selected=\(TabManager.debugShortWorkspaceId(effectiveSelectedId)) " +
                     "mounted=\(debugShortWorkspaceIds(mountedWorkspaceIds)) " +
                     "added=\(debugShortWorkspaceIds(added)) removed=\(debugShortWorkspaceIds(removed))"
                 )
             } else {
                 dlog(
-                    "ws.mount.reconcile id=none hot=\(isCycleHot ? 1 : 0) selected=\(debugShortWorkspaceId(effectiveSelectedId)) " +
+                    "ws.mount.reconcile id=none hot=\(isCycleHot ? 1 : 0) selected=\(TabManager.debugShortWorkspaceId(effectiveSelectedId)) " +
                     "mounted=\(debugShortWorkspaceIds(mountedWorkspaceIds))"
                 )
             }
@@ -1063,12 +1063,12 @@ struct ContentView: View {
         if let snapshot = tabManager.debugCurrentWorkspaceSwitchSnapshot() {
             let dtMs = (CACurrentMediaTime() - snapshot.startedAt) * 1000
             dlog(
-                "ws.handoff.start id=\(snapshot.id) dt=\(debugMsText(dtMs)) old=\(debugShortWorkspaceId(oldSelectedId)) " +
-                "new=\(debugShortWorkspaceId(newSelectedId))"
+                "ws.handoff.start id=\(snapshot.id) dt=\(TabManager.debugMsText(dtMs)) old=\(TabManager.debugShortWorkspaceId(oldSelectedId)) " +
+                "new=\(TabManager.debugShortWorkspaceId(newSelectedId))"
             )
         } else {
             dlog(
-                "ws.handoff.start id=none old=\(debugShortWorkspaceId(oldSelectedId)) new=\(debugShortWorkspaceId(newSelectedId))"
+                "ws.handoff.start id=none old=\(TabManager.debugShortWorkspaceId(oldSelectedId)) new=\(TabManager.debugShortWorkspaceId(newSelectedId))"
             )
         }
 #endif
@@ -1078,10 +1078,10 @@ struct ContentView: View {
             if let snapshot = tabManager.debugCurrentWorkspaceSwitchSnapshot() {
                 let dtMs = (CACurrentMediaTime() - snapshot.startedAt) * 1000
                 dlog(
-                    "ws.handoff.fastReady id=\(snapshot.id) dt=\(debugMsText(dtMs)) selected=\(debugShortWorkspaceId(newSelectedId))"
+                    "ws.handoff.fastReady id=\(snapshot.id) dt=\(TabManager.debugMsText(dtMs)) selected=\(TabManager.debugShortWorkspaceId(newSelectedId))"
                 )
             } else {
-                dlog("ws.handoff.fastReady id=none selected=\(debugShortWorkspaceId(newSelectedId))")
+                dlog("ws.handoff.fastReady id=none selected=\(TabManager.debugShortWorkspaceId(newSelectedId))")
             }
 #endif
             completeWorkspaceHandoff(reason: "ready")
@@ -1132,10 +1132,10 @@ struct ContentView: View {
         if let snapshot = tabManager.debugCurrentWorkspaceSwitchSnapshot() {
             let dtMs = (CACurrentMediaTime() - snapshot.startedAt) * 1000
             dlog(
-                "ws.handoff.complete id=\(snapshot.id) dt=\(debugMsText(dtMs)) reason=\(reason) retiring=\(debugShortWorkspaceId(retiring))"
+                "ws.handoff.complete id=\(snapshot.id) dt=\(TabManager.debugMsText(dtMs)) reason=\(reason) retiring=\(TabManager.debugShortWorkspaceId(retiring))"
             )
         } else {
-            dlog("ws.handoff.complete id=none reason=\(reason) retiring=\(debugShortWorkspaceId(retiring))")
+            dlog("ws.handoff.complete id=none reason=\(reason) retiring=\(TabManager.debugShortWorkspaceId(retiring))")
         }
 #endif
     }
@@ -1175,18 +1175,9 @@ struct ContentView: View {
     }
 
 #if DEBUG
-    func debugShortWorkspaceId(_ id: UUID?) -> String {
-        guard let id else { return "nil" }
-        return String(id.uuidString.prefix(5))
-    }
-
     private func debugShortWorkspaceIds(_ ids: [UUID]) -> String {
         if ids.isEmpty { return "[]" }
-        return "[" + ids.map { String($0.uuidString.prefix(5)) }.joined(separator: ",") + "]"
-    }
-
-    private func debugMsText(_ ms: Double) -> String {
-        String(format: "%.2fms", ms)
+        return "[" + ids.map { TabManager.debugShortWorkspaceId($0) }.joined(separator: ",") + "]"
     }
 #endif
 }

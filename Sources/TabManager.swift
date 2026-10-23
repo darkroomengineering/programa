@@ -2764,12 +2764,12 @@ class TabManager: ObservableObject {
         )
     }
 
-    private static func debugShortWorkspaceId(_ id: UUID?) -> String {
+    static func debugShortWorkspaceId(_ id: UUID?) -> String {
         guard let id else { return "nil" }
         return String(id.uuidString.prefix(5))
     }
 
-    private static func debugMsText(_ ms: Double) -> String {
+    static func debugMsText(_ ms: Double) -> String {
         String(format: "%.2fms", ms)
     }
 #endif

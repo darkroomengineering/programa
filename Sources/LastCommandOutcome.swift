@@ -1,16 +1,12 @@
 import Foundation
 
-/// Outcome of the most recently finished shell command in a workspace, derived from Ghostty's
-/// OSC 133 semantic prompt tracking (`GHOSTTY_ACTION_COMMAND_FINISHED`). Plumbing-only model:
-/// no UI reads this yet.
+/// Outcome of a finished shell command, derived from Ghostty's OSC 133 semantic prompt
+/// tracking (`GHOSTTY_ACTION_COMMAND_FINISHED`).
 struct LastCommandOutcome: Equatable {
     /// `nil` when Ghostty reported no exit code (C value `-1`); otherwise 0-255.
     let exitCode: Int?
     /// Wall-clock duration the command ran for, in seconds.
     let duration: TimeInterval
-    let finishedAt: Date
-    /// Panel (surface) that reported this outcome.
-    let sourcePanelId: UUID
 
     /// Builds a `LastCommandOutcome` from the raw C ABI values reported by Ghostty.
     /// - Parameters:
@@ -20,15 +16,11 @@ struct LastCommandOutcome: Equatable {
     ///     `ghostty_action_command_finished_s.duration`.
     static func from(
         exitCode: Int16,
-        durationNanoseconds: UInt64,
-        sourcePanelId: UUID,
-        finishedAt: Date = Date()
+        durationNanoseconds: UInt64
     ) -> LastCommandOutcome {
         LastCommandOutcome(
             exitCode: exitCode == -1 ? nil : Int(exitCode),
-            duration: TimeInterval(durationNanoseconds) / 1_000_000_000,
-            finishedAt: finishedAt,
-            sourcePanelId: sourcePanelId
+            duration: TimeInterval(durationNanoseconds) / 1_000_000_000
         )
     }
 

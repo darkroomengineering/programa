@@ -321,7 +321,7 @@ section.
 | Agent | Depth | Notes |
 |---|---|---|
 | Claude Code | Solid | Worked example above; spinner/permission/idle-prompt UI is well-documented and given directly in the feature spec. |
-| Codex | Solid | Has its own well-known spinner + approval-prompt UI (mirrors `classifyCodexNotification` already in `CLI+Hooks.swift` — read that classifier's string matches for a head start on wording, though it classifies hook JSON payloads, not screen text, so patterns still need independent verification against actual rendered output). |
+| Codex | Solid | Has its own well-known spinner + approval-prompt UI (mirrors `classifyAgentNotification` already in `CLI+Hooks.swift` — read that classifier's string matches for a head start on wording, though it classifies hook JSON payloads, not screen text, so patterns still need independent verification against actual rendered output). |
 < /br>| Gemini CLI | Solid | Spinner/prompt UI is stable and public; verify current exact strings against a real session before shipping. |
 | OpenCode | Stub | Ships a manifest as a hooks-fallback even though it's already hook-integrated (task requirement) — best-effort only. |
 | GitHub Copilot CLI | Stub | Best-effort; UI likely to drift, mark `needs_verification` throughout. |

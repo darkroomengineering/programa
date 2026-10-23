@@ -221,12 +221,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
     /// temporarily unattached (surface not yet created / reparenting) even while the panel
     /// is already in the window.
     var isViewInWindow: Bool { hostedView.window != nil }
-    /// Whether the runtime surface pointer is non-nil **and** the surface has
-    /// not yet entered the close/teardown lifecycle.  Use this before passing
-    /// `surface` to any Ghostty C API — a non-nil `surface` can become a
-    /// dangling pointer once teardown is in progress (the actual free happens
-    /// asynchronously on the next main-actor turn).
-    var isSurfaceLive: Bool { surface != nil && portalLifecycleState == .live }
     let id: UUID
     private(set) var tabId: UUID
     /// Port ordinal for PROGRAMA_PORT range assignment
@@ -2222,11 +2216,9 @@ final class TerminalSurface: Identifiable, ObservableObject {
         height: CGFloat,
         xScale: CGFloat,
         yScale: CGFloat,
-        layerScale: CGFloat,
         backingSize: CGSize? = nil
     ) -> Bool {
         guard let surface = surface else { return false }
-        _ = layerScale
 
         let resolvedBackingWidth = backingSize?.width ?? (width * xScale)
         let resolvedBackingHeight = backingSize?.height ?? (height * yScale)

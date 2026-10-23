@@ -95,7 +95,7 @@ private final class MainWindowIdentifierGuard {
 
 /// Supplies a single system space item so the main window's otherwise-empty
 /// unified toolbar reports a non-zero height, growing the titlebar so AppKit
-/// re-centers the traffic lights on `WindowGlassEffect.sidebarHeaderCenterFromWindowTop`.
+/// re-centers the traffic lights on the sidebar header row (`WindowGlassEffect.sidebarHeaderHeight`).
 /// The system space has no item view, so the toolbar never owns a hit region over
 /// the sidebar header controls; a custom sized item view does (about 44pt wide at
 /// the leading edge, which overlaps the sidebar toggle at the minimum sidebar width).
@@ -3502,7 +3502,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             sidebarState: sidebarState,
             sidebarSelectionState: sidebarSelectionState
         )
-        installFileDropOverlay(on: window, tabManager: tabManager)
+        installFileDropOverlay(on: window)
         if TerminalController.shouldSuppressSocketCommandActivation() {
             window.orderFront(nil)
             if TerminalController.socketCommandAllowsInAppFocusMutations() {
@@ -5265,7 +5265,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             // empty toolbar reports zero height). Give the toolbar a single
             // system space item -- the same mechanism sidebar apps (Mail,
             // Notes, Finder) use -- so AppKit re-centers the traffic lights on
-            // WindowGlassEffect.sidebarHeaderCenterFromWindowTop. Guarded on
+            // the sidebar header row (WindowGlassEffect.sidebarHeaderHeight). Guarded on
             // `window.toolbar == nil` because this function runs on every
             // WindowAccessor update, not just once per window.
             let toolbar = NSToolbar(identifier: mainWindowToolbarIdentifier)
@@ -5350,7 +5350,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             sidebarState: sidebarState,
             sidebarSelectionState: sidebarSelectionState
         )
-        installFileDropOverlay(on: window, tabManager: tabManager)
+        installFileDropOverlay(on: window)
 
         return nextTitlebarPadding
     }

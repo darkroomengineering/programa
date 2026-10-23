@@ -644,7 +644,6 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
             height: size.height,
             xScale: xScale,
             yScale: yScale,
-            layerScale: layerScale,
             backingSize: backingSize
         )
         return didChange || surfaceSizeChanged

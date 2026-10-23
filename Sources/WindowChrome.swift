@@ -148,12 +148,10 @@ enum WindowGlassEffect {
     /// `MainWindowToolbarDelegate`) holds one system space item. An empty `NSToolbar`
     /// and a `.top`-attribute `NSTitlebarAccessoryViewController` both leave the
     /// titlebar height unchanged; the space item grows it so AppKit re-centers the
-    /// traffic lights near `sidebarHeaderCenterFromWindowTop` (measured center 26pt
+    /// traffic lights on the header row's midline (measured center 26pt
     /// against the 26pt target). Off the glass path no toolbar is installed, so the
     /// 38pt height applies.
     static var sidebarHeaderHeight: CGFloat { isAvailable ? 40 : 38 }
-    /// Vertical midline of the header row measured from the window top.
-    static var sidebarHeaderCenterFromWindowTop: CGFloat { sidebarPanelInset + sidebarHeaderHeight / 2 }
 
     /// Inverted (Aside-style) layout: the window backdrop is the sidebar's
     /// material, sampling the desktop and following the system appearance.
@@ -192,9 +190,8 @@ enum WindowGlassEffect {
     /// opaque AppKit window — system corner radius, system shadow, system frame.
     /// The sidebar material is an NSVisualEffectView underlay that AppKit rounds
     /// to the window shape itself, exactly like every native sidebar. No custom
-    /// corner mask, no non-opaque window, no contentView replacement: those were
-    /// the source of every "transparent corner" artifact, so they are gone, not
-    /// patched.
+    /// corner mask, no non-opaque window, no contentView replacement: each of
+    /// those produces "transparent corner" artifacts.
     static func apply(to window: NSWindow, tintColor: NSColor? = nil) {
         guard let originalContentView = window.contentView else { return }
 
@@ -222,8 +219,7 @@ enum WindowGlassEffect {
         #endif
 
         // Never replace window.contentView — that breaks traffic-light rendering
-        // with `.fullSizeContentView` + `titlebarAppearsTransparent`, and it is
-        // what forced the old custom-mask architecture. The backdrop also cannot
+        // with `.fullSizeContentView` + `titlebarAppearsTransparent`. The backdrop also cannot
         // be a SUBVIEW of the hosting view: NSHostingView draws pure-SwiftUI
         // content into its own layer, and any subview — even positioned .below —
         // sits above that drawing, occluding the sidebar. Install it as a theme-
