@@ -40,8 +40,19 @@ still apply. Records are not saved with the session.
 
 ## What Programa shows
 
-Only the root record drives the UI. Child records are stored and counted against the limit but
-are not displayed.
+The root record drives the terminal's own status. Child records show up as helpers.
+
+- Helpers: every child record appears in the workspace's helpers popover (the "N helpers
+  running" line on the sidebar row), with its `title` as the name, `app` under it, a progress bar
+  when `progress` is set, and `msg` as the report preview. `done` and `error` children fold under
+  Finished; Clear removes them from the list and from the terminal's records. Child records never
+  reach the socket: `agent.task.list` and `workspace.list` count only helpers reported there.
+- A child whose last id segment is a helper's id from `agent.task.start` (as 32 hex digits, since
+  a segment holds at most 32 characters) updates that helper's state and progress instead of
+  adding a row. Only `working` and `blocked` apply; the socket report finishes the helper.
+- When a child record enters `blocked` on a surface you are not looking at, Programa posts one
+  notification naming the program's `app` ("A deployer task needs your input"), at most one per
+  10 seconds per surface. Its `title` and `msg` stay out of it, for the same reason as below.
 
 - Sidebar: `working` and `blocked` show as before; `done` and `error` show a check and a stop
   icon. A blocked or working surface in the same workspace outranks them.
@@ -73,7 +84,10 @@ OSC 7501 outranks hooks, and hooks outrank screen inference.
 
 The Claude Code, Codex and OpenCode hooks write OSC 7501 to the terminal as well as reporting to
 the socket, so the report also reaches a terminal where the socket is out of reach, such as an SSH
-session. They emit only when `PROGRAMA_SURFACE_ID` is set, and they skip emission inside tmux
+session. The Claude Code hooks also report each subagent as the child record
+`agents/<helper id>`: `working` from SubagentStart and each of its tool calls, `blocked` when it
+asks for permission or input, and `done` with the first line of its report. Its `title` is the task
+description Claude gave it, or its agent type. They emit only when `PROGRAMA_SURFACE_ID` is set, and they skip emission inside tmux
 (`TMUX` is set), where the sequence would need passthrough and can reach the wrong pane.
 
 ## Not covered

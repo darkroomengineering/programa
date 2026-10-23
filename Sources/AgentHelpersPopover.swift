@@ -66,6 +66,8 @@ struct AgentHelperSnapshot: Identifiable, Equatable, Sendable {
     let role: String?
     let state: AgentHelperState
     let summary: String?
+    /// 0-100 while the helper runs, when its program reports one.
+    let progress: Int?
     let startedAt: Date
     let endedAt: Date?
 
@@ -80,6 +82,7 @@ struct AgentHelperSnapshot: Identifiable, Equatable, Sendable {
         role = record.role.flatMap { $0 == title ? nil : $0 }
         state = AgentHelperState(record.state)
         summary = record.summary
+        progress = record.state.isFinished ? nil : record.progress
         startedAt = record.startedAt
         endedAt = record.endedAt
     }
@@ -133,10 +136,12 @@ final class AgentHelpersModel: ObservableObject {
     @Published var expandedHelperId: UUID?
 
     let workspaceId: UUID
+    private weak var workspace: Workspace?
     private var refreshTimer: Timer?
 
-    init(workspaceId: UUID) {
+    init(workspaceId: UUID, workspace: Workspace? = nil) {
         self.workspaceId = workspaceId
+        self.workspace = workspace
     }
 
     func start() {
@@ -153,8 +158,8 @@ final class AgentHelpersModel: ObservableObject {
     }
 
     func refresh() {
-        let helpers = AgentSupervisionRegistry.shared.records(workspaceIds: [workspaceId])
-            .filter { $0.placement == .runsWithParent }
+        let helpers = AgentSupervisionRegistry.shared
+            .helperRecords(workspaceId: workspaceId, surfaceIds: workspace?.panels.keys.map { $0 } ?? [])
             .map(AgentHelperSnapshot.init)
         let nextRunning = helpers.filter { !$0.isFinished }
         // Newest result first: the one you most likely opened the popover for.
@@ -172,6 +177,9 @@ final class AgentHelpersModel: ObservableObject {
     }
 
     func clearFinished() {
+        for case let panel as TerminalPanel in workspace?.panels.values.map({ $0 }) ?? [] {
+            panel.programStatus.removeFinishedChildren()
+        }
         AgentSupervisionRegistry.shared.discardFinishedHelpers(workspaceId: workspaceId)
         refresh()
     }
@@ -223,7 +231,7 @@ struct AgentHelpersPopover: View {
 
     init(workspace: Workspace) {
         self.workspace = workspace
-        _model = StateObject(wrappedValue: AgentHelpersModel(workspaceId: workspace.id))
+        _model = StateObject(wrappedValue: AgentHelpersModel(workspaceId: workspace.id, workspace: workspace))
     }
 
     var body: some View {
@@ -295,6 +303,13 @@ struct AgentHelpersPopover: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
+                        }
+                        if let progress = helper.progress {
+                            ProgressView(value: Double(progress), total: 100)
+                                .progressViewStyle(.linear)
+                                .controlSize(.small)
+                                .accessibilityLabel(String(localized: "agentHelpers.progress", defaultValue: "Progress"))
+                                .accessibilityValue("\(progress)%")
                         }
                     }
                     Spacer(minLength: 6)

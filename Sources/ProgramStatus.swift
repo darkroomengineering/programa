@@ -214,6 +214,17 @@ final class ProgramStatusStore {
         return .applied(rootTouched: report.id.isEmpty)
     }
 
+    /// Every record except the root, with `app` resolved through ancestors.
+    var children: [ProgramStatusRecord] {
+        records.keys.filter { !$0.isEmpty }.sorted().compactMap { record(id: $0) }
+    }
+
+    /// Removes resting child records (`done`, `error`, `idle`) once the user has dismissed
+    /// them from the helpers list, so the next sync does not bring them back.
+    func removeFinishedChildren() {
+        records = records.filter { $0.key.isEmpty || $0.value.state.isActive }
+    }
+
     /// A shell prompt means the foreground program ended: drop working and blocked records at
     /// every depth. Returns true when the root record was removed.
     @discardableResult

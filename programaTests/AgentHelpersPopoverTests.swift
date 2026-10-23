@@ -9,12 +9,15 @@ import XCTest
 @MainActor
 final class AgentHelpersPopoverTests: XCTestCase {
     private var workspaceId = UUID()
+    private var surfaceId = UUID()
 
     override func setUp() async throws {
         workspaceId = UUID()
+        surfaceId = UUID()
     }
 
     override func tearDown() async throws {
+        AgentSupervisionRegistry.shared.syncTerminalHelpers(workspaceId: workspaceId, surfaceId: surfaceId, children: [])
         AgentSupervisionRegistry.shared.discardFinishedHelpers(workspaceId: workspaceId)
         for record in AgentSupervisionRegistry.shared.records(workspaceIds: [workspaceId]) {
             AgentSupervisionRegistry.shared.discard(id: record.id)
@@ -62,6 +65,76 @@ final class AgentHelpersPopoverTests: XCTestCase {
         XCTAssertEqual(model.finished, [])
         XCTAssertNil(AgentSupervisionRegistry.shared.finishedHelperCounts[workspaceId])
         XCTAssertEqual(AgentSupervisionRegistry.shared.runningHelperCounts[workspaceId], 1)
+    }
+
+    private func child(
+        _ id: String, _ state: ProgramStatusState, title: String? = nil, app: String? = nil,
+        progress: Int? = nil, at seconds: TimeInterval
+    ) -> ProgramStatusRecord {
+        ProgramStatusRecord(
+            id: id, state: state, kind: nil, progress: progress, app: app, title: title, msg: nil,
+            updatedAt: Date(timeIntervalSince1970: seconds)
+        )
+    }
+
+    private func terminalHelpers() -> [AgentTaskRecord] {
+        AgentSupervisionRegistry.shared.helperRecords(workspaceId: workspaceId, surfaceIds: [surfaceId])
+    }
+
+    func testTerminalChildRecordsBecomeHelpersAndReportBlockedOnce() {
+        let registry = AgentSupervisionRegistry.shared
+        var blocked = registry.syncTerminalHelpers(workspaceId: workspaceId, surfaceId: surfaceId, children: [
+            child("deploy/us-east", .working, title: "US East", app: "deployer", progress: 40, at: 100),
+            child("deploy/eu-west", .blocked, app: "deployer", at: 100),
+        ])
+        XCTAssertEqual(blocked.map(\.task), ["eu-west"])
+        XCTAssertEqual(registry.runningHelperCounts[workspaceId], 2)
+        let usEast = terminalHelpers().first { $0.task == "US East" }
+        XCTAssertEqual(usEast?.progress, 40)
+        XCTAssertEqual(usEast?.role, "deployer")
+        XCTAssertTrue(registry.records(workspaceIds: [workspaceId]).isEmpty, "child records stay off the socket")
+
+        blocked = registry.syncTerminalHelpers(workspaceId: workspaceId, surfaceId: surfaceId, children: [
+            child("deploy/us-east", .done, title: "US East", app: "deployer", at: 150),
+            child("deploy/eu-west", .blocked, app: "deployer", at: 160),
+        ])
+        XCTAssertTrue(blocked.isEmpty, "a helper that stays blocked is not reported again")
+        let finished = terminalHelpers().first { $0.task == "US East" }
+        XCTAssertEqual(finished?.state, .completed)
+        XCTAssertEqual(finished?.startedAt, Date(timeIntervalSince1970: 100))
+        XCTAssertNil(finished?.progress)
+        XCTAssertEqual(registry.finishedHelperCounts[workspaceId], 1)
+    }
+
+    func testChildNamedAfterASocketHelperUpdatesItInsteadOfAddingARow() throws {
+        let helper = try startHelper(task: "Review the diff", role: "reviewer", state: .working, at: 100)
+        AgentSupervisionRegistry.shared.syncTerminalHelpers(workspaceId: workspaceId, surfaceId: surfaceId, children: [
+            child("agents/\(helper.id.uuidString.replacingOccurrences(of: "-", with: ""))", .blocked, title: "Review the diff", app: "claude-code", at: 120),
+        ])
+        XCTAssertEqual(terminalHelpers().map(\.id), [helper.id])
+        XCTAssertEqual(AgentSupervisionRegistry.shared.record(id: helper.id)?.state, .blocked)
+
+        AgentSupervisionRegistry.shared.syncTerminalHelpers(workspaceId: workspaceId, surfaceId: surfaceId, children: [
+            child("agents/\(helper.id.uuidString)", .done, app: "claude-code", at: 130),
+        ])
+        XCTAssertEqual(
+            AgentSupervisionRegistry.shared.record(id: helper.id)?.state, .blocked,
+            "only the hook's socket report finishes a socket helper, since it carries the report"
+        )
+    }
+
+    func testClearFinishedAlsoDropsFinishedTerminalHelpers() {
+        AgentSupervisionRegistry.shared.syncTerminalHelpers(workspaceId: workspaceId, surfaceId: surfaceId, children: [
+            child("build", .done, at: 100),
+            child("test", .error, at: 100),
+            child("lint", .working, at: 100),
+        ])
+        XCTAssertEqual(AgentSupervisionRegistry.shared.finishedHelperCounts[workspaceId], 2)
+
+        AgentHelpersModel(workspaceId: workspaceId).clearFinished()
+
+        XCTAssertEqual(terminalHelpers().map(\.task), ["lint"])
+        XCTAssertNil(AgentSupervisionRegistry.shared.finishedHelperCounts[workspaceId])
     }
 
     func testSnapshotTitlesPreferTheTaskAndHideARoleThatRepeatsIt() throws {

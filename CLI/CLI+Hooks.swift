@@ -265,7 +265,7 @@ let codexHookWrapperProcessNames: Set<String> = [
 /// Notification content a provider adapter derives from its hook payload.
 struct AgentHookNotification {
     let subtitle: String
-    let body: String
+    var body: String
     /// Decides whether the notification blocks the agent ("Permission"/"Waiting" do).
     /// Equals `subtitle` except for providers whose notification event is always one kind.
     let classifiedSubtitle: String
@@ -666,7 +666,11 @@ extension ProgramaCLI {
         let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
             preferred: mapped?.workspaceId, fallback: ctx.workspaceArg, client: ctx.client
         )
-        let notification = hook.notification(ctx.parsed, mapped)
+        var notification = hook.notification(ctx.parsed, mapped)
+        if hook.provider == "claude-code", let helper = claudeSubagentTitle(ctx.parsed) {
+            emitClaudeSubagentBlocked(ctx.parsed, scope: workspaceId, classifiedSubtitle: notification.classifiedSubtitle, body: notification.body)
+            notification.body = "\(helper): \(notification.body)"
+        }
         let surfaceId = try resolvePreferredSurfaceIdForClaudeHook(
             preferred: mapped?.surfaceId, fallback: ctx.surfaceArg, workspaceId: workspaceId, client: ctx.client
         )
@@ -776,6 +780,7 @@ extension ProgramaCLI {
     /// Claude-only: clears "Needs input" status and notification when Claude resumes work
     /// (e.g. after permission grant). Runs async so it doesn't block tool execution.
     private func runClaudePreToolUse(_ ctx: AgentHookContext) {
+        emitClaudeSubagentStatus(ctx.parsed, scope: ctx.workspaceArg, state: "working")
         let client = ctx.client
         let mappedSession = ctx.parsed.sessionId.flatMap { ctx.store.lookup(sessionId: $0) }
 
@@ -906,6 +911,7 @@ extension ProgramaCLI {
         if let sessionId = ctx.parsed.sessionId { startParams["session"] = sessionId }
         if let agentType { startParams["role"] = agentType }
         if let task = description ?? agentType { startParams["task"] = task }
+        emitClaudeSubagentStatus(ctx.parsed, scope: workspaceId, state: "working")
         do {
             _ = try client.sendV2(method: V2MethodNames.agentTaskStart, params: startParams)
         } catch {
@@ -943,6 +949,8 @@ extension ProgramaCLI {
             ?? firstString(in: object, keys: ["last_assistant_message"])
         // The socket caps a summary at 16 KiB; cut bytes, not characters.
         let summary = report.map { String(decoding: Data($0.utf8.prefix(16_000)), as: UTF8.self) }
+        let firstLine = report?.split(whereSeparator: \.isNewline).first { !$0.allSatisfy(\.isWhitespace) }
+        emitClaudeSubagentStatus(ctx.parsed, scope: workspaceId, state: "done", msg: firstLine.map(String.init))
         var finishParams: [String: Any] = ["agent_id": taskId, "state": "completed"]
         if let description { finishParams["task"] = description }
         if let summary { finishParams["summary"] = summary }
@@ -1685,7 +1693,7 @@ extension ProgramaCLI {
         return nil
     }
 
-    private func claudeSubagentTaskIdentifier(scope: String, externalAgentId: String) -> String {
+    func claudeSubagentTaskIdentifier(scope: String, externalAgentId: String) -> String {
         var bytes = Array(SHA256.hash(data: Data("claude:\(scope):\(externalAgentId)".utf8)).prefix(16))
         bytes[6] = (bytes[6] & 0x0f) | 0x50
         bytes[8] = (bytes[8] & 0x3f) | 0x80

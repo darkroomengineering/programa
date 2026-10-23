@@ -245,4 +245,18 @@ final class ProgramStatusStoreTests: XCTestCase {
         XCTAssertEqual(SidebarTitle.strippingLeadingStatusGlyph("© Example"), "© Example")
         XCTAssertEqual(SidebarTitle.strippingLeadingStatusGlyph("™ Product"), "™ Product")
     }
+
+    func testChildrenSkipTheRootAndFinishedChildrenCanBeDismissed() throws {
+        let store = ProgramStatusStore()
+        store.apply(try report(.working, app: "deployer"))
+        store.apply(try report(.done, id: "deploy/us-east"))
+        store.apply(try report(.blocked, id: "deploy/eu-west"))
+
+        XCTAssertEqual(store.children.map(\.id), ["deploy/eu-west", "deploy/us-east"])
+        XCTAssertEqual(store.children.first?.app, "deployer")
+
+        store.removeFinishedChildren()
+        XCTAssertEqual(store.children.map(\.id), ["deploy/eu-west"])
+        XCTAssertNotNil(store.root)
+    }
 }

@@ -1,4 +1,5 @@
 import Combine
+import CryptoKit
 import Foundation
 
 enum AgentTaskState: String, Sendable {
@@ -51,6 +52,8 @@ struct AgentTaskRecord: Sendable {
     let startedAt: Date
     let updatedAt: Date
     let endedAt: Date?
+    /// 0-100 from an OSC 7501 report; nil when the work is indeterminate.
+    var progress: Int? = nil
 
     /// Process-less helpers share their parent's terminal and therefore never expose a
     /// separate output stream, even when a host reports a surface identifier.
@@ -117,6 +120,18 @@ final class AgentSupervisionRegistry: ObservableObject {
     private(set) var finishedHelperCounts: [UUID: Int] = [:]
     private var recordsById: [UUID: AgentTaskRecord] = [:] {
         didSet { refreshHelperCounts() }
+    }
+    /// Helpers that programs report as OSC 7501 child records, per terminal surface. They
+    /// stay out of `recordsById`: the UI shows their text, but the protocol forbids handing
+    /// a record's id, title or message back to programs, and every `recordsById` reader
+    /// answers the socket.
+    private var terminalHelpersBySurface: [UUID: TerminalHelpers] = [:] {
+        didSet { refreshHelperCounts() }
+    }
+
+    private struct TerminalHelpers {
+        var workspaceId: UUID
+        var records: [AgentTaskRecord]
     }
 
     init(capacity: Int = 256) {
@@ -197,6 +212,7 @@ final class AgentSupervisionRegistry: ObservableObject {
         summary: String? = nil,
         workspaceId: UUID? = nil,
         surfaceId: UUID? = nil,
+        progress: Int?? = .none,
         now: Date = Date()
     ) throws -> AgentTaskRecord {
         guard let existing = recordsById[id] else {
@@ -230,7 +246,8 @@ final class AgentSupervisionRegistry: ObservableObject {
             surfaceId: nextSurfaceId,
             startedAt: existing.startedAt,
             updatedAt: now,
-            endedAt: nextState.isFinished ? now : nil
+            endedAt: nextState.isFinished ? now : nil,
+            progress: nextState.isFinished ? nil : (progress ?? existing.progress)
         )
         recordsById[id] = record
         return record
@@ -329,13 +346,15 @@ final class AgentSupervisionRegistry: ObservableObject {
                 ? record.id
                 : nil
         }
-        guard !ids.isEmpty else { return 0 }
+        let terminalCount = discardFinishedTerminalHelpers(workspaceId: workspaceId)
+        guard !ids.isEmpty else { return terminalCount }
         recordsById = recordsById.filter { !ids.contains($0.key) }
-        return ids.count
+        return ids.count + terminalCount
     }
 
     func retainWorkspaces(_ liveWorkspaceIds: Set<UUID>) {
         recordsById = recordsById.filter { liveWorkspaceIds.contains($0.value.workspaceId) }
+        terminalHelpersBySurface = terminalHelpersBySurface.filter { liveWorkspaceIds.contains($0.value.workspaceId) }
     }
 
     private func activeSurfaceRecordIds(workspaceId: UUID, surfaceId: UUID) -> [UUID] {
@@ -352,7 +371,8 @@ final class AgentSupervisionRegistry: ObservableObject {
     private func refreshHelperCounts() {
         var running: [UUID: Int] = [:]
         var finished: [UUID: Int] = [:]
-        for record in recordsById.values where record.placement == .runsWithParent {
+        let terminalRecords = terminalHelpersBySurface.values.flatMap(\.records)
+        for record in Array(recordsById.values) + terminalRecords where record.placement == .runsWithParent {
             if record.state.isFinished {
                 finished[record.workspaceId, default: 0] += 1
             } else {
@@ -445,5 +465,129 @@ enum AgentSupervisionMetadata {
             return sources.count == 1 ? sources.first : "mixed"
         }
         return hasHelpers ? "helpers" : nil
+    }
+}
+
+extension AgentSupervisionRegistry {
+    /// One workspace's helpers for the popover: in-process helpers reported over the socket,
+    /// then child records from the workspace's terminals.
+    func helperRecords(workspaceId: UUID, surfaceIds: some Sequence<UUID>) -> [AgentTaskRecord] {
+        records(workspaceIds: [workspaceId]).filter { $0.placement == .runsWithParent }
+            + surfaceIds.flatMap { terminalHelpersBySurface[$0]?.records ?? [] }
+    }
+
+    /// Mirrors one terminal's OSC 7501 child records. A child whose last id segment is the
+    /// UUID of a socket-reported helper updates that helper's live state instead, since the
+    /// Claude Code hooks report each subagent both ways. Returns the terminal-only helpers
+    /// that just entered `blocked`.
+    @discardableResult
+    func syncTerminalHelpers(
+        workspaceId: UUID,
+        surfaceId: UUID,
+        children: [ProgramStatusRecord],
+        now: Date = Date()
+    ) -> [AgentTaskRecord] {
+        let previous = Dictionary(
+            (terminalHelpersBySurface[surfaceId]?.records ?? []).map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var next: [AgentTaskRecord] = []
+        var newlyBlocked: [AgentTaskRecord] = []
+        for child in children {
+            let lastSegment = child.id.split(separator: "/").last.map(String.init) ?? child.id
+            let namedId = Self.uuid(fromSegment: lastSegment)
+            if let namedId, let socketRecord = record(id: namedId) {
+                applyLiveState(child, to: socketRecord, now: now)
+                continue
+            }
+            let id = namedId ?? Self.terminalHelperId(surfaceId: surfaceId, recordId: child.id)
+            let state = Self.taskState(child.state)
+            let existing = previous[id]
+            let helper = AgentTaskRecord(
+                id: id,
+                parentId: nil,
+                host: child.app ?? "program",
+                session: nil,
+                task: child.title ?? lastSegment,
+                role: child.app,
+                summary: child.msg,
+                state: state,
+                placement: .runsWithParent,
+                workspaceId: workspaceId,
+                surfaceId: surfaceId,
+                startedAt: existing?.startedAt ?? child.updatedAt,
+                updatedAt: child.updatedAt,
+                endedAt: state.isFinished ? (existing?.endedAt ?? child.updatedAt) : nil,
+                progress: state.isFinished ? nil : child.progress
+            )
+            if state == .blocked, existing?.state != .blocked { newlyBlocked.append(helper) }
+            next.append(helper)
+        }
+        if next.isEmpty {
+            if terminalHelpersBySurface[surfaceId] != nil { terminalHelpersBySurface.removeValue(forKey: surfaceId) }
+        } else {
+            terminalHelpersBySurface[surfaceId] = TerminalHelpers(workspaceId: workspaceId, records: next)
+        }
+        return newlyBlocked
+    }
+
+    /// Drops terminal helpers of `workspaces` whose surface closed or moved to another
+    /// workspace; the next report from a moved surface re-adds them under its new workspace.
+    func retainTerminalSurfaces(of workspaces: [Workspace]) {
+        let workspaceIdBySurface = Dictionary(
+            workspaces.flatMap { workspace in workspace.panels.keys.map { ($0, workspace.id) } },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let workspaceIds = Set(workspaces.map(\.id))
+        let stale = terminalHelpersBySurface.filter {
+            workspaceIds.contains($0.value.workspaceId) && workspaceIdBySurface[$0.key] != $0.value.workspaceId
+        }
+        guard !stale.isEmpty else { return }
+        terminalHelpersBySurface = terminalHelpersBySurface.filter { stale[$0.key] == nil }
+    }
+
+    private func discardFinishedTerminalHelpers(workspaceId: UUID) -> Int {
+        var removed = 0
+        var next = terminalHelpersBySurface
+        for (surfaceId, var helpers) in next where helpers.workspaceId == workspaceId {
+            let kept = helpers.records.filter { !$0.state.isFinished }
+            removed += helpers.records.count - kept.count
+            helpers.records = kept
+            next[surfaceId] = kept.isEmpty ? nil : helpers
+        }
+        if removed > 0 { terminalHelpersBySurface = next }
+        return removed
+    }
+
+    private func applyLiveState(_ child: ProgramStatusRecord, to record: AgentTaskRecord, now: Date) {
+        guard child.state.isActive, !record.state.isFinished else { return }
+        let state: AgentTaskState = child.state == .blocked ? .blocked : .working
+        guard state != record.state || child.progress != record.progress else { return }
+        _ = try? update(id: record.id, state: state, progress: .some(child.progress), now: now)
+    }
+
+    private static func taskState(_ state: ProgramStatusState) -> AgentTaskState {
+        switch state {
+        case .idle: return .idle
+        case .working: return .working
+        case .blocked: return .blocked
+        case .done: return .completed
+        case .error: return .failed
+        }
+    }
+
+    /// An id segment holds at most 32 characters, so a UUID arrives as 32 hex digits.
+    private static func uuid(fromSegment segment: String) -> UUID? {
+        guard segment.utf8.count == 32, segment.allSatisfy(\.isHexDigit) else { return UUID(uuidString: segment) }
+        var text = segment
+        for offset in [8, 13, 18, 23] {
+            text.insert("-", at: text.index(text.startIndex, offsetBy: offset))
+        }
+        return UUID(uuidString: text)
+    }
+
+    private static func terminalHelperId(surfaceId: UUID, recordId: String) -> UUID {
+        let digest = SHA256.hash(data: Data("\(surfaceId.uuidString)/\(recordId)".utf8))
+        return digest.withUnsafeBytes { UUID(uuid: $0.loadUnaligned(as: uuid_t.self)) }
     }
 }
