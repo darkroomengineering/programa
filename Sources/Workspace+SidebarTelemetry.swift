@@ -535,7 +535,7 @@ extension Workspace {
             text.removeSubrange(range)
         }
         if text.hasPrefix("/") || text.hasPrefix("~") { return true }
-        if text.range(of: #"(^|&& )(claude --resume|codex resume) "#, options: .regularExpression) != nil {
+        if text.range(of: #"(^|&& )(claude --resume|codex resume|opencode --session) "#, options: .regularExpression) != nil {
             return true
         }
         let banner = text.drop { !$0.isLetter && !$0.isNumber }

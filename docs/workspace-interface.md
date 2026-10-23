@@ -86,8 +86,9 @@ programa resume --session <id>       # a specific session id
 
 It takes the newest session that ended in the pane, or else the newest one that ended in the
 pane's current directory. If that session ran in another directory that still exists, the
-command starts with `cd <dir> &&`. Claude Code (`claude --resume <id>`) and Codex
-(`codex resume <id>`) are supported; OpenCode is not. `resume` refuses while an agent is still
+command starts with `cd <dir> &&`. Claude Code (`claude --resume <id>`), Codex
+(`codex resume <id>`) and OpenCode (`opencode --session <id>`) are supported. OpenCode starts a
+new session when it no longer knows the id. `resume` refuses while an agent is still
 running in the pane, so nothing is typed into a live agent.
 
 After a restart, each terminal pane remembers the last agent session it ran. Focus the pane and
