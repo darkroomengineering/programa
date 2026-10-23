@@ -89,8 +89,8 @@ extension ProgramaCLI {
                 newest one that ended in the pane's current directory. When the session ran in
                 another directory that still exists, the command starts with `cd <dir> &&`.
 
-                Supported agents: Claude Code (`claude --resume <id>`) and Codex
-                (`codex resume <id>`). OpenCode sessions are not supported yet.
+                Supported agents: Claude Code (`claude --resume <id>`), Codex
+                (`codex resume <id>`) and OpenCode (`opencode --session <id>`).
 
                 Flags:
                   --surface <id|ref>     Target pane (default: $PROGRAMA_SURFACE_ID)

@@ -24,6 +24,7 @@ from test_cli_registry_behavior import CLI_PATH, SURFACE_ID, WORKSPACE_ID, Socke
 
 SESSION_ID = "5f0c2a9e-1b2d-4c3e-8f4a-6b7c8d9e0f1a"
 OTHER_SURFACE_ID = "44444444-aaaa-4bbb-8ccc-dddddddddddd"
+OPENCODE_SESSION_ID = "ses_3a1f2b9c0ffeYq7RkT2mNp4LwX"
 
 
 class TreeRecorder(SocketRecorder):
@@ -149,6 +150,26 @@ class AgentResumeTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, merged_output(proc))
         self.assertEqual(proc.stdout.strip(), f"codex resume '{SESSION_ID}'")
 
+    def test_opencode_session_end_without_an_id_keeps_the_pane_session(self) -> None:
+        # The OpenCode plugin's dispose hook passes no --session, so the id comes from the live
+        # record that prompt-submit/stop stored for the pane.
+        live_state = self.box.home / ".programa" / "opencode-hook-sessions.json"
+        live_state.parent.mkdir()
+        now = time.time()
+        live_state.write_text(json.dumps({"version": 1, "sessions": {OPENCODE_SESSION_ID: {
+            "sessionId": OPENCODE_SESSION_ID, "workspaceId": WORKSPACE_ID, "surfaceId": SURFACE_ID,
+            "cwd": str(self.box.project), "startedAt": now, "updatedAt": now,
+        }}}), encoding="utf-8")
+        with self.recorder() as rec:
+            ended = self.box.cli(rec, ["opencode-hook", "session-end", "--cwd", str(self.box.project)], input_text="")
+            printed = self.box.cli(rec, ["resume", "--print"])
+        self.assertEqual(ended.returncode, 0, merged_output(ended))
+        kept = json.loads(self.box.last_sessions.read_text(encoding="utf-8"))["sessions"]
+        self.assertEqual([(e["provider"], e["sessionId"]) for e in kept], [("opencode", OPENCODE_SESSION_ID)], kept)
+        self.assertEqual(printed.returncode, 0, merged_output(printed))
+        self.assertEqual(printed.stdout.strip(), f"opencode --session '{OPENCODE_SESSION_ID}'")
+        self.assertEqual(sent(rec), [], "--print must not type anything")
+
     def test_refuses_while_an_agent_runs_in_the_pane(self) -> None:
         self.box.write_last_sessions(self.box.entry())
         for state in ("working", "idle"):
@@ -161,7 +182,7 @@ class AgentResumeTests(unittest.TestCase):
     def test_missing_or_unsupported_session_fails_with_a_clear_error(self) -> None:
         cases = {
             "no record": ((), "no ended agent session"),
-            "opencode": ((self.box.entry(provider="opencode"),), "cannot be resumed"),
+            "unknown provider": ((self.box.entry(provider="gemini"),), "cannot be resumed"),
             "unsafe id": ((self.box.entry(sessionId="x'; rm -rf ~"),), "invalid session id"),
         }
         for name, (entries, message) in cases.items():

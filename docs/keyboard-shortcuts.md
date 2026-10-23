@@ -125,8 +125,9 @@ shortcuts — CLI and command palette only, by design (not an oversight).
 ## Agent sessions
 
 **Resume Agent Session** in the command palette types the focused terminal's last agent
-session resume command (`claude --resume <id>` or `codex resume <id>`) at its shell prompt. It
-has no keyboard shortcut; `programa resume` does the same from the command line. See
+session resume command (`claude --resume <id>`, `codex resume <id>` or `opencode --session <id>`)
+at its shell prompt. It has no keyboard shortcut; `programa resume` does the same from the
+command line. See
 [workspace-interface.md](workspace-interface.md#resume-an-agent-session).
 
 ## Action ids and chord syntax
