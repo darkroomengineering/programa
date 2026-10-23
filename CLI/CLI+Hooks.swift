@@ -950,18 +950,22 @@ extension ProgramaCLI {
         // The socket caps a summary at 16 KiB; cut bytes, not characters.
         let summary = report.map { String(decoding: Data($0.utf8.prefix(16_000)), as: UTF8.self) }
         let firstLine = report?.split(whereSeparator: \.isNewline).first { !$0.allSatisfy(\.isWhitespace) }
-        emitClaudeSubagentStatus(ctx.parsed, scope: workspaceId, state: "done", msg: firstLine.map(String.init))
+        let agentType = firstString(in: object, keys: ["agent_type"])
         var finishParams: [String: Any] = ["agent_id": taskId, "state": "completed"]
         if let description { finishParams["task"] = description }
         if let summary { finishParams["summary"] = summary }
-        if (try? client.sendV2(method: V2MethodNames.agentTaskFinish, params: finishParams)) == nil {
+        let finished = (try? client.sendV2(method: V2MethodNames.agentTaskFinish, params: finishParams)) != nil
+        // Claude Code's internal forks (agent summaries, prompt suggestions, side questions) fire
+        // SubagentStop with an empty agent_type and never fire SubagentStart; they get no row.
+        guard finished || agentType != nil else { return }
+        emitClaudeSubagentStatus(ctx.parsed, scope: workspaceId, state: "done", msg: firstLine.map(String.init))
+        if !finished {
             let surfaceId = try? resolvePreferredSurfaceIdForClaudeHook(
                 preferred: mappedSession?.surfaceId,
                 fallback: ctx.surfaceArg,
                 workspaceId: workspaceId,
                 client: client
             )
-            let agentType = firstString(in: ctx.parsed.object ?? [:], keys: ["agent_type"])
             var completedParams: [String: Any] = [
                 "agent_id": taskId,
                 "workspace_id": workspaceId,
