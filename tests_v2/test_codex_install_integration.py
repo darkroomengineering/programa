@@ -20,11 +20,12 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
 from v2_support import must as _must
 from v2_support import find_cli_binary as _find_cli_binary
+from v2_support import hooks_commands as _hooks_commands
 
 
 CODEX_HOOK_MARKER = "programa codex-hook"
@@ -66,15 +67,6 @@ def _run(
 
 def _merged(proc: subprocess.CompletedProcess) -> str:
     return f"{proc.stdout}\n{proc.stderr}".strip()
-
-
-def _hooks_commands(hooks: Dict[str, Any], event: str) -> List[str]:
-    commands = []
-    for group in hooks.get(event, []):
-        for hook in group.get("hooks", []):
-            command = hook.get("command", "")
-            commands.append(command)
-    return commands
 
 
 def test_fresh_install(cli: str) -> None:

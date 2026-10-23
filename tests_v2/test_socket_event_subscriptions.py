@@ -33,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from programa_client import ProgramaClient, ProgramaClientError  # noqa: E402
 from v2_support import must as _must
 from v2_support import wait_for as _wait_for
+from v2_support import report_agent_state as _report_agent_state
 from pane_resize_test_support import (  # noqa: E402
     wait_for_surface_command_roundtrip as _wait_for_surface_command_roundtrip,
 )
@@ -59,14 +60,6 @@ def _call_while_events_may_be_pending(client: ProgramaClient, method: str, param
             raise ProgramaClientError(f"{method} failed: {frame}")
         return dict(frame.get("result") or {})
     raise ProgramaClientError(f"Timed out waiting for {method} response")
-
-
-def _report_agent_state(socket_path: str, workspace_id: str, surface_id: str, state: str) -> None:
-    with ProgramaClient(socket_path) as bg_client:
-        bg_client._call(
-            "surface.report_agent_state",
-            {"workspace_id": workspace_id, "surface_id": surface_id, "state": state},
-        )
 
 
 def _read_event(client: ProgramaClient, timeout_s: float = 10.0) -> dict:

@@ -55,8 +55,7 @@ def _read_last_socket_path() -> Optional[str]:
 
 
 def _default_socket_path() -> str:
-    # Backwards/forward compatibility: some scripts export PROGRAMA_SOCKET,
-    # while the client historically used PROGRAMA_SOCKET_PATH.
+    # Scripts export either PROGRAMA_SOCKET or PROGRAMA_SOCKET_PATH; honor both.
     override = os.environ.get("PROGRAMA_SOCKET_PATH") or os.environ.get("PROGRAMA_SOCKET")
     if override:
         if os.path.exists(override):
@@ -290,7 +289,6 @@ class ProgramaClient:
 
     def _resolve_surface_id(self, surface: Union[str, int, None], workspace_id: Optional[str] = None) -> Optional[str]:
         if surface is None:
-            # Try fast-path via identify.
             ident = self._call("system.identify")
             focused = (ident or {}).get("focused") or {}
             sid = focused.get("surface_id") if isinstance(focused, dict) else None
@@ -771,7 +769,7 @@ class ProgramaClient:
             raw = base64.b64decode(b64) if b64 else b""
             return raw.decode("utf-8", errors="replace")
         except ProgramaClientError as exc:
-            # Back-compat for older builds that only expose the debug method.
+            # Builds without surface.read_text expose only the debug method.
             if "method_not_found" not in str(exc):
                 raise
 
@@ -804,7 +802,6 @@ class ProgramaClient:
         if label:
             params["label"] = label
         res = dict(self._call("debug.panel_snapshot", params) or {})
-        # Normalize key to match the v1 client (panel_id).
         if "panel_id" not in res and "surface_id" in res:
             res["panel_id"] = res.get("surface_id")
         return res
@@ -850,7 +847,6 @@ def main() -> None:
 
     with ProgramaClient(args.socket) as c:
         if not args.method:
-            # Minimal smoke.
             print(json.dumps(c.capabilities(), indent=2, sort_keys=True))
             return
         params = json.loads(args.params)

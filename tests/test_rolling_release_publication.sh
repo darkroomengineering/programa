@@ -1160,17 +1160,6 @@ for stop_after in $(seq 1 "${mutation_total}"); do
 done
 [[ "${ref_moved_retry_observed}" == true ]] || fail "hard-stop matrix never exercised retry after the rolling ref moved"
 
-# There used to be two race scenarios here, keyed to a fake-gh hook fired when
-# the selected candidate flipped from draft to a published prerelease (a
-# milestone advancing right after that publish, and main advancing right
-# after it). Candidates no longer publish — nothing mutates or queries
-# GitHub between the initial high-water snapshot and the alias-publication
-# gate below, so that specific race window no longer exists; see the comment
-# above the removed RACE_HIGH_WATER check in publish_rolling_release.sh. The
-# pre-publication race gate below (FAKE_GH_EXPOSE_MILESTONE_BEFORE_METADATA /
-# FAKE_GH_ADVANCE_MAIN_BEFORE_METADATA / FAKE_GH_ADVANCE_MAIN_DURING_NOTES),
-# tied to the still-real appcast/alias uploads and ref move, remains covered.
-
 # A final high-water check immediately before publication prevents metadata,
 # latest status, and the ref from advancing after aliases were reconciled.
 reset_state

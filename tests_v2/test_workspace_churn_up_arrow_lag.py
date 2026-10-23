@@ -19,10 +19,7 @@ The test fails when churn latency regresses too far relative to baseline.
 
 from __future__ import annotations
 
-import json
 import os
-import select
-import socket
 import statistics
 import subprocess
 import sys
@@ -33,15 +30,14 @@ from pathlib import Path
 from typing import Optional
 
 # This is the only python test wired into CI (.github/workflows/ci.yml,
-# tests-build-and-lag job) that speaks the socket protocol. It has been
-# ported off the retired v1 line-protocol client (tests/programa.py) onto the
-# v2 JSON-RPC client (tests_v2/programa_client.py) so nothing CI-gated depends on v1.
+# tests-build-and-lag job) that speaks the socket protocol, through the v2
+# JSON-RPC client (tests_v2/programa_client.py).
 _TESTS_V2_DIR = os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests_v2")
 )
 sys.path.insert(0, _TESTS_V2_DIR)
 from programa_client import ProgramaClient, ProgramaClientError
-from v2_support import wait_for
+from v2_support import RawSocketClient, resolve_target_socket, wait_for
 
 NEW_WORKSPACES = int(os.environ.get("PROGRAMA_LAG_NEW_WORKSPACES", "20"))
 SWITCH_PASSES = int(os.environ.get("PROGRAMA_LAG_SWITCH_PASSES", "1"))
@@ -78,88 +74,6 @@ class LatencyStats:
     p95_ms: float
     p99_ms: float
     max_ms: float
-
-
-class RawSocketClient:
-    """Minimal v2 JSON-RPC client used only for the latency-critical simulate_shortcut loop.
-
-    Speaks the same one-JSON-object-per-line framing as tests_v2/programa_client.py
-    (``{"id": N, "method": ..., "params": {...}}`` in, ``{"id": N, "ok": ...}``
-    out), but skips the full client's id-resolution helpers so the measured
-    round trip is just: write one line, read one line. Kept separate from the
-    full v2 programa client (rather than reusing it) so the timing-loop shape and
-    per-call overhead stay identical to the pre-port v1 measurement.
-    """
-
-    def __init__(self, socket_path: str):
-        self.socket_path = socket_path
-        self.sock: Optional[socket.socket] = None
-        self.recv_buffer = ""
-        self._next_id = 1
-
-    def connect(self) -> None:
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.settimeout(3.0)
-        sock.connect(self.socket_path)
-        self.sock = sock
-
-    def close(self) -> None:
-        if self.sock is not None:
-            try:
-                self.sock.close()
-            finally:
-                self.sock = None
-
-    def __enter__(self) -> RawSocketClient:
-        self.connect()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        self.close()
-
-    def call(self, method: str, params: Optional[dict] = None, timeout_s: float = 2.0) -> dict:
-        if self.sock is None:
-            raise ProgramaClientError("Raw socket client not connected")
-
-        req_id = self._next_id
-        self._next_id += 1
-        payload = {"id": req_id, "method": method, "params": params or {}}
-        self.sock.sendall((json.dumps(payload, separators=(",", ":")) + "\n").encode("utf-8"))
-        deadline = time.time() + timeout_s
-
-        while True:
-            if "\n" in self.recv_buffer:
-                line, self.recv_buffer = self.recv_buffer.split("\n", 1)
-                break
-
-            remaining = deadline - time.time()
-            if remaining <= 0:
-                raise ProgramaClientError(f"Timed out waiting for response to: {method}")
-
-            ready, _, _ = select.select([self.sock], [], [], remaining)
-            if not ready:
-                raise ProgramaClientError(f"Timed out waiting for response to: {method}")
-
-            chunk = self.sock.recv(8192)
-            if not chunk:
-                raise ProgramaClientError("Socket closed while waiting for response")
-            self.recv_buffer += chunk.decode("utf-8", errors="replace")
-
-        try:
-            resp = json.loads(line)
-        except json.JSONDecodeError as e:
-            raise ProgramaClientError(f"Invalid JSON response: {e}: {line[:200]}")
-
-        if not isinstance(resp, dict) or resp.get("id") != req_id:
-            raise ProgramaClientError(f"Mismatched or invalid response to {method}: {line[:200]}")
-
-        if resp.get("ok") is True:
-            return resp.get("result") or {}
-
-        err = resp.get("error") or {}
-        code = err.get("code") or "error"
-        msg = err.get("message") or "Unknown error"
-        raise ProgramaClientError(f"{code}: {msg}")
 
 
 def percentile(values: list[float], p: float) -> float:
@@ -212,20 +126,6 @@ def get_programa_pid_for_socket(socket_path: Optional[str]) -> Optional[int]:
     return int(lines[0]) if lines else None
 
 
-def resolve_target_socket() -> str:
-    socket_path = os.environ.get("PROGRAMA_SOCKET_PATH")
-    if not socket_path:
-        raise ProgramaClientError(
-            "PROGRAMA_SOCKET_PATH is required. Point it to a tagged dev socket (for example /tmp/programa-debug-<tag>.sock)."
-        )
-    base = os.path.basename(socket_path)
-    if not ALLOW_MAIN_SOCKET and base in {"programa.sock", "programa-debug.sock"}:
-        raise ProgramaClientError(
-            f"Refusing to run against main socket '{socket_path}'. Set PROGRAMA_SOCKET_PATH to a tagged dev instance."
-        )
-    return socket_path
-
-
 def get_cpu(pid: int) -> float:
     result = subprocess.run(["ps", "-p", str(pid), "-o", "%cpu="], capture_output=True, text=True)
     if result.returncode != 0:
@@ -261,11 +161,8 @@ def keep_only_first_workspace(client: ProgramaClient) -> str:
     # The app may still be settling when this runs right after socket connect
     # (workspaces closing/restoring from the previous session), so a workspace
     # listed one moment can be gone by the time we select/close it, surfacing
-    # as a v2 "not_found: Workspace not found" error (the v1 client's
-    # equivalent was the literal string "ERROR: Tab not found"). Both contain
-    # "not found" case-insensitively, so the retry match below covers either
-    # client. Re-snapshot and retry instead of failing the whole run on that
-    # startup race.
+    # as a v2 "not_found: Workspace not found" error. Re-snapshot and retry
+    # instead of failing the whole run on that startup race.
     deadline = time.time() + 10.0
     last_error: Optional[ProgramaClientError] = None
     while True:
@@ -327,10 +224,7 @@ def focused_terminal_panel(client: ProgramaClient) -> str:
 
 
 def send_line(client: ProgramaClient, text: str) -> None:
-    # tests_v2/programa_client.py mirrors most of the v1 client's convenience API but
-    # doesn't ship a send_line helper, so this is a small local shim rather
-    # than a change to the shared v2 client. client.send() already unescapes
-    # backslash-n into a real newline, matching v1's send_line semantics.
+    # client.send() unescapes backslash-n into a real newline.
     client.send(text + "\\n")
 
 
@@ -426,7 +320,7 @@ def main() -> int:
     first_workspace_id: Optional[str] = None
 
     try:
-        target_socket = resolve_target_socket()
+        target_socket = resolve_target_socket(ALLOW_MAIN_SOCKET)
         client = ProgramaClient(socket_path=target_socket)
         client.connect()
         print(f"Using socket: {client.socket_path}")

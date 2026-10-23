@@ -33,22 +33,19 @@ otherwise (see ProgramaTypingTiming.isEnabled).
 
 from __future__ import annotations
 
-import json
 import os
-import select
-import socket
 import sys
 import time
-from typing import Optional
 
-# Mirrors tests_v2/test_workspace_churn_up_arrow_lag.py: speak the v2 JSON-RPC
-# protocol directly for the tight simulate-keystroke loop, and reuse
-# tests_v2/programa_client.py only for its error type.
+# Like tests_v2/test_workspace_churn_up_arrow_lag.py, drive the tight
+# simulate-keystroke loop through v2_support.RawSocketClient rather than the
+# full tests_v2/programa_client.py client.
 _TESTS_V2_DIR = os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests_v2")
 )
 sys.path.insert(0, _TESTS_V2_DIR)
 from programa_client import ProgramaClientError  # noqa: E402
+from v2_support import RawSocketClient, resolve_target_socket  # noqa: E402
 
 KEY_EVENTS = int(os.environ.get("PROGRAMA_REFRESH_COST_KEY_EVENTS", "200"))
 KEY_DELAY_S = float(os.environ.get("PROGRAMA_REFRESH_COST_KEY_DELAY_S", "0.0"))
@@ -59,102 +56,6 @@ ALLOW_MAIN_SOCKET = os.environ.get("PROGRAMA_REFRESH_COST_ALLOW_MAIN_SOCKET", "0
 # If fewer than this fraction of sent keystrokes show up as recorded samples,
 # the refresh path was not meaningfully exercised (e.g. sampling gated off).
 MIN_SAMPLE_FRACTION = 0.5
-
-
-class RawSocketClient:
-    """Minimal v2 JSON-RPC client for the simulate-keystroke loop.
-
-    Copied in shape from RawSocketClient in
-    tests_v2/test_workspace_churn_up_arrow_lag.py: skips the full tests_v2/programa_client.py
-    client's id-resolution helpers so per-call overhead stays minimal. Not
-    shared with that file directly since it is out of scope for this change.
-    """
-
-    def __init__(self, socket_path: str):
-        self.socket_path = socket_path
-        self.sock: Optional[socket.socket] = None
-        self.recv_buffer = ""
-        self._next_id = 1
-
-    def connect(self) -> None:
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.settimeout(3.0)
-        sock.connect(self.socket_path)
-        self.sock = sock
-
-    def close(self) -> None:
-        if self.sock is not None:
-            try:
-                self.sock.close()
-            finally:
-                self.sock = None
-
-    def __enter__(self) -> "RawSocketClient":
-        self.connect()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        self.close()
-
-    def call(self, method: str, params: Optional[dict] = None, timeout_s: float = 2.0) -> dict:
-        if self.sock is None:
-            raise ProgramaClientError("Raw socket client not connected")
-
-        req_id = self._next_id
-        self._next_id += 1
-        payload = {"id": req_id, "method": method, "params": params or {}}
-        self.sock.sendall((json.dumps(payload, separators=(",", ":")) + "\n").encode("utf-8"))
-        deadline = time.time() + timeout_s
-
-        while True:
-            if "\n" in self.recv_buffer:
-                line, self.recv_buffer = self.recv_buffer.split("\n", 1)
-                break
-
-            remaining = deadline - time.time()
-            if remaining <= 0:
-                raise ProgramaClientError(f"Timed out waiting for response to: {method}")
-
-            ready, _, _ = select.select([self.sock], [], [], remaining)
-            if not ready:
-                raise ProgramaClientError(f"Timed out waiting for response to: {method}")
-
-            chunk = self.sock.recv(8192)
-            if not chunk:
-                raise ProgramaClientError("Socket closed while waiting for response")
-            self.recv_buffer += chunk.decode("utf-8", errors="replace")
-
-        try:
-            resp = json.loads(line)
-        except json.JSONDecodeError as e:
-            raise ProgramaClientError(f"Invalid JSON response: {e}: {line[:200]}")
-
-        if not isinstance(resp, dict) or resp.get("id") != req_id:
-            raise ProgramaClientError(f"Mismatched or invalid response to {method}: {line[:200]}")
-
-        if resp.get("ok") is True:
-            return resp.get("result") or {}
-
-        err = resp.get("error") or {}
-        code = err.get("code") or "error"
-        msg = err.get("message") or "Unknown error"
-        raise ProgramaClientError(f"{code}: {msg}")
-
-
-def resolve_target_socket() -> str:
-    # Same refusal as tests_v2/test_workspace_churn_up_arrow_lag.py::resolve_target_socket:
-    # never target the main/untagged socket from an automated harness.
-    socket_path = os.environ.get("PROGRAMA_SOCKET_PATH")
-    if not socket_path:
-        raise ProgramaClientError(
-            "PROGRAMA_SOCKET_PATH is required. Point it to a tagged dev socket (for example /tmp/programa-debug-<tag>.sock)."
-        )
-    base = os.path.basename(socket_path)
-    if not ALLOW_MAIN_SOCKET and base in {"programa.sock", "programa-debug.sock"}:
-        raise ProgramaClientError(
-            f"Refusing to run against main socket '{socket_path}'. Set PROGRAMA_SOCKET_PATH to a tagged dev instance."
-        )
-    return socket_path
 
 
 def print_stats(bucket: str, stats: dict) -> None:
@@ -173,7 +74,7 @@ def main() -> int:
     print("=" * 64)
 
     try:
-        target_socket = resolve_target_socket()
+        target_socket = resolve_target_socket(ALLOW_MAIN_SOCKET)
     except ProgramaClientError as e:
         print(f"FAIL: {e}")
         return 1
