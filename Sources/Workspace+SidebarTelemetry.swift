@@ -11,6 +11,7 @@ import CoreText
 enum SidebarTelemetryLimits {
     static let maxKeyBytes = 512
     static let maxDirectoryBytes = 4 * 1024
+    static let maxAgentTitleBytes = 1024
     static let maxGitBranchBytes = 1024
     static let maxPullRequestURLBytes = 4 * 1024
     static let maxPullRequestLabelBytes = 64
@@ -523,6 +524,18 @@ extension Workspace {
             if self.title != previousTitle { didMutate = true }
         }
 
+        return didMutate
+    }
+
+    /// Sets the panel's live title from an agent session's topic and holds it against terminal
+    /// startup titles, like a restored title: the shell's cwd or resume command line and the
+    /// agent's own "Claude Code" banner no longer replace it, while any other title still does.
+    @discardableResult
+    func applyAgentTitle(panelId: UUID, title: String) -> Bool {
+        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        panelsHoldingRestoredTitle.remove(panelId)
+        let didMutate = updatePanelTitle(panelId: panelId, title: title)
+        panelsHoldingRestoredTitle.insert(panelId)
         return didMutate
     }
 

@@ -2516,6 +2516,15 @@ class TabManager: ObservableObject {
         }
     }
 
+    func applyAgentTitle(tabId: UUID, panelId: UUID, title: String) {
+        guard let tab = workspace(withId: tabId),
+              tab.panels[panelId] != nil,
+              tab.applyAgentTitle(panelId: panelId, title: title) else { return }
+        if selectedTabId == tabId && tab.focusedPanelId == panelId {
+            updateWindowTitle(for: tab)
+        }
+    }
+
     private func updateWindowTitleForSelectedTab() {
         guard let selectedTabId,
               let tab = workspace(withId: selectedTabId) else {

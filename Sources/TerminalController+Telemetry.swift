@@ -172,6 +172,41 @@ extension TerminalController {
         ])
     }
 
+    /// Sets a pane's live title from an agent session's topic. Telemetry-shaped (off-main parse,
+    /// main.async mutate, no focus or selection change); the title goes through the same path as
+    /// an OSC title, so a manual rename still wins.
+    nonisolated func v2SurfaceReportAgentTitle(params: [String: Any]) -> V2CallResult {
+        guard let workspaceId = v2CachedUUID(params, "workspace_id") else {
+            return v2InvalidParam("workspace_id")
+        }
+        guard let surfaceId = v2CachedUUID(params, "surface_id") else {
+            return v2InvalidParam("surface_id")
+        }
+        guard let title = v2RawString(params, "title")?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !title.isEmpty else {
+            return .err(code: "invalid_params", message: "Missing title", data: nil)
+        }
+        guard SidebarTelemetryLimits.utf8ByteCount(title) <= SidebarTelemetryLimits.maxAgentTitleBytes else {
+            return .err(
+                code: "invalid_params",
+                message: "title exceeds the UTF-8 limit of \(SidebarTelemetryLimits.maxAgentTitleBytes) bytes",
+                data: nil
+            )
+        }
+
+        v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { tabManager, _, sid in
+            tabManager.applyAgentTitle(tabId: workspaceId, panelId: sid, title: title)
+        }
+
+        return .ok([
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "surface_id": surfaceId.uuidString,
+            "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
+            "title": title,
+        ])
+    }
+
     nonisolated func v2SurfaceReportShellState(params: [String: Any]) -> V2CallResult {
         guard let workspaceId = v2CachedUUID(params, "workspace_id") else {
             return v2InvalidParam("workspace_id")

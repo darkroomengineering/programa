@@ -280,6 +280,7 @@ command threading policy" in the root `CLAUDE.md`):
 - report_tty -> `surface.report_tty`
 - ports_kick -> `surface.ports_kick`
 - report_pwd -> `surface.report_pwd`
+- (no v1 equivalent) -> `surface.report_agent_title` (`workspace_id`, `surface_id`, `title`: sets the pane's live title from an agent session's topic; a manual rename still wins, and a later shell startup title such as the cwd, a resume command or the "Claude Code" banner does not replace it)
 - report_shell_state -> `surface.report_shell_state` (shares the `SocketFastPathState` dedup helper)
 - report_git_branch -> `surface.report_git_branch`
 - clear_git_branch -> `surface.clear_git_branch`

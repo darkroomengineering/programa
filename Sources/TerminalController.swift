@@ -1915,6 +1915,8 @@ class TerminalController {
             return v2Result(id: id, self.v2SurfaceTriggerFlash(params: params))
         case "surface.report_pwd":
             return v2Result(id: id, self.v2SurfaceReportPwd(params: params))
+        case "surface.report_agent_title":
+            return v2Result(id: id, self.v2SurfaceReportAgentTitle(params: params))
         case "surface.report_shell_state":
             return v2Result(id: id, self.v2SurfaceReportShellState(params: params))
         case "surface.report_git_branch":

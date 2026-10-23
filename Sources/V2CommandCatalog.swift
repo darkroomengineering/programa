@@ -79,6 +79,7 @@ enum V2CommandCatalog {
         "surface.refresh",
         "surface.reorder",
         "surface.report_agent_state",
+        "surface.report_agent_title",
         "surface.report_git_branch",
         "surface.report_ports",
         "surface.report_pr",

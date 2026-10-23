@@ -26,6 +26,9 @@
 			AGST0001A1B2C3D4E5F60719 /* AgentActivityState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AGST0002A1B2C3D4E5F60719 /* AgentActivityState.swift */; };
 			A2E500000000000000000002 /* AgentResumeCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2E500000000000000000001 /* AgentResumeCommand.swift */; };
 			A2E500000000000000000003 /* AgentResumeCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2E500000000000000000001 /* AgentResumeCommand.swift */; };
+			C7A71E0000000000000000A2 /* ClaudeTranscriptTitle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A71E0000000000000000A1 /* ClaudeTranscriptTitle.swift */; };
+			C7A71E0000000000000000A3 /* ClaudeTranscriptTitle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A71E0000000000000000A1 /* ClaudeTranscriptTitle.swift */; };
+			C7A71E0000000000000000A5 /* CLI+AgentSessionTitle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A71E0000000000000000A4 /* CLI+AgentSessionTitle.swift */; };
 			A2E500000000000000000005 /* AgentResumeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2E500000000000000000004 /* AgentResumeStore.swift */; };
 			TTAI0001A1B2C3D4E5F60719 /* TerminalTabAgentIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = TTAI0002A1B2C3D4E5F60719 /* TerminalTabAgentIcon.swift */; };
 			7501A0000000000000000003 /* GhosttyApp+ProgramStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7501A0000000000000000004 /* GhosttyApp+ProgramStatus.swift */; };
@@ -456,6 +459,8 @@
 			NRSP0073A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+SidebarTelemetry.swift"; sourceTree = "<group>"; };
 			AGST0002A1B2C3D4E5F60719 /* AgentActivityState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AgentActivityState.swift"; sourceTree = "<group>"; };
 			A2E500000000000000000001 /* AgentResumeCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentResumeCommand.swift; sourceTree = "<group>"; };
+			C7A71E0000000000000000A1 /* ClaudeTranscriptTitle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeTranscriptTitle.swift; sourceTree = "<group>"; };
+			C7A71E0000000000000000A4 /* CLI+AgentSessionTitle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+AgentSessionTitle.swift"; sourceTree = "<group>"; };
 			A2E500000000000000000004 /* AgentResumeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentResumeStore.swift; sourceTree = "<group>"; };
 			TTAI0002A1B2C3D4E5F60719 /* TerminalTabAgentIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalTabAgentIcon.swift"; sourceTree = "<group>"; };
 			7501A0000000000000000002 /* ProgramStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramStatus.swift; sourceTree = "<group>"; };
@@ -936,6 +941,7 @@
 					NRSP0073A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift */,
 					AGST0002A1B2C3D4E5F60719 /* AgentActivityState.swift */,
 					A2E500000000000000000001 /* AgentResumeCommand.swift */,
+					C7A71E0000000000000000A1 /* ClaudeTranscriptTitle.swift */,
 					A2E500000000000000000004 /* AgentResumeStore.swift */,
 					TTAI0002A1B2C3D4E5F60719 /* TerminalTabAgentIcon.swift */,
 					7501A0000000000000000002 /* ProgramStatus.swift */,
@@ -1135,6 +1141,7 @@
 				7B3F9A10C2D4E5F6A7B80009 /* CLI+Ports.swift */,
 				A1D000000000000000000006 /* CLI+Handoff.swift */,
 				A2E500000000000000000006 /* CLI+AgentResume.swift */,
+				C7A71E0000000000000000A4 /* CLI+AgentSessionTitle.swift */,
 				F1D600000000000000000001 /* CLI+Usage.swift */,
 				B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */,
 				B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */,
@@ -1502,6 +1509,7 @@
 					NRSP0074A1B2C3D4E5F60719 /* Workspace+SidebarTelemetry.swift in Sources */,
 					AGST0001A1B2C3D4E5F60719 /* AgentActivityState.swift in Sources */,
 					A2E500000000000000000002 /* AgentResumeCommand.swift in Sources */,
+					C7A71E0000000000000000A2 /* ClaudeTranscriptTitle.swift in Sources */,
 					A2E500000000000000000005 /* AgentResumeStore.swift in Sources */,
 					TTAI0001A1B2C3D4E5F60719 /* TerminalTabAgentIcon.swift in Sources */,
 					7501A0000000000000000001 /* ProgramStatus.swift in Sources */,
@@ -1809,6 +1817,8 @@
 				A2E500000000000000000007 /* CLI+AgentResume.swift in Sources */,
 				F1D600000000000000000002 /* CLI+Usage.swift in Sources */,
 				A2E500000000000000000003 /* AgentResumeCommand.swift in Sources */,
+				C7A71E0000000000000000A3 /* ClaudeTranscriptTitle.swift in Sources */,
+				C7A71E0000000000000000A5 /* CLI+AgentSessionTitle.swift in Sources */,
 				B900003BA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift in Sources */,
 				B900003DA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift in Sources */,
 				E9C500000000000000000001 /* CLI+WorktreeIssue.swift in Sources */,

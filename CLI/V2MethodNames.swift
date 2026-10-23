@@ -112,6 +112,7 @@ enum V2MethodNames {
     static let surfaceRefresh = "surface.refresh"
     static let surfaceReorder = "surface.reorder"
     static let surfaceReportAgentState = "surface.report_agent_state"
+    static let surfaceReportAgentTitle = "surface.report_agent_title"
     static let surfaceReportGitBranch = "surface.report_git_branch"
     static let surfaceReportPorts = "surface.report_ports"
     static let surfaceReportPr = "surface.report_pr"

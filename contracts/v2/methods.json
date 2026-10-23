@@ -3393,6 +3393,42 @@
       },
       "threading": "off_main"
     },
+    "surface.report_agent_title": {
+      "auth_required": true,
+      "debug_only": false,
+      "description": "Terminal surface (pane content) lifecycle and IO. (report agent title). Sets the pane's live title from an agent session's topic; a manual rename still wins and a later terminal startup title (cwd, resume command, agent banner) does not replace it.",
+      "errors": [
+        "invalid_params"
+      ],
+      "focus_intent": false,
+      "handler": "v2SurfaceReportAgentTitle",
+      "params": {
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "surface_id": {
+            "format": "surface:N",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "workspace:N",
+            "type": "string"
+          }
+        },
+        "required": [
+          "surface_id",
+          "title",
+          "workspace_id"
+        ],
+        "type": "object"
+      },
+      "result": {
+        "type": "object"
+      },
+      "threading": "off_main"
+    },
     "surface.report_git_branch": {
       "auth_required": true,
       "debug_only": false,

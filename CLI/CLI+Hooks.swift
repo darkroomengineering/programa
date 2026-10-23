@@ -585,6 +585,7 @@ extension ProgramaCLI {
             setAgentPid(hook, ctx, workspaceId: workspaceId, sessionId: ctx.parsed.sessionId, pid: pid)
         }
         reportAgentEvent(client: ctx.client, provider: hook.provider, eventType: "session.started", workspaceId: workspaceId, surfaceId: surfaceId, sessionId: ctx.parsed.sessionId)
+        ctx.reportSessionTitle(hook, storedTranscriptPath: nil, workspaceId: workspaceId, surfaceId: surfaceId)
     }
 
     private func agentHookPromptSubmit(_ hook: AgentHookProvider, _ ctx: AgentHookContext) throws {
@@ -614,6 +615,7 @@ extension ProgramaCLI {
             preferred: mapped?.surfaceId, fallback: ctx.surfaceArg, workspaceId: workspaceId, client: ctx.client
         )
         reportAgentStateAndEvent(client: ctx.client, provider: hook.provider, eventType: "turn.started", workspaceId: workspaceId, surfaceId: surfaceId, state: .working, sessionId: ctx.parsed.sessionId)
+        ctx.reportSessionTitle(hook, storedTranscriptPath: mapped?.transcriptPath, workspaceId: workspaceId, surfaceId: surfaceId)
     }
 
     private func agentHookStop(_ hook: AgentHookProvider, _ ctx: AgentHookContext) throws {
@@ -659,6 +661,7 @@ extension ProgramaCLI {
             value: "Idle", icon: "pause.circle.fill", color: "#8E8E93"
         )
         reportAgentStateAndEvent(client: ctx.client, provider: hook.provider, eventType: "turn.completed", workspaceId: workspaceId, surfaceId: surfaceId, state: .idle, sessionId: ctx.parsed.sessionId)
+        ctx.reportSessionTitle(hook, storedTranscriptPath: mapped?.transcriptPath, workspaceId: workspaceId, surfaceId: surfaceId)
     }
 
     private func agentHookNotification(_ hook: AgentHookProvider, _ ctx: AgentHookContext) throws {
