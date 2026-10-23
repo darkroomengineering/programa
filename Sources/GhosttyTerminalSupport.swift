@@ -3,7 +3,6 @@ import SwiftUI
 import AppKit
 import Darwin
 import Bonsplit
-import IOSurface
 import UniformTypeIdentifiers
 
 // MARK: - GhosttyTerminalView Support

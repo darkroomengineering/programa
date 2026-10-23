@@ -622,14 +622,12 @@ class GhosttyApp {
             unsetenv("NO_COLOR")
         }
 
-        // Initialize Ghostty library first
         let result = ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv)
         if result != GHOSTTY_SUCCESS {
             NSLog("Failed to initialize ghostty: \(result)")
             return
         }
 
-        // Load config
         guard let primaryConfig = ghostty_config_new() else {
             NSLog("Failed to create ghostty config")
             return
@@ -640,7 +638,6 @@ class GhosttyApp {
         loadDefaultConfigFilesWithLegacyFallback(primaryConfig)
         updateDefaultBackground(from: primaryConfig, source: "initialize.primaryConfig")
 
-        // Create runtime config with callbacks
         var runtimeConfig = ghostty_runtime_config_s()
         runtimeConfig.userdata = Unmanaged.passUnretained(self).toOpaque()
         runtimeConfig.supports_selection_clipboard = true
@@ -790,7 +787,6 @@ class GhosttyApp {
             }
         }
 
-        // Create app
         if let created = ghostty_app_new(&runtimeConfig, primaryConfig) {
             self.app = created
             self.config = primaryConfig

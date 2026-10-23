@@ -688,7 +688,6 @@ struct StoredShortcut: Codable, Equatable {
     }
 }
 
-/// View for recording a keyboard shortcut
 struct KeyboardShortcutRecorder: View {
     let label: String
     var subtitle: String? = nil

@@ -1,10 +1,8 @@
 import Foundation
 import SwiftUI
 import AppKit
-import Metal
 import QuartzCore
 import Bonsplit
-import IOSurface
 import UniformTypeIdentifiers
 
 // MARK: - Ghostty Surface View
@@ -675,7 +673,6 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         abs(lhs - rhs) <= epsilon
     }
 
-    // Convenience accessor for the ghostty surface
     var surface: ghostty_surface_t? {
         terminalSurface?.surface
     }

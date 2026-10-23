@@ -11,7 +11,6 @@ final class ReviewPanel: Panel, ObservableObject {
     let id: UUID
     let panelType: PanelType = .review
 
-    /// The workspace this panel belongs to.
     private(set) var workspaceId: UUID
 
     /// The terminal surface being reviewed. `var` (not `let`) because session restore may need

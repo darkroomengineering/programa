@@ -152,7 +152,6 @@ final class ProgramaDirectoryTrust: @unchecked Sendable {
         saveLocked()
     }
 
-    /// Remove trust for a directory.
     func revokeTrust(configPath: String) {
         let trustKey = Self.trustKey(for: configPath)
         stateLock.lock()
@@ -164,7 +163,6 @@ final class ProgramaDirectoryTrust: @unchecked Sendable {
         saveLocked()
     }
 
-    /// All currently trusted paths.
     var allTrustedPaths: [String] {
         stateLock.lock()
         defer { stateLock.unlock() }
@@ -192,7 +190,6 @@ final class ProgramaDirectoryTrust: @unchecked Sendable {
         postDidChangeNotification()
     }
 
-    /// Clear all trusted directories.
     func clearAll() {
         stateLock.lock()
         trustedDirectories.removeAll()

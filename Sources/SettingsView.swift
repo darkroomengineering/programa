@@ -2,9 +2,6 @@ import AppKit
 import SwiftUI
 import Darwin
 import Bonsplit
-import UniformTypeIdentifiers
-import CoreImage
-import CoreImage.CIFilterBuiltins
 
 /// Height tracks the selected tab's content; width is free above a floor derived from
 /// the tab labels, so the six segments never truncate.

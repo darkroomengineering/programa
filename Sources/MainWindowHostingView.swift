@@ -1,11 +1,5 @@
 import AppKit
 import SwiftUI
-import Bonsplit
-import CoreServices
-import UserNotifications
-import Combine
-import ObjectiveC.runtime
-import Darwin
 
 /// Non-generic marker so callers can test "is this the main window's hosting
 /// view" without naming the generic parameter (used by the chrome-drag
