@@ -53,7 +53,6 @@ struct SurfaceSearchOverlay: View {
                     return surface.id == surfaceId
                 },
                 canApplyFocusRequest: canApplyFocusRequest,
-                focusSelection: .preserve,
                 debugContext: "surface=\(surfaceId.uuidString.prefix(5))",
                 onFieldDidFocus: onFieldDidFocus,
                 onEscape: { field in

@@ -17,26 +17,12 @@ enum AgentEventNormalizer {
     /// silent no-op.
     static func classify(eventType: String) -> Outcome? {
         switch eventType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "session.started":
+        case "session.started", "turn.completed", "turn.aborted":
             return .applyState(.idle)
-        case "turn.started":
+        case "turn.started", "item.started", "item.completed", "request.resolved", "user-input.resolved":
             return .applyState(.working)
-        case "item.started":
-            return .applyState(.working)
-        case "item.completed":
-            return .applyState(.working)
-        case "request.opened":
+        case "request.opened", "user-input.requested":
             return .applyState(.blocked)
-        case "request.resolved":
-            return .applyState(.working)
-        case "user-input.requested":
-            return .applyState(.blocked)
-        case "user-input.resolved":
-            return .applyState(.working)
-        case "turn.completed":
-            return .applyState(.idle)
-        case "turn.aborted":
-            return .applyState(.idle)
         case "session.exited":
             return .clearState
         default:

@@ -61,12 +61,6 @@ extension CommandPaletteView {
             return query.trimmingCharacters(in: .whitespacesAndNewlines)
         }
     }
-    func commandPaletteEntries(for scope: CommandPaletteListScope) -> [CommandPaletteCommand] {
-        commandPaletteEntries(
-            for: scope,
-            includeSurfaces: commandPaletteSwitcherIncludesSurfaceEntries
-        )
-    }
     func commandPaletteEntries(
         for scope: CommandPaletteListScope,
         includeSurfaces: Bool,
@@ -153,9 +147,6 @@ extension CommandPaletteView {
                 queryIsEmpty: queryIsEmpty,
                 historyTimestamp: historyTimestamp
             )
-            guard matches.count > resultLimit else {
-                return matches
-            }
             return Array(matches.prefix(resultLimit))
         }
 
@@ -179,9 +170,6 @@ extension CommandPaletteView {
             queryIsEmpty: queryIsEmpty,
             historyTimestamp: historyTimestamp
         )
-        guard matches.count > resultLimit else {
-            return matches
-        }
         return Array(matches.prefix(resultLimit))
     }
     nonisolated static func commandPaletteCommandPreviewMatchCommandIDsForTests(
@@ -209,7 +197,6 @@ extension CommandPaletteView {
         limit: Int
     ) -> [String] {
         guard limit > 0 else { return [] }
-        guard resultIDs.count > limit else { return resultIDs }
         return Array(resultIDs.prefix(limit))
     }
     static func commandPaletteShouldSynchronouslySeedResults(
@@ -239,16 +226,8 @@ extension CommandPaletteView {
         // transpositions, etc.), so it is NOT monotonic: appending characters to a
         // currently-empty-result query can turn a non-match into a match (e.g. a query that
         // was one edit short of "finder" gains an exact completion once more of the word is
-        // typed). Treating any query with `resolvedMatchingQuery` as a prefix as "safe to
-        // keep empty" assumed monotonicity that doesn't hold here, and could paper over a
-        // search that would have produced real results once it resolves.
+        // typed). Do not widen this to a prefix check.
         return currentMatchingQuery == resolvedMatchingQuery
-    }
-    func commandPaletteEntriesFingerprint(for scope: CommandPaletteListScope) -> Int {
-        commandPaletteEntriesFingerprint(
-            for: scope,
-            includeSurfaces: commandPaletteSwitcherIncludesSurfaceEntries
-        )
     }
     func commandPaletteEntriesFingerprint(
         for scope: CommandPaletteListScope,
@@ -565,10 +544,7 @@ extension CommandPaletteView {
             snapshot: snapshot
         )
     }
-    func commandPaletteShortcutHint(
-        for contribution: CommandPaletteCommandContribution,
-        context: CommandPaletteContextSnapshot
-    ) -> String? {
+    func commandPaletteShortcutHint(for contribution: CommandPaletteCommandContribution) -> String? {
         if let action = commandPaletteShortcutAction(for: contribution.commandId) {
             return KeyboardShortcutSettings.shortcut(for: action).displayString
         }

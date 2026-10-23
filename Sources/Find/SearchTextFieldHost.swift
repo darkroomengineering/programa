@@ -2,11 +2,6 @@ import AppKit
 import Bonsplit
 import SwiftUI
 
-enum SearchTextFieldFocusSelection: Equatable {
-    case preserve
-    case caretAtEnd
-}
-
 /// AppKit owner for terminal find fields.
 /// SwiftUI owns the surrounding controls while this host owns responder and IME behavior.
 struct SearchTextFieldHost: NSViewRepresentable {
@@ -16,7 +11,6 @@ struct SearchTextFieldHost: NSViewRepresentable {
     let focusNotificationName: Notification.Name
     let shouldApplyFocusNotification: (Notification) -> Bool
     let canApplyFocusRequest: () -> Bool
-    let focusSelection: SearchTextFieldFocusSelection
     let debugContext: String?
     let onFieldDidFocus: () -> Void
     let onEscape: (NSTextField) -> Void
@@ -41,7 +35,6 @@ struct SearchTextFieldHost: NSViewRepresentable {
         var parent: SearchTextFieldHost
         var isProgrammaticMutation = false
         var isFocusRequestPending = false
-        weak var parentField: NativeTextField?
         private var focusObserver: NSObjectProtocol?
         private var observedFocusNotificationName: Notification.Name?
 
@@ -77,7 +70,7 @@ struct SearchTextFieldHost: NSViewRepresentable {
                 }
 #endif
                 guard !alreadyFocused else { return }
-                let result = self.focus(field, in: window)
+                let result = window.makeFirstResponder(field)
 #if DEBUG
                 if let debugContext = self.parent.debugContext {
                     dlog(
@@ -125,21 +118,8 @@ struct SearchTextFieldHost: NSViewRepresentable {
                 guard self.parent.isFocused, self.parent.canApplyFocusRequest() else { return }
                 guard let field, let window = field.window else { return }
                 guard !self.isFirstResponder(field, in: window) else { return }
-                _ = self.focus(field, in: window)
+                _ = window.makeFirstResponder(field)
             }
-        }
-
-        @discardableResult
-        private func focus(_ field: NativeTextField, in window: NSWindow) -> Bool {
-            guard window.makeFirstResponder(field) else { return false }
-            guard parent.focusSelection == .caretAtEnd else { return true }
-            DispatchQueue.main.async { [weak field] in
-                guard let field,
-                      let editor = field.currentEditor() as? NSTextView else { return }
-                let end = field.stringValue.utf16.count
-                editor.setSelectedRange(NSRange(location: end, length: 0))
-            }
-            return true
         }
 
         private func isFirstResponder(_ field: NativeTextField, in window: NSWindow) -> Bool {
@@ -214,14 +194,12 @@ struct SearchTextFieldHost: NSViewRepresentable {
         field.isSelectable = true
         field.isEnabled = true
         field.stringValue = text
-        context.coordinator.parentField = field
         context.coordinator.installFocusObserver(for: field)
         return field
     }
 
     func updateNSView(_ nsView: NativeTextField, context: Context) {
         context.coordinator.parent = self
-        context.coordinator.parentField = nsView
         context.coordinator.installFocusObserver(for: nsView)
         context.coordinator.synchronizeText(in: nsView)
         context.coordinator.requestFocusIfNeeded(for: nsView)
@@ -230,6 +208,5 @@ struct SearchTextFieldHost: NSViewRepresentable {
     static func dismantleNSView(_ nsView: NativeTextField, coordinator: Coordinator) {
         coordinator.removeFocusObserver()
         nsView.delegate = nil
-        coordinator.parentField = nil
     }
 }

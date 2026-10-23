@@ -199,7 +199,6 @@ struct ContentView: View {
                     fullscreenControls
                 }
 
-                // Draggable folder icon + focused command name
                 if let directory = focusedDirectory {
                     DraggableFolderIcon(directory: directory)
                         .padding(.leading, -6)
@@ -314,7 +313,6 @@ struct ContentView: View {
               let tab = tabManager.tabs.first(where: { $0.id == selectedId }) else {
             return nil
         }
-        // Use focused panel's directory if available
         if let focusedPanelId = tab.focusedPanelId,
            let panelDir = tab.panelDirectories[focusedPanelId] {
             let trimmed = panelDir.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -337,8 +335,6 @@ struct ContentView: View {
 
     private var contentAndSidebarLayout: AnyView {
         let layout: AnyView
-        // When matching terminal background, use HStack so both sidebar and terminal
-        // sit directly on the window background with no intermediate layers.
         let useWithinWindow = sidebarBlendMode == SidebarBlendModeOption.withinWindow.rawValue
             && !sidebarMatchTerminalBackground
         if useWithinWindow {
@@ -357,7 +353,8 @@ struct ContentView: View {
                 }
             )
         } else {
-            // Standard HStack mode for behindWindow blur
+            // HStack mode for behindWindow blur, and when matching the terminal background so
+            // both sidebar and terminal sit directly on the window background.
             layout = AnyView(
                 HStack(spacing: 0) {
                     if sidebarState.isVisible {
@@ -439,25 +436,21 @@ struct ContentView: View {
                     guard let tabManager else { return }
                     var didRecover = false
 
-                    // Ensure there is at least one workspace.
                     if tabManager.tabs.isEmpty {
                         tabManager.addWorkspace()
                         didRecover = true
                     }
 
-                    // Ensure selectedTabId points to an existing workspace.
                     if tabManager.selectedTabId == nil || !tabManager.tabs.contains(where: { $0.id == tabManager.selectedTabId }) {
                         tabManager.selectedTabId = tabManager.tabs.first?.id
                         didRecover = true
                     }
 
-                    // Ensure mountedWorkspaceIds is populated.
                     if mountedWorkspaceIds.isEmpty || !mountedWorkspaceIds.contains(where: { id in tabManager.tabs.contains { $0.id == id } }) {
                         reconcileMountedWorkspaceIds()
                         didRecover = true
                     }
 
-                    // Ensure sidebar selection is valid.
                     if selectedTabIds.isEmpty, let selectedId = tabManager.selectedTabId {
                         selectedTabIds = [selectedId]
                         lastSidebarSelectionIndex = tabManager.tabs.firstIndex { $0.id == selectedId }
@@ -773,7 +766,6 @@ struct ContentView: View {
                     bgGlassTintOpacity: bgGlassTintOpacity
                 ) ?? titlebarPadding
 
-                // Track this window for fullscreen notifications
                 if observedWindow !== window {
                     DispatchQueue.main.async {
                         observedWindow = window
@@ -1006,11 +998,6 @@ struct ContentView: View {
                 evaluate()
             }
         }
-    }
-
-    private func addTab() {
-        tabManager.addTab()
-        sidebarSelectionState.selection = .tabs
     }
 
     static func makeViewHierarchyTransparent(_ root: NSView) {

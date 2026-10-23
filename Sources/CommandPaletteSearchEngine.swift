@@ -98,13 +98,11 @@ enum CommandPaletteSwitcherSearchIndexer {
         case .workspace:
             return [trimmed]
         case .surface:
-            // Include the branch's last path segment (split only on "/", preserving internal
-            // hyphens/underscores) alongside the fully-atomized components — mirrors
-            // directoryTokensForSearch's `basename`, which likewise keeps the final path
-            // component intact via URL.lastPathComponent instead of shattering it on every
-            // delimiter. Without this, a branch like "feature/cmd-palette-indexing" only ever
-            // indexed the whole string and single words ("feature", "cmd", "palette",
-            // "indexing"), never the compound "cmd-palette-indexing" segment users actually type.
+            // Index the branch's last path segment (split only on "/", keeping internal
+            // hyphens/underscores) alongside the fully-atomized components, like
+            // directoryTokensForSearch's `basename`. This makes the compound segment of
+            // "feature/cmd-palette-indexing" ("cmd-palette-indexing") searchable, not just
+            // the whole string and its single words.
             let lastPathSegment = trimmed
                 .components(separatedBy: "/")
                 .last(where: { !$0.isEmpty }) ?? trimmed
@@ -693,8 +691,7 @@ enum CommandPaletteFuzzyMatcher {
             )
         }
 
-        if tokenChars.count >= 2,
-            segmentLength >= tokenChars.count - 1,
+        if segmentLength >= tokenChars.count - 1,
             tokenPrefixMatches(
                 tokenChars: tokenChars,
                 tokenStart: mismatchOffset + 1,

@@ -1,20 +1,19 @@
-// Agent status badges (issue #164), v1 hook-tier scope only.
+// Agent status badges (issue #164).
 //
-// Two-tier status authority per the issue design: lifecycle hooks (Claude Code, Codex,
-// OpenCode — already installed via CLI+Hooks.swift) are the single source of truth when
-// present. This file only models the hook-driven state; there is no screen-rule fallback
-// (v2, tracked separately).
+// Status authority is tiered (see `AgentStateSource`): OSC 7501 program status, then lifecycle
+// hooks (Claude Code, Codex, OpenCode, installed via CLI+Hooks.swift), then screen-manifest
+// inference (AgentScreenDetectionEngine.swift) as the fallback for surfaces no hook reports on.
 //
-// Strict-blocked rule: `.blocked` is only ever set by an explicit hook report of a
+// Strict-blocked rule for hooks: `.blocked` is only ever set by an explicit hook report of a
 // permission/approval/question prompt (see CLI+Hooks.swift's classifyClaudeNotification /
 // classifyCodexNotification, and OpenCode's permission.asked event, which is unconditionally
 // a permission prompt). Anything ambiguous or unclassified defaults to `.idle` — a false
 // "blocked" trains users to ignore the badge.
 import Foundation
 
-/// Per-surface agent activity state, reported exclusively by installed lifecycle hooks.
-/// A surface with no entry has no hook-managed agent (or hasn't reported yet) and shows
-/// no badge at all — distinct from `.idle`, which means a hook explicitly reported rest.
+/// Per-surface agent activity state. A surface with no entry has no detected agent (or it
+/// hasn't reported yet) and shows no badge at all — distinct from `.idle`, which means a
+/// reporter explicitly reported rest.
 enum AgentActivityState: String, Codable, CaseIterable, Sendable {
     case working
     case blocked
@@ -37,8 +36,8 @@ enum AgentActivityState: String, Codable, CaseIterable, Sendable {
     }
 }
 
-/// Which tier reported a surface's current `AgentActivityState` (screen-manifest detection,
-/// v2 — see docs/plans/screen-manifest-detection.md). Additive sibling to `agent_state`
+/// Which tier reported a surface's current `AgentActivityState` (see
+/// docs/plans/screen-manifest-detection.md). Additive sibling to `agent_state`
 /// wherever it appears on the wire (`surface.list`/`surface.wait`/`subscribe`) — `agent_state`
 /// itself never changes shape, per docs/socket-api.md's "never repurpose an existing
 /// field" discipline and the exact-string-equality tests that already assert on it.
@@ -75,11 +74,10 @@ struct AgentSessionKey: Equatable, Hashable, Sendable, Codable {
     let pid: pid_t?
 }
 
-/// One surface's agent activity, with the provenance and timestamp needed to unify the
-/// three ad hoc "needs-input" signals (issue: agent-state-unification) into a single write
-/// path. `Workspace.panelAgentPresence` is the stored source of truth;
-/// `panelAgentStates`/`panelAgentStateSources` are derived, read-only mirrors kept for the
-/// existing wire shapes and call sites.
+/// One surface's agent activity, with the provenance and timestamp that let every
+/// "needs-input" signal share a single write path. `Workspace.panelAgentPresence` is the
+/// stored source of truth; `panelAgentStates`/`panelAgentStateSources` are derived, read-only
+/// mirrors for the wire shapes and call sites.
 struct AgentPresence: Equatable, Sendable {
     var state: AgentActivityState
     var source: AgentStateSource
@@ -142,7 +140,7 @@ struct SidebarAgentIndicator: Equatable {
     let isStale: Bool
 
     /// Aggregates every surface's presence worst-first (blocked > working > idle), exactly as
-    /// `Workspace.aggregateAgentState` does today, and returns `nil` when the workspace has no
+    /// `Workspace.aggregateAgentState` does, and returns `nil` when the workspace has no
     /// presence at all (no badge should render). The stale flag reflects only the presence that
     /// won the aggregation, not every surface.
     @MainActor

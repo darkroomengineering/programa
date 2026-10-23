@@ -9,24 +9,29 @@ private func localizedDebugLabel(_ value: String) -> String {
 
 #if DEBUG
 
-final class SettingsAboutTitlebarDebugWindowController: NSWindowController, NSWindowDelegate {
-    static let shared = SettingsAboutTitlebarDebugWindowController()
-
-    private init() {
+/// Shared NSPanel setup for every Debug > Debug Windows controller.
+class DebugPanelWindowController: NSWindowController, NSWindowDelegate {
+    init<Content: View>(
+        title: String,
+        identifier: String,
+        size: NSSize,
+        styleMask: NSWindow.StyleMask = [.titled, .closable, .utilityWindow],
+        rootView: Content
+    ) {
         let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 470, height: 690),
-            styleMask: [.titled, .closable, .resizable, .utilityWindow],
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: styleMask,
             backing: .buffered,
             defer: false
         )
-        window.title = localizedDebugLabel("Settings/About Titlebar Debug")
+        window.title = title
         window.titleVisibility = .visible
         window.titlebarAppearsTransparent = false
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("programa.settingsAboutTitlebarDebug")
+        window.identifier = NSUserInterfaceItemIdentifier(identifier)
         window.center()
-        window.contentView = NSHostingView(rootView: SettingsAboutTitlebarDebugView())
+        window.contentView = NSHostingView(rootView: rootView)
         super.init(window: window)
         window.delegate = self
     }
@@ -39,6 +44,24 @@ final class SettingsAboutTitlebarDebugWindowController: NSWindowController, NSWi
     func show() {
         window?.center()
         window?.makeKeyAndOrderFront(nil)
+    }
+}
+
+final class SettingsAboutTitlebarDebugWindowController: DebugPanelWindowController {
+    static let shared = SettingsAboutTitlebarDebugWindowController()
+
+    private convenience init() {
+        self.init(
+            title: localizedDebugLabel("Settings/About Titlebar Debug"),
+            identifier: "programa.settingsAboutTitlebarDebug",
+            size: NSSize(width: 470, height: 690),
+            styleMask: [.titled, .closable, .resizable, .utilityWindow],
+            rootView: SettingsAboutTitlebarDebugView()
+        )
+    }
+
+    override func show() {
+        super.show()
         SettingsAboutTitlebarStyleStore.shared.applyToOpenWindows()
     }
 }
@@ -234,36 +257,16 @@ private enum DebugWindowConfigSnapshot {
     }
 }
 
-final class DebugWindowControlsWindowController: NSWindowController, NSWindowDelegate {
+final class DebugWindowControlsWindowController: DebugPanelWindowController {
     static let shared = DebugWindowControlsWindowController()
 
-    private init() {
-        let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 560),
-            styleMask: [.titled, .closable, .utilityWindow],
-            backing: .buffered,
-            defer: false
+    private convenience init() {
+        self.init(
+            title: localizedDebugLabel("Debug Window Controls"),
+            identifier: "programa.debugWindowControls",
+            size: NSSize(width: 420, height: 560),
+            rootView: DebugWindowControlsView()
         )
-        window.title = localizedDebugLabel("Debug Window Controls")
-        window.titleVisibility = .visible
-        window.titlebarAppearsTransparent = false
-        window.isMovableByWindowBackground = true
-        window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("programa.debugWindowControls")
-        window.center()
-        window.contentView = NSHostingView(rootView: DebugWindowControlsView())
-        super.init(window: window)
-        window.delegate = self
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    func show() {
-        window?.center()
-        window?.makeKeyAndOrderFront(nil)
     }
 }
 
@@ -461,36 +464,16 @@ private struct DebugWindowControlsView: View {
 
 }
 
-final class SidebarDebugWindowController: NSWindowController, NSWindowDelegate {
+final class SidebarDebugWindowController: DebugPanelWindowController {
     static let shared = SidebarDebugWindowController()
 
-    private init() {
-        let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 520),
-            styleMask: [.titled, .closable, .utilityWindow],
-            backing: .buffered,
-            defer: false
+    private convenience init() {
+        self.init(
+            title: localizedDebugLabel("Sidebar Debug"),
+            identifier: "programa.sidebarDebug",
+            size: NSSize(width: 360, height: 520),
+            rootView: SidebarDebugView()
         )
-        window.title = localizedDebugLabel("Sidebar Debug")
-        window.titleVisibility = .visible
-        window.titlebarAppearsTransparent = false
-        window.isMovableByWindowBackground = true
-        window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("programa.sidebarDebug")
-        window.center()
-        window.contentView = NSHostingView(rootView: SidebarDebugView())
-        super.init(window: window)
-        window.delegate = self
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    func show() {
-        window?.center()
-        window?.makeKeyAndOrderFront(nil)
     }
 }
 
@@ -789,36 +772,16 @@ private struct SidebarDebugView: View {
 
 // MARK: - Menu Bar Extra Debug Window
 
-final class MenuBarExtraDebugWindowController: NSWindowController, NSWindowDelegate {
+final class MenuBarExtraDebugWindowController: DebugPanelWindowController {
     static let shared = MenuBarExtraDebugWindowController()
 
-    private init() {
-        let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 430),
-            styleMask: [.titled, .closable, .utilityWindow],
-            backing: .buffered,
-            defer: false
+    private convenience init() {
+        self.init(
+            title: localizedDebugLabel("Menu Bar Extra Debug"),
+            identifier: "programa.menubarDebug",
+            size: NSSize(width: 420, height: 430),
+            rootView: MenuBarExtraDebugView()
         )
-        window.title = localizedDebugLabel("Menu Bar Extra Debug")
-        window.titleVisibility = .visible
-        window.titlebarAppearsTransparent = false
-        window.isMovableByWindowBackground = true
-        window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("programa.menubarDebug")
-        window.center()
-        window.contentView = NSHostingView(rootView: MenuBarExtraDebugView())
-        super.init(window: window)
-        window.delegate = self
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    func show() {
-        window?.center()
-        window?.makeKeyAndOrderFront(nil)
     }
 }
 
@@ -958,37 +921,19 @@ private struct MenuBarExtraDebugView: View {
 
 // MARK: - Overlay Glass Debug Window
 
-final class OverlayGlassDebugWindowController: NSWindowController, NSWindowDelegate {
+final class OverlayGlassDebugWindowController: DebugPanelWindowController {
     static let shared = OverlayGlassDebugWindowController()
 
-    private init() {
-        let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 340, height: 170),
-            styleMask: [.titled, .closable, .utilityWindow],
-            backing: .buffered,
-            defer: false
+    private convenience init() {
+        self.init(
+            title: String(
+                localized: "debug.overlayGlass.title",
+                defaultValue: "Overlay Glass"
+            ),
+            identifier: "programa.overlayGlassDebug",
+            size: NSSize(width: 340, height: 170),
+            rootView: OverlayGlassDebugView()
         )
-        window.title = String(
-            localized: "debug.overlayGlass.title",
-            defaultValue: "Overlay Glass"
-        )
-        window.titleVisibility = .visible
-        window.titlebarAppearsTransparent = false
-        window.isMovableByWindowBackground = true
-        window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("programa.overlayGlassDebug")
-        window.center()
-        window.contentView = NSHostingView(rootView: OverlayGlassDebugView())
-        super.init(window: window)
-        window.delegate = self
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError() }
-
-    func show() {
-        window?.center()
-        window?.makeKeyAndOrderFront(nil)
     }
 }
 
@@ -1032,37 +977,19 @@ private struct OverlayGlassDebugView: View {
 
 // MARK: - Tab Bar Glass Debug Window
 
-final class TabBarGlassDebugWindowController: NSWindowController, NSWindowDelegate {
+final class TabBarGlassDebugWindowController: DebugPanelWindowController {
     static let shared = TabBarGlassDebugWindowController()
 
-    private init() {
-        let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 340, height: 170),
-            styleMask: [.titled, .closable, .utilityWindow],
-            backing: .buffered,
-            defer: false
+    private convenience init() {
+        self.init(
+            title: String(
+                localized: "debug.tabBarGlass.title",
+                defaultValue: "Tab Bar Glass"
+            ),
+            identifier: "programa.tabBarGlassDebug",
+            size: NSSize(width: 340, height: 170),
+            rootView: TabBarGlassDebugView()
         )
-        window.title = String(
-            localized: "debug.tabBarGlass.title",
-            defaultValue: "Tab Bar Glass"
-        )
-        window.titleVisibility = .visible
-        window.titlebarAppearsTransparent = false
-        window.isMovableByWindowBackground = true
-        window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("programa.tabBarGlassDebug")
-        window.center()
-        window.contentView = NSHostingView(rootView: TabBarGlassDebugView())
-        super.init(window: window)
-        window.delegate = self
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError() }
-
-    func show() {
-        window?.center()
-        window?.makeKeyAndOrderFront(nil)
     }
 }
 
@@ -1112,34 +1039,16 @@ private struct TabBarGlassDebugView: View {
 
 // MARK: - Split Button Layout Debug Window
 
-final class SplitButtonLayoutDebugWindowController: NSWindowController, NSWindowDelegate {
+final class SplitButtonLayoutDebugWindowController: DebugPanelWindowController {
     static let shared = SplitButtonLayoutDebugWindowController()
 
-    private init() {
-        let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
-            styleMask: [.titled, .closable, .utilityWindow],
-            backing: .buffered,
-            defer: false
+    private convenience init() {
+        self.init(
+            title: localizedDebugLabel("Split Button Layout"),
+            identifier: "programa.splitButtonLayoutDebug",
+            size: NSSize(width: 320, height: 240),
+            rootView: SplitButtonLayoutDebugView()
         )
-        window.title = localizedDebugLabel("Split Button Layout")
-        window.titleVisibility = .visible
-        window.titlebarAppearsTransparent = false
-        window.isMovableByWindowBackground = true
-        window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("programa.splitButtonLayoutDebug")
-        window.center()
-        window.contentView = NSHostingView(rootView: SplitButtonLayoutDebugView())
-        super.init(window: window)
-        window.delegate = self
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError() }
-
-    func show() {
-        window?.center()
-        window?.makeKeyAndOrderFront(nil)
     }
 }
 
@@ -1181,36 +1090,16 @@ private struct SplitButtonLayoutDebugView: View {
 
 // MARK: - Background Debug Window
 
-final class BackgroundDebugWindowController: NSWindowController, NSWindowDelegate {
+final class BackgroundDebugWindowController: DebugPanelWindowController {
     static let shared = BackgroundDebugWindowController()
 
-    private init() {
-        let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 300),
-            styleMask: [.titled, .closable, .utilityWindow],
-            backing: .buffered,
-            defer: false
+    private convenience init() {
+        self.init(
+            title: localizedDebugLabel("Background Debug"),
+            identifier: "programa.backgroundDebug",
+            size: NSSize(width: 360, height: 300),
+            rootView: BackgroundDebugView()
         )
-        window.title = localizedDebugLabel("Background Debug")
-        window.titleVisibility = .visible
-        window.titlebarAppearsTransparent = false
-        window.isMovableByWindowBackground = true
-        window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("programa.backgroundDebug")
-        window.center()
-        window.contentView = NSHostingView(rootView: BackgroundDebugView())
-        super.init(window: window)
-        window.delegate = self
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    func show() {
-        window?.center()
-        window?.makeKeyAndOrderFront(nil)
     }
 }
 
@@ -1328,36 +1217,16 @@ private struct BackgroundDebugView: View {
     }
 }
 
-final class DensityDebugWindowController: NSWindowController, NSWindowDelegate {
+final class DensityDebugWindowController: DebugPanelWindowController {
     static let shared = DensityDebugWindowController()
 
-    private init() {
-        let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 380, height: 640),
-            styleMask: [.titled, .closable, .utilityWindow],
-            backing: .buffered,
-            defer: false
+    private convenience init() {
+        self.init(
+            title: localizedDebugLabel("Density Debug"),
+            identifier: "programa.densityDebug",
+            size: NSSize(width: 380, height: 640),
+            rootView: DensityDebugView()
         )
-        window.title = localizedDebugLabel("Density Debug")
-        window.titleVisibility = .visible
-        window.titlebarAppearsTransparent = false
-        window.isMovableByWindowBackground = true
-        window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("programa.densityDebug")
-        window.center()
-        window.contentView = NSHostingView(rootView: DensityDebugView())
-        super.init(window: window)
-        window.delegate = self
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    func show() {
-        window?.center()
-        window?.makeKeyAndOrderFront(nil)
     }
 }
 

@@ -283,7 +283,8 @@ extension CommandPaletteView {
             accessibilityLabel: String,
             focus: Binding<Bool>,
             measuredHeight: Binding<CGFloat>,
-            maxHeight: CGFloat
+            maxHeight: CGFloat,
+            onEscape: () -> Void
         )
     }
 
@@ -293,7 +294,6 @@ extension CommandPaletteView {
         placeholder: String,
         text: Binding<String>,
         onSubmit: @escaping (String) -> Void,
-        onEscape: @escaping () -> Void,
         onInteraction: (() -> Void)? = nil
     ) -> some View {
         switch style {
@@ -313,7 +313,7 @@ extension CommandPaletteView {
                 .onTapGesture {
                     onInteraction?()
                 }
-        case .multiline(let accessibilityIdentifier, let accessibilityLabel, let focus, let measuredHeight, let maxHeight):
+        case .multiline(let accessibilityIdentifier, let accessibilityLabel, let focus, let measuredHeight, let maxHeight, let onEscape):
             CommandPaletteMultilineTextEditorRepresentable(
                 placeholder: placeholder,
                 accessibilityLabel: accessibilityLabel,
@@ -340,7 +340,6 @@ extension CommandPaletteView {
                 placeholder: target.placeholder,
                 text: $commandPaletteController.commandPaletteRenameDraft,
                 onSubmit: { _ in continueRenameFlow(target: target) },
-                onEscape: { dismissCommandPalette() },
                 onInteraction: handleCommandPaletteRenameInputInteraction
             )
             .padding(.horizontal, 9)
@@ -386,14 +385,14 @@ extension CommandPaletteView {
                     ),
                     focus: $commandPaletteController.commandPaletteShouldFocusWorkspaceDescriptionEditor,
                     measuredHeight: $commandPaletteController.commandPaletteWorkspaceDescriptionHeight,
-                    maxHeight: maxEditorHeight
+                    maxHeight: maxEditorHeight,
+                    onEscape: { dismissCommandPalette() }
                 ),
                 placeholder: target.placeholder,
                 text: $commandPaletteController.commandPaletteWorkspaceDescriptionDraft,
                 onSubmit: { proposedDescription in
                     applyWorkspaceDescriptionFlow(target: target, proposedDescription: proposedDescription)
-                },
-                onEscape: { dismissCommandPalette() }
+                }
             )
             .padding(.horizontal, 9)
             .padding(.vertical, 7)
@@ -482,7 +481,6 @@ extension CommandPaletteView {
         final class Coordinator: NSObject, NSTextFieldDelegate {
             var parent: CommandPaletteSearchFieldRepresentable
             var isProgrammaticMutation = false
-            weak var parentField: CommandPaletteNativeTextField?
             var pendingFocusRequest: Bool?
             var editorTextDidChangeObserver: NSObjectProtocol?
             weak var observedEditor: NSTextView?
@@ -613,13 +611,11 @@ extension CommandPaletteView {
             field.onHandleKeyEvent = { [weak coordinator = context.coordinator] event, editor in
                 coordinator?.handleKeyEvent(event, editor: editor) ?? false
             }
-            context.coordinator.parentField = field
             return field
         }
 
         func updateNSView(_ nsView: CommandPaletteNativeTextField, context: Context) {
             context.coordinator.parent = self
-            context.coordinator.parentField = nsView
             nsView.placeholderString = placeholder
 
             if let editor = nsView.currentEditor() as? NSTextView {
@@ -665,7 +661,6 @@ extension CommandPaletteView {
             nsView.delegate = nil
             nsView.onHandleKeyEvent = nil
             coordinator.detachEditorTextDidChangeObserver()
-            coordinator.parentField = nil
         }
     }
 
