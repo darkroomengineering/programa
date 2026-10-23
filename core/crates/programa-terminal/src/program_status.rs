@@ -285,27 +285,28 @@ impl Store {
         self.records.get(id)
     }
 
-    /// Returns false when the report would create a record past `CAPACITY` and was discarded.
+    /// Returns true only when the stored records changed. A repeated report, a clear of a
+    /// missing id, and a report discarded past `CAPACITY` all return false.
     pub(crate) fn apply(&mut self, report: Report) -> bool {
         let Some(state) = report.state else {
-            self.clear(&report.id);
-            return true;
+            return self.clear(&report.id);
         };
-        if !self.records.contains_key(&report.id) && self.records.len() >= CAPACITY {
-            return false;
+        let record = Record {
+            state,
+            kind: report.kind,
+            progress: report.progress,
+            app: report.app,
+            title: report.title,
+            msg: report.msg,
+        };
+        match self.records.get(&report.id) {
+            Some(existing) if *existing == record => false,
+            None if self.records.len() >= CAPACITY => false,
+            _ => {
+                self.records.insert(report.id, record);
+                true
+            }
         }
-        self.records.insert(
-            report.id,
-            Record {
-                state,
-                kind: report.kind,
-                progress: report.progress,
-                app: report.app,
-                title: report.title,
-                msg: report.msg,
-            },
-        );
-        true
     }
 
     /// A shell prompt means the foreground program ended: drop working and blocked records at
@@ -323,15 +324,17 @@ impl Store {
         had_records
     }
 
-    /// `a` removes `a/b`, not `ab`.
-    fn clear(&mut self, id: &str) {
+    /// `a` removes `a/b`, not `ab`. Returns true when anything was removed.
+    fn clear(&mut self, id: &str) -> bool {
+        let before = self.records.len();
         if id.is_empty() {
             self.records.clear();
-            return;
+        } else {
+            self.records.retain(|key, _| {
+                key != id && !(key.starts_with(id) && key.as_bytes().get(id.len()) == Some(&b'/'))
+            });
         }
-        self.records.retain(|key, _| {
-            key != id && !(key.starts_with(id) && key.as_bytes().get(id.len()) == Some(&b'/'))
-        });
+        self.records.len() != before
     }
 
     /// The app of `id`'s record, or of its nearest ancestor that has one.
@@ -842,6 +845,18 @@ mod tests {
     }
 
     #[test]
+    fn apply_reports_no_change_for_repeats_and_missing_clears() {
+        let mut store = Store::default();
+        assert!(store.apply(report("state=working:id=a:progress=40").unwrap()));
+        assert!(!store.apply(report("state=working:id=a:progress=40").unwrap()));
+        assert!(store.apply(report("state=working:id=a:progress=41").unwrap()));
+        assert!(!store.apply(report("state=clear:id=missing").unwrap()));
+        assert!(!store.apply(report("state=clear:id=a/b").unwrap()));
+        assert!(store.apply(report("state=clear:id=a").unwrap()));
+        assert!(!store.apply(report("state=clear").unwrap()));
+    }
+
+    #[test]
     fn prompt_drops_working_and_blocked_at_every_depth() {
         let mut store = Store::default();
         store.apply(report("state=working").unwrap());
@@ -1018,6 +1033,24 @@ mod tests {
 
         assert!(!status.feed(b"\x1b]7501;state=working:id=a//b\x07").changed);
         assert_eq!(status.store.len(), 0);
+    }
+
+    /// `changed` is what bumps the session's status generation, so a no-op report must not set it.
+    #[test]
+    fn feed_reports_no_change_for_a_repeated_report_or_a_missing_clear() {
+        let mut status = ProgramStatus::default();
+        assert!(
+            status
+                .feed(b"\x1b]7501;state=working:id=a:msg=UGxhbg\x07")
+                .changed
+        );
+        assert!(
+            !status
+                .feed(b"\x1b]7501;state=working:id=a:msg=UGxhbg\x07")
+                .changed
+        );
+        assert!(!status.feed(b"\x1b]7501;state=clear:id=b\x07").changed);
+        assert_eq!(status.store.len(), 1);
     }
 
     #[test]
