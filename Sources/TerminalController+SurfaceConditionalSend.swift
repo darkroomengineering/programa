@@ -36,26 +36,14 @@ extension TerminalController {
                 return .err(code: "invalid_params", message: "Provide text or keys", data: nil)
             }
 
-            guard let ws = v2ResolveWorkspace(params: params, tabManager: tabManager) else {
-                return .err(code: "not_found", message: "Workspace not found", data: nil)
-            }
-            let surfaceId: UUID?
-            if params["surface_id"] != nil {
-                surfaceId = v2UUID(params, "surface_id")
-                guard surfaceId != nil else {
-                    return .err(code: "not_found", message: "Surface not found for the given surface_id", data: nil)
-                }
-            } else {
-                surfaceId = ws.focusedPanelId
-            }
-            guard let surfaceId else {
-                return .err(code: "not_found", message: "No focused surface", data: nil)
-            }
-            guard let panel = ws.panels[surfaceId] else {
-                return .err(code: "not_found", message: "Surface not found", data: ["surface_id": surfaceId.uuidString])
-            }
-            guard let terminalPanel = panel as? TerminalPanel else {
-                return .err(code: "invalid_params", message: "Surface is not a terminal", data: ["surface_id": surfaceId.uuidString])
+            let ws: Workspace
+            let surfaceId: UUID
+            let terminalPanel: TerminalPanel
+            switch v2ResolveTerminalTarget(params: params, tabManager: tabManager) {
+            case .failed(let error):
+                return error
+            case .resolved(let target):
+                (ws, surfaceId, terminalPanel) = target
             }
             if let unknown = keys.first(where: { !terminalPanel.surface.isKnownNamedKey($0) }) {
                 return .err(code: "invalid_params", message: "Unknown key", data: ["key": unknown])

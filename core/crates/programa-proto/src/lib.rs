@@ -168,33 +168,10 @@ pub enum ErrorCode {
     Domain,
 }
 
-impl ErrorCode {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            ErrorCode::ParseError => "parse_error",
-            ErrorCode::InvalidUtf8 => "invalid_utf8",
-            ErrorCode::InvalidRequest => "invalid_request",
-            ErrorCode::InvalidParams => "invalid_params",
-            ErrorCode::PayloadTooLarge => "payload_too_large",
-            ErrorCode::MethodNotFound => "method_not_found",
-            ErrorCode::NotFound => "not_found",
-            ErrorCode::AuthRequired => "auth_required",
-            ErrorCode::AuthUnconfigured => "auth_unconfigured",
-            ErrorCode::AuthFailed => "auth_failed",
-            ErrorCode::AlreadyAttached => "already_attached",
-            ErrorCode::Timeout => "timeout",
-            ErrorCode::InternalError => "internal_error",
-            ErrorCode::Unsupported => "unsupported",
-            ErrorCode::Domain => "domain_error",
-        }
-    }
-}
-
 /// Declares each method name once: as a constant in `method` (matched by the
 /// server's dispatch) and in `IMPLEMENTED_METHODS` (advertised by
 /// `system.capabilities`). The method namespace is intentionally open-ended;
-/// see README for the authoritative list alongside what the macOS app
-/// implements that `programad` does not (yet).
+/// `core/docs/programad.md` lists what `programad` implements.
 macro_rules! methods {
     ($($name:ident = $wire:literal,)*) => {
         pub mod method {

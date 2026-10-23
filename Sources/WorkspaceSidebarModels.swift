@@ -5,8 +5,6 @@ import Foundation
 import SwiftUI
 import AppKit
 import Bonsplit
-import Darwin
-import CoreText
 
 struct SidebarWorkspaceHierarchyEntry: Equatable {
     let id: UUID

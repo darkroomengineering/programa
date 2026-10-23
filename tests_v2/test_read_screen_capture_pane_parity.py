@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """Regression: capture-pane parity via production read-screen APIs."""
 
-import glob
 import json
 import os
 import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Callable, List
+from typing import List
 
 sys.path.insert(0, str(Path(__file__).parent))
 from programa_client import ProgramaClient, ProgramaClientError

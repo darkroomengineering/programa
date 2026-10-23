@@ -95,7 +95,7 @@ private final class MainWindowIdentifierGuard {
 
 /// Supplies a single system space item so the main window's otherwise-empty
 /// unified toolbar reports a non-zero height, growing the titlebar so AppKit
-/// re-centers the traffic lights on `WindowGlassEffect.sidebarHeaderCenterFromWindowTop`.
+/// re-centers the traffic lights on the sidebar header row (`WindowGlassEffect.sidebarHeaderHeight`).
 /// The system space has no item view, so the toolbar never owns a hit region over
 /// the sidebar header controls; a custom sized item view does (about 44pt wide at
 /// the leading edge, which overlaps the sidebar toggle at the minimum sidebar width).
@@ -543,24 +543,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
         dilog("app.quit", "pid=\(getpid()) outcome=warning reason=ordinary_quit")
 
-        // Show the same confirmation dialog used by the Cmd+Q shortcut path,
-        // then reply asynchronously so we can return .terminateLater now.
+        // Reply asynchronously so we can return .terminateLater now.
         DispatchQueue.main.async {
-            let alert = NSAlert()
-            alert.alertStyle = .warning
-            alert.messageText = String(localized: "dialog.quitPrograma.title", defaultValue: "Quit Programa?")
-            alert.informativeText = String(localized: "dialog.quitPrograma.message", defaultValue: "This will close all windows and workspaces.")
-            alert.addButton(withTitle: String(localized: "dialog.quitPrograma.quit", defaultValue: "Quit"))
-            alert.addButton(withTitle: String(localized: "common.cancel", defaultValue: "Cancel"))
-            alert.showsSuppressionButton = true
-            alert.suppressionButton?.title = String(localized: "dialog.dontWarnCmdQ", defaultValue: "Don't warn again for Cmd+Q")
-
-            let response = alert.runModal()
-            if alert.suppressionButton?.state == .on {
-                QuitWarningSettings.setEnabled(false)
-            }
-
-            let shouldQuit = response == .alertFirstButtonReturn
+            let shouldQuit = self.runQuitConfirmationAlert()
             if shouldQuit {
                 self.appLifecycleCoordinator.confirmQuit()
                 self.finalizeStagedTerminalClosesThenMarkTerminating()
@@ -735,7 +720,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         available: [SessionDisplayGeometry],
         fallback: SessionDisplayGeometry?
     ) {
-        let available = NSScreen.screens.map { screen in
+        let geometry = { (screen: NSScreen) in
             SessionDisplayGeometry(
                 displayID: screen.programaDisplayID,
                 stableID: screen.programaStableDisplayID,
@@ -743,15 +728,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 visibleFrame: screen.visibleFrame
             )
         }
-        let fallback = (NSScreen.main ?? NSScreen.screens.first).map { screen in
-            SessionDisplayGeometry(
-                displayID: screen.programaDisplayID,
-                stableID: screen.programaStableDisplayID,
-                frame: screen.frame,
-                visibleFrame: screen.visibleFrame
-            )
-        }
-        return (available, fallback)
+        return (NSScreen.screens.map(geometry), (NSScreen.main ?? NSScreen.screens.first).map(geometry))
     }
 
     func attemptStartupSessionRestoreIfNeeded(primaryWindow: NSWindow) {
@@ -851,31 +828,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         reconcileOrphanedEscrowedSessions()
     }
 
-    /// Issue #307 orphan-reconciliation fix: the coarse-snapshot restore
-    /// that just completed above is keyed entirely by the panel UUIDs
-    /// already present in `session-<bundleId>.json` -- if that snapshot was
-    /// stale or missing at the moment of an abrupt kill, a session that is
-    /// still alive and escrow-claimed on disk (`meta.json`'s
-    /// `escrowed: true`) is never looked up, and becomes a permanently
-    /// orphaned, invisible shell (see `SessionWALStore
-    /// .escrowedSessionIds(excluding:)`'s doc comment). This pass runs
-    /// once, synchronously, right after every normal-launch restore: it
-    /// diffs the escrowed session directories on disk against every panel
-    /// id the restore just produced (a harmless superset that also
-    /// includes freshly-spawned, non-revived panels -- we only need to
-    /// exclude what's already present, not distinguish revived-vs-fresh),
-    /// and reattaches whatever is left into one clearly-labeled recovery
-    /// window.
+    /// Reattaches escrowed sessions that the snapshot restore did not produce a panel
+    /// for (#307). The coarse restore is keyed by the panel UUIDs in
+    /// `session-<bundleId>.json`; if that snapshot was stale or missing at an abrupt
+    /// kill, a session that is still alive and escrow-claimed on disk (`meta.json`'s
+    /// `escrowed: true`) is never looked up and becomes an invisible shell (see
+    /// `SessionWALStore.escrowedSessionIds(excluding:)`). This runs once, synchronously,
+    /// after every normal-launch restore: it excludes every panel id the restore produced
+    /// (a harmless superset that includes fresh, non-revived panels) and reattaches the
+    /// rest into one clearly-labeled recovery window.
     ///
-    /// Reuses `Workspace.revivePanel(sessionId:inPane:workingDirectory:)`
-    /// (the same primitive the coarse restore itself uses) directly against
-    /// each new tab's freshly-spawned initial pane, rather than pre-building
-    /// a `TerminalSurfaceReviveDescriptor` and threading it through
-    /// workspace creation: building that descriptor requires the escrow
-    /// retrieve, which already lives inside `revivePanel` and shouldn't be
-    /// duplicated here. The one fresh panel each new tab starts with is
-    /// closed immediately once the revived panel has taken its place in the
-    /// same pane, so no tab is ever left showing two panels or an empty one.
+    /// Each orphan goes through `Workspace.revivePanel(sessionId:inPane:workingDirectory:)`
+    /// against the new tab's initial pane, because building a
+    /// `TerminalSurfaceReviveDescriptor` up front would duplicate the escrow retrieve that
+    /// `revivePanel` already does. The tab's fresh panel is closed once the revived panel
+    /// takes its place, so no tab shows two panels or an empty one.
     private func reconcileOrphanedEscrowedSessions() {
         // Automated runs relaunch the app many times in a row, and each run leaves its shells
         // escrowed. Snapshot restore already skips these runs; recovering their orphans would
@@ -1489,9 +1456,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     /// every escrowed PTY dead the instant the app woke and start reading
     /// from them concurrently with the still-alive app, corrupting terminal
     /// output until force-quit. Staleness is mach-uptime based (pauses across
-    /// sleep), and this handler additionally refreshes the escrow connection
-    /// and renderer state on every wake as defense in depth and to leave a
-    /// record in the always-on diagnostics log if it ever happens again.
+    /// sleep); this handler also refreshes the escrow connection and renderer
+    /// state on every wake as defense in depth, and records the wake in the
+    /// always-on diagnostics log.
     private func handleSystemDidWake() {
         dilog("wake.lifecycle", "didWake")
         restartSocketListenerIfDead(source: "workspace.didWake")
@@ -1552,9 +1519,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         guard appLifecycleCoordinator.claimSuddenTerminationEnable() else { return }
         ProcessInfo.processInfo.enableSuddenTermination()
     }
-
-    // Session snapshot build/save/persist machinery lives in
-    // `AppDelegate+SessionSnapshotPersistence.swift`.
 
     struct MainWindowSummary {
         let windowId: UUID
@@ -2100,19 +2064,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     private func postCommandPaletteRequest(
         name: Notification.Name,
         preferredWindow: NSWindow?,
-        source: String,
-        markPending: Bool
+        source: String
     ) {
         let targetWindow = preferredWindow ?? NSApp.keyWindow ?? NSApp.mainWindow
-        if markPending {
-            markCommandPaletteOpenRequested(for: targetWindow)
-        }
+        markCommandPaletteOpenRequested(for: targetWindow)
         NotificationCenter.default.post(name: name, object: targetWindow)
 #if DEBUG
         dlog(
             "shortcut.palette.request source=\(source) " +
-            "target={\(debugWindowToken(targetWindow))} " +
-            "pendingMarked=\(markPending ? 1 : 0)"
+            "target={\(debugWindowToken(targetWindow))}"
         )
 #endif
     }
@@ -2121,8 +2081,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         postCommandPaletteRequest(
             name: .commandPaletteRequested,
             preferredWindow: preferredWindow,
-            source: source,
-            markPending: true
+            source: source
         )
     }
 
@@ -2130,8 +2089,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         postCommandPaletteRequest(
             name: .commandPaletteSwitcherRequested,
             preferredWindow: preferredWindow,
-            source: source,
-            markPending: true
+            source: source
         )
     }
 
@@ -2139,8 +2097,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         postCommandPaletteRequest(
             name: .commandPaletteRenameTabRequested,
             preferredWindow: preferredWindow,
-            source: source,
-            markPending: true
+            source: source
         )
     }
 
@@ -2151,8 +2108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         postCommandPaletteRequest(
             name: .commandPaletteRenameWorkspaceRequested,
             preferredWindow: preferredWindow,
-            source: source,
-            markPending: true
+            source: source
         )
     }
 
@@ -2163,8 +2119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         postCommandPaletteRequest(
             name: .commandPaletteEditWorkspaceDescriptionRequested,
             preferredWindow: preferredWindow,
-            source: source,
-            markPending: true
+            source: source
         )
     }
 
@@ -2207,7 +2162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         CommandPaletteController.windowLifecycle.endEscapeSuppression(windowId: windowId)
     }
 
-    private func shouldConsumeSuppressedEscape(event: NSEvent, window: NSWindow?) -> Bool {
+    private func shouldConsumeSuppressedEscape(window: NSWindow?) -> Bool {
         guard let window, let windowId = mainWindowId(for: window) else { return false }
         return CommandPaletteController.windowLifecycle.shouldConsumeSuppressedEscape(
             windowId: windowId,
@@ -2236,7 +2191,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     func clearEscapeSuppressionForKeyUp(event: NSEvent, consumeIfSuppressed: Bool = false) -> Bool {
         guard event.type == .keyUp, event.keyCode == 53 else { return false }
         let suppressionWindow = escapeSuppressionWindow(for: event)
-        let didConsume = consumeIfSuppressed && shouldConsumeSuppressedEscape(event: event, window: suppressionWindow)
+        let didConsume = consumeIfSuppressed && shouldConsumeSuppressedEscape(window: suppressionWindow)
         if let window = suppressionWindow {
             endCommandPaletteEscapeSuppression(for: window)
 #if DEBUG
@@ -2300,10 +2255,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         return CommandPaletteController.windowLifecycle.isVisible(windowId: windowId)
     }
 
-    func isCommandPaletteEffectivelyVisible(for window: NSWindow) -> Bool {
-        isCommandPaletteEffectivelyVisible(in: window)
-    }
-
     func shouldBlockFirstResponderChangeWhileCommandPaletteVisible(
         window: NSWindow,
         responder: NSResponder?
@@ -2311,7 +2262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         guard isCommandPaletteVisible(for: window) else { return false }
         guard let responder else { return false }
         guard !isCommandPaletteResponder(responder) else { return false }
-        return isFocusStealingResponderWhileCommandPaletteVisible(responder)
+        return isCommandPaletteFocusStealingTerminalResponder(responder)
     }
 
     private func isCommandPaletteResponder(_ responder: NSResponder) -> Bool {
@@ -2328,10 +2279,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             return isInsideCommandPaletteOverlay(view)
         }
         return false
-    }
-
-    private func isFocusStealingResponderWhileCommandPaletteVisible(_ responder: NSResponder) -> Bool {
-        isCommandPaletteFocusStealingTerminalResponder(responder)
     }
 
     private func isInsideCommandPaletteOverlay(_ view: NSView) -> Bool {
@@ -2412,7 +2359,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         guard !normalizedFlags.contains(.command) else { return }
         guard isMainTerminalWindow(window) else { return }
         guard window.attachedSheet == nil else { return }
-        guard !isCommandPaletteEffectivelyVisible(in: window) else { return }
+        guard !isCommandPaletteEffectivelyVisible(for: window) else { return }
         guard let context = contextForMainWindow(window) ?? contextForMainTerminalWindow(window),
               let workspace = context.tabManager.selectedWorkspace,
               let panelId = workspace.focusedPanelId,
@@ -2689,7 +2636,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         return nil
     }
 
-    private func isCommandPaletteEffectivelyVisible(in window: NSWindow) -> Bool {
+    func isCommandPaletteEffectivelyVisible(for window: NSWindow) -> Bool {
         isCommandPaletteVisible(for: window)
             || isCommandPalettePendingOpen(for: window)
             || isCommandPaletteOverlayPresented(in: window)
@@ -2700,16 +2647,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         pruneExpiredCommandPalettePendingOpenStates()
         if let keyWindow = NSApp.keyWindow,
            isMainTerminalWindow(keyWindow),
-           isCommandPaletteEffectivelyVisible(in: keyWindow) {
+           isCommandPaletteEffectivelyVisible(for: keyWindow) {
             return keyWindow
         }
         if let mainWindow = NSApp.mainWindow,
            isMainTerminalWindow(mainWindow),
-           isCommandPaletteEffectivelyVisible(in: mainWindow) {
+           isCommandPaletteEffectivelyVisible(for: mainWindow) {
             return mainWindow
         }
         if let orderedWindow = NSApp.orderedWindows.first(where: { window in
-            isMainTerminalWindow(window) && isCommandPaletteEffectivelyVisible(in: window)
+            isMainTerminalWindow(window) && isCommandPaletteEffectivelyVisible(for: window)
         }) {
             return orderedWindow
         }
@@ -2868,33 +2815,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     @discardableResult
     func toggleSidebarInActiveMainWindow() -> Bool {
-        if let activeManager = tabManager,
-           let activeContext = mainWindowContexts.values.first(where: { $0.tabManager === activeManager }) {
-            if let window = activeContext.window ?? windowForMainWindowId(activeContext.windowId) {
-                setActiveMainWindow(window)
-            }
-            activeContext.sidebarState.toggle()
-            return true
+        let activeContext = tabManager.flatMap { activeManager in
+            mainWindowContexts.values.first(where: { $0.tabManager === activeManager })
         }
-        if let keyContext = contextForMainWindow(NSApp.keyWindow) {
-            if let window = keyContext.window ?? windowForMainWindowId(keyContext.windowId) {
+        if let context = activeContext
+            ?? contextForMainWindow(NSApp.keyWindow)
+            ?? contextForMainWindow(NSApp.mainWindow)
+            ?? mainWindowContexts.values.first {
+            if let window = context.window ?? windowForMainWindowId(context.windowId) {
                 setActiveMainWindow(window)
             }
-            keyContext.sidebarState.toggle()
-            return true
-        }
-        if let mainContext = contextForMainWindow(NSApp.mainWindow) {
-            if let window = mainContext.window ?? windowForMainWindowId(mainContext.windowId) {
-                setActiveMainWindow(window)
-            }
-            mainContext.sidebarState.toggle()
-            return true
-        }
-        if let fallbackContext = mainWindowContexts.values.first {
-            if let window = fallbackContext.window ?? windowForMainWindowId(fallbackContext.windowId) {
-                setActiveMainWindow(window)
-            }
-            fallbackContext.sidebarState.toggle()
+            context.sidebarState.toggle()
             return true
         }
         if let sidebarState {
@@ -3025,7 +2956,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             case .window:
                 _ = createMainWindow(initialWorkingDirectory: directory)
             case .workspace:
-                openWorkspaceFromService(workingDirectory: directory)
+                openWorkspaceForExternalDirectory(workingDirectory: directory, debugSource: "service.openTab")
             }
         }
     }
@@ -3056,13 +2987,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
 
         return []
-    }
-
-    private func openWorkspaceFromService(workingDirectory: String) {
-        openWorkspaceForExternalDirectory(
-            workingDirectory: workingDirectory,
-            debugSource: "service.openTab"
-        )
     }
 
     private func prepareForExplicitOpenIntentAtStartup() {
@@ -3177,6 +3101,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     /// away so the user sees Claude boot in place (no pool, no hidden workspace). Refs #137.
     @discardableResult
     func createClaudeWorkspace(event: NSEvent? = nil, debugSource: String = "unspecified") -> UUID? {
+        openWorkspaceRunning("claude\n", inFocusedDirectory: true, event: event, debugSource: debugSource)
+    }
+
+    /// The integration installers target the user's global agent settings, not a project,
+    /// so they open without a working-directory override. Menu-only entry points (#138).
+    @discardableResult
+    func openClaudeIntegrationInstaller(event: NSEvent? = nil, debugSource: String = "unspecified") -> UUID? {
+        openWorkspaceRunning("programa claude install-integration\n", event: event, debugSource: debugSource)
+    }
+
+    @discardableResult
+    func openCodexIntegrationInstaller(event: NSEvent? = nil, debugSource: String = "unspecified") -> UUID? {
+        openWorkspaceRunning("programa codex install-integration\n", event: event, debugSource: debugSource)
+    }
+
+    @discardableResult
+    func openOpenCodeIntegrationInstaller(event: NSEvent? = nil, debugSource: String = "unspecified") -> UUID? {
+        openWorkspaceRunning("programa opencode install-integration\n", event: event, debugSource: debugSource)
+    }
+
+    @discardableResult
+    func openAsideMCPInstaller(event: NSEvent? = nil, debugSource: String = "unspecified") -> UUID? {
+        openWorkspaceRunning("programa aside install-mcp --with-devtools\n", event: event, debugSource: debugSource)
+    }
+
+    private func openWorkspaceRunning(
+        _ terminalInput: String,
+        inFocusedDirectory: Bool = false,
+        event: NSEvent?,
+        debugSource: String
+    ) -> UUID? {
         discardOrphanedMainWindowContexts()
         guard let context = preferredMainWindowContextForWorkspaceCreation(event: event, debugSource: debugSource) else {
             openNewMainWindow(nil)
@@ -3189,110 +3144,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
         setActiveMainWindow(window)
 
-        let trimmedCwd = context.tabManager.selectedWorkspace?.currentDirectory
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let cwd = (trimmedCwd?.isEmpty ?? true) ? nil : trimmedCwd
+        var cwd: String?
+        if inFocusedDirectory,
+           let trimmed = context.tabManager.selectedWorkspace?.currentDirectory
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !trimmed.isEmpty {
+            cwd = trimmed
+        }
 
         let workspace = context.tabManager.addWorkspace(
             workingDirectory: cwd,
-            initialTerminalInput: "claude\n",
-            select: true
-        )
-        return workspace.id
-    }
-
-    /// Opens a new workspace and runs `programa claude install-integration` in it,
-    /// mirroring createClaudeWorkspace's window-context resolution but without a
-    /// working-directory override — the installer targets the user's global Claude
-    /// Code settings, not a project. Menu-only entry point (#138).
-    @discardableResult
-    func openClaudeIntegrationInstaller(event: NSEvent? = nil, debugSource: String = "unspecified") -> UUID? {
-        discardOrphanedMainWindowContexts()
-        guard let context = preferredMainWindowContextForWorkspaceCreation(event: event, debugSource: debugSource) else {
-            openNewMainWindow(nil)
-            return nil
-        }
-        guard let window = resolvedWindow(for: context) else {
-            discardOrphanedMainWindowContext(context)
-            openNewMainWindow(nil)
-            return nil
-        }
-        setActiveMainWindow(window)
-
-        let workspace = context.tabManager.addWorkspace(
-            initialTerminalInput: "programa claude install-integration\n",
-            select: true
-        )
-        return workspace.id
-    }
-
-    /// Opens a new workspace and runs `programa codex install-integration` in it,
-    /// mirroring openClaudeIntegrationInstaller: no working-directory override, since
-    /// the installer targets the user's global Codex settings, not a project.
-    @discardableResult
-    func openCodexIntegrationInstaller(event: NSEvent? = nil, debugSource: String = "unspecified") -> UUID? {
-        discardOrphanedMainWindowContexts()
-        guard let context = preferredMainWindowContextForWorkspaceCreation(event: event, debugSource: debugSource) else {
-            openNewMainWindow(nil)
-            return nil
-        }
-        guard let window = resolvedWindow(for: context) else {
-            discardOrphanedMainWindowContext(context)
-            openNewMainWindow(nil)
-            return nil
-        }
-        setActiveMainWindow(window)
-
-        let workspace = context.tabManager.addWorkspace(
-            initialTerminalInput: "programa codex install-integration\n",
-            select: true
-        )
-        return workspace.id
-    }
-
-    /// Opens a new workspace and runs `programa opencode install-integration` in it,
-    /// mirroring openCodexIntegrationInstaller: no working-directory override, since
-    /// the installer targets the user's global OpenCode plugin directory, not a project.
-    @discardableResult
-    func openOpenCodeIntegrationInstaller(event: NSEvent? = nil, debugSource: String = "unspecified") -> UUID? {
-        discardOrphanedMainWindowContexts()
-        guard let context = preferredMainWindowContextForWorkspaceCreation(event: event, debugSource: debugSource) else {
-            openNewMainWindow(nil)
-            return nil
-        }
-        guard let window = resolvedWindow(for: context) else {
-            discardOrphanedMainWindowContext(context)
-            openNewMainWindow(nil)
-            return nil
-        }
-        setActiveMainWindow(window)
-
-        let workspace = context.tabManager.addWorkspace(
-            initialTerminalInput: "programa opencode install-integration\n",
-            select: true
-        )
-        return workspace.id
-    }
-
-    /// Opens a new workspace and runs `programa aside install-mcp --with-devtools` in it,
-    /// mirroring openOpenCodeIntegrationInstaller: no working-directory override, since
-    /// the installer targets the user's global Claude Code / Codex MCP config, not a project.
-    @discardableResult
-    func openAsideMCPInstaller(event: NSEvent? = nil, debugSource: String = "unspecified") -> UUID? {
-        discardOrphanedMainWindowContexts()
-        guard let context = preferredMainWindowContextForWorkspaceCreation(event: event, debugSource: debugSource) else {
-            openNewMainWindow(nil)
-            return nil
-        }
-        guard let window = resolvedWindow(for: context) else {
-            discardOrphanedMainWindowContext(context)
-            openNewMainWindow(nil)
-            return nil
-        }
-        setActiveMainWindow(window)
-
-        let workspace = context.tabManager.addWorkspace(
-            initialTerminalInput: "programa aside install-mcp --with-devtools\n",
+            initialTerminalInput: terminalInput,
             select: true
         )
         return workspace.id
@@ -3379,7 +3241,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     private func shortcutEventHasAddressableWindow(_ event: NSEvent?) -> Bool {
         guard let event else { return false }
-        // NSEvent.windowNumber can be 0 for responder-chain events that are not
         return event.window != nil || event.windowNumber > 0
     }
 
@@ -3641,7 +3502,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             sidebarState: sidebarState,
             sidebarSelectionState: sidebarSelectionState
         )
-        installFileDropOverlay(on: window, tabManager: tabManager)
+        installFileDropOverlay(on: window)
         if TerminalController.shouldSuppressSocketCommandActivation() {
             window.orderFront(nil)
             if TerminalController.socketCommandAllowsInAppFocusMutations() {
@@ -3923,28 +3784,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     @objc func copyUpdateLogs(_ sender: Any?) {
-        let logText = UpdateLogStore.shared.snapshot()
-        let payload: String
-        if logText.isEmpty {
-            payload = "No update logs captured.\nLog file: \(UpdateLogStore.shared.logPath())"
-        } else {
-            payload = logText + "\nLog file: \(UpdateLogStore.shared.logPath())"
-        }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(payload, forType: .string)
+        copyLogSnapshot(UpdateLogStore.shared.snapshot(), logPath: UpdateLogStore.shared.logPath(), kind: "update")
     }
     @objc func copyFocusLogs(_ sender: Any?) {
-        let logText = FocusLogStore.shared.snapshot()
-        let payload: String
-        if logText.isEmpty {
-            payload = "No focus logs captured.\nLog file: \(FocusLogStore.shared.logPath())"
-        } else {
-            payload = logText + "\nLog file: \(FocusLogStore.shared.logPath())"
-        }
+        copyLogSnapshot(FocusLogStore.shared.snapshot(), logPath: FocusLogStore.shared.logPath(), kind: "focus")
+    }
+
+    private func copyLogSnapshot(_ logText: String, logPath: String, kind: String) {
+        let body = logText.isEmpty ? "No \(kind) logs captured." : logText
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(payload, forType: .string)
+        pasteboard.setString(body + "\nLog file: \(logPath)", forType: .string)
     }
 
     /// Sends `text` to a terminal in `tab` once its surface exists. `afterSend` runs right after
@@ -4050,12 +3900,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         titlebarAccessoryController.isNotificationsPopoverShown()
     }
 
-    // MARK: - Agent status badges (issue #164, v1 hook tier)
+    // MARK: - Agent status badges
     //
     // "Blocked" surfaces are surfaced in the menu bar as "N agents blocked" alongside the
     // unread count. State is fed exclusively by installed lifecycle hooks
-    // (Workspace.panelAgentStates, set via surface.report_agent_state) — there is no
-    // heuristic/screen-rule fallback in this tier.
+    // (Workspace.panelAgentStates, set via surface.report_agent_state), with no
+    // heuristic/screen-rule fallback.
 
     /// Every currently-blocked surface across all windows, as (workspaceId, surfaceId)
     /// pairs. Falls back to the active `tabManager`'s tabs when no window context is
@@ -4384,18 +4234,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         return StoredShortcut(key: key, command: command, shift: shift, option: option, control: control)
     }
 
-    func handleQuitShortcutWarning() -> Bool {
-        // Tagged DEV builds are ephemeral, skip quit confirmation entirely.
-        if SocketControlSettings.isTaggedDevBuild() {
-            NSApp.terminate(nil)
-            return true
-        }
-
-        if !QuitWarningSettings.isEnabled() {
-            NSApp.terminate(nil)
-            return true
-        }
-
+    /// Shows the Quit confirmation shared by Cmd+Q and the menu/Dock quit path; returns
+    /// whether the user chose Quit. Persists the "don't warn again" checkbox.
+    private func runQuitConfirmationAlert() -> Bool {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = String(localized: "dialog.quitPrograma.title", defaultValue: "Quit Programa?")
@@ -4409,8 +4250,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         if alert.suppressionButton?.state == .on {
             QuitWarningSettings.setEnabled(false)
         }
+        return response == .alertFirstButtonReturn
+    }
 
-        if response == .alertFirstButtonReturn {
+    func handleQuitShortcutWarning() -> Bool {
+        // Tagged DEV builds are ephemeral, skip quit confirmation entirely.
+        if SocketControlSettings.isTaggedDevBuild() {
+            NSApp.terminate(nil)
+            return true
+        }
+
+        if !QuitWarningSettings.isEnabled() {
+            NSApp.terminate(nil)
+            return true
+        }
+
+        if runQuitConfirmationAlert() {
             // Mark as confirmed so applicationShouldTerminate does not show a
             // second alert when NSApp.terminate re-enters the delegate callback.
             appLifecycleCoordinator.confirmQuit()
@@ -4419,22 +4274,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         return true
     }
 
-    // Precedence encoded by this function's evaluation order (each phase is checked
-    // strictly after the previous one; the first phase that returns wins). Refs #95.
-    //   1. Setup: chord-prefix bookkeeping, Ctrl+D debug probe, close-confirmation-alert
-    //      passthrough, modal/sheet passthrough, command-palette window/state computation.
-    //   2. Palette (highest real precedence while interactive): Escape-key routing
-    //      (palette dismiss / terminal-IME bypass / suppressed-escape grace window),
-    //      palette selection-navigation (arrow keys),
-    //      clear, palette "effective" actions (open palette / go-to-workspace + their
-    //      chord arming), shouldConsumeShortcutWhileCommandPaletteVisible catch-all.
-    //      popover escape/typing consumption, shortcut-routing-context sync guard, Ctrl+D
-    //      bypass.
-    //   4. App-shortcut (lowest precedence, only reached once nothing above claimed the
-    //      event): the flat table of ~55 `matchConfiguredShortcut`/digit/directional/tab
-    //      checks, in handleConfiguredAppShortcutActions(event:...).
     // Snapshot of whether/how the command palette is claiming keyboard input for a given
-    // shortcut event's routed window. The precedence decisions below read
+    // shortcut event's routed window. The precedence decisions in handleCustomShortcut read
     // `commandPaletteState.isEffectiveInTargetWindow` etc. declaratively instead of
     // re-deriving the interdependent booleans.
     private struct CommandPaletteInteractionState {
@@ -4493,12 +4334,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         String(localized: "dialog.closeWindow.title", defaultValue: "Close window?"),
     ]
 
+    // Precedence is this function's evaluation order; the first phase that claims the
+    // event wins. Refs #95.
+    //   1. Setup: chord-prefix bookkeeping, Ctrl+D debug probe, close-confirmation-alert
+    //      passthrough, modal/sheet passthrough, command-palette state computation.
+    //   2. Palette (while interactive): Escape routing (dismiss / terminal-IME bypass /
+    //      suppressed-escape grace window), selection navigation, palette actions (open
+    //      palette / go-to-workspace and their chord arming), and the
+    //      shouldConsumeShortcutWhileCommandPaletteVisible catch-all.
+    //   3. Guards: popover escape/typing consumption, shortcut-routing-context sync,
+    //      Ctrl+D bypass.
+    //   4. App shortcuts, reached only when nothing above claimed the event:
+    //      handleConfiguredAppShortcutActions(event:...).
     func handleCustomShortcut(event: NSEvent) -> Bool {
-        // `charactersIgnoringModifiers` can be nil for some synthetic NSEvents and certain special keys.
-        // Treat nil as "" and rely on keyCode/layout-aware fallback logic where needed.
-        // When a non-Latin input source is active (Korean, Chinese, Japanese, etc.),
-        // charactersIgnoringModifiers returns non-ASCII characters that never match
-        // Latin shortcut keys. Normalize via KeyboardLayout so downstream comparisons
+        // `charactersIgnoringModifiers` can be nil for some synthetic NSEvents and certain special keys,
+        // and under a non-Latin input source (Korean, Chinese, Japanese, etc.) it returns
+        // non-ASCII characters that never match Latin shortcut keys. KeyboardLayout normalizes both.
         let chars = KeyboardLayout.normalizedCharacters(for: event)
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let hasControl = flags.contains(.control)
@@ -4570,11 +4421,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
 
         let normalizedFlags = flags.subtracting([.numericPad, .function, .capsLock])
-        // The six interdependent booleans below (visible/pendingOpen/overlayVisible/
-        // responderActive/interactive/effective) describe whether -- and how -- the command
-        // palette is currently claiming keyboard input in the window this event is routed to.
-        // Precedence throughout the rest of this function reads off `commandPaletteState`
-        // declaratively instead of recomputing these checks inline.
         let commandPaletteState = makeCommandPaletteInteractionState(for: event)
         let commandPaletteTargetWindow = commandPaletteState.targetWindow
         let commandPaletteShortcutWindow = commandPaletteState.shortcutWindow
@@ -4649,7 +4495,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 return false
             }
             if let paletteWindow = escapePaletteWindow,
-               isCommandPaletteEffectivelyVisible(in: paletteWindow) {
+               isCommandPaletteEffectivelyVisible(for: paletteWindow) {
                 if commandPaletteMarkedTextInput(in: paletteWindow) != nil {
 #if DEBUG
                     dlog(
@@ -4670,7 +4516,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 ?? event.window
                 ?? NSApp.keyWindow
                 ?? NSApp.mainWindow
-            if shouldConsumeSuppressedEscape(event: event, window: suppressionWindow) {
+            if shouldConsumeSuppressedEscape(window: suppressionWindow) {
 #if DEBUG
                 dlog(
                     "shortcut.escape suppressionConsume consumed=1 target={\(debugWindowToken(suppressionWindow))} " +
@@ -5419,7 +5265,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             // empty toolbar reports zero height). Give the toolbar a single
             // system space item -- the same mechanism sidebar apps (Mail,
             // Notes, Finder) use -- so AppKit re-centers the traffic lights on
-            // WindowGlassEffect.sidebarHeaderCenterFromWindowTop. Guarded on
+            // the sidebar header row (WindowGlassEffect.sidebarHeaderHeight). Guarded on
             // `window.toolbar == nil` because this function runs on every
             // WindowAccessor update, not just once per window.
             let toolbar = NSToolbar(identifier: mainWindowToolbarIdentifier)
@@ -5480,7 +5326,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
                 ContentView.makeViewHierarchyTransparent(contentView)
             }
         } else {
-            // the NSWindow background. Keep opaque theme changes applied here as well.
             if window.backgroundColor != currentThemeBackground {
                 window.backgroundColor = currentThemeBackground
             }
@@ -5505,7 +5350,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             sidebarState: sidebarState,
             sidebarSelectionState: sidebarSelectionState
         )
-        installFileDropOverlay(on: window, tabManager: tabManager)
+        installFileDropOverlay(on: window)
 
         return nextTitlebarPadding
     }

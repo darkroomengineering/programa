@@ -58,10 +58,6 @@ enum TabBarColors {
 
     // MARK: - Tab Bar Background
 
-    static var barBackground: Color {
-        Color(nsColor: .windowBackgroundColor)
-    }
-
     static func barBackground(for appearance: BonsplitConfiguration.Appearance) -> Color {
         Color(nsColor: effectiveBackgroundColor(for: appearance, fallback: .windowBackgroundColor))
     }
@@ -98,20 +94,12 @@ enum TabBarColors {
 
     // MARK: - Text Colors
 
-    static var activeText: Color {
-        Color(nsColor: .labelColor)
-    }
-
     static func activeText(for appearance: BonsplitConfiguration.Appearance) -> Color {
         Color(nsColor: effectiveTextColor(for: appearance, secondary: false))
     }
 
     static func nsColorActiveText(for appearance: BonsplitConfiguration.Appearance) -> NSColor {
         effectiveTextColor(for: appearance, secondary: false)
-    }
-
-    static var inactiveText: Color {
-        Color(nsColor: .secondaryLabelColor)
     }
 
     static func inactiveText(for appearance: BonsplitConfiguration.Appearance) -> Color {
@@ -135,10 +123,6 @@ enum TabBarColors {
 
     // MARK: - Borders & Indicators
 
-    static var separator: Color {
-        Color(nsColor: .separatorColor)
-    }
-
     static func separator(for appearance: BonsplitConfiguration.Appearance) -> Color {
         Color(nsColor: nsColorSeparator(for: appearance))
     }
@@ -158,13 +142,8 @@ enum TabBarColors {
         return tone.withAlphaComponent(alpha)
     }
 
-    static var dropIndicator: Color {
-        Color.accentColor
-    }
-
     static func dropIndicator(for appearance: BonsplitConfiguration.Appearance) -> Color {
-        _ = appearance
-        return dropIndicator
+        Color.accentColor
     }
 
     static var dirtyIndicator: Color {
@@ -176,13 +155,8 @@ enum TabBarColors {
         return activeText(for: appearance).opacity(0.72)
     }
 
-    static var notificationBadge: Color {
-        Color(nsColor: .systemBlue)
-    }
-
     static func notificationBadge(for appearance: BonsplitConfiguration.Appearance) -> Color {
-        _ = appearance
-        return notificationBadge
+        Color(nsColor: .systemBlue)
     }
 }
 
@@ -215,24 +189,24 @@ private extension NSColor {
         self.init(red: red, green: green, blue: blue, alpha: alpha)
     }
 
-    var isBonsplitLightColor: Bool {
+    private var bonsplitSRGBComponents: (red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat) {
         var red: CGFloat = 0
         var green: CGFloat = 0
         var blue: CGFloat = 0
         var alpha: CGFloat = 0
         let color = usingColorSpace(.sRGB) ?? self
         color.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        return (red, green, blue, alpha)
+    }
+
+    var isBonsplitLightColor: Bool {
+        let (red, green, blue, _) = bonsplitSRGBComponents
         let luminance = (0.299 * red) + (0.587 * green) + (0.114 * blue)
         return luminance > 0.5
     }
 
     func bonsplitLighten(by amount: CGFloat) -> NSColor {
-        var red: CGFloat = 0
-        var green: CGFloat = 0
-        var blue: CGFloat = 0
-        var alpha: CGFloat = 0
-        let color = usingColorSpace(.sRGB) ?? self
-        color.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        let (red, green, blue, alpha) = bonsplitSRGBComponents
         return NSColor(
             red: min(1.0, red + amount),
             green: min(1.0, green + amount),
@@ -242,12 +216,7 @@ private extension NSColor {
     }
 
     func bonsplitDarken(by amount: CGFloat) -> NSColor {
-        var red: CGFloat = 0
-        var green: CGFloat = 0
-        var blue: CGFloat = 0
-        var alpha: CGFloat = 0
-        let color = usingColorSpace(.sRGB) ?? self
-        color.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        let (red, green, blue, alpha) = bonsplitSRGBComponents
         return NSColor(
             red: max(0.0, red - amount),
             green: max(0.0, green - amount),

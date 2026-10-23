@@ -14,9 +14,6 @@ public protocol BonsplitDelegate: AnyObject {
 
     // MARK: - Tab Lifecycle (Notifications)
 
-    /// Called after a tab has been created.
-    func splitTabBar(_ controller: BonsplitController, didCreateTab tab: Tab, inPane pane: PaneID)
-
     /// Called after a tab has been closed.
     func splitTabBar(_ controller: BonsplitController, didCloseTab tabId: TabID, fromPane pane: PaneID)
 
@@ -65,9 +62,6 @@ public protocol BonsplitDelegate: AnyObject {
 
     /// Called when any pane geometry changes (resize, split, close)
     func splitTabBar(_ controller: BonsplitController, didChangeGeometry snapshot: LayoutSnapshot)
-
-    /// Called to check if notifications should be sent during divider drag (opt-in for real-time sync)
-    func splitTabBar(_ controller: BonsplitController, shouldNotifyDuringDrag: Bool) -> Bool
 }
 
 // MARK: - Default Implementations (all methods optional)
@@ -75,7 +69,6 @@ public protocol BonsplitDelegate: AnyObject {
 public extension BonsplitDelegate {
     func splitTabBar(_ controller: BonsplitController, shouldCreateTab tab: Tab, inPane pane: PaneID) -> Bool { true }
     func splitTabBar(_ controller: BonsplitController, shouldCloseTab tab: Tab, inPane pane: PaneID) -> Bool { true }
-    func splitTabBar(_ controller: BonsplitController, didCreateTab tab: Tab, inPane pane: PaneID) {}
     func splitTabBar(_ controller: BonsplitController, didCloseTab tabId: TabID, fromPane pane: PaneID) {}
     func splitTabBar(_ controller: BonsplitController, didSelectTab tab: Tab, inPane pane: PaneID) {}
     func splitTabBar(_ controller: BonsplitController, didMoveTab tab: Tab, fromPane source: PaneID, toPane destination: PaneID) {}
@@ -88,5 +81,4 @@ public extension BonsplitDelegate {
     func splitTabBar(_ controller: BonsplitController, didRequestTabContextAction action: TabContextAction, for tab: Tab, inPane pane: PaneID) {}
     func splitTabBar(_ controller: BonsplitController, didRequestTabColor hex: String, for tab: Tab, inPane pane: PaneID) {}
     func splitTabBar(_ controller: BonsplitController, didChangeGeometry snapshot: LayoutSnapshot) {}
-    func splitTabBar(_ controller: BonsplitController, shouldNotifyDuringDrag: Bool) -> Bool { false }
 }

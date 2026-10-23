@@ -18,23 +18,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must as _must
+from v2_support import read_terminal_text_until as _read_terminal_text_until
 from pane_resize_test_support import (
     wait_for_surface_command_roundtrip as _wait_for_surface_command_roundtrip,
 )
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
-
-
-def _read_terminal_text_until(c: ProgramaClient, surface_id: str, needle: str, timeout_s: float = 10.0) -> str:
-    deadline = time.time() + timeout_s
-    last_text = ""
-    while time.time() < deadline:
-        last_text = c.read_terminal_text(surface_id)
-        if needle in last_text:
-            return last_text
-        time.sleep(0.2)
-    raise ProgramaClientError(f"Timed out waiting for marker {needle!r} in terminal output: {last_text!r}")
 
 
 def _expect_invalid_params(c: ProgramaClient, params: dict) -> None:

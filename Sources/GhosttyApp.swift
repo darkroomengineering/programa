@@ -622,14 +622,12 @@ class GhosttyApp {
             unsetenv("NO_COLOR")
         }
 
-        // Initialize Ghostty library first
         let result = ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv)
         if result != GHOSTTY_SUCCESS {
             NSLog("Failed to initialize ghostty: \(result)")
             return
         }
 
-        // Load config
         guard let primaryConfig = ghostty_config_new() else {
             NSLog("Failed to create ghostty config")
             return
@@ -640,7 +638,6 @@ class GhosttyApp {
         loadDefaultConfigFilesWithLegacyFallback(primaryConfig)
         updateDefaultBackground(from: primaryConfig, source: "initialize.primaryConfig")
 
-        // Create runtime config with callbacks
         var runtimeConfig = ghostty_runtime_config_s()
         runtimeConfig.userdata = Unmanaged.passUnretained(self).toOpaque()
         runtimeConfig.supports_selection_clipboard = true
@@ -790,7 +787,6 @@ class GhosttyApp {
             }
         }
 
-        // Create app
         if let created = ghostty_app_new(&runtimeConfig, primaryConfig) {
             self.app = created
             self.config = primaryConfig
@@ -2308,8 +2304,7 @@ class GhosttyApp {
             )
             return true
         case GHOSTTY_ACTION_COMMAND_FINISHED:
-            // OSC 133 semantic prompt tracking. Plumbing-only: stores exit code + duration on
-            // `Workspace.lastCommand`; no UI reads this yet.
+            // OSC 133 semantic prompt tracking: drives the long-running command notification.
             guard let tabId = callbackTabId,
                   let surfaceId = callbackSurfaceId else { return true }
             let commandFinished = action.action.command_finished
@@ -2323,10 +2318,8 @@ class GhosttyApp {
                       let workspace = owningManager.tabs.first(where: { $0.id == tabId }) else { return }
                 let outcome = LastCommandOutcome.from(
                     exitCode: exitCode,
-                    durationNanoseconds: durationNanoseconds,
-                    sourcePanelId: surfaceId
+                    durationNanoseconds: durationNanoseconds
                 )
-                workspace.lastCommand = outcome
 
                 // Experimental: notify when a long-running command finishes in a pane the
                 // user isn't looking at. Fires at or above LongCommandNotificationSettings.thresholdSeconds.

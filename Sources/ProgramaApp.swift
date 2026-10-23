@@ -2,7 +2,6 @@ import AppKit
 import SwiftUI
 import Darwin
 import Bonsplit
-import UniformTypeIdentifiers
 
 enum UITestLaunchManifest {
     static let argumentName = "-programaUITestLaunchManifest"
@@ -119,9 +118,8 @@ struct programaApp: App {
         Self.configureGhosttyEnvironment()
         _ = KeyboardShortcutSettings.settingsFileStore
 
-        // The in-app language picker was removed; the app always follows the
-        // system language. Clear any previously chosen per-app override once,
-        // since no UI can undo it anymore.
+        // The app has no language picker and follows the system language;
+        // clear any stored per-app override once, since no UI can undo it.
         Self.migrateLanguageOverrideRemovalIfNeeded(defaults: .standard)
 
         let startupAppearance = AppearanceSettings.resolvedMode()
@@ -260,7 +258,6 @@ struct programaApp: App {
                         UpdateLogStore.shared.append("ui test: programaApp onAppear")
                     }
 #endif
-                    // Start the Unix socket controller for programmatic access
                     updateSocketController()
                     appDelegate.configure(tabManager: tabManager, notificationStore: notificationStore, sidebarState: sidebarState)
                     programaConfigStore.wireDirectoryTracking(tabManager: tabManager)

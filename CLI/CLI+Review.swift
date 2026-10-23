@@ -208,8 +208,6 @@ extension ProgramaCLI {
         return (start, start)
     }
 
-    /// Subcommand help text for Review commands, split out of the central `subcommandUsage`
-    /// switch (programa.swift), mirroring `markdownSubcommandUsage`.
     func reviewSubcommandUsage(_ command: String) -> String? {
         switch command {
         case "review":

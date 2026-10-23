@@ -46,12 +46,6 @@ final class SplitViewController {
     /// Flag to prevent notification loops during external updates
     var isExternalUpdateInProgress: Bool = false
 
-    /// Timestamp of last geometry notification for debouncing
-    var lastGeometryNotificationTime: TimeInterval = 0
-
-    /// Callback for geometry changes
-    var onGeometryChange: (() -> Void)?
-
     init(rootNode: SplitNode? = nil) {
         if let rootNode {
             self.rootNode = rootNode
@@ -111,14 +105,16 @@ final class SplitViewController {
 
     // MARK: - Split Operations
 
-    /// Split the specified pane in the given orientation
-    func splitPane(_ paneId: PaneID, orientation: SplitOrientation, with newTab: TabItem? = nil) {
+    /// Splits `paneId` and focuses the new pane, which holds `newTab` (or nothing) and
+    /// sits first (left/top) when `insertFirst` is true.
+    func splitPane(_ paneId: PaneID, orientation: SplitOrientation, with newTab: TabItem? = nil, insertFirst: Bool = false) {
         clearPaneZoom()
         rootNode = splitNodeRecursively(
             node: rootNode,
             targetPaneId: paneId,
             orientation: orientation,
-            newTab: newTab
+            newTab: newTab,
+            insertFirst: insertFirst
         )
     }
 
@@ -126,122 +122,39 @@ final class SplitViewController {
         node: SplitNode,
         targetPaneId: PaneID,
         orientation: SplitOrientation,
-        newTab: TabItem?
+        newTab: TabItem?,
+        insertFirst: Bool
     ) -> SplitNode {
         switch node {
         case .pane(let paneState):
-            if paneState.id == targetPaneId {
-                // Create new pane - empty if no tab provided (gives developer full control)
-                let newPane: PaneState
-                if let tab = newTab {
-                    newPane = PaneState(tabs: [tab])
-                } else {
-                    newPane = PaneState(tabs: [])
-                }
-
-                // Start with divider at the edge so there's no flash before animation
-                let splitState = SplitState(
-                    orientation: orientation,
-                    first: .pane(paneState),
-                    second: .pane(newPane),
-                    // Keep the model at its steady-state ratio. The view layer can still animate
-                    // from an edge via animationOrigin, but the model should never represent a
-                    // fully-collapsed pane (which can get stuck under view reparenting timing).
-                    dividerPosition: 0.5,
-                    animationOrigin: .fromSecond  // New pane slides in from right/bottom
-                )
-
-                // Focus the new pane
-                focusedPaneId = newPane.id
-
-                return .split(splitState)
-            }
-            return node
+            guard paneState.id == targetPaneId else { return node }
+            let newPane = PaneState(tabs: newTab.map { [$0] } ?? [])
+            // Keep the model at its steady-state ratio. The view layer can still animate
+            // from an edge via animationOrigin, but the model should never represent a
+            // fully-collapsed pane (which can get stuck under view reparenting timing).
+            let splitState = SplitState(
+                orientation: orientation,
+                first: .pane(insertFirst ? newPane : paneState),
+                second: .pane(insertFirst ? paneState : newPane),
+                dividerPosition: 0.5,
+                animationOrigin: insertFirst ? .fromFirst : .fromSecond
+            )
+            focusedPaneId = newPane.id
+            return .split(splitState)
 
         case .split(let splitState):
             splitState.first = splitNodeRecursively(
                 node: splitState.first,
                 targetPaneId: targetPaneId,
                 orientation: orientation,
-                newTab: newTab
+                newTab: newTab,
+                insertFirst: insertFirst
             )
             splitState.second = splitNodeRecursively(
                 node: splitState.second,
                 targetPaneId: targetPaneId,
                 orientation: orientation,
-                newTab: newTab
-            )
-            return .split(splitState)
-        }
-    }
-
-    /// Split a pane with a specific tab, optionally inserting the new pane first
-    func splitPaneWithTab(_ paneId: PaneID, orientation: SplitOrientation, tab: TabItem, insertFirst: Bool) {
-        clearPaneZoom()
-        rootNode = splitNodeWithTabRecursively(
-            node: rootNode,
-            targetPaneId: paneId,
-            orientation: orientation,
-            tab: tab,
-            insertFirst: insertFirst
-        )
-    }
-
-    private func splitNodeWithTabRecursively(
-        node: SplitNode,
-        targetPaneId: PaneID,
-        orientation: SplitOrientation,
-        tab: TabItem,
-        insertFirst: Bool
-    ) -> SplitNode {
-        switch node {
-        case .pane(let paneState):
-            if paneState.id == targetPaneId {
-                // Create new pane with the tab
-                let newPane = PaneState(tabs: [tab])
-
-                // Start with divider at the edge so there's no flash before animation
-                let splitState: SplitState
-                if insertFirst {
-                    // New pane goes first (left or top).
-                    splitState = SplitState(
-                        orientation: orientation,
-                        first: .pane(newPane),
-                        second: .pane(paneState),
-                        dividerPosition: 0.5,
-                        animationOrigin: .fromFirst
-                    )
-                } else {
-                    // New pane goes second (right or bottom).
-                    splitState = SplitState(
-                        orientation: orientation,
-                        first: .pane(paneState),
-                        second: .pane(newPane),
-                        dividerPosition: 0.5,
-                        animationOrigin: .fromSecond
-                    )
-                }
-
-                // Focus the new pane
-                focusedPaneId = newPane.id
-
-                return .split(splitState)
-            }
-            return node
-
-        case .split(let splitState):
-            splitState.first = splitNodeWithTabRecursively(
-                node: splitState.first,
-                targetPaneId: targetPaneId,
-                orientation: orientation,
-                tab: tab,
-                insertFirst: insertFirst
-            )
-            splitState.second = splitNodeWithTabRecursively(
-                node: splitState.second,
-                targetPaneId: targetPaneId,
-                orientation: orientation,
-                tab: tab,
+                newTab: newTab,
                 insertFirst: insertFirst
             )
             return .split(splitState)
@@ -439,8 +352,7 @@ final class SplitViewController {
     func selectPreviousTab() {
         guard let pane = focusedPane,
               let selectedTabId = pane.selectedTabId,
-              let currentIndex = pane.tabs.firstIndex(where: { $0.id == selectedTabId }),
-              !pane.tabs.isEmpty else { return }
+              let currentIndex = pane.tabs.firstIndex(where: { $0.id == selectedTabId }) else { return }
 
         let newIndex = currentIndex > 0 ? currentIndex - 1 : pane.tabs.count - 1
         pane.selectTab(pane.tabs[newIndex].id)
@@ -450,8 +362,7 @@ final class SplitViewController {
     func selectNextTab() {
         guard let pane = focusedPane,
               let selectedTabId = pane.selectedTabId,
-              let currentIndex = pane.tabs.firstIndex(where: { $0.id == selectedTabId }),
-              !pane.tabs.isEmpty else { return }
+              let currentIndex = pane.tabs.firstIndex(where: { $0.id == selectedTabId }) else { return }
 
         let newIndex = currentIndex < pane.tabs.count - 1 ? currentIndex + 1 : 0
         pane.selectTab(pane.tabs[newIndex].id)

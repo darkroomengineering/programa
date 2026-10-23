@@ -20,7 +20,6 @@ from pane_resize_test_support import (
     must as _must,
     pane_extent as _pane_extent,
     pick_resize_direction_for_pane as _pick_resize_direction_for_pane,
-    scrollback_has_exact_line as _scrollback_has_exact_line,
     surface_scrollback_text as _surface_scrollback_text,
     wait_for as _wait_for,
     wait_for_surface_command_roundtrip as _wait_for_surface_command_roundtrip,

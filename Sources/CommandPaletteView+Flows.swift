@@ -37,86 +37,39 @@ extension CommandPaletteView {
     func attachCommandPaletteRequestHandlers(to view: some View) -> some View {
         view
             .onReceive(NotificationCenter.default.publisher(for: .commandPaletteToggleRequested)) { notification in
-                let requestedWindow = notification.object as? NSWindow
-                guard Self.shouldHandleCommandPaletteRequest(
-                    observedWindow: observedWindow,
-                    requestedWindow: requestedWindow,
-                    keyWindow: NSApp.keyWindow,
-                    mainWindow: NSApp.mainWindow
-                ) else { return }
+                guard shouldHandleCommandPaletteRequest(notification) else { return }
                 toggleCommandPalette()
             }
             .onReceive(NotificationCenter.default.publisher(for: .commandPaletteRequested)) { notification in
-                let requestedWindow = notification.object as? NSWindow
-                guard Self.shouldHandleCommandPaletteRequest(
-                    observedWindow: observedWindow,
-                    requestedWindow: requestedWindow,
-                    keyWindow: NSApp.keyWindow,
-                    mainWindow: NSApp.mainWindow
-                ) else { return }
+                guard shouldHandleCommandPaletteRequest(notification) else { return }
                 openCommandPaletteCommands()
             }
             .onReceive(NotificationCenter.default.publisher(for: .commandPaletteSwitcherRequested)) { notification in
-                let requestedWindow = notification.object as? NSWindow
-                guard Self.shouldHandleCommandPaletteRequest(
-                    observedWindow: observedWindow,
-                    requestedWindow: requestedWindow,
-                    keyWindow: NSApp.keyWindow,
-                    mainWindow: NSApp.mainWindow
-                ) else { return }
+                guard shouldHandleCommandPaletteRequest(notification) else { return }
                 openCommandPaletteSwitcher()
             }
             .onReceive(NotificationCenter.default.publisher(for: .commandPaletteSubmitRequested)) { notification in
                 guard commandPaletteController.isCommandPalettePresented else { return }
-                let requestedWindow = notification.object as? NSWindow
-                guard Self.shouldHandleCommandPaletteRequest(
-                    observedWindow: observedWindow,
-                    requestedWindow: requestedWindow,
-                    keyWindow: NSApp.keyWindow,
-                    mainWindow: NSApp.mainWindow
-                ) else { return }
+                guard shouldHandleCommandPaletteRequest(notification) else { return }
                 handleCommandPaletteSubmitRequest()
             }
             .onReceive(NotificationCenter.default.publisher(for: .commandPaletteDismissRequested)) { notification in
                 guard commandPaletteController.isCommandPalettePresented else { return }
-                let requestedWindow = notification.object as? NSWindow
-                guard Self.shouldHandleCommandPaletteRequest(
-                    observedWindow: observedWindow,
-                    requestedWindow: requestedWindow,
-                    keyWindow: NSApp.keyWindow,
-                    mainWindow: NSApp.mainWindow
-                ) else { return }
+                guard shouldHandleCommandPaletteRequest(notification) else { return }
                 dismissCommandPalette(restoreFocus: notification.userInfo?["restoreFocus"] as? Bool ?? true)
             }
             .onReceive(NotificationCenter.default.publisher(for: .commandPaletteRenameTabRequested)) { notification in
-                let requestedWindow = notification.object as? NSWindow
-                guard Self.shouldHandleCommandPaletteRequest(
-                    observedWindow: observedWindow,
-                    requestedWindow: requestedWindow,
-                    keyWindow: NSApp.keyWindow,
-                    mainWindow: NSApp.mainWindow
-                ) else { return }
+                guard shouldHandleCommandPaletteRequest(notification) else { return }
                 openCommandPaletteRenameTabInput()
             }
             .onReceive(NotificationCenter.default.publisher(for: .commandPaletteRenameWorkspaceRequested)) { notification in
-                let requestedWindow = notification.object as? NSWindow
-                guard Self.shouldHandleCommandPaletteRequest(
-                    observedWindow: observedWindow,
-                    requestedWindow: requestedWindow,
-                    keyWindow: NSApp.keyWindow,
-                    mainWindow: NSApp.mainWindow
-                ) else { return }
+                guard shouldHandleCommandPaletteRequest(notification) else { return }
                 openCommandPaletteRenameWorkspaceInput()
             }
             .onReceive(NotificationCenter.default.publisher(for: .commandPaletteEditWorkspaceDescriptionRequested)) { notification in
-                let requestedWindow = notification.object as? NSWindow
-                let shouldHandle = Self.shouldHandleCommandPaletteRequest(
-                    observedWindow: observedWindow,
-                    requestedWindow: requestedWindow,
-                    keyWindow: NSApp.keyWindow,
-                    mainWindow: NSApp.mainWindow
-                )
+                let shouldHandle = shouldHandleCommandPaletteRequest(notification)
     #if DEBUG
+                let requestedWindow = notification.object as? NSWindow
                 dlog(
                     "palette.wsDescription.request observed={\(debugCommandPaletteWindowSummary(observedWindow))} " +
                     "requested={\(debugCommandPaletteWindowSummary(requestedWindow))} " +
@@ -130,40 +83,31 @@ extension CommandPaletteView {
             .onReceive(NotificationCenter.default.publisher(for: .commandPaletteMoveSelection)) { notification in
                 guard commandPaletteController.isCommandPalettePresented else { return }
                 guard case .commands = commandPaletteController.commandPaletteMode else { return }
-                let requestedWindow = notification.object as? NSWindow
-                guard Self.shouldHandleCommandPaletteRequest(
-                    observedWindow: observedWindow,
-                    requestedWindow: requestedWindow,
-                    keyWindow: NSApp.keyWindow,
-                    mainWindow: NSApp.mainWindow
-                ) else { return }
+                guard shouldHandleCommandPaletteRequest(notification) else { return }
                 guard let delta = notification.userInfo?["delta"] as? Int, delta != 0 else { return }
                 moveCommandPaletteSelection(by: delta)
             }
             .onReceive(NotificationCenter.default.publisher(for: .commandPaletteRenameInputInteractionRequested)) { notification in
                 guard commandPaletteController.isCommandPalettePresented else { return }
                 guard case .renameInput = commandPaletteController.commandPaletteMode else { return }
-                let requestedWindow = notification.object as? NSWindow
-                guard Self.shouldHandleCommandPaletteRequest(
-                    observedWindow: observedWindow,
-                    requestedWindow: requestedWindow,
-                    keyWindow: NSApp.keyWindow,
-                    mainWindow: NSApp.mainWindow
-                ) else { return }
+                guard shouldHandleCommandPaletteRequest(notification) else { return }
                 handleCommandPaletteRenameInputInteraction()
             }
             .onReceive(NotificationCenter.default.publisher(for: .commandPaletteRenameInputDeleteBackwardRequested)) { notification in
                 guard commandPaletteController.isCommandPalettePresented else { return }
                 guard case .renameInput = commandPaletteController.commandPaletteMode else { return }
-                let requestedWindow = notification.object as? NSWindow
-                guard Self.shouldHandleCommandPaletteRequest(
-                    observedWindow: observedWindow,
-                    requestedWindow: requestedWindow,
-                    keyWindow: NSApp.keyWindow,
-                    mainWindow: NSApp.mainWindow
-                ) else { return }
+                guard shouldHandleCommandPaletteRequest(notification) else { return }
                 _ = handleCommandPaletteRenameDeleteBackward(modifiers: [])
             }
+    }
+
+    private func shouldHandleCommandPaletteRequest(_ notification: Notification) -> Bool {
+        Self.shouldHandleCommandPaletteRequest(
+            observedWindow: observedWindow,
+            requestedWindow: notification.object as? NSWindow,
+            keyWindow: NSApp.keyWindow,
+            mainWindow: NSApp.mainWindow
+        )
     }
 
     var commandPaletteListScope: CommandPaletteListScope {
@@ -326,6 +270,24 @@ extension CommandPaletteView {
         )
     }
 
+    private func commitCommandPaletteResolvedResults(
+        requestID: UInt64,
+        scope: CommandPaletteListScope,
+        fingerprint: Int?,
+        matchingQuery: String
+    ) {
+        commandPaletteController.commandPaletteResolvedSearchRequestID = requestID
+        commandPaletteController.commandPaletteResolvedSearchScope = scope
+        commandPaletteController.commandPaletteResolvedSearchFingerprint = fingerprint
+        commandPaletteController.commandPaletteResolvedMatchingQuery = matchingQuery
+        commandPaletteController.isCommandPaletteSearchPending = false
+        setCommandPaletteVisibleResults(
+            commandPaletteController.cachedCommandPaletteResults,
+            scope: scope,
+            fingerprint: fingerprint
+        )
+    }
+
     func scheduleCommandPaletteResultsRefresh(
         query: String? = nil,
         forceSearchCorpusRefresh: Bool = false
@@ -369,16 +331,7 @@ extension CommandPaletteView {
                 matches: matches,
                 commandsByID: commandsByID
             )
-            commandPaletteController.commandPaletteResolvedSearchRequestID = requestID
-            commandPaletteController.commandPaletteResolvedSearchScope = scope
-            commandPaletteController.commandPaletteResolvedSearchFingerprint = fingerprint
-            commandPaletteController.commandPaletteResolvedMatchingQuery = matchingQuery
-            commandPaletteController.isCommandPaletteSearchPending = false
-            setCommandPaletteVisibleResults(
-                commandPaletteController.cachedCommandPaletteResults,
-                scope: scope,
-                fingerprint: fingerprint
-            )
+            commitCommandPaletteResolvedResults(requestID: requestID, scope: scope, fingerprint: fingerprint, matchingQuery: matchingQuery)
             commandPaletteController.commandPaletteResultsRevision &+= 1
             return
         }
@@ -428,16 +381,7 @@ extension CommandPaletteView {
                     requestID: requestID,
                     resultIDs: resultIDs
                 )
-                commandPaletteController.commandPaletteResolvedSearchRequestID = requestID
-                commandPaletteController.commandPaletteResolvedSearchScope = scope
-                commandPaletteController.commandPaletteResolvedSearchFingerprint = fingerprint
-                commandPaletteController.commandPaletteResolvedMatchingQuery = matchingQuery
-                commandPaletteController.isCommandPaletteSearchPending = false
-                setCommandPaletteVisibleResults(
-                    commandPaletteController.cachedCommandPaletteResults,
-                    scope: scope,
-                    fingerprint: fingerprint
-                )
+                commitCommandPaletteResolvedResults(requestID: requestID, scope: scope, fingerprint: fingerprint, matchingQuery: matchingQuery)
                 if Self.commandPalettePendingActivationRequestID(pendingActivation) == requestID {
                     commandPaletteController.commandPalettePendingActivation = nil
                 }
@@ -940,8 +884,7 @@ extension CommandPaletteView {
     }
 
     private func commandPaletteRenameInputFocusPolicy() -> CommandPaletteInputFocusPolicy {
-        // Rename always opens with the existing name selected, so typing replaces
-        // it. Other focus policies still use .caretAtEnd, so only this call site is fixed.
+        // Rename always opens with the existing name selected, so typing replaces it.
         return CommandPaletteInputFocusPolicy(
             focusTarget: .rename,
             selectionBehavior: .selectAll
@@ -1020,15 +963,6 @@ extension CommandPaletteView {
     private func recordCommandPaletteUsage(_ commandId: String) {
         persistCommandPaletteUsageHistory(
             commandPaletteController.recordUsage(commandId: commandId, usedAt: Date().timeIntervalSince1970)
-        )
-    }
-
-    func commandPaletteHistoryBoost(for commandId: String, queryIsEmpty: Bool) -> Int {
-        Self.commandPaletteHistoryBoost(
-            for: commandId,
-            queryIsEmpty: queryIsEmpty,
-            history: commandPaletteController.commandPaletteUsageHistoryByCommandId,
-            now: Date().timeIntervalSince1970
         )
     }
 

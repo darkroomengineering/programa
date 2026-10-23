@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Regression: non-focus CLI commands should not switch the selected workspace."""
 
-import glob
 import os
 import subprocess
 import sys

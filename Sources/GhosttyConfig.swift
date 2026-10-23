@@ -20,7 +20,6 @@ struct GhosttyConfig {
     var unfocusedSplitFill: NSColor?
     var splitDividerColor: NSColor?
 
-    // Colors (from theme or config)
     var backgroundColor: NSColor = NSColor(hex: "#272822")!
     var backgroundOpacity: Double = 1.0
     // Read-only display state: mirrors backgroundOpacity's presence here, but nothing in
@@ -34,7 +33,6 @@ struct GhosttyConfig {
     var selectionBackground: NSColor = NSColor(hex: "#57584f")!
     var selectionForeground: NSColor = NSColor(hex: "#fdfff1")!
 
-    // Sidebar appearance
     var rawSidebarBackground: String?
     var sidebarBackground: NSColor?
     var sidebarBackgroundLight: NSColor?
@@ -225,7 +223,6 @@ struct GhosttyConfig {
             }
         }
 
-        // Load theme if specified
         if let themeName = config.theme {
             config.loadTheme(
                 themeName,

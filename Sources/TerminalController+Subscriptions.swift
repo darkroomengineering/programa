@@ -2,8 +2,7 @@
 // over a long-lived connection instead of making external tools (dashboards, orchestrators, a
 // menu bar on another machine) poll `surface.list`/`workspace.list` in a loop.
 //
-// Design (see docs/socket-api.md "Socket Event Subscriptions (#167)" for the full spec,
-// written before this was implemented):
+// Design (see docs/socket-api.md "Socket Event Subscriptions (#167)" for the full spec):
 //   - `subscribe` upgrades the calling connection: it keeps answering ordinary v2 requests on
 //     the same connection (including `unsubscribe`), but frames pushed by
 //     `SocketEventBroadcaster` are interleaved on the same socket, serialized through
@@ -18,7 +17,7 @@
 //     ahead of the next real frame so a client always knows to re-sync via `surface.list`/
 //     `workspace.list` rather than silently missing events.
 //   - Disconnect: the first failed `write()` (client gone) tears the subscription down and
-//     unregisters it from the broadcaster; `handleClient`'s existing read-loop teardown also
+//     unregisters it from the broadcaster; `handleClient`'s read-loop teardown also
 //     unconditionally tears down any subscription on that connection (client-initiated close,
 //     or the app shutting the listener down).
 import Bonsplit

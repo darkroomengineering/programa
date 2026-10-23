@@ -1,30 +1,29 @@
 import Foundation
 import AppKit
 
-final class UpdateLogStore {
-    static let shared = UpdateLogStore()
-
-    private let queue = DispatchQueue(label: "programa.update.log")
+/// Bounded in-memory ring of recent lines, mirrored to a file under `~/Library/Logs`.
+class FileLogStore {
+    private let queue: DispatchQueue
     private var entries: [String] = []
-    private let maxEntries = 200
-    private let maxLogFileSize: UInt64 = 1024 * 1024
+    private let maxEntries: Int
+    /// `nil` lets the file grow without rotation.
+    private let maxLogFileSize: UInt64?
     private let logURL: URL
-    private let formatter: ISO8601DateFormatter
+    let formatter: ISO8601DateFormatter
 
-    private init() {
+    init(queueLabel: String, fileName: String, maxEntries: Int, maxLogFileSize: UInt64?) {
+        queue = DispatchQueue(label: queueLabel)
+        self.maxEntries = maxEntries
+        self.maxLogFileSize = maxLogFileSize
         formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let logsDir = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
-        logURL = logsDir.appendingPathComponent("Logs/programa-update.log")
+        logURL = logsDir.appendingPathComponent("Logs/\(fileName)")
         ensureLogFile()
     }
 
-    func append(_ message: String) {
-        let timestamp = formatter.string(from: Date())
-        let bundle = Bundle.main.bundleIdentifier ?? "<no.bundle.id>"
-        let pid = ProcessInfo.processInfo.processIdentifier
-        let line = "[\(timestamp)] [\(bundle):\(pid)] \(message)"
+    func appendLine(_ line: String) {
         queue.async { [weak self] in
             guard let self else { return }
             entries.append(line)
@@ -55,7 +54,9 @@ final class UpdateLogStore {
 
     private func appendToFile(line: String) {
         let data = Data((line + "\n").utf8)
-        rotateLogIfNeeded(appendingByteCount: data.count)
+        if let maxLogFileSize {
+            rotateLogIfNeeded(appendingByteCount: data.count, maxLogFileSize: maxLogFileSize)
+        }
         if let handle = try? FileHandle(forWritingTo: logURL) {
             _ = try? handle.seekToEnd()
             try? handle.write(contentsOf: data)
@@ -65,7 +66,7 @@ final class UpdateLogStore {
         }
     }
 
-    private func rotateLogIfNeeded(appendingByteCount: Int) {
+    private func rotateLogIfNeeded(appendingByteCount: Int, maxLogFileSize: UInt64) {
         let attributes = try? FileManager.default.attributesOfItem(atPath: logURL.path)
         let currentSize = (attributes?[.size] as? NSNumber)?.uint64Value ?? 0
         guard currentSize > 0,
@@ -79,70 +80,47 @@ final class UpdateLogStore {
             try FileManager.default.moveItem(at: logURL, to: backupURL)
             ensureLogFile()
         } catch {
-            // Best-effort logging must not interfere with the updater.
+            // Best-effort logging must not interfere with the caller.
         }
     }
 }
 
-final class FocusLogStore {
-    static let shared = FocusLogStore()
-
-    private let queue = DispatchQueue(label: "programa.focus.log")
-    private var entries: [String] = []
-    private let maxEntries = 400
-    private let logURL: URL
-    private let formatter: ISO8601DateFormatter
+final class UpdateLogStore: FileLogStore {
+    static let shared = UpdateLogStore()
 
     private init() {
-        formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let logsDir = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-        logURL = logsDir.appendingPathComponent("Logs/programa-focus.log")
-        ensureLogFile()
+        super.init(
+            queueLabel: "programa.update.log",
+            fileName: "programa-update.log",
+            maxEntries: 200,
+            maxLogFileSize: 1024 * 1024
+        )
+    }
+
+    func append(_ message: String) {
+        let timestamp = formatter.string(from: Date())
+        let bundle = Bundle.main.bundleIdentifier ?? "<no.bundle.id>"
+        let pid = ProcessInfo.processInfo.processIdentifier
+        appendLine("[\(timestamp)] [\(bundle):\(pid)] \(message)")
+    }
+}
+
+final class FocusLogStore: FileLogStore {
+    static let shared = FocusLogStore()
+
+    private init() {
+        super.init(
+            queueLabel: "programa.focus.log",
+            fileName: "programa-focus.log",
+            maxEntries: 400,
+            maxLogFileSize: nil
+        )
     }
 
     func append(_ message: String) {
         #if DEBUG
         let timestamp = formatter.string(from: Date())
-        let line = "[\(timestamp)] \(message)"
-        queue.async { [weak self] in
-            guard let self else { return }
-            entries.append(line)
-            if entries.count > maxEntries {
-                entries.removeFirst(entries.count - maxEntries)
-            }
-            appendToFile(line: line)
-        }
+        appendLine("[\(timestamp)] \(message)")
         #endif
-    }
-
-    func snapshot() -> String {
-        queue.sync {
-            entries.joined(separator: "\n")
-        }
-    }
-
-    func logPath() -> String {
-        logURL.path
-    }
-
-    private func ensureLogFile() {
-        let directory = logURL.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        if !FileManager.default.fileExists(atPath: logURL.path) {
-            try? Data().write(to: logURL)
-        }
-    }
-
-    private func appendToFile(line: String) {
-        let data = Data((line + "\n").utf8)
-        if let handle = try? FileHandle(forWritingTo: logURL) {
-            _ = try? handle.seekToEnd()
-            try? handle.write(contentsOf: data)
-            try? handle.close()
-        } else {
-            try? data.write(to: logURL, options: .atomic)
-        }
     }
 }

@@ -27,7 +27,7 @@
 //! their scrollback has aged content out.
 //!
 //! **fsync**: debounced, at most once per `fsync_interval` (default 200ms)
-//! of wall time, matching the "fsync debounced" requirement. A final fsync
+//! of wall time. A final fsync
 //! always happens on `Drop`/`close` so a clean shutdown never loses the
 //! last write.
 
@@ -153,7 +153,7 @@ impl WalStore {
     pub fn flush(&mut self) -> io::Result<()> {
         self.file.flush()?;
         self.file.sync_data()?;
-        write_meta(&self.meta_path, &self.meta)?;
+        write_json_atomic(&self.meta_path, &self.meta)?;
         self.last_fsync = Instant::now();
         self.dirty = false;
         Ok(())
@@ -204,12 +204,12 @@ impl WalStore {
         write_json_atomic(&self.compact_intent_path, &new_meta)?;
         std::fs::rename(&self.compact_data_path, &self.data_path)?;
         sync_parent(&self.data_path)?;
-        write_meta(&self.meta_path, &new_meta)?;
+        write_json_atomic(&self.meta_path, &new_meta)?;
         std::fs::remove_file(&self.compact_intent_path)?;
         sync_parent(&self.data_path)?;
 
-        // Reopen in append mode positioned at the end, since the file we
-        // just wrote to was opened write-only-from-start.
+        // The rename replaced the inode `self.file` points at; reopen the
+        // new data file in append mode.
         self.file = OpenOptions::new()
             .create(true)
             .read(true)
@@ -263,10 +263,6 @@ fn read_meta(path: &Path) -> io::Result<Option<WalMeta>> {
     })
 }
 
-fn write_meta(path: &Path, meta: &WalMeta) -> io::Result<()> {
-    write_json_atomic(path, meta)
-}
-
 fn write_json_atomic(path: &Path, meta: &WalMeta) -> io::Result<()> {
     use std::os::unix::fs::OpenOptionsExt;
     let temp = path.with_extension("new");
@@ -318,7 +314,7 @@ fn recover_compaction(
         ));
     }
 
-    write_meta(meta_path, &meta)?;
+    write_json_atomic(meta_path, &meta)?;
     std::fs::remove_file(compact_intent_path)?;
     sync_parent(data_path)
 }

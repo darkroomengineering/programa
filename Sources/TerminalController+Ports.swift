@@ -7,7 +7,6 @@ extension TerminalController {
     /// required because the hub store and the workspace list are main-actor state, and the
     /// caller expects one consistent view. Never activates the app or changes focus.
     nonisolated func v2PortsList(params: [String: Any]) -> V2CallResult {
-        _ = params
         return v2MainSync {
             let hub = PortsHubStore.shared
             hub.revalidateLeftovers()

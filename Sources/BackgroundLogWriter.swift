@@ -2,19 +2,13 @@ import Foundation
 
 // MARK: - BackgroundLogWriter
 //
-// Avoids a per-call FileManager.fileExists + FileHandle(forWritingTo:)
-// open -> seekToEnd -> write -> close pattern, which would run synchronously under a lock
-// on the calling thread (often the main thread) for every debug log line and block
-// appearance-config resolution during bursts of background log activity.
-//
-// This writer serializes all file I/O onto a single serial background queue with one
-// long-lived FileHandle. Callers append lines asynchronously and never block. The log
-// file path/format is unchanged so existing tooling that tails the log keeps working.
+// Serializes all log file I/O onto one serial background queue with one long-lived
+// FileHandle. Callers append lines asynchronously and never block, so bursts of
+// background log activity do not stall the calling thread (often the main thread)
+// on a per-line open/seek/write/close.
 
-/// Minimal sink abstraction so the writer's queueing/coalescing logic can be tested
-/// independently of real file I/O. Upstream splits this into a protocol for their
-/// package's unit tests; programa has no separate test target for this file, so the
-/// concrete `FileBackgroundLogLineSink` is the only conformer today.
+/// Sink abstraction that separates the writer's queueing from real file I/O.
+/// `FileBackgroundLogLineSink` is the only conformer.
 protocol BackgroundLogLineSink: AnyObject {
     func write(_ data: Data)
 }
@@ -84,7 +78,7 @@ final class BackgroundLogWriter {
     /// Appends `line` to the log file asynchronously. Safe to call from any thread;
     /// never blocks the caller on file I/O.
     func append(_ line: String) {
-        guard let data = line.data(using: .utf8) else { return }
+        let data = Data(line.utf8)
         queue.async { [sink] in
             sink.write(data)
         }

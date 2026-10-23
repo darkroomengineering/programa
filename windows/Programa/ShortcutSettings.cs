@@ -30,7 +30,6 @@ public sealed class ShortcutSettings
 
     private ShortcutSettings(Dictionary<string, string> values) => _values = values;
 
-    public string this[string action] => _values[action];
     public IReadOnlyDictionary<string, string> Values => _values;
 
     public static ShortcutSettings Load()

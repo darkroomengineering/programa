@@ -55,7 +55,7 @@ pub fn spawn(params: SpawnParams) -> io::Result<PtySession> {
     set_cloexec(&master)?;
     set_cloexec(&slave)?;
 
-    set_winsize(&slave, params.cols, params.rows)?;
+    resize(&slave, params.cols, params.rows)?;
 
     let (program, args): (&str, &[String]) = match params.argv.split_first() {
         Some((first, rest)) => (first.as_str(), rest),
@@ -111,9 +111,7 @@ pub fn spawn(params: SpawnParams) -> io::Result<PtySession> {
             // inherit it (it would otherwise keep the master's read side
             // artificially alive and could let the child interfere with
             // the daemon's own PTY drain).
-            if master_raw >= 0 {
-                libc::close(master_raw);
-            }
+            libc::close(master_raw);
             Ok(())
         });
     }
@@ -140,11 +138,7 @@ pub(crate) fn set_cloexec(fd: &impl AsRawFd) -> io::Result<()> {
         .map_err(io::Error::from)
 }
 
-pub fn resize(master: &OwnedFd, cols: u16, rows: u16) -> io::Result<()> {
-    set_winsize(master, cols, rows)
-}
-
-fn set_winsize(fd: &OwnedFd, cols: u16, rows: u16) -> io::Result<()> {
+pub fn resize(fd: &OwnedFd, cols: u16, rows: u16) -> io::Result<()> {
     let ws = libc::winsize {
         ws_row: rows,
         ws_col: cols,

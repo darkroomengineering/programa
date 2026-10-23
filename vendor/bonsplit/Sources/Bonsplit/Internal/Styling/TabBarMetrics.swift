@@ -47,7 +47,6 @@ enum TabBarMetrics {
 
     static let minimumPaneWidth: CGFloat = 100
     static let minimumPaneHeight: CGFloat = 100
-    static let dividerThickness: CGFloat = 1
 
     // MARK: - Animations
 

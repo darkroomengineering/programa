@@ -38,10 +38,6 @@ pub fn socket_path() -> io::Result<PathBuf> {
     Ok(runtime_dir()?.join("programad.sock"))
 }
 
-pub fn lock_path() -> io::Result<PathBuf> {
-    Ok(runtime_dir()?.join("programad.lock"))
-}
-
 /// `$XDG_STATE_HOME/programa`, defaulting to `~/.local/state/programa`.
 pub fn state_root() -> io::Result<PathBuf> {
     let dir = if let Some(xdg) = std::env::var_os("XDG_STATE_HOME") {

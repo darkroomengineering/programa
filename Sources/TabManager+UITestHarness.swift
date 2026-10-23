@@ -36,7 +36,6 @@ fileprivate final class VsyncIOSurfaceTimelineState {
 
     var targets: [Target] = []
 
-    // Results
     var firstBlank: (label: String, frame: Int)?
     var firstSizeMismatch: (label: String, frame: Int, ios: String, expected: String)?
     var trace: [String] = []
@@ -90,8 +89,8 @@ fileprivate func programaVsyncIOSurfaceTimelineCallback(
     let st = Unmanaged<VsyncIOSurfaceTimelineState>.fromOpaque(ctx).takeUnretainedValue()
     if !st.tryBeginCapture() { return kCVReturnSuccess }
 
-    // Sample on the main thread synchronously so we don't "miss" a single compositor frame.
-    // (The previous Task/@MainActor hop could be delayed long enough to skip the blank frame.)
+    // Sample on the main thread synchronously so we don't "miss" a single compositor frame:
+    // a Task/@MainActor hop can be delayed long enough to skip the blank frame.
     DispatchQueue.main.sync {
         defer { st.endCapture() }
         guard st.framesWritten < st.frameCount else { return }
@@ -340,7 +339,6 @@ extension TabManager {
         guard env["PROGRAMA_UI_TEST_SPLIT_CLOSE_RIGHT_SETUP"] == "1" else { return }
         guard let path = env["PROGRAMA_UI_TEST_SPLIT_CLOSE_RIGHT_PATH"], !path.isEmpty else { return }
         let visualMode = env["PROGRAMA_UI_TEST_SPLIT_CLOSE_RIGHT_VISUAL"] == "1"
-        let shotsDir = (env["PROGRAMA_UI_TEST_SPLIT_CLOSE_RIGHT_SHOTS_DIR"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let visualIterations = Int((env["PROGRAMA_UI_TEST_SPLIT_CLOSE_RIGHT_ITERATIONS"] ?? "20").trimmingCharacters(in: .whitespacesAndNewlines)) ?? 20
         let burstFrames = Int((env["PROGRAMA_UI_TEST_SPLIT_CLOSE_RIGHT_BURST_FRAMES"] ?? "6").trimmingCharacters(in: .whitespacesAndNewlines)) ?? 6
         let closeDelayMs = Int((env["PROGRAMA_UI_TEST_SPLIT_CLOSE_RIGHT_CLOSE_DELAY_MS"] ?? "70").trimmingCharacters(in: .whitespacesAndNewlines)) ?? 70
@@ -382,8 +380,8 @@ extension TabManager {
                 ], at: path)
 
                 if visualMode {
-                    // Visual repro mode: repeat the split/close sequence many times and write
-                    // screenshots to `shotsDir`. This avoids relying on XCUITest to click hover-only
+                    // Visual repro mode: repeat the split/close sequence many times, sampling
+                    // IOSurface frames. This avoids relying on XCUITest to click hover-only
                     // close buttons, while still exercising the "close unfocused right tabs" path.
                     self.writeSplitCloseRightTestData([
                         "visualMode": "1",
@@ -395,7 +393,6 @@ extension TabManager {
                         tab: tab,
                         topLeftPanelId: topLeftPanelId,
                         path: path,
-                        shotsDir: shotsDir,
                         iterations: max(1, min(visualIterations, 60)),
                         burstFrames: max(0, min(burstFrames, 80)),
                         closeDelayMs: max(0, min(closeDelayMs, 500)),
@@ -535,19 +532,16 @@ extension TabManager {
         }
     }
 
-	    @MainActor
-	    private func runSplitCloseRightVisualRepro(
-	        tab: Workspace,
-	        topLeftPanelId: UUID,
-	        path: String,
-	        shotsDir: String,
-	        iterations: Int,
-	        burstFrames: Int,
-	        closeDelayMs: Int,
-	        pattern: String
-	    ) async {
-        _ = shotsDir // legacy: screenshots removed in favor of IOSurface sampling
-
+    @MainActor
+    private func runSplitCloseRightVisualRepro(
+        tab: Workspace,
+        topLeftPanelId: UUID,
+        path: String,
+        iterations: Int,
+        burstFrames: Int,
+        closeDelayMs: Int,
+        pattern: String
+    ) async {
         func sendText(_ panelId: UUID, _ text: String) {
             guard let tp = tab.terminalPanel(for: panelId) else { return }
             tp.surface.sendText(text)

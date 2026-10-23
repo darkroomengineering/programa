@@ -93,8 +93,7 @@ extension ProgramaCLI {
     }
 
     /// `.programa/` lives in the *user's own* repository, so it must not surface as untracked
-    /// noise that a broad `git add -A` sweeps into their commit -- which is exactly what
-    /// happened twice in one session before this existed. A `.gitignore` of `*` placed inside
+    /// noise that a broad `git add -A` sweeps into their commit. A `.gitignore` of `*` placed inside
     /// the directory makes it self-ignoring for every user with no per-repo `.gitignore` entry
     /// and no per-machine global excludes. A recap genuinely worth keeping can still be
     /// committed deliberately with `git add -f`.
@@ -152,8 +151,6 @@ extension ProgramaCLI {
             .sorted()
     }
 
-    /// Subcommand help text for Recap commands, split out of the central `subcommandUsage`
-    /// switch (programa.swift), mirroring `markdownSubcommandUsage`.
     func recapSubcommandUsage(_ command: String) -> String? {
         switch command {
         case "recap":

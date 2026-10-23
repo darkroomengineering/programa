@@ -163,8 +163,7 @@ enum SessionEscrowPolicy {
     /// connection. Takes both timestamps as `ProcessInfo.systemUptime`
     /// values (mach-uptime based, pauses across system sleep) rather than
     /// `Date()`/wall-clock -- a factored-out, unit-testable seam so this
-    /// math (the fix for the sleep/wake false-positive-death bug) has a
-    /// regression test independent of the real socket read loop in `serve`.
+    /// math has a regression test independent of the real socket read loop in `serve`.
     static func isConnectionStale(
         lastActivitySystemUptime: TimeInterval,
         nowSystemUptime: TimeInterval,
@@ -2053,7 +2052,7 @@ enum SessionEscrowHolder {
     /// out any session absent from the snapshot that has been draining past
     /// `SessionEscrowPolicy.unclaimedSessionTTL`, and (2) exit the holder
     /// once it has had nothing to hold and no live connection for
-    /// `SessionEscrowPolicy.idleExitGrace`. Both halves of the fix for the
+    /// `SessionEscrowPolicy.idleExitGrace`. Both halves prevent an
     /// escrow-holder leak: without (1) an unclaimed session (crash, force
     /// quit, a deleted tagged build, an update that reclaims nothing) is
     /// held forever; without (2) the holder itself never exits even once

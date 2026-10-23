@@ -40,14 +40,15 @@ public struct BonsplitView<Content: View, EmptyContent: View>: View {
     public var body: some View {
         SplitViewContainer(
             contentBuilder: { tabItem, paneId in
-                contentBuilder(Tab(from: tabItem), PaneID(id: paneId.id))
+                contentBuilder(Tab(from: tabItem), paneId)
             },
-            emptyPaneBuilder: { internalPaneId in
-                emptyPaneBuilder(PaneID(id: internalPaneId.id))
-            },
+            emptyPaneBuilder: emptyPaneBuilder,
             appearance: controller.configuration.appearance,
             onGeometryChange: { [weak controller] isDragging in
-                controller?.notifyGeometryChange(isDragging: isDragging)
+                // Live divider-drag updates are not forwarded; the drag's final
+                // resize arrives with isDragging == false.
+                guard !isDragging else { return }
+                controller?.notifyGeometryChange()
             }
         )
         .environment(controller)

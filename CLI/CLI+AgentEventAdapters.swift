@@ -1,17 +1,12 @@
 import Foundation
 
 /// Provider adapters that translate Claude Code, Codex, and OpenCode hook events into
-/// normalized `agent.event` socket calls. Split out of CLI+Hooks.swift (which owns the
-/// per-provider hook dispatch and stays under its structural line budget) so the two can
-/// grow independently; call sites live in CLI+Hooks.swift.
+/// normalized `agent.event` socket calls; call sites live in CLI+Hooks.swift.
 extension ProgramaCLI {
     /// Reports a normalized `agent.event` (docs/plans/agent-events.md) alongside the
-    /// existing three-state `surface.report_agent_state` calls in CLI+Hooks.swift -- additive,
-    /// not a replacement. Best-effort like `reportAgentState`/`clearAgentState`: a hook must
+    /// existing three-state `surface.report_agent_state` calls in CLI+Hooks.swift.
+    /// Best-effort like `reportAgentState`/`clearAgentState`: a hook must
     /// never fail the user's tool call because programa's socket is unreachable.
-    ///
-    /// Was `private` in CLI+Hooks.swift; now internal (no access modifier) so the hook
-    /// handlers there can still call it across files.
     func reportAgentEvent(
         client: SocketClient,
         provider: String,

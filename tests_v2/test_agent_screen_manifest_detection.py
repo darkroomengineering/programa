@@ -27,11 +27,10 @@ import os
 import stat
 import sys
 import tempfile
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from programa_client import ProgramaClient, ProgramaClientError  # noqa: E402
+from programa_client import ProgramaClient  # noqa: E402
 from v2_support import must as _must
 from pane_resize_test_support import (  # noqa: E402
     wait_for_surface_command_roundtrip as _wait_for_surface_command_roundtrip,

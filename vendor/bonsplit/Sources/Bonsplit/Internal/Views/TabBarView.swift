@@ -374,9 +374,6 @@ struct TabBarView: View {
     // MARK: - Item Provider
 
     private func createItemProvider(for tab: TabItem) -> NSItemProvider {
-        #if DEBUG
-        NSLog("[Bonsplit Drag] createItemProvider for tab: \(tab.title)")
-        #endif
 #if DEBUG
         dlog("tab.dragStart pane=\(pane.id.id.uuidString.prefix(5)) tab=\(tab.id.uuidString.prefix(5)) title=\"\(tab.title)\"")
 #endif
@@ -731,20 +728,6 @@ private struct TabControlShortcutStoredShortcut: Decodable {
     let option: Bool
     let control: Bool
 
-    init(
-        key: String,
-        command: Bool,
-        shift: Bool,
-        option: Bool,
-        control: Bool
-    ) {
-        self.key = key
-        self.command = command
-        self.shift = shift
-        self.option = option
-        self.control = control
-    }
-
     var modifierFlags: NSEvent.ModifierFlags {
         var flags: NSEvent.ModifierFlags = []
         if command { flags.insert(.command) }
@@ -1061,9 +1044,6 @@ struct TabDropDelegate: DropDelegate {
     @Binding var dropLifecycle: TabDropLifecycle
 
     func performDrop(info: DropInfo) -> Bool {
-        #if DEBUG
-        NSLog("[Bonsplit Drag] performDrop called, targetIndex: \(targetIndex)")
-        #endif
 #if DEBUG
         dlog("tab.drop pane=\(pane.id.id.uuidString.prefix(5)) targetIndex=\(targetIndex)")
 #endif
@@ -1080,7 +1060,7 @@ struct TabDropDelegate: DropDelegate {
         // may not have propagated yet when performDrop runs.
         guard let draggedTab = controller.activeDragTab ?? controller.draggingTab,
               let sourcePaneId = controller.activeDragSourcePaneId ?? controller.dragSourcePaneId else {
-            guard let transfer = decodeTransfer(from: info),
+            guard let transfer = TabTransferData.fromDragPasteboard(),
                   transfer.isFromCurrentProcess else {
                 return false
             }
@@ -1137,7 +1117,6 @@ struct TabDropDelegate: DropDelegate {
 
     func dropEntered(info: DropInfo) {
         #if DEBUG
-        NSLog("[Bonsplit Drag] dropEntered at index: \(targetIndex)")
         dlog(
             "tab.dropEntered pane=\(pane.id.id.uuidString.prefix(5)) targetIndex=\(targetIndex) " +
             "hasDrag=\(controller.draggingTab != nil ? 1 : 0) " +
@@ -1154,7 +1133,6 @@ struct TabDropDelegate: DropDelegate {
 
     func dropExited(info: DropInfo) {
         #if DEBUG
-        NSLog("[Bonsplit Drag] dropExited from index: \(targetIndex)")
         dlog("tab.dropExited pane=\(pane.id.id.uuidString.prefix(5)) targetIndex=\(targetIndex)")
         #endif
         dropLifecycle = .idle
@@ -1164,8 +1142,8 @@ struct TabDropDelegate: DropDelegate {
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        // Guard against dropUpdated firing after performDrop/dropExited
-        // This is the key fix for the lingering indicator bug
+        // dropUpdated can fire after performDrop/dropExited; re-setting the indicator then
+        // leaves it lingering after the drag ends.
         guard dropLifecycle == .hovering else {
 #if DEBUG
             dlog("tab.dropUpdated.skip pane=\(pane.id.id.uuidString.prefix(5)) targetIndex=\(targetIndex) reason=lifecycle_idle")
@@ -1209,7 +1187,7 @@ struct TabDropDelegate: DropDelegate {
         }
 
         // External drags (another Bonsplit controller) must include a payload from this process.
-        guard let transfer = decodeTransfer(from: info),
+        guard let transfer = TabTransferData.fromDragPasteboard(),
               transfer.isFromCurrentProcess else {
             return false
         }
@@ -1233,26 +1211,5 @@ struct TabDropDelegate: DropDelegate {
         // Insertion indices are expressed in "original array" coordinates; after removal,
         // inserting at `sourceIndex` or `sourceIndex + 1` results in no change.
         return targetIndex == sourceIndex || targetIndex == sourceIndex + 1
-    }
-
-    private func decodeTransfer(from string: String) -> TabTransferData? {
-        guard let data = string.data(using: .utf8),
-              let transfer = try? JSONDecoder().decode(TabTransferData.self, from: data) else {
-            return nil
-        }
-        return transfer
-    }
-
-    private func decodeTransfer(from info: DropInfo) -> TabTransferData? {
-        let pasteboard = NSPasteboard(name: .drag)
-        let type = NSPasteboard.PasteboardType(UTType.tabTransfer.identifier)
-        if let data = pasteboard.data(forType: type),
-           let transfer = try? JSONDecoder().decode(TabTransferData.self, from: data) {
-            return transfer
-        }
-        if let raw = pasteboard.string(forType: type) {
-            return decodeTransfer(from: raw)
-        }
-        return nil
     }
 }

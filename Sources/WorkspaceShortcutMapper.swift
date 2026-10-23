@@ -1,8 +1,4 @@
-import AppKit
-import SwiftUI
-import Bonsplit
-import CoreServices
-import ObjectiveC.runtime
+import Foundation
 
 enum WorkspaceShortcutMapper {
     /// Maps numbered workspace shortcuts to a zero-based workspace index.

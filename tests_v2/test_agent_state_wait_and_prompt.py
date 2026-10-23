@@ -26,21 +26,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from programa_client import ProgramaClient, ProgramaClientError  # noqa: E402
 from v2_support import must as _must
+from v2_support import report_agent_state as _report_agent_state
 from pane_resize_test_support import (  # noqa: E402
     wait_for_surface_command_roundtrip as _wait_for_surface_command_roundtrip,
 )
 
 
 DEFAULT_SOCKET_PATHS = ["/tmp/programa-debug.sock", "/tmp/programa.sock"]
-
-
-def _report_agent_state(socket_path: str, workspace_id: str, surface_id: str, state: str) -> None:
-    """Reports a state change from its own connection -- see the HARD-WON LESSONS header."""
-    with ProgramaClient(socket_path) as bg_client:
-        bg_client._call(
-            "surface.report_agent_state",
-            {"workspace_id": workspace_id, "surface_id": surface_id, "state": state},
-        )
 
 
 def _clear_agent_state(socket_path: str, workspace_id: str, surface_id: str) -> None:

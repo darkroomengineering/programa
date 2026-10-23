@@ -3,7 +3,6 @@ import Combine
 import AppKit
 import SwiftUI
 
-/// Type of panel content
 public enum PanelType: String, Codable, Sendable {
     case terminal
     case markdown
@@ -257,13 +256,10 @@ enum FocusFlashPattern {
     }
 }
 
-/// Protocol for all panel types
 @MainActor
 public protocol Panel: AnyObject, Identifiable, ObservableObject where ID == UUID {
-    /// Unique identifier for this panel
     var id: UUID { get }
 
-    /// The type of panel
     var panelType: PanelType { get }
 
     /// Display title shown in tab bar
@@ -281,7 +277,6 @@ public protocol Panel: AnyObject, Identifiable, ObservableObject where ID == UUI
     /// Focus the panel for input
     func focus()
 
-    /// Unfocus the panel
     func unfocus()
 
     /// Trigger a focus flash animation for this panel.
@@ -308,7 +303,6 @@ public protocol Panel: AnyObject, Identifiable, ObservableObject where ID == UUI
     func yieldFocusIntent(_ intent: PanelFocusIntent, in window: NSWindow) -> Bool
 }
 
-/// Extension providing default implementations
 extension Panel {
     public var displayIcon: String? { nil }
     public var isDirty: Bool { false }

@@ -584,19 +584,13 @@ func commandPaletteWindowOverlayController(for window: NSWindow) -> WindowComman
 }
 
 /// Installs a FileDropOverlayView on the window's theme frame for Finder file drag support.
-func installFileDropOverlay(on window: NSWindow, tabManager: TabManager) {
+func installFileDropOverlay(on window: NSWindow) {
     guard objc_getAssociatedObject(window, &fileDropOverlayKey) == nil,
           let contentView = window.contentView,
           let themeFrame = contentView.superview else { return }
 
     let overlay = FileDropOverlayView(frame: contentView.frame)
     overlay.translatesAutoresizingMaskIntoConstraints = false
-    overlay.onDrop = { [weak tabManager] urls in
-        MainActor.assumeIsolated {
-            guard let tabManager, let terminal = tabManager.selectedWorkspace?.focusedTerminalPanel else { return false }
-            return terminal.hostedView.handleDroppedURLs(urls)
-        }
-    }
 
     themeFrame.addSubview(overlay, positioned: .above, relativeTo: contentView)
     NSLayoutConstraint.activate([

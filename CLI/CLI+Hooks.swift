@@ -2,12 +2,6 @@ import Foundation
 import CryptoKit
 import Darwin
 import TOML
-#if canImport(LocalAuthentication)
-import LocalAuthentication
-#endif
-#if canImport(Security)
-import Security
-#endif
 
 struct ClaudeHookParsedInput {
     let object: [String: Any]?
@@ -384,7 +378,7 @@ extension ProgramaCLI {
                 }
             },
             notification: { parsed, session in
-                self.savedBodyNotification(self.summarizeClaudeHookNotification(parsedInput: parsed), session: session)
+                self.savedBodyNotification(self.summarizeAgentHookNotification(parsedInput: parsed, agentName: "Claude"), session: session)
             },
             extraEvents: [
                 "pre-tool-use": { self.runClaudePreToolUse($0) },
@@ -418,7 +412,7 @@ extension ProgramaCLI {
                 )
             },
             notification: { parsed, session in
-                self.savedBodyNotification(self.summarizeCodexHookNotification(parsedInput: parsed), session: session)
+                self.savedBodyNotification(self.summarizeAgentHookNotification(parsedInput: parsed, agentName: "Codex"), session: session)
             },
             extraEvents: [:]
         )
@@ -835,12 +829,10 @@ extension ProgramaCLI {
         }
         clearPendingQuestion(ctx, mappedSession)
 
-        // Best-effort, and deliberately not `try`: a throw here aborted the whole hook
-        // before any of the three clears below, stranding the red "blocked" badge lit
-        // while Claude was already running again. Hook failures don't block tool
-        // execution, so the user saw Claude working under a permission badge that
-        // nothing would ever clear. Only reportAgentState needs a surface; the
-        // notification and status clears are workspace-scoped and must still run.
+        // Best-effort, not `try`: a throw would abort the hook before the three clears
+        // below and leave the blocked badge lit while Claude runs. Only reportAgentState
+        // needs a surface; the notification and status clears are workspace-scoped and
+        // must still run.
         let surfaceId = try? resolvePreferredSurfaceIdForClaudeHook(
             preferred: mappedSession?.surfaceId,
             fallback: ctx.surfaceArg,
@@ -1023,9 +1015,9 @@ extension ProgramaCLI {
         case idle
     }
 
-    /// Maps a hook notification's classified subtitle (see classifyClaudeNotification /
-    /// classifyCodexNotification) to an agent activity state. Only "Permission" (approval
-    /// prompt) and "Waiting" (AskUserQuestion / idle-prompt) are genuine blocking signals.
+    /// Maps a hook notification's classified subtitle (see classifyAgentNotification) to an
+    /// agent activity state. Only "Permission" (approval prompt) and "Waiting"
+    /// (AskUserQuestion / idle-prompt) are genuine blocking signals.
     func agentStateForClassifiedNotificationSubtitle(_ subtitle: String) -> CLIAgentActivityState {
         switch subtitle {
         case "Permission", "Waiting":
@@ -1036,10 +1028,9 @@ extension ProgramaCLI {
     }
 
     /// Reports a surface's agent activity state via the socket. Best-effort: benign if the
-    /// surface/workspace can't be resolved (e.g. TabManager already torn down). Not
-    /// `private`: CLI+AgentEventAdapters.swift's reportAgentStateAndEvent calls it.
+    /// surface/workspace can't be resolved (e.g. TabManager already torn down).
     /// `sessionId`/`pid`, when present, let the app key this report to a session and
-    /// register the pid for stale-session detection/port scanning (agent-state-unification T2).
+    /// register the pid for stale-session detection/port scanning.
     func reportAgentState(
         client: SocketClient,
         workspaceId: String,
@@ -1061,7 +1052,6 @@ extension ProgramaCLI {
     }
 
     /// Clears a surface's reported agent activity state (hook session-end / process exit).
-    /// Not `private`: CLI+AgentEventAdapters.swift's clearAgentStateAndReportEvent calls it.
     func clearAgentState(client: SocketClient, workspaceId: String, surfaceId: String) {
         _ = try? client.sendV2(method: V2MethodNames.surfaceClearAgentState, params: [
             "workspace_id": workspaceId,
@@ -1115,7 +1105,7 @@ extension ProgramaCLI {
     // NOTE: despite the "Teardown" name, this is also reused by session-start/active
     // and prompt-submit across all three agent hooks (claude/codex/opencode) to fail
     // open on the same transport-failure fragments — a Programa quit mid-session must
-    // not block an agent's next hook invocation. Kept as-is (no rename) per scope.
+    // not block an agent's next hook invocation.
     private func shouldIgnoreClaudeHookTeardownError(_ error: Error) -> Bool {
         let message = String(describing: error).lowercased()
         let benignFragments = [
@@ -1632,12 +1622,12 @@ extension ProgramaCLI {
         return nil
     }
 
-    func summarizeClaudeHookNotification(parsedInput: ClaudeHookParsedInput) -> (subtitle: String, body: String) {
+    func summarizeAgentHookNotification(parsedInput: ClaudeHookParsedInput, agentName: String) -> (subtitle: String, body: String) {
         guard let object = parsedInput.object else {
             if let fallback = parsedInput.rawFallback, !fallback.isEmpty {
-                return classifyClaudeNotification(signal: fallback, message: fallback)
+                return classifyAgentNotification(signal: fallback, message: fallback, agentName: agentName)
             }
-            return ("Waiting", "Claude is waiting for your input")
+            return ("Waiting", "\(agentName) is waiting for your input")
         }
 
         let nested = (object["notification"] as? [String: Any]) ?? (object["data"] as? [String: Any]) ?? [:]
@@ -1650,23 +1640,23 @@ extension ProgramaCLI {
             firstString(in: object, keys: ["message", "body", "text", "prompt", "error", "description"]),
             firstString(in: nested, keys: ["message", "body", "text", "prompt", "error", "description"])
         ]
-        let message = messageCandidates.compactMap { $0 }.first ?? "Claude needs your input"
+        let message = messageCandidates.compactMap { $0 }.first ?? "\(agentName) needs your input"
         let normalizedMessage = normalizedSingleLine(message)
         let signal = signalParts.compactMap { $0 }.joined(separator: " ")
-        var classified = classifyClaudeNotification(signal: signal, message: normalizedMessage)
+        var classified = classifyAgentNotification(signal: signal, message: normalizedMessage, agentName: agentName)
 
         classified.body = truncate(classified.body, maxLength: 180)
         return classified
     }
 
-    private func classifyClaudeNotification(signal: String, message: String) -> (subtitle: String, body: String) {
+    private func classifyAgentNotification(signal: String, message: String, agentName: String) -> (subtitle: String, body: String) {
         let lower = "\(signal) \(message)".lowercased()
         if lower.contains("permission") || lower.contains("approve") || lower.contains("approval") || lower.contains("permission_prompt") {
             let body = message.isEmpty ? "Approval needed" : message
             return ("Permission", body)
         }
         if lower.contains("error") || lower.contains("failed") || lower.contains("exception") {
-            let body = message.isEmpty ? "Claude reported an error" : message
+            let body = message.isEmpty ? "\(agentName) reported an error" : message
             return ("Error", body)
         }
         if lower.contains("complet") || lower.contains("finish") || lower.contains("done") || lower.contains("success") {
@@ -1678,10 +1668,10 @@ extension ProgramaCLI {
             return ("Waiting", body)
         }
         // Use the message directly if it's meaningful (not a generic placeholder).
-        if !message.isEmpty, message != "Claude needs your input" {
+        if !message.isEmpty, message != "\(agentName) needs your input" {
             return ("Attention", message)
         }
-        return ("Attention", "Claude needs your attention")
+        return ("Attention", "\(agentName) needs your attention")
     }
 
     private func firstString(in object: [String: Any], keys: [String]) -> String? {
@@ -3237,58 +3227,6 @@ extension ProgramaCLI {
             }
         }
         return result.reversed()
-    }
-
-    func summarizeCodexHookNotification(parsedInput: ClaudeHookParsedInput) -> (subtitle: String, body: String) {
-        guard let object = parsedInput.object else {
-            if let fallback = parsedInput.rawFallback, !fallback.isEmpty {
-                return classifyCodexNotification(signal: fallback, message: fallback)
-            }
-            return ("Waiting", "Codex is waiting for your input")
-        }
-
-        let nested = (object["notification"] as? [String: Any]) ?? (object["data"] as? [String: Any]) ?? [:]
-        let signalParts = [
-            firstString(in: object, keys: ["event", "event_name", "hook_event_name", "type", "kind"]),
-            firstString(in: object, keys: ["notification_type", "matcher", "reason"]),
-            firstString(in: nested, keys: ["type", "kind", "reason"])
-        ]
-        let messageCandidates = [
-            firstString(in: object, keys: ["message", "body", "text", "prompt", "error", "description"]),
-            firstString(in: nested, keys: ["message", "body", "text", "prompt", "error", "description"])
-        ]
-        let message = messageCandidates.compactMap { $0 }.first ?? "Codex needs your input"
-        let normalizedMessage = normalizedSingleLine(message)
-        let signal = signalParts.compactMap { $0 }.joined(separator: " ")
-        var classified = classifyCodexNotification(signal: signal, message: normalizedMessage)
-
-        classified.body = truncate(classified.body, maxLength: 180)
-        return classified
-    }
-
-    private func classifyCodexNotification(signal: String, message: String) -> (subtitle: String, body: String) {
-        let lower = "\(signal) \(message)".lowercased()
-        if lower.contains("permission") || lower.contains("approve") || lower.contains("approval") || lower.contains("permission_prompt") {
-            let body = message.isEmpty ? "Approval needed" : message
-            return ("Permission", body)
-        }
-        if lower.contains("error") || lower.contains("failed") || lower.contains("exception") {
-            let body = message.isEmpty ? "Codex reported an error" : message
-            return ("Error", body)
-        }
-        if lower.contains("complet") || lower.contains("finish") || lower.contains("done") || lower.contains("success") {
-            let body = message.isEmpty ? "Task completed" : message
-            return ("Completed", body)
-        }
-        if lower.contains("idle") || lower.contains("wait") || lower.contains("input") || lower.contains("idle_prompt") {
-            let body = message.isEmpty ? "Waiting for input" : message
-            return ("Waiting", body)
-        }
-        // Use the message directly if it's meaningful (not a generic placeholder).
-        if !message.isEmpty, message != "Codex needs your input" {
-            return ("Attention", message)
-        }
-        return ("Attention", "Codex needs your attention")
     }
 
     private func inferredCodexAgentPID() -> Int? {

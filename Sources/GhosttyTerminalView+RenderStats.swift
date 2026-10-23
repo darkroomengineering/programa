@@ -1,7 +1,6 @@
 import Foundation
 import SwiftUI
 import AppKit
-import Bonsplit
 import IOSurface
 
 // MARK: - GhosttySurfaceScrollView + RenderStats

@@ -10,13 +10,8 @@ import Bonsplit
 import IOSurface
 import os
 
-// MARK: - Debug Render Instrumentation
-
-/// Lightweight instrumentation to detect whether Ghostty is actually requesting Metal drawables.
-/// This helps catch "frozen until refocus" regressions without relying on screenshots (which can
-/// mask redraw issues by forcing a window server flush).
-/// Issue #182 slice 2 (`Sources/SessionEscrow.swift`): carries an
-/// already-running child's pty master fd + pid (retrieved from the escrow
+/// Carries an already-running child's pty master fd + pid (issue #182,
+/// `Sources/SessionEscrow.swift`; retrieved from the escrow
 /// holder via `SessionEscrowClient.retrieve`) from
 /// `Workspace+Persistence.swift`'s `createPanel(from:inPane:)` down to
 /// `TerminalSurface.createSurface(for:)`, where it becomes
@@ -41,11 +36,10 @@ final class TerminalSurfaceRegistry {
     static let shared = TerminalSurfaceRegistry()
 
     // `NSHashTable<AnyObject>.weakObjects()` does not reliably weak-store pure Swift
-    // classes that aren't NSObject subclasses — confirmed empirically: TerminalSurface
-    // instances registered via the old NSHashTable-backed storage never released even
-    // after every other strong reference was dropped, permanently blocking `deinit`
-    // (see testSearchOverlayMountDoesNotRetainTerminalSurface, and bisection notes in
-    // that test's history). A plain Swift `weak` box array is the reliable way to hold
+    // classes that aren't NSObject subclasses: TerminalSurface instances stored in one
+    // never release even after every other strong reference is dropped, permanently
+    // blocking `deinit` (see testSearchOverlayMountDoesNotRetainTerminalSurface). Do not
+    // switch this to NSHashTable. A plain Swift `weak` box array is the reliable way to hold
     // weak references to a non-NSObject class; ARC handles it correctly regardless of
     // Objective-C bridging.
     private struct WeakSurfaceBox {
@@ -227,12 +221,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
     /// temporarily unattached (surface not yet created / reparenting) even while the panel
     /// is already in the window.
     var isViewInWindow: Bool { hostedView.window != nil }
-    /// Whether the runtime surface pointer is non-nil **and** the surface has
-    /// not yet entered the close/teardown lifecycle.  Use this before passing
-    /// `surface` to any Ghostty C API — a non-nil `surface` can become a
-    /// dangling pointer once teardown is in progress (the actual free happens
-    /// asynchronously on the next main-actor turn).
-    var isSurfaceLive: Bool { surface != nil && portalLifecycleState == .live }
     let id: UUID
     private(set) var tabId: UUID
     /// Port ordinal for PROGRAMA_PORT range assignment
@@ -457,14 +445,13 @@ final class TerminalSurface: Identifiable, ObservableObject {
         hostedView.attachSurface(self)
         TerminalSurfaceRegistry.shared.register(self)
 
-        // Deferred-realization revival fix (2026-08-20): a revived panel restored
-        // into a hidden tab may never create its runtime surface this launch, so
-        // the normal re-escrow trigger (resolveSessionWALIdentity, run from
-        // createSurface) may never fire. Until it does, the retrieved master fd
-        // exists ONLY in this process — the next quit or crash closes it and
-        // SIGHUPs the child, which is the "every tab except the active one gets
-        // reset on update" report. Hand the fd to the escrow holder immediately
-        // instead of waiting for the tab to be shown.
+        // Deferred realization: a revived panel restored into a hidden tab may
+        // never create its runtime surface this launch, so the normal re-escrow
+        // trigger (resolveSessionWALIdentity, run from createSurface) may never
+        // fire. Until it does, the retrieved master fd exists ONLY in this
+        // process — the next quit or crash closes it and SIGHUPs the child,
+        // resetting every tab except the active one on update. Hand the fd to the
+        // escrow holder immediately instead of waiting for the tab to be shown.
         if let descriptor = reviveDescriptor, !SessionMachineryGate.isUnitTesting {
             escrowRevivedDescriptorImmediately(descriptor)
         }
@@ -949,12 +936,10 @@ final class TerminalSurface: Identifiable, ObservableObject {
 #endif
     }
 
-    /// Single teardown path (audit finding N12) for the runtime surface plus its
-    /// callback/tap handoff state, shared by the two *real* close paths —
-    /// `teardownSurface()` and `deinit` — which is where the forensic evidence
-    /// (#250-era teardown-race audit) points: both can independently decide to
-    /// tear the same surface down, and before this unification each had its own
-    /// copy of the snapshot-and-free logic. Snapshots and nils every piece of
+    /// Single teardown path for the runtime surface plus its callback/tap
+    /// handoff state, shared by the two *real* close paths —
+    /// `teardownSurface()` and `deinit` — both of which can independently
+    /// decide to tear the same surface down. Snapshots and nils every piece of
     /// state a second call could act on (surface, surfaceCallbackContext,
     /// outputTapContext, reviveDescriptor), so calling this from either site can
     /// never double-free or double-release: a second call sees `surface == nil`
@@ -979,9 +964,8 @@ final class TerminalSurface: Identifiable, ObservableObject {
     ///   it into the nil-as-idempotency-guard shape here would erase the exact
     ///   dangling-pointer scenario that fixture exists to test.
     ///
-    /// Keeps the deferred `Task { @MainActor in }` free timing (#432) exactly
-    /// as both prior call sites had it — this PR does not make the free
-    /// synchronous.
+    /// The free stays deferred to a `Task { @MainActor in }` (#432); do not
+    /// make it synchronous.
     ///
     /// Deliberately not `@MainActor`: `deinit` is always nonisolated in Swift's
     /// concurrency model and cannot call a main-actor-isolated method
@@ -1059,7 +1043,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
         // only starts once any replay enqueued before this teardown call has
         // finished (or observed `reviveReplayCanceled` and broken out).
         // Deliberately does not capture `self` -- everything the Task body
-        // needs is snapshotted above, same discipline as before.
+        // needs is snapshotted above.
         reviveReplayQueue.async {
             Task { @MainActor in
                 let surfaceToFree = deferredSurfaceFree.pointer
@@ -1743,10 +1727,9 @@ final class TerminalSurface: Identifiable, ObservableObject {
         // see that arm for why it dispatches its own replay directly
         // instead.
         //
-        // Accepted tradeoff, stated honestly: the pty is live from the
-        // moment `ghostty_surface_new` succeeds, so live output can render
-        // before this deferred historical seed runs -- the old inline seed
-        // had the same window, just at microsecond scale instead of up to
+        // Accepted tradeoff: the pty is live from the moment
+        // `ghostty_surface_new` succeeds, so live output can render before
+        // this deferred historical seed runs, for up to
         // ~150ms (a minimum, not a cap: `asyncAfter` can slip further under
         // main-queue pressure). Any live output *painted* during that window
         // is overwritten on screen when the seed finally runs (seeding
@@ -1884,19 +1867,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
         }
     }
 
-    /// Issue #182 slice 1 escrow trigger (`Sources/SessionEscrow.swift`).
-    /// Reads the raw pty master fd and duplicates it (`F_DUPFD_CLOEXEC`,
-    /// so the copy never leaks into spawned children) -- both on the main
-    /// actor, matching the cost class of the sibling `child_pid`/
-    /// `pty_path` accessors called just above -- then hands the dup off to
-    /// `SessionEscrowClient` on its own background queue for the actual
-    /// (potentially blocking) socket send. Guarded by
-    /// `hasAttemptedSessionEscrow`, set before the dup even happens, so a
-    /// surface only ever attempts this once regardless of how many
-    /// `resolveSessionWALIdentity` retries follow. Never touches the
-    /// ghostty-owned fd itself: `ghostty_surface_pty_master_fd` does not
-    /// dup or transfer ownership, so a duplicate here is required before the
-    /// fd can safely outlive this surface.
     /// Tells the escrow holder to drop this session, but only when the
     /// surface is going away because the user closed it for good.
     ///
@@ -1977,6 +1947,19 @@ final class TerminalSurface: Identifiable, ObservableObject {
         }
     }
 
+    /// Escrow trigger for issue #182 (`Sources/SessionEscrow.swift`).
+    /// Reads the raw pty master fd and duplicates it (`F_DUPFD_CLOEXEC`,
+    /// so the copy never leaks into spawned children) -- both on the main
+    /// actor, matching the cost class of the sibling `child_pid`/
+    /// `pty_path` accessors in `resolveSessionWALIdentity` -- then hands the
+    /// dup off to `SessionEscrowClient` on its own background queue for the
+    /// actual (potentially blocking) socket send. Guarded by
+    /// `hasAttemptedSessionEscrow`, set before the dup even happens, so a
+    /// surface only ever attempts this once regardless of how many
+    /// `resolveSessionWALIdentity` retries follow. Never touches the
+    /// ghostty-owned fd itself: `ghostty_surface_pty_master_fd` does not
+    /// dup or transfer ownership, so a duplicate here is required before the
+    /// fd can safely outlive this surface.
     private func attemptSessionEscrow(surface: ghostty_surface_t, surfaceId: String, childPID: Int32) {
         guard !SessionMachineryGate.isUnitTesting else { return }
         hasAttemptedSessionEscrow = true
@@ -2209,7 +2192,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
 
                 // Post-seed SIGWINCH: a live TUI that survived the relaunch (and
                 // thus handles SIGWINCH) repaints over any replay artifacts on its
-                // own, replacing the manual window-resize users otherwise do today.
+                // own, so the user does not have to resize the window by hand.
                 // SIGWINCH's default disposition is ignore, so delivering it to a
                 // stale/reused pgid or pid is a silent no-op, not a hazard.
                 if let pgid, pgid > 0 {
@@ -2233,11 +2216,9 @@ final class TerminalSurface: Identifiable, ObservableObject {
         height: CGFloat,
         xScale: CGFloat,
         yScale: CGFloat,
-        layerScale: CGFloat,
         backingSize: CGSize? = nil
     ) -> Bool {
         guard let surface = surface else { return false }
-        _ = layerScale
 
         let resolvedBackingWidth = backingSize?.width ?? (width * xScale)
         let resolvedBackingHeight = backingSize?.height ?? (height * yScale)

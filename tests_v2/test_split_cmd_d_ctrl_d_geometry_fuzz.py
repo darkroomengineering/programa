@@ -15,6 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from programa_client import ProgramaClient, ProgramaClientError
+from v2_support import container_frame as _container_frame
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
@@ -37,55 +38,6 @@ def _pane_count(layout_payload: dict) -> int:
     layout = layout_payload.get("layout") or {}
     panes = layout.get("panes") or []
     return len(panes)
-
-
-def _largest_split_frame(layout_payload: dict) -> dict:
-    selected = layout_payload.get("selectedPanels") or []
-    best = None
-    best_area = -1.0
-
-    for row in selected:
-        for split in row.get("splitViews") or []:
-            frame = split.get("frame")
-            if not frame:
-                continue
-
-            try:
-                x = float(frame.get("x", 0.0))
-                y = float(frame.get("y", 0.0))
-                width = float(frame.get("width", 0.0))
-                height = float(frame.get("height", 0.0))
-            except (TypeError, ValueError):
-                continue
-
-            if width <= 0.0 or height <= 0.0:
-                continue
-
-            area = width * height
-            if area > best_area:
-                best_area = area
-                best = {"x": x, "y": y, "width": width, "height": height}
-
-    if best is None:
-        raise ProgramaClientError(f"layout_debug contains no usable split-view frame: {layout_payload}")
-    return best
-
-
-def _container_frame(layout_payload: dict) -> dict:
-    container = (layout_payload.get("layout") or {}).get("containerFrame")
-    if container:
-        try:
-            return {
-                "x": float(container.get("x", 0.0)),
-                "y": float(container.get("y", 0.0)),
-                "width": float(container.get("width", 0.0)),
-                "height": float(container.get("height", 0.0)),
-            }
-        except (TypeError, ValueError):
-            pass
-
-    # Back-compat fallback for older payloads that don't expose containerFrame.
-    return _largest_split_frame(layout_payload)
 
 
 def _assert_same_frame(

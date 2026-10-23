@@ -136,10 +136,9 @@ import Bonsplit
 ///   synchronous read of that directory's WAL tail.
 /// - Five seconds after the first registration each launch, a one-time sweep
 ///   considers deleting any session directory that has no live writer. This
-///   is deliberately conservative (issue #181 postmortem: an earlier version
-///   deleted any no-live-writer directory unconditionally, which could race
-///   ahead of a slow/multi-panel restore and destroy a WAL that
-///   `createPanel` had not read yet). A directory is only removed here if
+///   is deliberately conservative: deleting every no-live-writer directory
+///   can race ahead of a slow restore and destroy a WAL `createPanel` has
+///   not read yet (issue #181). A directory is only removed here if
 ///   its `meta.json` heartbeat (or, if that can't be parsed, its own
 ///   filesystem modification date) is older than
 ///   `SessionWALPolicy.orphanDirectoryMaxAge`. A directory whose age cannot
@@ -1326,7 +1325,7 @@ final class SessionWALStore {
         return try? Self.metaDecoder.decode(SessionWALMeta.self, from: data)
     }
 
-    /// Issue #307 orphan-reconciliation fix: launch-time scan for session
+    /// Launch-time scan for session
     /// directories that are still escrow-claimed (`meta.escrowed == true`)
     /// but weren't reattached by the coarse-snapshot restore that just ran.
     /// Mirrors `sweepOrphanedSessionDirectories`'s own

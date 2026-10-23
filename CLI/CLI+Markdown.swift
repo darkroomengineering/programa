@@ -1,12 +1,5 @@
 import Foundation
-import CryptoKit
 import Darwin
-#if canImport(LocalAuthentication)
-import LocalAuthentication
-#endif
-#if canImport(Security)
-import Security
-#endif
 
 extension ProgramaCLI {
     // MARK: - Markdown Commands
@@ -19,7 +12,6 @@ extension ProgramaCLI {
     ) throws {
         var args = commandArgs
 
-        // Parse routing flags
         let (workspaceOpt, argsAfterWorkspace) = parseOption(args, name: "--workspace")
         let (windowOpt, argsAfterWindow) = parseOption(argsAfterWorkspace, name: "--window")
         let (surfaceOpt, argsAfterSurface) = parseOption(argsAfterWindow, name: "--surface")
@@ -69,7 +61,6 @@ extension ProgramaCLI {
 
         let absolutePath = resolvePath(rawPath)
 
-        // Build params
         let direction = directionOpt ?? "right"
         var params: [String: Any] = ["path": absolutePath, "direction": direction]
         if let surfaceRaw = surfaceOpt {
@@ -101,9 +92,6 @@ extension ProgramaCLI {
         }
     }
 
-    /// Subcommand help text for Markdown commands, split out of the
-    /// central `subcommandUsage` switch (programa.swift) so each domain's
-    /// help text lives next to its command descriptors. Refs #101.
     func markdownSubcommandUsage(_ command: String) -> String? {
         switch command {
         case "markdown":

@@ -1,12 +1,5 @@
 import Foundation
-import CryptoKit
 import Darwin
-#if canImport(LocalAuthentication)
-import LocalAuthentication
-#endif
-#if canImport(Security)
-import Security
-#endif
 
 extension ProgramaCLI {
     private struct TreeCommandOptions {
@@ -279,9 +272,6 @@ extension ProgramaCLI {
         return parts.joined(separator: " ")
     }
 
-    /// Subcommand help text for Tree commands, split out of the
-    /// central `subcommandUsage` switch (programa.swift) so each domain's
-    /// help text lives next to its command descriptors. Refs #101.
     func treeSubcommandUsage(_ command: String) -> String? {
         switch command {
         case "tree":
@@ -314,9 +304,6 @@ extension ProgramaCLI {
         }
     }
 
-    /// Tree command descriptors, split out of the central
-    /// `commandDescriptors()` array (programa.swift) so they live next to
-    /// their implementation. Refs #101.
     func treeDescriptors() -> [CommandDescriptor] {
         [
             CommandDescriptor(

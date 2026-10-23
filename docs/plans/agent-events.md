@@ -14,7 +14,7 @@ Programa already ships a two-tier agent-state system (issue #164,
   (`CLI/CLI+HookCommands.swift`, dispatched in `CLI/programa.swift`). Each
   hook handler (`runClaudeHook`, `runCodexHook`, `runOpenCodeHook` in
   `CLI/CLI+Hooks.swift`) reads the provider's hook JSON off stdin, classifies
-  it by hand (`classifyClaudeNotification`, `classifyCodexNotification`,
+  it by hand (`summarizeAgentHookNotification`, `classifyAgentNotification`,
   OpenCode's inline `permission.asked` check), and calls the v2 method
   `surface.report_agent_state` with a **three-value** state
   (`working|blocked|idle`) and `source: "hooks"`.
@@ -91,8 +91,8 @@ carried through and stored (see below) so a future richer UI does not
 require a wire change, but nothing in this pass classifies state from
 `label` text — classification stays on `event.type`, which is provider-
 normalized before it reaches the socket, not on free-text sniffing (that
-free-text sniffing is exactly what `classifyClaudeNotification` /
-`classifyCodexNotification` do today, and is the brittleness this schema
+free-text sniffing is exactly what `summarizeAgentHookNotification` /
+`classifyAgentNotification` do today, and is the brittleness this schema
 replaces for the providers listed as "full mapping" above).
 
 ### Event type → `AgentActivityState` mapping

@@ -26,7 +26,6 @@ in v2SurfaceClose (Sources/TerminalController+Surface.swift). So:
     target workspace's own focused surface and succeeds.
 """
 
-import glob
 import os
 import subprocess
 import sys

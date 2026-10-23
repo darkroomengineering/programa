@@ -20,8 +20,9 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from programa_client import ProgramaClient, ProgramaClientError
+from programa_client import ProgramaClient
 from v2_support import must as _must
+from v2_support import read_terminal_text_until as _read_terminal_text_until
 from pane_resize_test_support import (
     wait_for_surface_command_roundtrip as _wait_for_surface_command_roundtrip,
 )
@@ -57,17 +58,6 @@ def _make_dirty_git_repo() -> Path:
     (repo_dir / "untracked.txt").write_text("brand new file\n", encoding="utf-8")
 
     return repo_dir
-
-
-def _read_terminal_text_until(c: ProgramaClient, surface_id: str, needle: str, timeout_s: float = 10.0) -> str:
-    deadline = time.time() + timeout_s
-    last_text = ""
-    while time.time() < deadline:
-        last_text = c.read_terminal_text(surface_id)
-        if needle in last_text:
-            return last_text
-        time.sleep(0.2)
-    raise ProgramaClientError(f"Timed out waiting for marker {needle!r} in terminal output: {last_text!r}")
 
 
 def main() -> int:
@@ -158,7 +148,7 @@ def main() -> int:
 
             # A comment carrying a shell command substitution. Review text is delivered as one
             # paste with no implicit Return into a plain shell (no agent presence), so the shell
-            # must never execute it. Typed-key delivery used to turn each newline into Return.
+            # must never execute it. Typed-key delivery would turn each newline into Return.
             canary_path = Path(tempfile.gettempdir()) / f"fixsweep-review-{int(time.time() * 1000)}"
             c._call(
                 "review.comment.add",

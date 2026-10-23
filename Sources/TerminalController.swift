@@ -1081,7 +1081,6 @@ class TerminalController {
             return pidsByWorkspace
         }
 
-        // Accept connections in background thread
         Thread.detachNewThread { [weak self] in
             self?.acceptLoop(listenerSocket: listenerSocket, generation: generation)
         }
@@ -1479,7 +1478,6 @@ class TerminalController {
                 connectionSource = .rejectedUnix
             }
 
-            // Handle client in new thread
             Thread.detachNewThread { [self] in
                 handleClient(clientSocket, peerPid: peerPid, source: connectionSource)
             }

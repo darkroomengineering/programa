@@ -1,8 +1,6 @@
 import AppKit
 import SwiftUI
 import Darwin
-import Bonsplit
-import UniformTypeIdentifiers
 
 enum WorkspacePresentationModeSettings {
     static let modeKey = "workspacePresentationMode"

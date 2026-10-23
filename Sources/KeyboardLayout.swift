@@ -7,7 +7,6 @@ class KeyboardLayout {
     static var debugInputSourceIdOverride: String?
     #endif
 
-    /// Return a string ID of the current keyboard input source.
     static var id: String? {
         #if DEBUG
         if let override = debugInputSourceIdOverride { return override }

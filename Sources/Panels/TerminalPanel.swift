@@ -10,22 +10,17 @@ final class TerminalPanel: Panel, ObservableObject {
     let id: UUID
     let panelType: PanelType = .terminal
 
-    /// The underlying terminal surface
     let surface: TerminalSurface
 
     /// OSC 7501 program status records for this terminal. Not persisted.
     let programStatus = ProgramStatusStore()
 
-    /// The workspace ID this panel belongs to
     private(set) var workspaceId: UUID
 
-    /// Published title from the terminal process
     @Published private(set) var title: String = "Terminal"
 
-    /// Published directory from the terminal
     @Published private(set) var directory: String = ""
 
-    /// Search state for find functionality
     @Published var searchState: TerminalSurface.SearchState? {
         didSet {
             surface.searchState = searchState
@@ -75,7 +70,6 @@ final class TerminalPanel: Panel, ObservableObject {
         self.workspaceId = workspaceId
         self.surface = surface
 
-        // Subscribe to surface's search state changes
         surface.$searchState
             .sink { [weak self] state in
                 if self?.searchState !== state {

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Regression: tmux compatibility command matrix (implemented + explicit not-supported)."""
 
-import glob
 import json
 import os
 import subprocess
@@ -9,7 +8,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Callable, List, Tuple
+from typing import List, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
 from programa_client import ProgramaClient, ProgramaClientError

@@ -4,8 +4,6 @@
 import SwiftUI
 import AppKit
 import Bonsplit
-import Darwin
-import CoreText
 
 @MainActor
 private final class PendingTerminalInputState {

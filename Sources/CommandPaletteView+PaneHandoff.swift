@@ -18,8 +18,7 @@ final class CommandPalettePaneHandoffTarget {
 
 @MainActor
 private enum CommandPalettePaneHandoffStore {
-    /// Keyed by palette controller (one per window). `CommandPaletteController.swift` is at its
-    /// line budget, so the pick state lives here and is cleared on every palette dismissal.
+    /// Keyed by palette controller (one per window). Cleared on every palette dismissal.
     static var targets: [ObjectIdentifier: CommandPalettePaneHandoffTarget] = [:]
 }
 

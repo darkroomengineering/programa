@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Regression: tab/workspace action naming is consistent in CLI + socket v2."""
 
-import glob
 import json
 import os
 import subprocess

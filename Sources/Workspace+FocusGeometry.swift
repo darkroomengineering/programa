@@ -7,8 +7,6 @@ import SwiftUI
 import AppKit
 import Bonsplit
 import Combine
-import Darwin
-import CoreText
 
 extension Workspace {
     func preserveFocusAfterNonFocusSplit(
@@ -235,7 +233,6 @@ extension Workspace {
         }
         let previousFocusedPanelId = focusedPanelId
 
-        // Unfocus the currently-focused panel before navigating.
         if let prevPanelId = previousFocusedPanelId, let prev = panels[prevPanelId] {
             prev.unfocus()
         }
@@ -282,7 +279,6 @@ extension Workspace {
         requestAttentionFlash(panelId: panelId, reason: .debug)
     }
 
-    /// Hide all terminal portal views for this workspace.
     /// Called before the workspace is unmounted to hide its portal-hosted terminal views.
     func hideAllTerminalPortalViews() {
         for panel in panels.values {

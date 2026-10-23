@@ -52,7 +52,7 @@ extension AppDelegate {
         (.toggleSidebar, consume { app, _, _ in _ = app.toggleSidebarInActiveMainWindow() }),
         (.newTab, consume { app, event, _ in app.performNewWorkspaceShortcut(event: event) }),
         // New Claude Code Workspace: Cmd+Shift+C. Instantly creates a new workspace in the current
-        // workspace's working directory and boots Claude Code into it (no pool, no hidden workspace).
+        // workspace's working directory and boots Claude Code into it.
         (.newClaudeWorkspace, consume { app, event, _ in
 #if DEBUG
             dlog("shortcut.action name=newClaudeWorkspace \(app.debugShortcutRouteSnapshot(event: event))")
@@ -76,7 +76,6 @@ extension AppDelegate {
 #endif
             app.jumpToLatestUnread()
         }),
-        // Flash the currently focused panel so the user can visually confirm focus.
         (.triggerFlash, consume { app, _, _ in app.tabManager?.triggerFocusFlash() }),
         (.nextSurface, consume { app, _, _ in app.tabManager?.selectNextSurface() }),
         (.prevSurface, consume { app, _, _ in app.tabManager?.selectPreviousSurface() }),
@@ -152,13 +151,11 @@ extension AppDelegate {
             app.recordGotoSplitZoomIfNeeded()
 #endif
         }),
-        // Split actions: Cmd+D / Cmd+Shift+D.
         (.splitRight, consume { app, event, _ in app.performSplitShortcutAction(event: event, direction: .right, debugActionName: "splitRight") }),
         (.splitDown, consume { app, event, _ in app.performSplitShortcutAction(event: event, direction: .down, debugActionName: "splitDown") }),
     ]
 
     private static let appShortcutsAfterLegacyTabNavigation: [(KeyboardShortcutSettings.Action, AppShortcutHandler)] = [
-        // New surface: Cmd+T
         (.newSurface, consume { app, _, _ in app.tabManager?.newSurface() }),
         (.openReview, consume { app, _, _ in
             guard let workspace = app.tabManager?.selectedWorkspace,
@@ -207,7 +204,7 @@ extension AppDelegate {
         }
 
         // Surface navigation (legacy Ctrl+Tab support). Not driven by KeyboardShortcutSettings.Action,
-        // so it can't live in the tables -- kept as plain checks in their original position.
+        // so it can't live in the tables.
         if matchTabShortcut(event: event, shortcut: StoredShortcut(key: "\t", command: false, shift: false, option: false, control: true)) {
             tabManager?.selectNextSurface()
             return true
@@ -314,7 +311,8 @@ extension AppDelegate {
         }
     }
 
-    // Cmd+W must close the focused panel even if first-responder momentarily lags on a
+    // Unless the window owns Cmd+W, it routes through the workspace model so it closes the
+    // focused panel even while first responder lags behind focus.
     private func handleCloseTabShortcutAction(event: NSEvent) -> Bool? {
         guard matchConfiguredShortcut(event: event, action: .closeTab) else { return nil }
         let targetWindow = resolvedShortcutEventWindow(event) ?? NSApp.keyWindow ?? NSApp.mainWindow
@@ -373,7 +371,7 @@ extension AppDelegate {
         return true
     }
 
-    // Numeric shortcuts for surfaces within the focused pane (9 = last)
+    // 9 selects the last surface in the focused pane.
     private func handleSelectSurfaceByNumberShortcutAction(event: NSEvent) -> Bool? {
         guard let digit = numberedConfiguredShortcutDigit(event: event, action: .selectSurfaceByNumber) else { return nil }
         if digit == 9 {
@@ -473,30 +471,18 @@ extension AppDelegate {
         let terminalContext = focusedTerminalShortcutContext(preferredWindow: targetWindow)
         _ = synchronizeActiveMainWindowContext(preferredWindow: targetWindow)
 
-        let directionLabel: String
-        switch direction {
-        case .left: directionLabel = "left"
-        case .right: directionLabel = "right"
-        case .up: directionLabel = "up"
-        case .down: directionLabel = "down"
-        }
-
         #if DEBUG
-        let keyWindow = NSApp.keyWindow
-        let firstResponder = keyWindow?.firstResponder
-        let firstResponderType = firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
-        let firstResponderPtr = firstResponder.map { String(describing: Unmanaged.passUnretained($0).toOpaque()) } ?? "nil"
-        let firstResponderWindow: Int = {
-            if let v = firstResponder as? NSView {
-                return v.window?.windowNumber ?? -1
-            }
-            if let w = firstResponder as? NSWindow {
-                return w.windowNumber
-            }
-            return -1
-        }()
-        let splitContext = "keyWin=\(keyWindow?.windowNumber ?? -1) mainWin=\(NSApp.mainWindow?.windowNumber ?? -1) fr=\(firstResponderType)@\(firstResponderPtr) frWin=\(firstResponderWindow)"
-            dlog("split.shortcut dir=\(directionLabel) pre panel=nil \(splitContext)")
+        let splitContext: () -> String = {
+            let keyWindow = NSApp.keyWindow
+            let firstResponder = keyWindow?.firstResponder
+            let firstResponderType = firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
+            let firstResponderPtr = firstResponder.map { String(describing: Unmanaged.passUnretained($0).toOpaque()) } ?? "nil"
+            let firstResponderWindow = (firstResponder as? NSView)?.window?.windowNumber
+                ?? (firstResponder as? NSWindow)?.windowNumber
+                ?? -1
+            return "keyWin=\(keyWindow?.windowNumber ?? -1) mainWin=\(NSApp.mainWindow?.windowNumber ?? -1) fr=\(firstResponderType)@\(firstResponderPtr) frWin=\(firstResponderWindow)"
+        }
+        dlog("split.shortcut dir=\(direction) pre panel=nil \(splitContext())")
         #endif
 
         let didCreateSplit: Bool = {
@@ -510,22 +496,8 @@ extension AppDelegate {
             return tabManager?.createSplit(direction: direction) != nil
         }()
 #if DEBUG
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-            let keyWindow = NSApp.keyWindow
-            let firstResponder = keyWindow?.firstResponder
-            let firstResponderType = firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
-            let firstResponderPtr = firstResponder.map { String(describing: Unmanaged.passUnretained($0).toOpaque()) } ?? "nil"
-            let firstResponderWindow: Int = {
-                if let v = firstResponder as? NSView {
-                    return v.window?.windowNumber ?? -1
-                }
-                if let w = firstResponder as? NSWindow {
-                    return w.windowNumber
-                }
-                return -1
-            }()
-            let splitContext = "keyWin=\(keyWindow?.windowNumber ?? -1) mainWin=\(NSApp.mainWindow?.windowNumber ?? -1) fr=\(firstResponderType)@\(firstResponderPtr) frWin=\(firstResponderWindow)"
-                dlog("split.shortcut dir=\(directionLabel) post panel=nil \(splitContext)")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            dlog("split.shortcut dir=\(direction) post panel=nil \(splitContext())")
         }
         recordGotoSplitSplitIfNeeded(direction: direction)
 #endif
@@ -643,12 +615,8 @@ extension AppDelegate {
         return false
     }
 
-    /// Match a shortcut stroke against an event, handling normal keys.
-    ///
-    /// Thin forwarder: the matching logic lives in `ShortcutRouting.matchStroke`, which is a
-    /// pure function over an explicit `layoutCharacterProvider` parameter so it can be
-    /// table-tested without AppKit. This method exists so existing call sites keep working
-    /// unchanged, passing this instance's `shortcutLayoutCharacterProvider` through.
+    /// The matching logic lives in `ShortcutRouting.matchStroke`, a pure function over an
+    /// explicit `layoutCharacterProvider` so it can be table-tested without AppKit.
     func matchShortcutStroke(event: NSEvent, stroke: ShortcutStroke) -> Bool {
         ShortcutRouting.matchStroke(
             event: event,
@@ -711,9 +679,8 @@ extension AppDelegate {
         return digit
     }
 
-    /// Shared with `ShortcutRouting.matchStroke` (via `AppDelegate.normalizedShortcutEventCharacter`)
-    /// and with `numberedShortcutDigit` above, so it stays here as `nonisolated static` rather than
-    /// moving — it never reads instance state, so isolation is safe to drop explicitly.
+    /// Shared by `ShortcutRouting.matchStroke` and `numberedShortcutDigit`; `nonisolated static`
+    /// because it reads no instance state.
     nonisolated static func normalizedShortcutEventCharacter(
         _ eventCharacter: String,
         applyShiftSymbolNormalization: Bool,
@@ -748,9 +715,8 @@ extension AppDelegate {
         }
     }
 
-    /// Shared with `ShortcutRouting.matchStroke` (via `AppDelegate.digitForNumberKeyCode`) and
-    /// with `numberedShortcutDigit` above, so it stays here as `nonisolated static` rather than
-    /// moving — it never reads instance state, so isolation is safe to drop explicitly.
+    /// Shared by `ShortcutRouting.matchStroke` and `numberedShortcutDigit`; `nonisolated static`
+    /// because it reads no instance state.
     nonisolated static func digitForNumberKeyCode(_ keyCode: UInt16) -> Int? {
         switch keyCode {
         case 18: return 1 // kVK_ANSI_1
@@ -775,7 +741,7 @@ extension AppDelegate {
         return event.keyCode == keyCode && flags == stroke.modifierFlags
     }
 
-    /// Match tab key shortcuts using keyCode 48
+    /// keyCode 48 is kVK_Tab.
     private func matchTabShortcut(event: NSEvent, stroke: ShortcutStroke) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         return event.keyCode == 48 && flags == stroke.modifierFlags

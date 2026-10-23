@@ -4,15 +4,14 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-/// Issue #182 slice 1 (`Sources/SessionEscrow.swift`): tiny C shim for the
+/// `Sources/SessionEscrow.swift`: tiny C shim for the
 /// exactly-one-fd `SCM_RIGHTS` send/receive the escrow protocol needs.
 ///
 /// Why this exists: Darwin's `<sys/socket.h>` `CMSG_*` macros
 /// (`CMSG_SPACE`, `CMSG_LEN`, `CMSG_DATA`, `CMSG_FIRSTHDR`) are C
 /// preprocessor macros and are not importable into Swift. A hand-rolled
 /// Swift reimplementation of the control-message byte layout produced a
-/// `sendmsg` that failed with `EINVAL` in practice (see the surrounding
-/// commit/PR discussion) despite matching the macro arithmetic on paper --
+/// `sendmsg` that failed with `EINVAL` in practice despite matching the macro arithmetic on paper --
 /// marshalling `msghdr`/`cmsghdr` by hand from Swift across several nested
 /// `withUnsafe...` closures is exactly the kind of detail that is easy to
 /// get subtly wrong and hard to diagnose without a debugger attached to

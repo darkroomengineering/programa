@@ -75,7 +75,6 @@ struct WorkspaceContentView: View {
         }()
 
         let bonsplitView = BonsplitView(controller: workspace.bonsplitController) { tab, paneId in
-            // Content for each tab in bonsplit
             let _ = Self.debugPanelLookup(tab: tab, workspace: workspace)
             if let panel = workspace.panel(for: tab.id) {
                 let isFocused = isWorkspaceInputActive && workspace.focusedPanelId == panel.id
@@ -125,7 +124,6 @@ struct WorkspaceContentView: View {
                 EmptyPanelView(workspace: workspace, paneId: paneId)
             }
         } emptyPane: { paneId in
-            // Empty pane content
             EmptyPanelView(workspace: workspace, paneId: paneId)
                 .onTapGesture {
                     workspace.bonsplitController.focusPane(paneId)

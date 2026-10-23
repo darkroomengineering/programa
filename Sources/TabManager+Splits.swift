@@ -61,33 +61,57 @@ extension TabManager {
         guard amount > 0,
               let tab = workspace(withId: tabId),
               let paneId = tab.paneId(forPanelId: surfaceId) else { return false }
+        if case .resized = Self.resizePane(paneId.id, in: tab, direction: direction, amount: Int(amount)) {
+            return true
+        }
+        return false
+    }
 
-        let paneUUID = paneId.id
-        guard tab.bonsplitController.allPaneIds.contains(where: { $0.id == paneUUID }) else {
-            return false
+    enum SplitResizeOutcome {
+        case paneNotFound
+        case paneNotInTree
+        case noSplitAncestor
+        case noAdjacentBorder
+        case setFailed(splitId: UUID)
+        case resized(splitId: UUID, oldPosition: CGFloat, newPosition: CGFloat)
+    }
+
+    /// Moves the divider on the `direction` side of `paneId` by `amount` points, clamped to
+    /// 0.1...0.9 of the split. `amount` must be positive.
+    static func resizePane(
+        _ paneId: UUID,
+        in tab: Workspace,
+        direction: ResizeDirection,
+        amount: Int
+    ) -> SplitResizeOutcome {
+        guard tab.bonsplitController.allPaneIds.contains(where: { $0.id == paneId }) else {
+            return .paneNotFound
         }
 
         var candidates: [ResizeSplitCandidate] = []
         let trace = resizeSplitCollectCandidates(
             node: tab.bonsplitController.treeSnapshot(),
-            targetPaneId: paneUUID.uuidString,
+            targetPaneId: paneId.uuidString,
             candidates: &candidates
         )
-        guard trace.containsTarget else { return false }
+        guard trace.containsTarget else { return .paneNotInTree }
 
         let orientationMatches = candidates.filter { $0.orientation == direction.splitOrientation }
-        guard !orientationMatches.isEmpty else { return false }
+        guard !orientationMatches.isEmpty else { return .noSplitAncestor }
 
         guard let candidate = orientationMatches.first(where: {
             $0.paneInFirstChild == direction.requiresPaneInFirstChild
         }) else {
-            return false
+            return .noAdjacentBorder
         }
 
         let delta = CGFloat(amount) / candidate.axisPixels
         let requested = candidate.dividerPosition + (direction.dividerDeltaSign * delta)
         let clamped = min(max(requested, 0.1), 0.9)
-        return tab.bonsplitController.setDividerPosition(clamped, forSplit: candidate.splitId, fromExternal: true)
+        guard tab.bonsplitController.setDividerPosition(clamped, forSplit: candidate.splitId, fromExternal: true) else {
+            return .setFailed(splitId: candidate.splitId)
+        }
+        return .resized(splitId: candidate.splitId, oldPosition: candidate.dividerPosition, newPosition: clamped)
     }
 
     /// Equalize splits - not directly supported by bonsplit
@@ -167,7 +191,7 @@ extension TabManager {
         let bounds: CGRect
     }
 
-    private func resizeSplitCollectCandidates(
+    private static func resizeSplitCollectCandidates(
         node: ExternalTreeNode,
         targetPaneId: String,
         candidates: inout [ResizeSplitCandidate]

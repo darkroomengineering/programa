@@ -35,8 +35,8 @@ final class ClosedTerminalUndoStore {
     var isEmpty: Bool { entries.isEmpty }
 
     /// Stages a close for undo. `restore` reattaches the closed panel; `finalize` performs the
-    /// real teardown once the grace period elapses without a restore. Returns an opaque id that
-    /// can be used to cancel staging early.
+    /// real teardown once the grace period elapses without a restore. Returns the staged entry's
+    /// id.
     @discardableResult
     func stage(restore: @escaping () -> Void, finalize: @escaping () -> Void) -> UUID {
         let id = UUID()

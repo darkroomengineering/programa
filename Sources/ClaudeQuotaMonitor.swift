@@ -143,6 +143,35 @@ protocol ProviderUsageFetching: Sendable {
     func fetch() async -> ProviderUsageResult
 }
 
+extension ProviderUsageFetching {
+    /// First executable `name` on PATH, then in the common user/Homebrew install locations,
+    /// then in `extraCandidates`.
+    static func resolveExecutable(named name: String, extraCandidates: [String] = []) -> URL? {
+        let fileManager = FileManager.default
+        var candidates: [String] = []
+        if let path = ProcessInfo.processInfo.environment["PATH"] {
+            candidates.append(contentsOf: path.split(separator: ":").map { "\($0)/\(name)" })
+        }
+
+        let home = fileManager.homeDirectoryForCurrentUser.path
+        candidates.append(contentsOf: [
+            "\(home)/.local/bin/\(name)",
+            "\(home)/.bun/bin/\(name)",
+            "/opt/homebrew/bin/\(name)",
+            "/usr/local/bin/\(name)",
+        ])
+        candidates.append(contentsOf: extraCandidates)
+
+        var seen: Set<String> = []
+        for candidate in candidates where seen.insert(candidate).inserted {
+            if fileManager.isExecutableFile(atPath: candidate) {
+                return URL(fileURLWithPath: candidate)
+            }
+        }
+        return nil
+    }
+}
+
 @MainActor
 final class ProviderUsageStore: ObservableObject {
     @Published private(set) var results: [ProviderUsageResult] = []
@@ -288,7 +317,7 @@ struct ClaudeProviderUsageFetcher: ProviderUsageFetching {
     private static let maximumCacheAge: TimeInterval = 3_600
 
     func fetch() async -> ProviderUsageResult {
-        guard let executableURL = Self.resolveClaudeExecutable() else {
+        guard let executableURL = Self.resolveExecutable(named: "claude") else {
             return .unavailable(.claude)
         }
         let cacheURL = FileManager.default.homeDirectoryForCurrentUser
@@ -484,29 +513,6 @@ struct ClaudeProviderUsageFetcher: ProviderUsageFetching {
         }
     }
 
-    private static func resolveClaudeExecutable() -> URL? {
-        let fileManager = FileManager.default
-        var candidates: [String] = []
-        if let path = ProcessInfo.processInfo.environment["PATH"] {
-            candidates.append(contentsOf: path.split(separator: ":").map { "\($0)/claude" })
-        }
-
-        let home = fileManager.homeDirectoryForCurrentUser.path
-        candidates.append(contentsOf: [
-            "\(home)/.local/bin/claude",
-            "\(home)/.bun/bin/claude",
-            "/opt/homebrew/bin/claude",
-            "/usr/local/bin/claude",
-        ])
-
-        var seen: Set<String> = []
-        for candidate in candidates where seen.insert(candidate).inserted {
-            if fileManager.isExecutableFile(atPath: candidate) {
-                return URL(fileURLWithPath: candidate)
-            }
-        }
-        return nil
-    }
 }
 
 enum CodexUsageSnapshotParser {
@@ -694,7 +700,10 @@ struct CodexProviderUsageFetcher: ProviderUsageFetching {
     let provider = ProviderUsageProvider.codex
 
     func fetch() async -> ProviderUsageResult {
-        guard let executableURL = Self.resolveCodexExecutable() else {
+        guard let executableURL = Self.resolveExecutable(
+            named: "codex",
+            extraCandidates: ["/Applications/Codex.app/Contents/Resources/codex"]
+        ) else {
             return .unavailable(.codex)
         }
 
@@ -997,30 +1006,5 @@ struct CodexProviderUsageFetcher: ProviderUsageFetching {
                 Thread.sleep(forTimeInterval: 0.01)
             }
         }
-    }
-
-    private static func resolveCodexExecutable() -> URL? {
-        let fileManager = FileManager.default
-        var candidates: [String] = []
-        if let path = ProcessInfo.processInfo.environment["PATH"] {
-            candidates.append(contentsOf: path.split(separator: ":").map { "\($0)/codex" })
-        }
-
-        let home = fileManager.homeDirectoryForCurrentUser.path
-        candidates.append(contentsOf: [
-            "\(home)/.local/bin/codex",
-            "\(home)/.bun/bin/codex",
-            "/opt/homebrew/bin/codex",
-            "/usr/local/bin/codex",
-            "/Applications/Codex.app/Contents/Resources/codex",
-        ])
-
-        var seen: Set<String> = []
-        for candidate in candidates where seen.insert(candidate).inserted {
-            if fileManager.isExecutableFile(atPath: candidate) {
-                return URL(fileURLWithPath: candidate)
-            }
-        }
-        return nil
     }
 }

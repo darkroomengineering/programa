@@ -249,9 +249,6 @@ struct SplitContainerView<Content: View, EmptyContent: View>: NSViewRepresentabl
         // without briefly dropping arrangedSubviews to 1.
         let arranged = splitView.arrangedSubviews
         if arranged.count >= 2 {
-            let firstType = splitState.first.nodeType
-            let secondType = splitState.second.nodeType
-
             let firstContainer = arranged[0]
             let secondContainer = arranged[1]
             firstContainer.wantsLayer = true
@@ -264,18 +261,14 @@ struct SplitContainerView<Content: View, EmptyContent: View>: NSViewRepresentabl
             updateHostedContent(
                 in: firstContainer,
                 node: splitState.first,
-                nodeTypeChanged: firstType != context.coordinator.firstNodeType,
                 controller: &context.coordinator.firstHostingController
             )
-            context.coordinator.firstNodeType = firstType
 
             updateHostedContent(
                 in: secondContainer,
                 node: splitState.second,
-                nodeTypeChanged: secondType != context.coordinator.secondNodeType,
                 controller: &context.coordinator.secondHostingController
             )
-            context.coordinator.secondNodeType = secondType
         }
 
         // Access dividerPosition to ensure SwiftUI tracks this dependency
@@ -288,11 +281,9 @@ struct SplitContainerView<Content: View, EmptyContent: View>: NSViewRepresentabl
 
     private func makeHostingController(for node: SplitNode) -> NSHostingController<AnyView> {
         let hostingController = NSHostingController(rootView: AnyView(makeView(for: node)))
-        if #available(macOS 13.0, *) {
-            // NSSplitView owns pane geometry. Keep NSHostingController from publishing
-            // intrinsic-size constraints that force a minimum pane width.
-            hostingController.sizingOptions = []
-        }
+        // NSSplitView owns pane geometry. Keep NSHostingController from publishing
+        // intrinsic-size constraints that force a minimum pane width.
+        hostingController.sizingOptions = []
         // Split children live inside the pane area, not under the titlebar; the
         // window's titlebar safe area must not inset their content (same rule as
         // SinglePaneWrapper — without this, every pane of a split gains a blank
@@ -326,20 +317,10 @@ struct SplitContainerView<Content: View, EmptyContent: View>: NSViewRepresentabl
     private func updateHostedContent(
         in container: NSView,
         node: SplitNode,
-        nodeTypeChanged: Bool,
         controller: inout NSHostingController<AnyView>?
     ) {
-        // Historically we recreated the NSHostingController when the child node type changed
-        // (pane <-> split) to force a full detach/reattach of native AppKit subviews.
-        //
-        // In practice, that can introduce a single-frame "blank flash" for Metal/IOSurface-backed
-        // content during split collapse (SwiftUI tears down the old subtree before the new subtree
-        // has produced its native backing views).
-        //
-        // Keeping the hosting controller stable and just swapping its rootView makes the update
-        // atomic from AppKit's perspective and avoids the transient blank frame.
-        _ = nodeTypeChanged // keep signature; behavior is intentionally identical either way.
-
+        // Keep the hosting controller and swap its rootView, even when the child flips between
+        // pane and split: recreating it flashes a blank frame for Metal/IOSurface-backed content.
         if let current = controller {
             current.rootView = AnyView(makeView(for: node))
             // Ensure fill if container bounds changed without a layout pass yet.
@@ -391,9 +372,6 @@ struct SplitContainerView<Content: View, EmptyContent: View>: NSViewRepresentabl
         var isSyncingProgrammatically = false
         /// Track if user is actively dragging the divider
         var isDragging = false
-        /// Track child node types to detect structural changes
-        var firstNodeType: SplitNode.NodeType
-        var secondNodeType: SplitNode.NodeType
         /// Retain hosting controllers so SwiftUI content stays alive
         var firstHostingController: NSHostingController<AnyView>?
         var secondHostingController: NSHostingController<AnyView>?
@@ -406,8 +384,6 @@ struct SplitContainerView<Content: View, EmptyContent: View>: NSViewRepresentabl
             self.splitStateId = splitState.id
             self.onGeometryChange = onGeometryChange
             self.lastAppliedPosition = splitState.dividerPosition
-            self.firstNodeType = splitState.first.nodeType
-            self.secondNodeType = splitState.second.nodeType
         }
 
         func update(
@@ -425,8 +401,6 @@ struct SplitContainerView<Content: View, EmptyContent: View>: NSViewRepresentabl
                 didApplyInitialDividerPosition = false
                 initialDividerApplyAttempts = 0
                 isDragging = false
-                firstNodeType = newState.first.nodeType
-                secondNodeType = newState.second.nodeType
                 return
             }
 

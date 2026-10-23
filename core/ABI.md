@@ -146,9 +146,8 @@ same state model but not a process.
 - **`programa-ffi`** wraps `programa-domain::Core` behind the C ABI documented
   above and ships as `programa_core.dll` in the Windows app. It runs in the
   app's own process, on the app's own thread, with no IPC in the loop.
-- **`programad`** (`core/crates/programad`, moved in from
-  `darkroomengineering/programa-core`) is a separate headless process that
-  owns PTYs, session write-ahead logs, and attach/detach/fd-handoff, and now
+- **`programad`** (`core/crates/programad`) is a separate headless process that
+  owns PTYs, session write-ahead logs, and attach/detach/fd-handoff, and
   also links `programa-domain` directly to expose the same state model over
   its Unix-socket wire protocol (`core/docs/programad.md`): `workspace.snapshot`
   and `workspace.dispatch` take and return the exact JSON documented above
@@ -157,7 +156,7 @@ same state model but not a process.
   `params`, and gets the same `Snapshot` JSON back either way.
 
 **What `programad` owns:** PTYs and their child processes, the per-session
-WAL, attach/detach and `SCM_RIGHTS` fd handoff, and now the `workspace.*`
+WAL, attach/detach and `SCM_RIGHTS` fd handoff, and the `workspace.*`
 surface over that same socket. A domain surface that is a terminal carries a
 `session_id` that names one of `programad`'s own sessions; `workspace.dispatch`
 rejects any command that would attach a *new* surface to a `session_id`

@@ -33,7 +33,6 @@ final class MarkdownPanel: Panel, ObservableObject {
     /// Absolute path to the markdown file being displayed.
     let filePath: String
 
-    /// The workspace this panel belongs to.
     private(set) var workspaceId: UUID
 
     /// Current markdown content read from the file.

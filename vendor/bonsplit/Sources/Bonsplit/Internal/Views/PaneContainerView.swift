@@ -42,12 +42,6 @@ public extension EnvironmentValues {
     }
 }
 
-/// Drop lifecycle state to prevent dropUpdated from re-setting state after performDrop
-enum PaneDropLifecycle {
-    case idle
-    case hovering
-}
-
 private struct PaneDropPlaceholderOverlay: View {
     let zone: DropZone?
     let size: CGSize
@@ -289,7 +283,7 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
                 isDirty: tab.isDirty,
                 showsNotificationBadge: tab.showsNotificationBadge,
                 customColorHex: tab.customColorHex,
-                accessibilityValue: accessibilityValue(for: tab),
+                accessibilityValue: tab.accessibilityStates.joined(separator: ", "),
                 menuItems: menuItems(for: tab, at: index, splitController: splitController)
             )
         }
@@ -413,15 +407,6 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
         bonsplitController.requestNewTab(kind: "terminal", inPane: newPaneID)
     }
 
-    private func accessibilityValue(for tab: TabItem) -> String {
-        var values: [String] = []
-        if tab.isLoading { values.append(BonsplitStrings.tabLoading) }
-        if tab.isPinned { values.append(BonsplitStrings.tabPinned) }
-        if tab.showsNotificationBadge { values.append(BonsplitStrings.tabUnread) }
-        if tab.isDirty { values.append(BonsplitStrings.tabModified) }
-        return values.joined(separator: ", ")
-    }
-
     private func menuItems(
         for tab: TabItem,
         at index: Int,
@@ -518,7 +503,7 @@ struct PaneContainerView<Content: View, EmptyContent: View>: View {
     let emptyPaneBuilder: (PaneID) -> EmptyContent
 
     @State private var activeDropZone: DropZone?
-    @State private var dropLifecycle: PaneDropLifecycle = .idle
+    @State private var dropLifecycle: TabDropLifecycle = .idle
 
     private var isFocused: Bool {
         controller.focusedPaneId == pane.id
@@ -743,7 +728,7 @@ struct UnifiedPaneDropDelegate: DropDelegate {
     let controller: SplitViewController
     let bonsplitController: BonsplitController
     @Binding var activeDropZone: DropZone?
-    @Binding var dropLifecycle: PaneDropLifecycle
+    @Binding var dropLifecycle: TabDropLifecycle
 
     // Calculate zone based on position within the view
     private func zoneForLocation(_ location: CGPoint) -> DropZone {
@@ -771,14 +756,11 @@ struct UnifiedPaneDropDelegate: DropDelegate {
               let sourcePaneId = controller.activeDragSourcePaneId ?? controller.dragSourcePaneId else {
             return defaultZone
         }
-        guard let adjacentPaneMoveZone = adjacentPaneMoveZone(
+        return adjacentPaneMoveZone(
             for: draggedTab,
             sourcePaneId: sourcePaneId,
             defaultZone: defaultZone
-        ) else {
-            return defaultZone
-        }
-        return adjacentPaneMoveZone
+        ) ?? defaultZone
     }
 
     private func adjacentPaneMoveZone(
@@ -824,7 +806,7 @@ struct UnifiedPaneDropDelegate: DropDelegate {
         // may not have propagated yet when performDrop runs.
         guard let draggedTab = controller.activeDragTab ?? controller.draggingTab,
               let sourcePaneId = controller.activeDragSourcePaneId ?? controller.dragSourcePaneId else {
-            guard let transfer = decodeTransfer(from: info),
+            guard let transfer = TabTransferData.fromDragPasteboard(),
                   transfer.isFromCurrentProcess else {
                 return false
             }
@@ -955,7 +937,7 @@ struct UnifiedPaneDropDelegate: DropDelegate {
         }
 
         // External drags (another Bonsplit controller) must include a payload from this process.
-        guard let transfer = decodeTransfer(from: info),
+        guard let transfer = TabTransferData.fromDragPasteboard(),
               transfer.isFromCurrentProcess else {
             return false
         }
@@ -968,27 +950,6 @@ struct UnifiedPaneDropDelegate: DropDelegate {
         )
 #endif
         return true
-    }
-
-    private func decodeTransfer(from string: String) -> TabTransferData? {
-        guard let data = string.data(using: .utf8),
-              let transfer = try? JSONDecoder().decode(TabTransferData.self, from: data) else {
-            return nil
-        }
-        return transfer
-    }
-
-    private func decodeTransfer(from info: DropInfo) -> TabTransferData? {
-        let pasteboard = NSPasteboard(name: .drag)
-        let type = NSPasteboard.PasteboardType(UTType.tabTransfer.identifier)
-        if let data = pasteboard.data(forType: type),
-           let transfer = try? JSONDecoder().decode(TabTransferData.self, from: data) {
-            return transfer
-        }
-        if let raw = pasteboard.string(forType: type) {
-            return decodeTransfer(from: raw)
-        }
-        return nil
     }
 }
 

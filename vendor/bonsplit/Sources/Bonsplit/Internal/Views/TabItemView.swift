@@ -372,11 +372,7 @@ struct TabItemView: View {
     }
 
     private var accessibilityValue: String {
-        var parts: [String] = []
-        if tab.isLoading { parts.append(BonsplitStrings.tabLoading) }
-        if tab.isPinned { parts.append(BonsplitStrings.tabPinned) }
-        if tab.showsNotificationBadge { parts.append(BonsplitStrings.tabUnread) }
-        if tab.isDirty { parts.append(BonsplitStrings.tabModified) }
+        var parts = tab.accessibilityStates
         if showsZoomIndicator { parts.append(BonsplitStrings.tabZoomed) }
         return parts.joined(separator: ", ")
     }

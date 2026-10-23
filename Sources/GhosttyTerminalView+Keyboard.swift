@@ -717,7 +717,6 @@ extension GhosttyNSView {
         syncPreeditMs = (ProcessInfo.processInfo.systemUptime - syncPreeditStart) * 1000.0
 #endif
 
-        // Build the key event
         var keyEvent = ghostty_input_key_s()
         keyEvent.action = action
         keyEvent.keycode = UInt32(event.keyCode)
@@ -1101,7 +1100,6 @@ extension GhosttyNSView {
         return chars
     }
 
-    /// Get the unshifted codepoint for the key event
     private func unshiftedCodepointFromEvent(_ event: NSEvent) -> UInt32 {
         if let layoutChars = KeyboardLayout.character(forKeyCode: event.keyCode),
            layoutChars.count == 1,

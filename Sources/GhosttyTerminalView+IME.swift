@@ -405,7 +405,6 @@ extension GhosttyNSView: NSTextInputClient {
             )
         }
 #endif
-        // Get the string value
         var chars = ""
         switch string {
         case let v as NSAttributedString:
@@ -416,7 +415,6 @@ extension GhosttyNSView: NSTextInputClient {
             return
         }
 
-        // Clear marked text since we're inserting
         unmarkText()
 
         // Some IME/input-method paths call insertText with an empty payload to

@@ -961,6 +961,36 @@ extension TerminalController {
         }
     }
 
+    /// Resolves a surface command's workspace and terminal panel: the explicit `surface_id`,
+    /// or the workspace's focused surface when none is given.
+    func v2ResolveTerminalTarget(
+        params: [String: Any],
+        tabManager: TabManager
+    ) -> V2Resolution<(Workspace, UUID, TerminalPanel)> {
+        guard let ws = v2ResolveWorkspace(params: params, tabManager: tabManager) else {
+            return .failed(.err(code: "not_found", message: "Workspace not found", data: nil))
+        }
+        let surfaceId: UUID?
+        if params["surface_id"] != nil {
+            surfaceId = v2UUID(params, "surface_id")
+            guard surfaceId != nil else {
+                return .failed(.err(code: "not_found", message: "Surface not found for the given surface_id", data: nil))
+            }
+        } else {
+            surfaceId = ws.focusedPanelId
+        }
+        guard let surfaceId else {
+            return .failed(.err(code: "not_found", message: "No focused surface", data: nil))
+        }
+        guard let panel = ws.panels[surfaceId] else {
+            return .failed(.err(code: "not_found", message: "Surface not found", data: ["surface_id": surfaceId.uuidString]))
+        }
+        guard let terminalPanel = panel as? TerminalPanel else {
+            return .failed(.err(code: "invalid_params", message: "Surface is not a terminal", data: ["surface_id": surfaceId.uuidString]))
+        }
+        return .resolved((ws, surfaceId, terminalPanel))
+    }
+
     nonisolated func v2SurfaceSendText(params: [String: Any]) -> V2CallResult {
         v2MainSync {
             guard let tabManager = v2ResolveTabManager(params: params) else {
@@ -970,26 +1000,14 @@ extension TerminalController {
                 return .err(code: "invalid_params", message: "Missing text", data: nil)
             }
 
-            guard let ws = v2ResolveWorkspace(params: params, tabManager: tabManager) else {
-                return .err(code: "not_found", message: "Workspace not found", data: nil)
-            }
-            let surfaceId: UUID?
-            if params["surface_id"] != nil {
-                surfaceId = v2UUID(params, "surface_id")
-                guard surfaceId != nil else {
-                    return .err(code: "not_found", message: "Surface not found for the given surface_id", data: nil)
-                }
-            } else {
-                surfaceId = ws.focusedPanelId
-            }
-            guard let surfaceId else {
-                return .err(code: "not_found", message: "No focused surface", data: nil)
-            }
-            guard let panel = ws.panels[surfaceId] else {
-                return .err(code: "not_found", message: "Surface not found", data: ["surface_id": surfaceId.uuidString])
-            }
-            guard let terminalPanel = panel as? TerminalPanel else {
-                return .err(code: "invalid_params", message: "Surface is not a terminal", data: ["surface_id": surfaceId.uuidString])
+            let ws: Workspace
+            let surfaceId: UUID
+            let terminalPanel: TerminalPanel
+            switch v2ResolveTerminalTarget(params: params, tabManager: tabManager) {
+            case .failed(let error):
+                return error
+            case .resolved(let target):
+                (ws, surfaceId, terminalPanel) = target
             }
             #if DEBUG
             let sendStart = ProcessInfo.processInfo.systemUptime
@@ -1017,26 +1035,14 @@ extension TerminalController {
                 return .err(code: "invalid_params", message: "Missing key", data: nil)
             }
 
-            guard let ws = v2ResolveWorkspace(params: params, tabManager: tabManager) else {
-                return .err(code: "not_found", message: "Workspace not found", data: nil)
-            }
-            let surfaceId: UUID?
-            if params["surface_id"] != nil {
-                surfaceId = v2UUID(params, "surface_id")
-                guard surfaceId != nil else {
-                    return .err(code: "not_found", message: "Surface not found for the given surface_id", data: nil)
-                }
-            } else {
-                surfaceId = ws.focusedPanelId
-            }
-            guard let surfaceId else {
-                return .err(code: "not_found", message: "No focused surface", data: nil)
-            }
-            guard let panel = ws.panels[surfaceId] else {
-                return .err(code: "not_found", message: "Surface not found", data: ["surface_id": surfaceId.uuidString])
-            }
-            guard let terminalPanel = panel as? TerminalPanel else {
-                return .err(code: "invalid_params", message: "Surface is not a terminal", data: ["surface_id": surfaceId.uuidString])
+            let ws: Workspace
+            let surfaceId: UUID
+            let terminalPanel: TerminalPanel
+            switch v2ResolveTerminalTarget(params: params, tabManager: tabManager) {
+            case .failed(let error):
+                return error
+            case .resolved(let target):
+                (ws, surfaceId, terminalPanel) = target
             }
             guard v2DeliverNamedKey(key, to: terminalPanel, reason: "terminalController.v2SurfaceSendKey") else {
                 return .err(code: "invalid_params", message: "Unknown key", data: ["key": key])
@@ -1051,26 +1057,14 @@ extension TerminalController {
                 return .err(code: "unavailable", message: "TabManager not available", data: nil)
             }
 
-            guard let ws = v2ResolveWorkspace(params: params, tabManager: tabManager) else {
-                return .err(code: "not_found", message: "Workspace not found", data: nil)
-            }
-            let surfaceId: UUID?
-            if params["surface_id"] != nil {
-                surfaceId = v2UUID(params, "surface_id")
-                guard surfaceId != nil else {
-                    return .err(code: "not_found", message: "Surface not found for the given surface_id", data: nil)
-                }
-            } else {
-                surfaceId = ws.focusedPanelId
-            }
-            guard let surfaceId else {
-                return .err(code: "not_found", message: "No focused surface", data: nil)
-            }
-            guard let panel = ws.panels[surfaceId] else {
-                return .err(code: "not_found", message: "Surface not found", data: ["surface_id": surfaceId.uuidString])
-            }
-            guard let terminalPanel = panel as? TerminalPanel else {
-                return .err(code: "invalid_params", message: "Surface is not a terminal", data: ["surface_id": surfaceId.uuidString])
+            let ws: Workspace
+            let surfaceId: UUID
+            let terminalPanel: TerminalPanel
+            switch v2ResolveTerminalTarget(params: params, tabManager: tabManager) {
+            case .failed(let error):
+                return error
+            case .resolved(let target):
+                (ws, surfaceId, terminalPanel) = target
             }
 
             guard terminalPanel.performBindingAction("clear_screen") else {
@@ -1100,27 +1094,14 @@ extension TerminalController {
                 return .err(code: "invalid_params", message: "lines must be greater than 0", data: nil)
             }
 
-            guard let ws = v2ResolveWorkspace(params: params, tabManager: tabManager) else {
-                return .err(code: "not_found", message: "Workspace not found", data: nil)
-            }
-
-            let surfaceId: UUID?
-            if params["surface_id"] != nil {
-                surfaceId = v2UUID(params, "surface_id")
-                guard surfaceId != nil else {
-                    return .err(code: "not_found", message: "Surface not found for the given surface_id", data: nil)
-                }
-            } else {
-                surfaceId = ws.focusedPanelId
-            }
-            guard let surfaceId else {
-                return .err(code: "not_found", message: "No focused surface", data: nil)
-            }
-            guard let panel = ws.panels[surfaceId] else {
-                return .err(code: "not_found", message: "Surface not found", data: ["surface_id": surfaceId.uuidString])
-            }
-            guard let terminalPanel = panel as? TerminalPanel else {
-                return .err(code: "invalid_params", message: "Surface is not a terminal", data: ["surface_id": surfaceId.uuidString])
+            let ws: Workspace
+            let surfaceId: UUID
+            let terminalPanel: TerminalPanel
+            switch v2ResolveTerminalTarget(params: params, tabManager: tabManager) {
+            case .failed(let error):
+                return error
+            case .resolved(let target):
+                (ws, surfaceId, terminalPanel) = target
             }
 
             let text: String
@@ -1360,4 +1341,10 @@ extension TerminalController {
         }
         return true
     }
+}
+
+/// A v2 handler's resolved target, or the error response to return instead.
+enum V2Resolution<Value> {
+    case resolved(Value)
+    case failed(TerminalController.V2CallResult)
 }

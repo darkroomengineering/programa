@@ -217,100 +217,6 @@ extension TerminalController {
         }
     }
 
-    private enum V2PaneResizeDirection: String {
-        case left
-        case right
-        case up
-        case down
-
-        var splitOrientation: String {
-            switch self {
-            case .left, .right:
-                return "horizontal"
-            case .up, .down:
-                return "vertical"
-            }
-        }
-
-        /// A split controls the target pane's right/bottom edge when target is first child,
-        /// and left/top edge when target is second child.
-        var requiresPaneInFirstChild: Bool {
-            switch self {
-            case .right, .down:
-                return true
-            case .left, .up:
-                return false
-            }
-        }
-
-        /// Positive value moves divider toward second child (right/down).
-        var dividerDeltaSign: CGFloat {
-            requiresPaneInFirstChild ? 1 : -1
-        }
-    }
-
-    private struct V2PaneResizeCandidate {
-        let splitId: UUID
-        let orientation: String
-        let paneInFirstChild: Bool
-        let dividerPosition: CGFloat
-        let axisPixels: CGFloat
-    }
-
-    private struct V2PaneResizeTrace {
-        let containsTarget: Bool
-        let bounds: CGRect
-    }
-
-    private func v2PaneResizeCollectCandidates(
-        node: ExternalTreeNode,
-        targetPaneId: String,
-        candidates: inout [V2PaneResizeCandidate]
-    ) -> V2PaneResizeTrace {
-        switch node {
-        case .pane(let pane):
-            let bounds = CGRect(
-                x: pane.frame.x,
-                y: pane.frame.y,
-                width: pane.frame.width,
-                height: pane.frame.height
-            )
-            return V2PaneResizeTrace(containsTarget: pane.id == targetPaneId, bounds: bounds)
-
-        case .split(let split):
-            let first = v2PaneResizeCollectCandidates(
-                node: split.first,
-                targetPaneId: targetPaneId,
-                candidates: &candidates
-            )
-            let second = v2PaneResizeCollectCandidates(
-                node: split.second,
-                targetPaneId: targetPaneId,
-                candidates: &candidates
-            )
-
-            let combinedBounds = first.bounds.union(second.bounds)
-            let containsTarget = first.containsTarget || second.containsTarget
-
-            if containsTarget,
-               let splitUUID = UUID(uuidString: split.id) {
-                let orientation = split.orientation.lowercased()
-                let axisPixels: CGFloat = orientation == "horizontal"
-                    ? combinedBounds.width
-                    : combinedBounds.height
-                candidates.append(V2PaneResizeCandidate(
-                    splitId: splitUUID,
-                    orientation: orientation,
-                    paneInFirstChild: first.containsTarget,
-                    dividerPosition: CGFloat(split.dividerPosition),
-                    axisPixels: max(axisPixels, 1)
-                ))
-            }
-
-            return V2PaneResizeTrace(containsTarget: containsTarget, bounds: combinedBounds)
-        }
-    }
-
     nonisolated func v2PaneResize(params: [String: Any]) -> V2CallResult {
         v2MainSync {
             guard let tabManager = v2ResolveTabManager(params: params) else {
@@ -327,7 +233,7 @@ extension TerminalController {
             } else {
                 amount = 1
             }
-            guard let direction = V2PaneResizeDirection(rawValue: directionRaw), amount > 0 else {
+            guard let direction = ResizeDirection(rawValue: directionRaw), amount > 0 else {
                 return .err(code: "invalid_params", message: "direction must be one of left|right|up|down and amount must be > 0", data: nil)
             }
 
@@ -339,47 +245,34 @@ extension TerminalController {
             guard let paneUUID else {
                 return .err(code: "not_found", message: "No focused pane", data: nil)
             }
-            guard ws.bonsplitController.allPaneIds.contains(where: { $0.id == paneUUID }) else {
+            let splitId: UUID
+            let oldPosition: CGFloat
+            let newPosition: CGFloat
+            switch TabManager.resizePane(paneUUID, in: ws, direction: direction, amount: amount) {
+            case .paneNotFound:
                 return .err(code: "not_found", message: "Pane not found", data: ["pane_id": paneUUID.uuidString])
-            }
-
-            let tree = ws.bonsplitController.treeSnapshot()
-            var candidates: [V2PaneResizeCandidate] = []
-            let trace = v2PaneResizeCollectCandidates(
-                node: tree,
-                targetPaneId: paneUUID.uuidString,
-                candidates: &candidates
-            )
-            guard trace.containsTarget else {
+            case .paneNotInTree:
                 return .err(code: "not_found", message: "Pane not found in split tree", data: ["pane_id": paneUUID.uuidString])
-            }
-
-            let orientationMatches = candidates.filter { $0.orientation == direction.splitOrientation }
-            guard !orientationMatches.isEmpty else {
+            case .noSplitAncestor:
                 return .err(
                     code: "invalid_state",
                     message: "No \(direction.splitOrientation) split ancestor for pane",
                     data: ["pane_id": paneUUID.uuidString, "direction": direction.rawValue]
                 )
-            }
-
-            guard let candidate = orientationMatches.first(where: { $0.paneInFirstChild == direction.requiresPaneInFirstChild }) else {
+            case .noAdjacentBorder:
                 return .err(
                     code: "invalid_state",
                     message: "Pane has no adjacent border in direction \(direction.rawValue)",
                     data: ["pane_id": paneUUID.uuidString, "direction": direction.rawValue]
                 )
-            }
-
-            let delta = CGFloat(amount) / candidate.axisPixels
-            let requested = candidate.dividerPosition + (direction.dividerDeltaSign * delta)
-            let clamped = min(max(requested, 0.1), 0.9)
-            guard ws.bonsplitController.setDividerPosition(clamped, forSplit: candidate.splitId, fromExternal: true) else {
+            case .setFailed(let failedSplitId):
                 return .err(
                     code: "internal_error",
                     message: "Failed to set split divider position",
-                    data: ["split_id": candidate.splitId.uuidString]
+                    data: ["split_id": failedSplitId.uuidString]
                 )
+            case .resized(let resizedSplitId, let old, let new):
+                (splitId, oldPosition, newPosition) = (resizedSplitId, old, new)
             }
 
             let windowId = v2ResolveWindowId(tabManager: tabManager)
@@ -390,11 +283,11 @@ extension TerminalController {
                 "workspace_ref": v2Ref(kind: .workspace, uuid: ws.id),
                 "pane_id": paneUUID.uuidString,
                 "pane_ref": v2Ref(kind: .pane, uuid: paneUUID),
-                "split_id": candidate.splitId.uuidString,
+                "split_id": splitId.uuidString,
                 "direction": direction.rawValue,
                 "amount": amount,
-                "old_divider_position": candidate.dividerPosition,
-                "new_divider_position": clamped
+                "old_divider_position": oldPosition,
+                "new_divider_position": newPosition
             ])
         }
     }

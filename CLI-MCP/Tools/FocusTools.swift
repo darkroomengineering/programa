@@ -5,11 +5,11 @@ import MCP
 /// prefix instead of the usual dot-to-underscore method name -- exists for the same reason:
 /// the tool name alone should warn an agent before it calls one).
 ///
-/// This is the authoritative `focusIntentV2Methods` set (`Sources/TerminalController.swift:157-
-/// 175`) filtered to the in-scope catalog -- exactly 10 methods. `worktree.create` is
+/// This is the authoritative `focusIntentV2Methods` set (`Sources/TerminalController.swift`)
+/// filtered to the in-scope catalog -- exactly 10 methods. `worktree.create` is
 /// also in `focusIntentV2Methods` but is deliberately NOT here: it only focuses when its
 /// `focus` param is explicitly set to `true` (default `false`, `Sources/TerminalController+
-/// Worktree.swift:43`), and `WorktreeTools.swift`'s `worktree_create` tool omits that param
+/// Worktree.swift`), and `WorktreeTools.swift`'s `worktree_create` tool omits that param
 /// from its schema entirely so it can never raise the window -- see the comment there.
 enum FocusTools {
     static let tools: [ProgramaTool] = [

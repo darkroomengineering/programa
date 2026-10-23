@@ -13,7 +13,7 @@ import Foundation
 /// direct call) can conform without changing the shape callers already use.
 ///
 /// `InProcessCore` is the only conformance today: every method forwards
-/// straight to the exact same code that ran before this file existed.
+/// straight to the in-process implementation.
 /// Nothing moves out of process, no new thread or queue is introduced, and
 /// no public socket command changes shape.
 ///

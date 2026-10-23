@@ -1,12 +1,5 @@
 import Foundation
-import CryptoKit
 import Darwin
-#if canImport(LocalAuthentication)
-import LocalAuthentication
-#endif
-#if canImport(Security)
-import Security
-#endif
 
 extension ProgramaCLI {
     private struct ThemeReloadStatus {
@@ -415,9 +408,6 @@ extension ProgramaCLI {
         return nil
     }
 
-    /// Subcommand help text for Themes commands, split out of the
-    /// central `subcommandUsage` switch (programa.swift) so each domain's
-    /// help text lives next to its command descriptors. Refs #101.
     func themesSubcommandUsage(_ command: String) -> String? {
         switch command {
         case "themes":

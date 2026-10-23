@@ -29,8 +29,6 @@ private func windowDragHandleShouldResolveActiveHitCapture(
     return eventWindow === dragHandleWindow
 }
 
-/// Runs the same action macOS titlebars use for double-click:
-/// zoom by default, or minimize when the user preference is set.
 enum StandardTitlebarDoubleClickAction: Equatable {
     case miniaturize
     case zoom
@@ -362,7 +360,7 @@ func windowDragHandleShouldCaptureHit(
 struct WindowDragHandleView: NSViewRepresentable {
     /// When `false` (and `onDoubleClick` is `nil`), double-clicks are left untouched
     /// (no titlebar zoom/minimize, no drag capture) so an underlying SwiftUI gesture
-    /// can still fire. Defaults to `true` to preserve existing callers.
+    /// can still fire.
     var handlesDoubleClick: Bool = true
 
     /// When set, this view owns double-click handling itself and invokes this closure
@@ -371,7 +369,7 @@ struct WindowDragHandleView: NSViewRepresentable {
     /// this drag view is mounted in front of the gesture's content: a sibling gesture
     /// recognizer never sees the first click of a double-click once this view has
     /// claimed the hit-test for it, so passthrough-based double-click detection is
-    /// unreliable when this view is frontmost (see sidebar empty-area drag fix).
+    /// unreliable when this view is frontmost.
     var onDoubleClick: (() -> Void)?
 
     func makeNSView(context: Context) -> NSView {

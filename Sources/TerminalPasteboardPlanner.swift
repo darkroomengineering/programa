@@ -29,13 +29,9 @@ enum TerminalPasteboardPlanner {
         return .insertText(insertedText(for: fileURLs))
     }
 
-    static func escapeForShell(_ value: String) -> String {
-        GhosttyPasteboardHelper.escapeForShell(value)
-    }
-
     private static func insertedText(for fileURLs: [URL]) -> String {
         fileURLs
-            .map { escapeForShell($0.path) }
+            .map { GhosttyPasteboardHelper.escapeForShell($0.path) }
             .joined(separator: " ")
     }
 
@@ -56,7 +52,7 @@ enum TerminalPasteboardPlanner {
         }
 
         if let rawURL = pasteboard.string(forType: .URL), !rawURL.isEmpty {
-            return .insertText(escapeForShell(rawURL))
+            return .insertText(GhosttyPasteboardHelper.escapeForShell(rawURL))
         }
 
         return .reject
@@ -71,7 +67,7 @@ enum TerminalPasteboardPlanner {
         }
 
         if let rawURL = pasteboard.string(forType: .URL), !rawURL.isEmpty {
-            return .insertText(escapeForShell(rawURL))
+            return .insertText(GhosttyPasteboardHelper.escapeForShell(rawURL))
         }
 
         if let string = pasteboard.string(forType: .string), !string.isEmpty {

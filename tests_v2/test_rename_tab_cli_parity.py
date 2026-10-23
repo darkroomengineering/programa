@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Regression: explicit `rename-tab` CLI command parity with tab.action rename."""
 
-import glob
 import os
 import subprocess
 import sys

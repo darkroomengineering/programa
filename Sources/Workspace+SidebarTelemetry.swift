@@ -5,8 +5,6 @@ import Foundation
 import SwiftUI
 import AppKit
 import Bonsplit
-import Darwin
-import CoreText
 
 enum SidebarTelemetryLimits {
     static let maxKeyBytes = 512
@@ -50,7 +48,6 @@ extension Workspace {
         if panelDirectories[panelId] != normalized {
             panelDirectories[panelId] = normalized
         }
-        // Update current directory if this is the focused panel
         if panelId == focusedPanelId, currentDirectory != normalized {
             currentDirectory = normalized
         }
@@ -221,14 +218,13 @@ extension Workspace {
         }
     }
 
-    /// Reports an agent activity state for a surface (issue #164 hook tier; screen-manifest
-    /// `.inferred` tier added by docs/plans/screen-manifest-detection.md). This is the single
+    /// Reports an agent activity state for a surface (hook, screen-manifest `.inferred` and
+    /// OSC 7501 `.program` tiers; see docs/plans/screen-manifest-detection.md). This is the single
     /// funnel every report path goes through — `TabManager.updateSurfaceAgentState` (called by
     /// both `TerminalController+Telemetry.swift`'s hook-driven `v2SurfaceReportAgentState` and
     /// `AgentScreenDetectionEngine`'s screen-manifest sampler) is the only caller.
     ///
-    /// Hooks-always-win precedence (source defaults to `.hooks` so every pre-existing call site
-    /// compiles and behaves unchanged):
+    /// Hooks-always-win precedence (`source` defaults to `.hooks`):
     /// - `source == .hooks` always writes — state and source both update unconditionally, even
     ///   if the state value itself is unchanged, so a surface's source can flip from `.inferred`
     ///   back to `.hooks` the instant a hook speaks.

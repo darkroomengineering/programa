@@ -4,8 +4,6 @@ import Foundation
 import SwiftUI
 import AppKit
 import Bonsplit
-import Darwin
-import CoreText
 
 extension Workspace {
     func sessionSnapshot(includeScrollback: Bool) -> SessionWorkspaceSnapshot {
@@ -80,14 +78,13 @@ extension Workspace {
     func restoreSessionSnapshot(_ snapshot: SessionWorkspaceSnapshot) {
         restoredTerminalScrollbackByPanelId.removeAll(keepingCapacity: false)
 
-        // Divider-race fix (restore-replay-residuals): bump the restore
-        // generation and open the settle gate before any panel/surface gets
+        // Bump the restore generation and open the settle gate before any panel/surface gets
         // created below. Any surface revived via `attemptSessionReattach`
         // during this pass (`TerminalSurface.createSurface`) registers itself
         // under `restoreGeneration` and holds its one-shot scrollback seed
         // until this same pass clears the gate below, after divider positions
         // are applied. See `TerminalSurface.isSessionRestoreSettling`'s doc
-        // comment for the full race this closes.
+        // comment for the divider race this prevents.
         let restoreGeneration = TerminalSurface.beginSessionRestorePass()
 
         if let normalizedCurrentDirectory = normalizedSidebarDirectory(snapshot.currentDirectory) {
@@ -121,7 +118,7 @@ extension Workspace {
         pruneSurfaceMetadata(validSurfaceIds: Set(panels.keys))
         applySessionDividerPositions(snapshotNode: snapshot.layout, liveNode: bonsplitController.treeSnapshot())
 
-        // Divider-race fix: give bonsplit's SwiftUI/AppKit relayout for the
+        // Give bonsplit's SwiftUI/AppKit relayout for the
         // divider fractions just applied above one additional main-queue turn
         // before releasing any surface gated under this restore pass -- see
         // `TerminalSurface.isSessionRestoreSettling`'s doc comment.
@@ -133,8 +130,8 @@ extension Workspace {
         // current layout turn (`TerminalWindowPortalRegistry
         // .scheduleExternalGeometrySynchronize`,
         // `GhosttyTerminalView+SwiftUIWrapper.swift`). A single turn would release the
-        // gate before the surface ever saw the final window width, which is
-        // what let width-dependent WAL replay scatter text across the wrong
+        // gate before the surface sees the final window width, and
+        // width-dependent WAL replay would scatter text across the wrong
         // columns on restore.
         DispatchQueue.main.async {
             DispatchQueue.main.async {
@@ -482,12 +479,11 @@ extension Workspace {
                 ?? normalizedSidebarDirectory(snapshot.directory)
                 ?? currentDirectory
 
-            // Issue #182 slice 2: try to reattach to a still-alive escrowed
-            // child before falling back to the spawn-fresh + WAL-tail
-            // replay path below. Strictly additive and best-effort -- any
-            // failure (never escrowed, holder unreachable, token mismatch,
-            // child already exited, timeout) falls straight through to the
-            // existing unchanged code.
+            // Try to reattach to a still-alive escrowed child (issue #182)
+            // before falling back to the spawn-fresh + WAL-tail replay path
+            // below. Best-effort: any failure (never escrowed, holder
+            // unreachable, token mismatch, child already exited, timeout)
+            // falls through to that path.
             if let revivedPanelId = attemptSessionReattach(
                 snapshot: snapshot,
                 inPane: paneId,
@@ -510,8 +506,7 @@ extension Workspace {
                     : SessionWALStore.shared.readFallbackScrollbackText(sessionId: snapshot.id.uuidString))
                 : nil
             // Routed through the fresh surface's revive-seed path
-            // (`TerminalSurface.pendingReviveSeed` / `seedRevivedScrollbackIfPending`)
-            // instead of the old temp-file + shell-rc `cat` mechanism --
+            // (`TerminalSurface.pendingReviveSeed` / `seedRevivedScrollbackIfPending`);
             // see `SessionFreshSpawnScrollbackSeed`'s doc comment.
             let recoveryNotice = String(
                 localized: "session_recovery.freshShell.notice",
@@ -594,24 +589,22 @@ extension Workspace {
         }
     }
 
-    /// Issue #182 slice 2: the reattach half of `createPanel(from:inPane:)`'s
-    /// `.terminal` case. `snapshot.id` is the pre-restore panel/surface
+    /// The reattach half of `createPanel(from:inPane:)`'s `.terminal` case
+    /// (issue #182). `snapshot.id` is the pre-restore panel/surface
     /// UUID, which is also the WAL session directory name (`TerminalPanel
     /// .id == TerminalSurface.id`) -- the same key the non-revive fallback
     /// path already reads for scrollback. Returns the new panel id on
     /// success (revival already seeds scrollback and re-escrows via the
     /// normal `TerminalSurface.createSurface`/`resolveSessionWALIdentity`
     /// path, so the caller must not also spawn fresh or WAL-replay); nil on
-    /// any failure so the caller falls through to its existing
-    /// spawn-fresh path unchanged. Synchronous and launch-time only, same
-    /// contract as the WAL restore reads it builds on.
+    /// any failure so the caller falls through to its spawn-fresh path.
+    /// Synchronous and launch-time only, same contract as the WAL restore
+    /// reads it builds on.
     ///
     /// Thin wrapper over `revivePanel(sessionId:inPane:workingDirectory:)`
     /// (below), which holds every bit of the actual retrieve/build/cleanup
     /// logic. This wrapper only adds the snapshot-specific bookkeeping
-    /// (`applySessionPanelMetadata`) once the generic revive succeeds, so
-    /// the coarse-snapshot restore path stays byte-for-byte identical to
-    /// before the split.
+    /// (`applySessionPanelMetadata`) once the generic revive succeeds.
     private func attemptSessionReattach(
         snapshot: SessionPanelSnapshot,
         inPane paneId: PaneID,
@@ -635,9 +628,7 @@ extension Workspace {
         return panelId
     }
 
-    /// The generic escrow-retrieve-and-build-panel primitive extracted from
-    /// `attemptSessionReattach` above (Issue #307 orphan-reconciliation
-    /// fix). Given only a session id -- no `SessionPanelSnapshot` -- looks
+    /// The generic escrow-retrieve-and-build-panel primitive. Given only a session id -- no `SessionPanelSnapshot` -- looks
     /// up `meta.json`, retrieves the escrowed PTY fd from the holder, and
     /// builds a live `TerminalPanel` seeded with pre-crash scrollback.
     /// Callers own attaching any of their own bookkeeping (title, pin

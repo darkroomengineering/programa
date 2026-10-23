@@ -1,17 +1,13 @@
-// Screen-manifest agent detection, v2 tier of #164's agent activity state model. See
+// Screen-manifest agent detection, screen-inference tier of #164's agent activity state model. See
 // docs/plans/screen-manifest-detection.md for the full design; this file implements its §1.5
 // two-phase engine.
 //
-// Phase A trigger research outcome (plan §4 risk #1, resolved during implementation): shell
-// integration's foreground-command telemetry (`surface.report_shell_state` /
-// `_programa_report_shell_activity_state` in the zsh/bash/fish integration scripts) only ever sends
-// a bare "prompt"/"running" state -- the actual command string (`$1` in zsh's `preexec`) is read
-// locally by the shell script but never put on the wire. So there is no usable foreground-command
-// signal to hook Phase A recognition off of today. Per the plan's documented fallback (§4 risk 1),
-// this engine instead runs Phase A recognition (`recognize.screen_patterns`) against the sampled
-// screen text itself, on its own slow ~3s cadence, for every open terminal surface that is not
-// already a candidate and not already hooks-owned. This is still not a continuous per-keystroke
-// poll and still fully respects the settings gate (§4 risk 5) -- see `runRecognitionScanOnce()`.
+// Phase A recognition (`recognize.screen_patterns`) runs against the sampled screen text, on its
+// own slow ~3s cadence, for every open terminal surface that is not already a candidate and not
+// already hooks-owned. Shell integration's foreground-command telemetry
+// (`surface.report_shell_state`) carries only a bare "prompt"/"running" state, never the command
+// string, so it cannot drive recognition. The scan is not a per-keystroke poll and respects the
+// settings gate -- see `runRecognitionScanOnce()`.
 //
 // Threading (mirrors `TerminalController.v2StartOutputPollLoopIfNeeded`, per root CLAUDE.md's
 // "Socket command threading policy" and the typing-latency-sensitive-paths pitfalls): a single

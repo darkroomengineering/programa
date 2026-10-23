@@ -324,8 +324,7 @@ extension AppDelegate {
     }
 
     func debugManagerToken(_ manager: TabManager?) -> String {
-        guard let manager else { return "nil" }
-        return String(describing: Unmanaged.passUnretained(manager).toOpaque())
+        pointerString(manager)
     }
 
     func debugWindowToken(_ window: NSWindow?) -> String {

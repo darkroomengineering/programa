@@ -221,7 +221,7 @@ extension TabManager {
 
     /// Test-only seam: `sweepStaleAgentPIDs` is private and otherwise reachable only via the
     /// 30s `agentPIDSweepTimer`. Runs the exact same sweep synchronously on the calling
-    /// (main) thread so T8 tests can assert watchdog behavior without waiting on a timer.
+    /// (main) thread so tests can assert watchdog behavior without waiting on a timer.
     func sweepStaleAgentPIDsForTesting() {
         sweepStaleAgentPIDs()
     }

@@ -57,7 +57,7 @@ extension CommandPaletteView {
                     rank: nextRank,
                     title: contribution.title(context),
                     subtitle: contribution.subtitle(context),
-                    shortcutHint: commandPaletteShortcutHint(for: contribution, context: context),
+                    shortcutHint: commandPaletteShortcutHint(for: contribution),
                     kindLabel: nil,
                     keywords: contribution.keywords,
                     dismissOnRun: contribution.dismissOnRun,
@@ -982,7 +982,6 @@ extension CommandPaletteView {
         }
 
         for command in programaConfigStore.loadedCommands {
-            let captured = command
             let sourcePath = programaConfigStore.commandSourcePaths[command.id]
             let globalPath = programaConfigStore.globalConfigPath
             registry.register(commandId: command.id) {
@@ -990,7 +989,7 @@ extension CommandPaletteView {
                 let baseCwd = (rawCwd?.isEmpty == false) ? rawCwd!
                     : FileManager.default.homeDirectoryForCurrentUser.path
                 ProgramaConfigExecutor.execute(
-                    command: captured,
+                    command: command,
                     tabManager: tabManager,
                     baseCwd: baseCwd,
                     configSourcePath: sourcePath,
@@ -1000,12 +999,11 @@ extension CommandPaletteView {
         }
 
         for recipe in programaConfigStore.loadedRecipes {
-            let captured = recipe
             let sourcePath = programaConfigStore.recipeSourcePaths[recipe.id]
             let globalPath = programaConfigStore.globalConfigPath
             registry.register(commandId: recipe.id) {
                 ProgramaConfigExecutor.executeRecipe(
-                    recipe: captured,
+                    recipe: recipe,
                     tabManager: tabManager,
                     configSourcePath: sourcePath,
                     globalConfigPath: globalPath
@@ -1045,15 +1043,13 @@ extension CommandPaletteView {
     }
 
     func closeSelectedWorkspacesBelow() {
-        guard tabManager.selectedWorkspace != nil,
-              let anchorIndex = selectedWorkspaceIndex() else { return }
+        guard let anchorIndex = selectedWorkspaceIndex() else { return }
         let workspaceIds = tabManager.tabs.suffix(from: anchorIndex + 1).map(\.id)
         closeWorkspaceIds(workspaceIds, allowPinned: true)
     }
 
     func closeSelectedWorkspacesAbove() {
-        guard tabManager.selectedWorkspace != nil,
-              let anchorIndex = selectedWorkspaceIndex() else { return }
+        guard let anchorIndex = selectedWorkspaceIndex() else { return }
         let workspaceIds = tabManager.tabs.prefix(upTo: anchorIndex).map(\.id)
         closeWorkspaceIds(workspaceIds, allowPinned: true)
     }

@@ -230,8 +230,8 @@ extension TerminalController {
             context = resolved
         }
 
-        // Off-main: the snapshot's repository lookup is also the pre-split git-repository gate,
-        // avoiding the previous duplicate `git rev-parse --show-toplevel` subprocess.
+        // Off-main: the snapshot's repository lookup doubles as the pre-split git-repository
+        // gate, so no separate `git rev-parse --show-toplevel` subprocess runs.
         let snapshot = ReviewDiffProber.diffSnapshot(
             directory: context.directory,
             mode: context.mode,
@@ -258,8 +258,8 @@ extension TerminalController {
             }
 
             // Per the socket focus policy, the default focus:false path does not activate the
-            // app or change workspace selection. The explicit focus path keeps its original
-            // focus-window, select-workspace, then create-and-focus ordering.
+            // app or change workspace selection. The explicit focus path runs
+            // focus-window, select-workspace, then create-and-focus, in that order.
             if context.focusRequested {
                 self.v2MaybeFocusWindow(for: tabManager)
                 self.v2MaybeSelectWorkspace(tabManager, workspace: workspace)

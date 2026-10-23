@@ -111,8 +111,6 @@ enum ProgramaTypingTiming {
     ///         6  GhosttyNSView.insertText(_:replacementRange:) $deferL_
     ///        16  -[NSView interpretKeyEvents:]
     ///
-    /// So the instrumentation crashed the app it was measuring, and only when
-    /// switched on -- which is why nothing caught it until someone tried to use it.
     /// Read the key-only fields only when the event actually is a key event.
     fileprivate static func eventFields(_ event: NSEvent) -> String {
         switch event.type {

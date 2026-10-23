@@ -3,7 +3,6 @@ import SwiftUI
 import AppKit
 import QuartzCore
 import Bonsplit
-import IOSurface
 
 // MARK: - GhosttyNSView + Accessibility
 //

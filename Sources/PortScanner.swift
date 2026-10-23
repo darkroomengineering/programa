@@ -54,7 +54,6 @@ final class PortScanner: @unchecked Sendable {
     /// Panels that requested a scan since the last coalesce snapshot.
     private var pendingKicks: Set<PanelKey> = []
 
-    /// Whether a burst sequence is currently running.
     private var burstActive = false
 
     /// Invalidates burst callbacks and panel results queued before the final
@@ -272,7 +271,6 @@ final class PortScanner: @unchecked Sendable {
         // Already on `queue`.
         let workspaceIds = Set(panelSnapshot.keys.map(\.workspaceId))
 
-        // Build TTY set (deduplicated).
         let uniqueTTYs = Set(panelSnapshot.values)
         let ttyList = uniqueTTYs.joined(separator: ",")
 

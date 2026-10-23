@@ -49,10 +49,10 @@ enum UpdateSettings {
             defaults.set(scheduledCheckInterval, forKey: scheduledCheckIntervalKey)
         }
 
-        // automaticallyUpdateKey is deliberately NOT written here anymore: the
-        // registered default (true, since the 2026-08-20 auto-install flip)
-        // covers the nil case, and writing a concrete value would defeat the
-        // v3 migration below for installs that reach v2 first.
+        // automaticallyUpdateKey is deliberately NOT written here: the
+        // registered default (true) covers the nil case, and writing a
+        // concrete value would defeat `applyAutoInstallMigration` for
+        // installs that reach this migration first.
         if defaults.object(forKey: sendProfileInfoKey) == nil {
             defaults.set(false, forKey: sendProfileInfoKey)
         }
@@ -60,13 +60,11 @@ enum UpdateSettings {
         defaults.set(true, forKey: migrationKey)
     }
 
-    /// 2026-08-20 default flip (audit follow-up): silent auto-install is now
-    /// the default — the single-lane, fix-forward release model only works if
-    /// fixes actually reach users, and a crash-looping user never clicks the
-    /// pill. The v2 migration wrote a concrete `false` into every existing
-    /// install's defaults, so flipping the registered default alone would
-    /// never reach them: this one-time migration clears that stored value so
-    /// the registered default (true) takes effect. The Settings toggle writes
+    /// Silent auto-install is the default: the single-lane, fix-forward
+    /// release model only works if fixes reach users, and a crash-looping
+    /// user never clicks the pill. Installs migrated by an earlier build hold
+    /// a stored `false` that would mask the registered default (true); this
+    /// one-time migration clears that stored value. The Settings toggle writes
     /// a concrete value afterwards and wins permanently — this runs once.
     private static func applyAutoInstallMigration(to defaults: UserDefaults) {
         guard !defaults.bool(forKey: autoInstallMigrationKey) else { return }
@@ -75,7 +73,6 @@ enum UpdateSettings {
     }
 }
 
-/// Controller for managing Sparkle updates in programa.
 class UpdateController {
     private(set) var updater: SPUUpdater
     private let userDriver: UpdateDriver
@@ -123,7 +120,7 @@ class UpdateController {
         ensureSparkleInstallationCache()
 #if DEBUG
         // Keep the permission-related defaults resettable for UI tests even though the
-        // delegate now suppresses Sparkle's permission UI entirely.
+        // delegate suppresses Sparkle's permission UI entirely.
         if ProcessInfo.processInfo.environment["PROGRAMA_UI_TEST_RESET_SPARKLE_PERMISSION"] == "1" {
             let defaults = UserDefaults.standard
             defaults.removeObject(forKey: UpdateSettings.automaticChecksKey)

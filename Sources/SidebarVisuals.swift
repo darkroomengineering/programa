@@ -883,7 +883,6 @@ private struct ScrollBackgroundClearer: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {
         DispatchQueue.main.async {
             guard let scrollView = findScrollView(startingAt: nsView) else { return }
-            // Clear all backgrounds and mark as non-opaque for transparency
             scrollView.drawsBackground = false
             scrollView.backgroundColor = .clear
             scrollView.wantsLayer = true
@@ -1215,7 +1214,6 @@ private struct SidebarVisualEffectBackground: NSViewRepresentable {
         }
         #endif
 
-        // Use NSVisualEffectView
         let view = NSVisualEffectView()
         view.autoresizingMask = [.width, .height]
         view.wantsLayer = true

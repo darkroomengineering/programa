@@ -6,27 +6,17 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from programa_client import ProgramaClient, ProgramaClientError
+from programa_client import ProgramaClient
 from v2_support import must as _must
+from v2_support import run_git as _run_git
 
 
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
-
-
-def _run_git(args: list[str], cwd: Path) -> None:
-    subprocess.run(
-        ["git"] + args,
-        cwd=cwd,
-        check=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
 
 
 def _create_git_repo(root: Path) -> Path:

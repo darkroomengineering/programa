@@ -1,7 +1,6 @@
 import Foundation
 import SwiftUI
 import AppKit
-import Metal
 import QuartzCore
 import Darwin
 import Bonsplit
@@ -726,7 +725,7 @@ final class GhosttySurfaceScrollView: NSView {
 
     @discardableResult
     private func setFrameIfNeeded(_ view: NSView, to frame: CGRect) -> Bool {
-        guard !Self.rectApproximatelyEqual(view.frame, frame) else { return false }
+        guard !HostedViewPortalRegistry.rectApproximatelyEqual(view.frame, frame, epsilon: 0.5) else { return false }
         view.frame = frame
         return true
     }
@@ -783,7 +782,7 @@ final class GhosttySurfaceScrollView: NSView {
     }
 
     private func applyDropZoneOverlayFrame(_ frame: CGRect) {
-        if Self.rectApproximatelyEqual(dropZoneOverlayView.frame, frame) { return }
+        if HostedViewPortalRegistry.rectApproximatelyEqual(dropZoneOverlayView.frame, frame, epsilon: 0.5) { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         dropZoneOverlayView.frame = frame
@@ -1376,13 +1375,6 @@ final class GhosttySurfaceScrollView: NSView {
         return container.convert(localFrame, from: self)
     }
 
-    private static func rectApproximatelyEqual(_ lhs: CGRect, _ rhs: CGRect, epsilon: CGFloat = 0.5) -> Bool {
-        abs(lhs.origin.x - rhs.origin.x) <= epsilon &&
-            abs(lhs.origin.y - rhs.origin.y) <= epsilon &&
-            abs(lhs.size.width - rhs.size.width) <= epsilon &&
-            abs(lhs.size.height - rhs.size.height) <= epsilon
-    }
-
     func setDropZoneOverlay(zone: DropZone?) {
         if !Thread.isMainThread {
             DispatchQueue.main.async { [weak self] in
@@ -1412,7 +1404,7 @@ final class GhosttySurfaceScrollView: NSView {
             attachDropZoneOverlayIfNeeded()
             let targetFrame = dropZoneOverlayFrame(for: zone, in: bounds.size)
             let previousFrame = dropZoneOverlayView.frame
-            let isSameFrame = Self.rectApproximatelyEqual(previousFrame, targetFrame)
+            let isSameFrame = HostedViewPortalRegistry.rectApproximatelyEqual(previousFrame, targetFrame, epsilon: 0.5)
             let needsFrameUpdate = !isSameFrame
             let zoneChanged = previousZone != zone
 
@@ -1646,7 +1638,6 @@ final class GhosttySurfaceScrollView: NSView {
             )
         }
         if !visible {
-            // If we were focused, yield first responder.
             if let window, let fr = window.firstResponder as? NSView,
                fr === surfaceView || fr.isDescendant(of: surfaceView) {
                 window.makeFirstResponder(nil)
@@ -2595,7 +2586,6 @@ final class GhosttySurfaceScrollView: NSView {
                 let distanceFromBottom = documentHeight - currentOrigin.y - viewportHeight
                 let isAtBottom = distanceFromBottom <= Self.scrollToBottomThreshold
 
-                // Update userScrolledAwayFromBottom based on current position
                 if isAtBottom {
                     userScrolledAwayFromBottom = false
                 }

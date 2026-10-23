@@ -667,7 +667,6 @@ def test_close_horizontal_split(client: ProgramaClient) -> TestResult:
         client.close_surface(surfaces[1][1])
         time.sleep(1.5)
 
-        # Verify we now have 1 surface (with retry for timing)
         for _ in range(5):
             surfaces = client.list_surfaces()
             if len(surfaces) == 1:
@@ -757,7 +756,6 @@ def test_close_vertical_split(client: ProgramaClient) -> TestResult:
         client.close_surface(surfaces[1][1])
         time.sleep(1.5)
 
-        # Verify we now have 1 surface (with retry for timing)
         for _ in range(5):
             surfaces = client.list_surfaces()
             if len(surfaces) == 1:
@@ -851,7 +849,6 @@ def test_close_first_pane_vertical_split(client: ProgramaClient) -> TestResult:
         client.close_surface(surfaces[0][1])
         time.sleep(1.5)
 
-        # Verify we now have 1 surface (with retry for timing)
         for _ in range(5):
             surfaces = client.list_surfaces()
             if len(surfaces) == 1:

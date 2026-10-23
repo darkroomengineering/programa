@@ -534,12 +534,12 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
     }
 
     func testInsertedPathEscapesSpacesBeforePaste() {
-        let escaped = TerminalPasteboardPlanner.escapeForShell("/tmp/Screen Shot.png")
+        let escaped = GhosttyPasteboardHelper.escapeForShell("/tmp/Screen Shot.png")
         XCTAssertEqual(escaped, "/tmp/Screen\\ Shot.png")
     }
 
     func testInsertedPathSingleQuotesEmbeddedNewlinesBeforePaste() {
-        let escaped = TerminalPasteboardPlanner.escapeForShell("/tmp/Screen\nShot\r.png")
+        let escaped = GhosttyPasteboardHelper.escapeForShell("/tmp/Screen\nShot\r.png")
         XCTAssertEqual(escaped, "'/tmp/Screen\nShot\r.png'")
     }
 }

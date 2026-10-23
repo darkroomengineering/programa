@@ -3,7 +3,6 @@ import Foundation
 import AppKit
 import Bonsplit
 
-/// View for rendering a terminal panel
 struct TerminalPanelView: View {
     @ObservedObject var panel: TerminalPanel
     // Observed separately from `panel` so SwiftUI re-renders when the underlying
@@ -79,7 +78,6 @@ struct TerminalPanelView: View {
     }
 }
 
-/// Shared appearance settings for panels
 struct PanelAppearance {
     let dividerColor: Color
     let unfocusedOverlayNSColor: NSColor

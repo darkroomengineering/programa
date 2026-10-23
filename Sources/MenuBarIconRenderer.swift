@@ -1,11 +1,6 @@
 import AppKit
 import SwiftUI
-import Bonsplit
-import CoreServices
-import UserNotifications
 import Combine
-import ObjectiveC.runtime
-import Darwin
 
 @MainActor
 final class MenuBarExtraController: NSObject, NSMenuDelegate {

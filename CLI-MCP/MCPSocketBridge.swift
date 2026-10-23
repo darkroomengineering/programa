@@ -13,7 +13,7 @@ import Darwin
 /// instead of collapsing them into one generic failure string.
 enum MCPSocketBridgeError: Error {
     /// A legacy, pre-JSON connection-level failure line, e.g.
-    /// `"ERROR: Access denied ..."` (`Sources/TerminalController.swift:1435`).
+    /// `"ERROR: Access denied ..."` (`TerminalController.handleClient`).
     case legacyError(String)
     /// A v2 protocol error: `{"ok": false, "error": {"code": ..., "message": ...}}`.
     case v2Error(code: String, message: String)

@@ -29,10 +29,8 @@ final class NonDraggableHostingView<Content: View>: NSHostingView<Content> {
 private enum TitlebarControlsRhythm {
     static let trafficLightGap: CGFloat = 8
 
-    /// Relative tightness preserved from the original hand-tuned spacing values
-    /// (classic=10, compact=6, roomy=14, pillGroup/softButtons=8), re-expressed as
-    /// multiples of the traffic-light gap so every preset derives from the same rule
-    /// instead of its own magic number.
+    /// Per-preset spacing as multiples of the traffic-light gap, so every preset derives
+    /// from the same rule instead of its own magic number.
     enum ScaleFactor {
         static let classic: CGFloat = 1.0
         static let compact: CGFloat = 0.625
@@ -241,7 +239,7 @@ struct ShortcutHintHorizontalPlanner {
 /// correction factors are judged by eye (not arbitrary tuning): `sidebar.left` is a wide,
 /// filled-ish shape that reads larger than its point size, `plus` is a thin cross with little
 /// ink that reads smaller, and `bell` / `bell.fill` sit in between as the reference. Unknown
-/// symbols default to 1.0, i.e. today's unscaled behavior.
+/// symbols default to 1.0, i.e. unscaled.
 private let titlebarIconOpticalScale: [String: CGFloat] = [
     "sidebar.left": 0.94,
     "bell": 1.0,
@@ -615,8 +613,6 @@ struct HiddenTitlebarSidebarControlsView: View {
     @ObservedObject var sidebarState: SidebarState
     @StateObject private var viewModel = TitlebarControlsViewModel()
 
-    // Sized to fit all 3 titlebar buttons (sidebar toggle, notifications, new tab)
-    // plus spacing/insets across every TitlebarControlsStyle config, including roomy.
     // Sized to hug the 3 buttons at the roomiest style config (3x28 + spacing
     // + trailing hint inset) so the box doesn't reach toward the traffic lights.
     private let hostWidth: CGFloat = 140

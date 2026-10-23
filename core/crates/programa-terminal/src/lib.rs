@@ -659,9 +659,9 @@ unsafe fn session<'a>(
     value.as_ref().ok_or(STATUS_INVALID_ARGUMENT)
 }
 
-fn set_buffer(out: *mut ProgramaTerminalBuffer, value: Vec<u8>) -> i32 {
+fn set_buffer(out: *mut ProgramaTerminalBuffer, value: Vec<u8>) -> Result<(), i32> {
     if out.is_null() {
-        return STATUS_INVALID_ARGUMENT;
+        return Err(STATUS_INVALID_ARGUMENT);
     }
     let boxed = value.into_boxed_slice();
     let len = boxed.len();
@@ -669,7 +669,7 @@ fn set_buffer(out: *mut ProgramaTerminalBuffer, value: Vec<u8>) -> i32 {
     unsafe {
         *out = ProgramaTerminalBuffer { data, len };
     }
-    STATUS_OK
+    Ok(())
 }
 
 unsafe fn clear_buffer(out: *mut ProgramaTerminalBuffer) -> Result<(), i32> {
@@ -787,10 +787,7 @@ pub unsafe extern "C" fn programa_terminal_snapshot_json(
     ffi_status(|| {
         clear_buffer(out)?;
         let encoded = serde_json::to_vec(&snapshot(session(value)?)).map_err(|_| STATUS_FAILED)?;
-        match set_buffer(out, encoded) {
-            STATUS_OK => Ok(()),
-            code => Err(code),
-        }
+        set_buffer(out, encoded)
     })
 }
 
@@ -835,10 +832,7 @@ pub unsafe extern "C" fn programa_terminal_program_status_json(
         let encoded =
             serde_json::to_vec(&status.store.snapshot(generation)).map_err(|_| STATUS_FAILED)?;
         drop(status);
-        match set_buffer(out, encoded) {
-            STATUS_OK => Ok(()),
-            code => Err(code),
-        }
+        set_buffer(out, encoded)
     })
 }
 
@@ -947,10 +941,7 @@ pub unsafe extern "C" fn programa_terminal_copy_selection(
             .lock()
             .selection_to_string()
             .unwrap_or_default();
-        match set_buffer(out, text.into_bytes()) {
-            STATUS_OK => Ok(()),
-            code => Err(code),
-        }
+        set_buffer(out, text.into_bytes())
     })
 }
 
@@ -1017,10 +1008,7 @@ pub unsafe extern "C" fn programa_terminal_last_error(
         let message = lock(&session(value)?.state.error)
             .clone()
             .unwrap_or_default();
-        match set_buffer(out, message.into_bytes()) {
-            STATUS_OK => Ok(()),
-            code => Err(code),
-        }
+        set_buffer(out, message.into_bytes())
     })
 }
 
