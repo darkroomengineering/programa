@@ -1,9 +1,6 @@
 import Foundation
 
 extension ProgramaCLI {
-    /// Subcommand help text for Hooks commands, split out of the
-    /// central `subcommandUsage` switch (programa.swift) so each domain's
-    /// help text lives next to its command descriptors. Refs #101.
     func hooksSubcommandUsage(_ command: String) -> String? {
         switch command {
         case "claude-hook":

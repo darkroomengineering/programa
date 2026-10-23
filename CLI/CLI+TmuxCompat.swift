@@ -1,12 +1,6 @@
 import Foundation
 import CryptoKit
 import Darwin
-#if canImport(LocalAuthentication)
-import LocalAuthentication
-#endif
-#if canImport(Security)
-import Security
-#endif
 
 extension ProgramaCLI {
     /// The tmux-emulation command names, all dispatched through the same
@@ -137,7 +131,6 @@ extension ProgramaCLI {
             if arg == "--" {
                 break
             }
-            // Handle -V (version) as a pseudo-command
             if globalBoolFlags.contains(arg) {
                 return (arg, [])
             }
@@ -185,8 +178,8 @@ extension ProgramaCLI {
 
     /// Workspaces the shim can target: the caller's window first (it plays tmux's current
     /// session), then every other window. A bare `workspace.list` answers for the app's
-    /// current window, so a pane printed by `split-window -P` became unreachable as soon as
-    /// the user moved to another window.
+    /// current window, so a pane printed by `split-window -P` would become unreachable as soon as
+    /// the user moves to another window.
     private func tmuxWorkspaceItems(client: SocketClient, allWindows: Bool = true) throws -> [[String: Any]] {
         let callerParams: [String: Any] = tmuxCallerWorkspaceHandle().map { ["workspace_id": $0] } ?? [:]
         let payload: [String: Any]
@@ -2240,9 +2233,6 @@ extension ProgramaCLI {
         }
     }
 
-    /// Subcommand help text for TmuxCompat commands, split out of the
-    /// central `subcommandUsage` switch (programa.swift) so each domain's
-    /// help text lives next to its command descriptors. Refs #101.
     func tmuxCompatSubcommandUsage(_ command: String) -> String? {
         switch command {
         case "capture-pane":

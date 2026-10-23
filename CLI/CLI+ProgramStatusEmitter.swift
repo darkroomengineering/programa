@@ -161,9 +161,9 @@ extension ProgramaCLI {
             let body: String
             switch command {
             case "claude-hook":
-                (subtitle, body) = summarizeClaudeHookNotification(parsedInput: parsed)
+                (subtitle, body) = summarizeAgentHookNotification(parsedInput: parsed, agentName: "Claude")
             case "codex-hook":
-                (subtitle, body) = summarizeCodexHookNotification(parsedInput: parsed)
+                (subtitle, body) = summarizeAgentHookNotification(parsedInput: parsed, agentName: "Codex")
             default:
                 let message = ["message", "body", "text", "reason", "description"]
                     .lazy.compactMap { parsed.object?[$0] as? String }.first { !$0.isEmpty }

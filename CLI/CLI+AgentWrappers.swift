@@ -1,12 +1,5 @@
 import Foundation
-import CryptoKit
 import Darwin
-#if canImport(LocalAuthentication)
-import LocalAuthentication
-#endif
-#if canImport(Security)
-import Security
-#endif
 
 extension ProgramaCLI {
     private func isProgramaClaudeWrapper(at path: String) -> Bool {
@@ -300,9 +293,6 @@ extension ProgramaCLI {
         }
     }
 
-    /// Subcommand help text for AgentWrappers commands, split out of the
-    /// central `subcommandUsage` switch (programa.swift) so each domain's
-    /// help text lives next to its command descriptors. Refs #101.
     func agentWrapperSubcommandUsage(_ command: String) -> String? {
         switch command {
         case "claude-teams":

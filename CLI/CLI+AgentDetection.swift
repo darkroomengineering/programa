@@ -64,7 +64,7 @@ extension ProgramaCLI {
     }
 
     /// Mirrors `AgentManifestLoader.bundledAgentIds`
-    /// (Sources/AgentManifestLoader.swift:21-29) -- this CLI target can't import that type, so
+    /// (Sources/AgentManifestLoader.swift) -- this CLI target can't import that type, so
     /// this is a manually-kept-in-sync copy, used only to gate `agent-detection scaffold`'s
     /// bundled-shadowing guard below.
     private static let agentDetectionBundledIds: Set<String> = [

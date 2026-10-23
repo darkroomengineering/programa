@@ -1,12 +1,5 @@
 import Foundation
-import CryptoKit
 import Darwin
-#if canImport(LocalAuthentication)
-import LocalAuthentication
-#endif
-#if canImport(Security)
-import Security
-#endif
 
 enum CLIIDFormat: String {
     case refs
@@ -21,10 +14,6 @@ enum CLIIDFormat: String {
         return parsed
     }
 }
-
-// CLISocketPathSource / CLISocketPathResolver live in
-// `CLI/SocketPathResolution.swift`, shared with the MCP sidecar
-// (`CLI-MCP/MCPSocketBridge.swift`).
 
 struct CLIProcessResult {
     let status: Int32
@@ -245,7 +234,7 @@ enum CLICommandArgumentContract {
 /// interchangeable line-for-line.
 ///
 /// A command with a `nil` grammar (the default) falls through to the switch
-/// unchanged -- this is additive, not a migration deadline.
+/// unchanged.
 struct CLIArgumentGrammar {
     /// Flags that take a value, e.g. `--name <value>`.
     var valueOptions: Set<String> = []
@@ -288,8 +277,7 @@ struct CommandDescriptor {
     let names: [String]
     /// Lines contributed verbatim, in order, to the `Commands:` section of
     /// `usage()`. Empty means the command exists but is intentionally
-    /// undocumented (matches several legacy/internal commands that were
-    /// already missing from the old free-text help).
+    /// undocumented.
     let helpLines: [String]
     let connectionPolicy: CLICommandConnectionPolicy
     let helpPolicy: CLICommandHelpPolicy
@@ -335,9 +323,9 @@ struct ProgramaCLI {
         try CLICommandDispatcher(cli: self).run()
     }
     /// Single source of truth for command existence, help text, and dispatch.
-    /// See `CommandDescriptor` for the collapsed-knowledge rationale (CT1).
+    /// See `CommandDescriptor` for the collapsed-knowledge rationale.
     ///
-    /// Order matches the historical `Commands:` help block, since that order
+    /// Order matches the `Commands:` help block, since that order
     /// is externally visible; dispatch itself is by name lookup and does not
     /// depend on array order.
     func commandDescriptors() -> [CommandDescriptor] {
@@ -1559,8 +1547,7 @@ struct ProgramaCLI {
                     guard let direction = rem1.first else {
                         throw CLIError(message: "drag-surface-to-split requires a direction")
                     }
-                    // v1 always targeted the currently-selected workspace (no --workspace support);
-                    // leave workspace_id unset so v2 falls back to the current selection identically.
+                    // No --workspace support: leave workspace_id unset so v2 targets the current selection.
                     let surfaceIdForDrag = try self.normalizeSurfaceHandle(surface, client: ctx.client, workspaceHandle: nil)
                     var dragParams: [String: Any] = ["direction": direction]
                     if let surfaceIdForDrag { dragParams["surface_id"] = surfaceIdForDrag }
@@ -1579,7 +1566,7 @@ struct ProgramaCLI {
                 """,
                 grammar: CLIArgumentGrammar(),
                 execute: { ctx in
-                    // v1 always targeted the currently-selected workspace; no workspace_id here either.
+                    // No --workspace support: leave workspace_id unset so v2 targets the current selection.
                     let refreshPayload = try ctx.client.sendV2(method: V2MethodNames.surfaceRefresh, params: [:])
                     print("OK Refreshed \(self.intFromAny(refreshPayload["refreshed"]) ?? 0) surfaces")
                 }
@@ -2312,8 +2299,7 @@ struct ProgramaCLI {
                     // firing after an hour of silence) lands here. By default we don't let any
                     // of those kill the process: print one stderr notice, reconnect+resubscribe
                     // with capped exponential backoff, and keep streaming. --no-reconnect
-                    // restores the historical exit-on-drop behavior for scripts that want to
-                    // observe and handle drops themselves.
+                    // exits on the first drop instead, for scripts that handle drops themselves.
                     while true {
                         do {
                             let line = try ctx.client.readEventLine(timeout: 3600)
@@ -3093,7 +3079,6 @@ struct ProgramaCLI {
         if exists && isDir.boolValue {
             directory = resolved
         } else if exists {
-            // It's a file; use its parent directory
             directory = (resolved as NSString).deletingLastPathComponent
         } else {
             throw CLIError(message: "Path does not exist: \(resolved)")
@@ -3113,7 +3098,6 @@ struct ProgramaCLI {
             print("OK \(wsRef)")
         }
 
-        // Bring the app to front
         try activateApp()
     }
 
@@ -3557,8 +3541,10 @@ struct ProgramaCLI {
     }
 
     func formatHandle(_ payload: [String: Any], kind: String, idFormat: CLIIDFormat) -> String? {
-        let id = payload["\(kind)_id"] as? String
-        let ref = payload["\(kind)_ref"] as? String
+        formatHandle(id: payload["\(kind)_id"] as? String, ref: payload["\(kind)_ref"] as? String, idFormat: idFormat)
+    }
+
+    private func formatHandle(id: String?, ref: String?, idFormat: CLIIDFormat) -> String? {
         switch idFormat {
         case .refs:
             return ref ?? id
@@ -3575,35 +3561,13 @@ struct ProgramaCLI {
     private func formatTabHandle(_ payload: [String: Any], idFormat: CLIIDFormat) -> String? {
         let id = (payload["tab_id"] as? String) ?? (payload["surface_id"] as? String)
         let refRaw = (payload["tab_ref"] as? String) ?? (payload["surface_ref"] as? String)
-        let ref = displayTabHandle(refRaw)
-        switch idFormat {
-        case .refs:
-            return ref ?? id
-        case .uuids:
-            return id ?? ref
-        case .both:
-            if let ref, let id {
-                return "\(ref) (\(id))"
-            }
-            return ref ?? id
-        }
+        return formatHandle(id: id, ref: displayTabHandle(refRaw), idFormat: idFormat)
     }
 
     private func formatCreatedTabHandle(_ payload: [String: Any], idFormat: CLIIDFormat) -> String? {
         let id = (payload["created_tab_id"] as? String) ?? (payload["created_surface_id"] as? String)
         let refRaw = (payload["created_tab_ref"] as? String) ?? (payload["created_surface_ref"] as? String)
-        let ref = displayTabHandle(refRaw)
-        switch idFormat {
-        case .refs:
-            return ref ?? id
-        case .uuids:
-            return id ?? ref
-        case .both:
-            if let ref, let id {
-                return "\(ref) (\(id))"
-            }
-            return ref ?? id
-        }
+        return formatHandle(id: id, ref: displayTabHandle(refRaw), idFormat: idFormat)
     }
 
     func printV2Payload(
@@ -4246,7 +4210,7 @@ struct ProgramaCLI {
     /// Resolves the repo to operate on: `explicit` (an arbitrary directory inside the repo,
     /// not necessarily its toplevel) if given, else the CLI process's own current directory --
     /// this is a shell-invoked CLI, so its cwd is the natural "caller's directory" default,
-    /// distinct from any currently-selected workspace's cwd (plan risk #2).
+    /// distinct from any currently-selected workspace's cwd.
     private func resolveWorktreeRepoRoot(explicit: String?) throws -> String {
         let directory = ((explicit ?? FileManager.default.currentDirectoryPath) as NSString).expandingTildeInPath
         guard let root = gitTopLevelDirectory(at: directory) else {
@@ -4491,9 +4455,8 @@ struct ProgramaCLI {
             }
             params["workspace_id"] = workspaceId
         }
-        // Help text promises "cwd = --cwd (or the current directory)"; without an
-        // explicit fallback here, an omitted --cwd sent nothing and the app fell
-        // back to its own new-tab heuristic instead.
+        // Help text promises cwd = --cwd or the current directory, so fall back explicitly;
+        // otherwise the app applies its own new-tab heuristic.
         params["cwd"] = cwdOpt ?? FileManager.default.currentDirectoryPath
 
         let payload = try client.sendV2(method: V2MethodNames.layoutApply, params: params)

@@ -54,8 +54,7 @@ enum MCPErrorMapping {
         case .legacyError(let message):
             // Pre-JSON connection-level failures (e.g. "ERROR: Access denied
             // ...") don't carry a machine-readable code from the server --
-            // see `Sources/TerminalController.swift:1435` and
-            // `CLI/programa.swift:1017`.
+            // see `TerminalController.handleClient` and `SocketClient.sendV2`.
             return ("connection_denied", message)
         case .v2Error(let code, let message):
             return (code, message)

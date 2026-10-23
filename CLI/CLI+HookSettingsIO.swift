@@ -75,7 +75,7 @@ extension ProgramaCLI {
     }
 
     /// The lifecycle events the runtime wrapper's HOOKS_JSON injects
-    /// (Resources/bin/claude:207), reproduced here for the persistent file.
+    /// (Resources/bin/claude), reproduced here for the persistent file.
     private static let claudeHookEventSpecs: [ClaudeHookEventSpec] = [
         ClaudeHookEventSpec(name: "SessionStart", event: "session-start", timeout: 10, isAsync: false),
         ClaudeHookEventSpec(name: "Stop", event: "stop", timeout: 10, isAsync: false),
