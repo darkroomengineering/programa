@@ -782,10 +782,7 @@ mod tests {
                 );
             }
         }
-        let unknown = call("system.not_a_method")
-            .await
-            .err()
-            .map(|e| e.code);
+        let unknown = call("system.not_a_method").await.err().map(|e| e.code);
         assert_eq!(unknown, Some(ErrorCode::MethodNotFound));
     }
 }
