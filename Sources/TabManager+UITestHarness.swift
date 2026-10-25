@@ -622,9 +622,6 @@ extension TabManager {
             if let bottomRight {
                 sendText(bottomRight.id, "printf '\\033[2J\\033[H'; for i in {1..200}; do echo PROGRAMA_SPLIT_BOTTOMRIGHT_\(i); done; printf '\\033[HPROGRAMA_MARKER_BOTTOMRIGHT\\n'\r")
             }
-            // Give shell output a moment to paint before we start the close timeline.
-            try? await Task.sleep(nanoseconds: 180_000_000)
-
             let desiredFrames = max(16, min(burstFrames, 60))
             let closeFrame = min(6, max(1, desiredFrames / 4))
             let delayFrames = max(0, Int((Double(max(0, closeDelayMs)) / 16.6667).rounded(.up)))
@@ -718,6 +715,39 @@ extension TabManager {
                     ]
                 }
             }()
+
+            // The probe counts any text-free top strip as blank, so the close timeline must not
+            // start while the priming printf is still clearing and filling a sampled pane. A fixed
+            // sleep loses that race on loaded CI runners. Wait until each sampled pane has the
+            // marker on row 1 and its rendered strip is non-blank and unchanged for a few frames.
+            let markerPanels: [String: (panel: TerminalPanel?, marker: String)] = [
+                "TL": (tab.terminalPanel(for: topLeftId), "PROGRAMA_MARKER_TOPLEFT"),
+                "TR": (topRight, "PROGRAMA_MARKER_TOPRIGHT"),
+                "BL": (bottomLeft, "PROGRAMA_MARKER_BOTTOMLEFT"),
+            ]
+            let settleDeadline = Date().addingTimeInterval(5)
+            var stableFrames = 0
+            var lastFingerprints: [UInt64] = []
+            while stableFrames < 4 {
+                let markersShown = targets.allSatisfy { target in
+                    guard let entry = markerPanels[target.label], let panel = entry.panel else { return false }
+                    let text = TerminalController.shared.readTerminalText(terminalPanel: panel) ?? ""
+                    let firstLine = text.split(separator: "\n", omittingEmptySubsequences: false).first ?? ""
+                    return firstLine.trimmingCharacters(in: .whitespaces).hasPrefix(entry.marker)
+                }
+                let samples = targets.map { $0.view.debugSampleIOSurface(normalizedCrop: sampleCrop) }
+                let painted = samples.allSatisfy { $0.map { !$0.isProbablyBlank } ?? false }
+                let fingerprints = samples.map { $0?.fingerprint ?? 0 }
+                stableFrames = (markersShown && painted && fingerprints == lastFingerprints) ? stableFrames + 1 : 0
+                lastFingerprints = fingerprints
+                if stableFrames < 4 {
+                    if Date() > settleDeadline {
+                        writeSplitCloseRightTestData(["setupError": "Sampled panes never showed settled marker text before the close timeline (iteration \(i))"], at: path)
+                        return
+                    }
+                    try? await Task.sleep(nanoseconds: 16_000_000)
+                }
+            }
 
             let result = await captureVsyncIOSurfaceTimeline(
                 frameCount: desiredFrames,
