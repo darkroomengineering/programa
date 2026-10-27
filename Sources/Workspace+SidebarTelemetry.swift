@@ -248,6 +248,14 @@ extension Workspace {
     ) {
         let current = panelAgentPresence[panelId]
 
+        // Before the precedence guards: which tier owns the badge says nothing about which
+        // session runs in the panel, and Programa's own hooks emit OSC 7501 ahead of this report.
+        if source == .hooks, let sessionKey, let sessionId = sessionKey.sessionId {
+            AgentResumeStore.shared.note(
+                panelId: panelId, provider: sessionKey.provider, sessionId: sessionId, cwd: panelDirectories[panelId]
+            )
+        }
+
         if source != .program, let current, current.source == .program,
            current.state != .idle || state == .idle {
             return
@@ -291,11 +299,6 @@ extension Workspace {
             inferredAgent: resolvedInferredAgent,
             programState: programState
         )
-        if let resolvedSessionKey, let sessionId = resolvedSessionKey.sessionId {
-            AgentResumeStore.shared.note(
-                panelId: panelId, provider: resolvedSessionKey.provider, sessionId: sessionId, cwd: panelDirectories[panelId]
-            )
-        }
         noteReviewNudgeTurnEdge(panelId: panelId, previous: current?.state, next: state)
         // Event-driven half of surface.wait's `agent_state` condition (#166 task 2) and
         // agent.prompt's internal working/idle watch (#166 task 3) -- see
