@@ -573,6 +573,26 @@ final class AgentActivityStateTests: XCTestCase {
         XCTAssertEqual(workspace.panelAgentPresence[panel]?.programState, .working)
     }
 
+    func testHookSessionIdRecordsResumeTargetWhileProgramOwnsPanel() {
+        let workspace = Workspace(title: "Test")
+        let panel = UUID()
+        defer { AgentResumeStore.shared.forget(panelId: panel) }
+        // Programa's own hook writes OSC 7501 `working` to the tty before its socket report,
+        // so the program tier owns the panel by the time the session id arrives.
+        workspace.updatePanelAgentState(panelId: panel, state: .working, source: .program, programState: .working)
+        workspace.updatePanelAgentState(
+            panelId: panel,
+            state: .working,
+            source: .hooks,
+            sessionKey: AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
+        )
+        XCTAssertEqual(workspace.panelAgentStateSources[panel], .program)
+        XCTAssertEqual(
+            AgentResumeStore.shared.target(panelId: panel),
+            AgentResumeTarget(provider: "claude-code", sessionId: "session-1", cwd: nil)
+        )
+    }
+
     func testRestingProgramAcceptsOnlyActiveHookClaims() {
         let workspace = Workspace(title: "Test")
         let panel = UUID()
