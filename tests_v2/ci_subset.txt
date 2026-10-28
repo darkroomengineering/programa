@@ -7,7 +7,7 @@
 # Do NOT add: test_splits_focus_close_resize.py, test_notifications.py.
 test_cli_id_format_defaults.py
 # test_windows_api.py — excluded on CI: moved surfaces report in_window=false on
-# GitHub runners even with a virtual display; needs runner-side investigation (#169).
+# GitHub runners even with a virtual display; reproduced in nightly dispatch run 40732953157.
 test_cli_identify_ref_resolution.py
 test_workspace_create_initial_env.py
 test_layout_save_apply_roundtrip.py

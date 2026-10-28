@@ -5,7 +5,8 @@ name: Extended tests
 #   - the tests_v2 files listed in tests_v2/nightly_subset.txt
 #   - the XCUITest classes listed in scripts/nightly-ui-classes.txt
 #   - tests_v2/test_idle_cpu.py, the idle CPU budget of one focused quiet terminal
-# Failures here do not block merges; read the job summaries each morning.
+# Failures here do not block merges. A failed scheduled run opens (or comments on) the
+# "Nightly failing" issue, and the next green scheduled run closes it.
 #
 # On-demand runs take explicit lists, which is also how a new test is triaged
 # before it is added to the nightly lists:
@@ -550,3 +551,37 @@ jobs:
             kill "$VDISPLAY_PERSISTENT_PID" >/dev/null 2>&1 || true
           fi
           rm -f /tmp/create-virtual-display
+
+  # Scheduled runs only: a dispatch on a branch is triage and must not touch the issue.
+  # idle-cpu is informational (continue-on-error above), so its failure does not count.
+  report:
+    needs: [build-app, tests-v2, idle-cpu, ui-tests]
+    if: always() && !cancelled() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      ISSUE_TITLE: Nightly failing
+    steps:
+      - name: Open, comment on or close the "Nightly failing" issue
+        run: |
+          set -euo pipefail
+          failed="$(gh api "repos/$GH_REPO/actions/runs/$GITHUB_RUN_ID/jobs?filter=latest&per_page=100" \
+            --jq '.jobs[] | select(.conclusion != null and .conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral") | select(.name != "idle-cpu" and .name != "report") | "- \(.name)"')"
+          issue="$(gh issue list --state open --limit 100 --json number,title \
+            --jq "[.[] | select(.title == \"$ISSUE_TITLE\")][0].number // empty")"
+          if [ -n "$failed" ]; then
+            body="$(printf 'Nightly run failed: %s\n\nFailed jobs:\n%s\n' "$RUN_URL" "$failed")"
+            if [ -n "$issue" ]; then
+              gh issue comment "$issue" --body "$body"
+            else
+              gh issue create --title "$ISSUE_TITLE" --body "$body"
+            fi
+          elif [ -n "$issue" ]; then
+            gh issue close "$issue" --comment "Nightly passed: $RUN_URL"
+          fi
