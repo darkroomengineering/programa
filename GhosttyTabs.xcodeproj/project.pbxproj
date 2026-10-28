@@ -243,6 +243,7 @@
 		F6D8BDB710C64A444F3DE4F0 /* MCPSocketBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9A8BC17CBD749D48C344001 /* MCPSocketBridgeTests.swift */; };
 		35911EB4D71E31E20BE3DACA /* MCPSocketBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED79E527F994DBDC0A46043A /* MCPSocketBridge.swift */; };
 		7B3E9C21A4F0D85E63C1470B /* MCPSocketBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED79E527F994DBDC0A46043A /* MCPSocketBridge.swift */; };
+		B0B0000000000000000000A1 /* BlockingStdioTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0B0000000000000000000A2 /* BlockingStdioTransport.swift */; };
 		2EFFCCB7C0F0B14D04B041AD /* MCPErrorMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53B518DFE87542AC5DC8FD4E /* MCPErrorMapping.swift */; };
 		A06CCD2517BF88BFE4F43D51 /* ToolCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C125931E1CB14CD4EAE4D83 /* ToolCatalog.swift */; };
 		9506CC0AAA45434057BC6665 /* ResourceCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFB7889C55F9780B5678186D /* ResourceCatalog.swift */; };
@@ -674,6 +675,7 @@
 		FE22E2E37BA6C8A7447AD12D /* SocketPathResolution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocketPathResolution.swift; sourceTree = "<group>"; };
 		A9A8BC17CBD749D48C344001 /* MCPSocketBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPSocketBridgeTests.swift; sourceTree = "<group>"; };
 		ED79E527F994DBDC0A46043A /* MCPSocketBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPSocketBridge.swift; sourceTree = "<group>"; };
+		B0B0000000000000000000A2 /* BlockingStdioTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlockingStdioTransport.swift; sourceTree = "<group>"; };
 		53B518DFE87542AC5DC8FD4E /* MCPErrorMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPErrorMapping.swift; sourceTree = "<group>"; };
 		8C125931E1CB14CD4EAE4D83 /* ToolCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ToolCatalog.swift"; sourceTree = "<group>"; };
 		BFB7889C55F9780B5678186D /* ResourceCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ResourceCatalog.swift"; sourceTree = "<group>"; };
@@ -1164,6 +1166,7 @@
 				34A6F1F29768816E717790E5 /* programa-mcp.swift */,
 				5780162BC419AEE022390A45 /* MCPServer+Capabilities.swift */,
 				ED79E527F994DBDC0A46043A /* MCPSocketBridge.swift */,
+				B0B0000000000000000000A2 /* BlockingStdioTransport.swift */,
 				53B518DFE87542AC5DC8FD4E /* MCPErrorMapping.swift */,
 				8C125931E1CB14CD4EAE4D83 /* ToolCatalog.swift */,
 				BFB7889C55F9780B5678186D /* ResourceCatalog.swift */,
@@ -1837,6 +1840,7 @@
 				5C0A7E43B93D2F6A18E4D057 /* SocketClient.swift in Sources */,
 				C0DE5A55000000000000F003 /* SocketPasswordResolver.swift in Sources */,
 				35911EB4D71E31E20BE3DACA /* MCPSocketBridge.swift in Sources */,
+				B0B0000000000000000000A1 /* BlockingStdioTransport.swift in Sources */,
 				2EFFCCB7C0F0B14D04B041AD /* MCPErrorMapping.swift in Sources */,
 				A06CCD2517BF88BFE4F43D51 /* ToolCatalog.swift in Sources */,
 				9506CC0AAA45434057BC6665 /* ResourceCatalog.swift in Sources */,
