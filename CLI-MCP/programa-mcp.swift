@@ -24,7 +24,7 @@ struct ProgramaMCPMain {
         await ResourceCatalog.register(on: server)
 
         do {
-            let transport = StdioTransport()
+            let transport = BlockingStdioTransport()
             try await server.start(transport: transport)
             await server.waitUntilCompleted()
         } catch {
