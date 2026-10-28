@@ -2347,6 +2347,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         if hostedView.responderMatchesPreferredKeyboardFocus(responder) {
             return false
         }
+        // An editable text input (for example the review composer in a split) holds the
+        // caret; repairing here would send its keystrokes to the terminal.
+        if let textView = responder as? NSTextView, textView.isEditable {
+            return false
+        }
+        if let textField = responder as? NSTextField, textField.isEditable {
+            return false
+        }
         return true
     }
 

@@ -168,6 +168,7 @@ struct ReviewPanelView: View {
     @State private var commentAdmissionError: String?
     @State private var rowPlanner = ReviewPanelRowPlanner()
     @State private var isConfirmingCheckpointRevert = false
+    @FocusState private var isComposerFocused: Bool
 
     private struct InlineComposerState {
         let filePath: String
@@ -733,6 +734,12 @@ struct ReviewPanelView: View {
             .padding(.horizontal, 6)
             .background(Color.primary.opacity(0.06))
             .cornerRadius(4)
+            .focused($isComposerFocused)
+            .onChange(of: isComposerFocused) { _, focused in
+                // The workspace's terminal-focus safety nets reclaim keystrokes for the
+                // focused terminal, so the panel has to own focus while the composer does.
+                if focused, !isFocused { onRequestPanelFocus() }
+            }
             .onSubmit { commitComposer() }
 
             Button(String(localized: "review.composer.add", defaultValue: "Add")) {
