@@ -44,6 +44,7 @@ test_review_diff_panel.py
 test_shortcut_window_scope.py
 test_snapshot_list_and_restore_param_validation.py
 test_socket_limits_and_focus_sweep.py
+test_split_cmd_d_ctrl_d_two_pane_frame_guard.py
 test_split_cmd_shift_d_ctrl_d_no_portal_orphans.py
 test_split_flash_and_layout.py
 test_split_pane_cap.py
