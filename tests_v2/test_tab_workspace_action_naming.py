@@ -128,6 +128,31 @@ def main() -> int:
             mark_read = c._call("tab.action", {"tab_id": tab_ref, "action": "mark_read"}) or {}
             _must(str(mark_read.get("tab_ref") or "").startswith("tab:"), f"Expected tab_ref in mark_read result: {mark_read}")
             _must(str(mark_read.get("workspace_id") or "") == ws_id, f"mark_read should resolve target workspace: {mark_read}")
+
+            # Regression: a tab ref that names no live tab must fail with not_found instead of
+            # falling back to the workspace's focused tab and closing every other tab.
+            c._call("surface.create", {"workspace_id": ws_id, "type": "terminal"})
+            before = c.list_surfaces(ws_id)
+            _must(len(before) >= 2, f"Expected at least two tabs before close_others: {before}")
+            for key, stale_ref in (("surface_id", "surface:999999"), ("tab_id", "tab:999999")):
+                try:
+                    c._call("tab.action", {"workspace_id": ws_id, key: stale_ref, "action": "close_others"})
+                except ProgramaClientError as error:
+                    _must("not_found" in str(error), f"tab.action {key}={stale_ref} should be not_found: {error}")
+                else:
+                    raise ProgramaClientError(f"tab.action close_others with {key}={stale_ref} unexpectedly succeeded")
+            try:
+                _run_cli(
+                    cli,
+                    ["tab-action", "--workspace", ws_id, "--surface", "surface:999999", "--action", "close-others"],
+                    json_output=False,
+                )
+            except ProgramaClientError as error:
+                _must("not_found" in str(error), f"tab-action with a stale --surface should be not_found: {error}")
+            else:
+                raise ProgramaClientError("tab-action close-others with a stale --surface unexpectedly succeeded")
+            after = c.list_surfaces(ws_id)
+            _must(len(after) == len(before), f"A stale tab ref must not close any tab: before={before} after={after}")
         finally:
             if ws_other:
                 try:
