@@ -20,7 +20,11 @@ extension TerminalController {
     }
 
     nonisolated func v2NotificationCreate(params: [String: Any]) -> V2CallResult {
-        let explicitSurfaceId = v2UUID(params, "surface_id")
+        let explicitSurfaceId: UUID?
+        switch v2TargetSurfaceId(params, fallback: nil) {
+        case .failed(let error): return error
+        case .resolved(let id): explicitSurfaceId = id
+        }
         if let limitError = v2TextLimitError(params, Self.v2NotificationTextLimits) { return limitError }
         let title = (params["title"] as? String) ?? Self.v2DefaultNotificationTitle
         let subtitle = (params["subtitle"] as? String) ?? ""
@@ -34,7 +38,7 @@ extension TerminalController {
                 return .err(code: "not_found", message: "Workspace not found", data: nil)
             }
             // A surface_id that was passed but does not resolve must not retarget the focused surface.
-            if v2HasNonNullParam(params, "surface_id"), explicitSurfaceId.map({ ws.panels[$0] == nil }) ?? true {
+            if let explicitSurfaceId, ws.panels[explicitSurfaceId] == nil {
                 return .err(
                     code: "not_found",
                     message: "Surface not found",

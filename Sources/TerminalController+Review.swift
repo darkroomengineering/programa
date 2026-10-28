@@ -170,6 +170,11 @@ extension TerminalController {
         let modeRaw = v2String(params, "mode") ?? "uncommitted"
         let baseBranch = v2String(params, "base_branch") ?? "origin/main"
         let focusRequested = v2Bool(params, "focus") ?? false
+        let requestedSourceSurfaceId: UUID?
+        switch v2TargetSurfaceId(params, fallback: nil) {
+        case .failed(let error): return error
+        case .resolved(let id): requestedSourceSurfaceId = id
+        }
 
         let resolution: ReviewOpenResolution = v2MainSync {
             guard let tabManager = self.v2ResolveTabManager(params: params) else {
@@ -181,7 +186,7 @@ extension TerminalController {
             guard let workspace = self.v2ResolveWorkspace(params: params, tabManager: tabManager) else {
                 return .workspaceNotFound
             }
-            let sourceSurfaceId = self.v2UUID(params, "surface_id") ?? workspace.focusedPanelId
+            let sourceSurfaceId = requestedSourceSurfaceId ?? workspace.focusedPanelId
             guard let sourceSurfaceId else {
                 return .noFocusedSurface
             }

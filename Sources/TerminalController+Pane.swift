@@ -122,7 +122,11 @@ extension TerminalController {
                 return .err(code: "not_found", message: "Pane or workspace not found", data: nil)
             }
 
-            let paneUUID = v2UUID(params, "pane_id")
+            let paneUUID: UUID?
+            switch v2TargetPaneId(params, fallback: nil) {
+            case .failed(let error): return error
+            case .resolved(let id): paneUUID = id
+            }
             let paneId: PaneID? = {
                 if let paneUUID {
                     return ws.bonsplitController.allPaneIds.first(where: { $0.id == paneUUID })
@@ -241,8 +245,9 @@ extension TerminalController {
                 return .err(code: "not_found", message: "Workspace not found", data: nil)
             }
 
-            let paneUUID = v2UUID(params, "pane_id") ?? ws.bonsplitController.focusedPaneId?.id
-            guard let paneUUID else {
+            let paneTarget = v2TargetPaneId(params, fallback: ws.bonsplitController.focusedPaneId?.id)
+            if case .failed(let error) = paneTarget { return error }
+            guard case .resolved(let paneUUID?) = paneTarget else {
                 return .err(code: "not_found", message: "No focused pane", data: nil)
             }
             let splitId: UUID
@@ -383,7 +388,16 @@ extension TerminalController {
                 return .err(code: "not_found", message: "Workspace not found", data: nil)
             }
 
-            let sourcePaneUUID = v2UUID(params, "pane_id")
+            let sourcePaneUUID: UUID?
+            switch v2TargetPaneId(params, fallback: nil) {
+            case .failed(let error): return error
+            case .resolved(let id): sourcePaneUUID = id
+            }
+            let explicitSurfaceId: UUID?
+            switch v2TargetSurfaceId(params, fallback: nil) {
+            case .failed(let error): return error
+            case .resolved(let id): explicitSurfaceId = id
+            }
             let sourcePane: PaneID? = {
                 if let sourcePaneUUID {
                     return sourceWorkspace.bonsplitController.allPaneIds.first(where: { $0.id == sourcePaneUUID })
@@ -392,7 +406,7 @@ extension TerminalController {
             }()
 
             let surfaceId: UUID? = {
-                if let explicitSurface = v2UUID(params, "surface_id") { return explicitSurface }
+                if let explicitSurfaceId { return explicitSurfaceId }
                 if let sourcePane,
                    let selected = sourceWorkspace.bonsplitController.selectedTab(inPane: sourcePane) {
                     return sourceWorkspace.panelIdFromSurfaceId(selected.id)
@@ -467,8 +481,17 @@ extension TerminalController {
                 return v2InvalidParam("target_pane_id")
             }
 
-            var surfaceId = v2UUID(params, "surface_id")
-            if surfaceId == nil, let sourcePaneUUID = v2UUID(params, "pane_id") {
+            var surfaceId: UUID?
+            switch v2TargetSurfaceId(params, fallback: nil) {
+            case .failed(let error): return error
+            case .resolved(let id): surfaceId = id
+            }
+            let sourcePaneUUID: UUID?
+            switch v2TargetPaneId(params, fallback: nil) {
+            case .failed(let error): return error
+            case .resolved(let id): sourcePaneUUID = id
+            }
+            if surfaceId == nil, let sourcePaneUUID {
                 guard let sourceLocated = v2LocatePane(sourcePaneUUID),
                       let selected = sourceLocated.workspace.bonsplitController.selectedTab(inPane: sourceLocated.paneId),
                       let selectedSurface = sourceLocated.workspace.panelIdFromSurfaceId(selected.id) else {

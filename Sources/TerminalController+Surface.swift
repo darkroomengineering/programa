@@ -49,8 +49,12 @@ extension TerminalController {
             v2MaybeFocusWindow(for: tabManager)
             v2MaybeSelectWorkspace(tabManager, workspace: ws)
 
-            let sourceSurfaceId = v2UUID(params, "surface_id") ?? ws.focusedPanelId
-            guard let sourceSurfaceId else {
+            let sourceTarget = v2TargetSurfaceId(params, fallback: ws.focusedPanelId)
+            if case .failed(let error) = sourceTarget {
+                result = error
+                return
+            }
+            guard case .resolved(let sourceSurfaceId?) = sourceTarget else {
                 result = .err(code: "not_found", message: "No focused surface to split", data: nil)
                 return
             }
@@ -327,9 +331,10 @@ extension TerminalController {
     }
 
     nonisolated func v2SurfaceClose(params: [String: Any]) -> V2CallResult {
-        let requestedSurfaceId = v2UUID(params, "surface_id")
-        if v2HasNonNullParam(params, "surface_id"), requestedSurfaceId == nil {
-            return v2InvalidParam("surface_id")
+        let requestedSurfaceId: UUID?
+        switch v2TargetSurfaceId(params, fallback: nil) {
+        case .failed(let error): return error
+        case .resolved(let id): requestedSurfaceId = id
         }
         return v2MainSync {
             guard let tabManager = v2ResolveTabManager(params: params) else {
@@ -970,16 +975,9 @@ extension TerminalController {
         guard let ws = v2ResolveWorkspace(params: params, tabManager: tabManager) else {
             return .failed(.err(code: "not_found", message: "Workspace not found", data: nil))
         }
-        let surfaceId: UUID?
-        if params["surface_id"] != nil {
-            surfaceId = v2UUID(params, "surface_id")
-            guard surfaceId != nil else {
-                return .failed(.err(code: "not_found", message: "Surface not found for the given surface_id", data: nil))
-            }
-        } else {
-            surfaceId = ws.focusedPanelId
-        }
-        guard let surfaceId else {
+        let target = v2TargetSurfaceId(params, fallback: ws.focusedPanelId)
+        if case .failed(let error) = target { return .failed(error) }
+        guard case .resolved(let surfaceId?) = target else {
             return .failed(.err(code: "not_found", message: "No focused surface", data: nil))
         }
         guard let panel = ws.panels[surfaceId] else {
@@ -1137,8 +1135,9 @@ extension TerminalController {
                 return .err(code: "not_found", message: "Workspace not found", data: nil)
             }
 
-            let surfaceId = v2UUID(params, "surface_id") ?? ws.focusedPanelId
-            guard let surfaceId else {
+            let target = v2TargetSurfaceId(params, fallback: ws.focusedPanelId)
+            if case .failed(let error) = target { return error }
+            guard case .resolved(let surfaceId?) = target else {
                 return .err(code: "not_found", message: "No focused surface", data: nil)
             }
             guard ws.panels[surfaceId] != nil else {
@@ -1347,4 +1346,45 @@ extension TerminalController {
 enum V2Resolution<Value> {
     case resolved(Value)
     case failed(TerminalController.V2CallResult)
+}
+
+extension TerminalController {
+    /// The surface named by the first of `keys` present in `params`, else `fallback` (usually the
+    /// focused surface; nil when there is none). A present id that does not resolve fails with
+    /// `not_found` instead of retargeting the command onto `fallback`.
+    nonisolated func v2TargetSurfaceId(
+        _ params: [String: Any],
+        keys: [String] = ["surface_id"],
+        fallback: UUID?
+    ) -> V2Resolution<UUID?> {
+        v2TargetId(params, keys: keys, noun: "Surface", fallback: fallback)
+    }
+
+    /// `v2TargetSurfaceId` for `pane_id`.
+    nonisolated func v2TargetPaneId(_ params: [String: Any], fallback: UUID?) -> V2Resolution<UUID?> {
+        v2TargetId(params, keys: ["pane_id"], noun: "Pane", fallback: fallback)
+    }
+
+    private nonisolated func v2TargetId(
+        _ params: [String: Any],
+        keys: [String],
+        noun: String,
+        fallback: UUID?
+    ) -> V2Resolution<UUID?> {
+        guard let key = keys.first(where: { v2HasNonNullParam(params, $0) }) else {
+            return .resolved(fallback)
+        }
+        guard let raw = v2String(params, key), UUID(uuidString: raw) != nil || v2IsHandleRefShaped(raw) else {
+            return .failed(v2InvalidParam(key))
+        }
+        guard let id = v2UUID(params, key) else {
+            return .failed(.err(code: "not_found", message: "\(noun) not found for the given \(key)", data: [key: raw]))
+        }
+        return .resolved(id)
+    }
+
+    private nonisolated func v2IsHandleRefShaped(_ raw: String) -> Bool {
+        let parts = raw.split(separator: ":", omittingEmptySubsequences: false)
+        return parts.count == 2 && !parts[0].isEmpty && Int(parts[1]) != nil
+    }
 }

@@ -106,16 +106,23 @@ extension TerminalController {
             let title = (requestedTitle?.isEmpty == false) ? requestedTitle : nil
             let description = v2RawString(params, "description")
             let applyRememberedFolderColor = v2Bool(params, "apply_remembered_folder_color") ?? true
-            let cwd: String?
+            let requestedCwd: String?
             if let workingDirectory {
-                cwd = workingDirectory
+                requestedCwd = workingDirectory
             } else if let raw = params["cwd"] {
                 guard let str = raw as? String else {
                     return .err(code: "invalid_params", message: "cwd must be a string", data: nil)
                 }
-                cwd = str
+                requestedCwd = str
             } else {
-                cwd = nil
+                requestedCwd = nil
+            }
+            let cwd = tabManager.normalizedWorkingDirectory(requestedCwd).map { ($0 as NSString).expandingTildeInPath }
+            if let cwd {
+                var isDirectory: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: cwd, isDirectory: &isDirectory), isDirectory.boolValue else {
+                    return .err(code: "invalid_params", message: "Working directory is not an existing directory: \(cwd)", data: ["cwd": cwd])
+                }
             }
 
             let shouldFocus = v2FocusAllowed()
@@ -500,12 +507,14 @@ extension TerminalController {
                 "set_color", "clear_color"
             ]
 
-            var result: V2CallResult = .err(code: "invalid_params", message: "Unknown workspace action", data: [
-                "action": action,
-                "supported_actions": supportedActions
-            ])
+            let unknownActionError: V2CallResult = .err(
+                code: "invalid_params",
+                message: "Unknown workspace action '\(action)'. Supported: \(supportedActions.joined(separator: ", "))",
+                data: ["action": action, "supported_actions": supportedActions]
+            )
+            var result = unknownActionError
 
-            let requestedWorkspaceId = v2UUID(params, "workspace_id") ?? tabManager.selectedTabId
+            let requestedWorkspaceId = v2HasNonNullParam(params, "workspace_id") ? v2UUID(params, "workspace_id") : tabManager.selectedTabId
             guard let workspaceId = requestedWorkspaceId,
                   let workspace = tabManager.tabs.first(where: { $0.id == workspaceId }) else {
                 result = .err(code: "not_found", message: "Workspace not found", data: nil)
@@ -666,10 +675,7 @@ extension TerminalController {
                 finish(["color": NSNull()])
 
             default:
-                result = .err(code: "invalid_params", message: "Unknown workspace action", data: [
-                    "action": action,
-                    "supported_actions": supportedActions
-                ])
+                result = unknownActionError
             }
             return result
         }
@@ -691,18 +697,21 @@ extension TerminalController {
                 "pin", "unpin", "mark_read", "mark_unread"
             ]
 
-            var result: V2CallResult = .err(code: "invalid_params", message: "Unknown tab action", data: [
-                "action": action,
-                "supported_actions": supportedActions
-            ])
+            let unknownActionError: V2CallResult = .err(
+                code: "invalid_params",
+                message: "Unknown tab action '\(action)'. Supported: \(supportedActions.joined(separator: ", "))",
+                data: ["action": action, "supported_actions": supportedActions]
+            )
+            var result = unknownActionError
 
             guard let workspace = v2ResolveWorkspace(params: params, tabManager: tabManager) else {
                 result = .err(code: "not_found", message: "Workspace not found", data: nil)
                 return result
             }
 
-            let surfaceId = v2UUID(params, "surface_id") ?? v2UUID(params, "tab_id") ?? workspace.focusedPanelId
-            guard let surfaceId else {
+            let target = v2TargetSurfaceId(params, keys: ["surface_id", "tab_id"], fallback: workspace.focusedPanelId)
+            if case .failed(let error) = target { return error }
+            guard case .resolved(let surfaceId?) = target else {
                 result = .err(code: "not_found", message: "No focused tab", data: nil)
                 return result
             }
@@ -872,10 +881,7 @@ extension TerminalController {
                 finish(["closed": closeResult.closed, "skipped_pinned": closeResult.skippedPinned])
 
             default:
-                result = .err(code: "invalid_params", message: "Unknown tab action", data: [
-                    "action": action,
-                    "supported_actions": supportedActions
-                ])
+                result = unknownActionError
             }
             return result
         }
