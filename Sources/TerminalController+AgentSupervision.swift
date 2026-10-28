@@ -192,13 +192,9 @@ extension TerminalController {
                         "workspace_id": workspaceId.uuidString,
                     ])
                 }
-                var liveWorkspaceIds = Set(AppDelegate.shared?.scriptableMainWindows().flatMap {
-                    $0.tabManager.tabs.map(\.id)
-                } ?? [])
-                if let tabManager = self.tabManager {
-                    liveWorkspaceIds.formUnion(tabManager.tabs.map(\.id))
-                }
-                AgentSupervisionRegistry.shared.retainWorkspaces(liveWorkspaceIds)
+                AgentSupervisionRegistry.shared.retainWorkspaces(
+                    AgentSupervisionRegistry.liveWorkspaceIds(including: self.tabManager?.tabs ?? [])
+                )
                 let workspaceIds = workspaceId.map { Set([$0]) }
                 let records = AgentSupervisionRegistry.shared.records(
                     workspaceIds: workspaceIds,

@@ -227,7 +227,18 @@ extension TabManager {
     }
 
     private func sweepStaleAgentPIDs() {
-        AgentSupervisionRegistry.shared.retainTerminalSurfaces(of: tabs)
+        let registry = AgentSupervisionRegistry.shared
+#if DEBUG
+        let recordsBefore = registry.records().count
+#endif
+        registry.retainWorkspaces(AgentSupervisionRegistry.liveWorkspaceIds(including: tabs))
+#if DEBUG
+        let recordsAfter = registry.records().count
+        if recordsAfter != recordsBefore {
+            dlog("agentSweep.retainWorkspaces records=\(recordsBefore)->\(recordsAfter)")
+        }
+#endif
+        registry.retainTerminalSurfaces(of: tabs)
         for tab in tabs {
             var keysToRemove: [String] = []
             for (key, pid) in tab.agentPIDs {

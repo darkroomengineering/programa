@@ -36,7 +36,7 @@ enum AgentTaskPlacement: String, Sendable {
     case runsWithParent = "runs_with_parent"
 }
 
-struct AgentTaskRecord: Sendable {
+struct AgentTaskRecord: Sendable, Equatable {
     let id: UUID
     let parentId: UUID?
     let host: String
@@ -61,9 +61,14 @@ struct AgentTaskRecord: Sendable {
         placement != .runsWithParent && surfaceId != nil
     }
 
-    func payload() -> [String: Any] {
+    private static let timestampFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    func payload() -> [String: Any] {
+        let formatter = Self.timestampFormatter
         return [
             "id": id.uuidString,
             "parent_id": Self.jsonValue(parentId?.uuidString),
@@ -107,9 +112,27 @@ enum AgentSupervisionRegistryError: Error, Equatable {
 
 @MainActor
 final class AgentSupervisionRegistry: ObservableObject {
-    static let shared = AgentSupervisionRegistry()
+    static let shared = AgentSupervisionRegistry(isWorkspaceLive: { workspaceId in
+        AppDelegate.shared == nil || liveWorkspaceIds().contains(workspaceId)
+    })
+
+    /// Workspaces of every main window (hidden ones included), of the primary and active
+    /// managers even before they own a window, plus `extra`. Each window's
+    /// sweep prunes against this set, so it must never be scoped to one window.
+    static func liveWorkspaceIds(including extra: [Workspace] = []) -> Set<UUID> {
+        var ids = Set(extra.map(\.id))
+        if let contexts = AppDelegate.shared?.mainWindowContexts.values {
+            for context in contexts { ids.formUnion(context.tabManager.tabs.map(\.id)) }
+        }
+        ids.formUnion(AppDelegate.shared?.tabManager?.tabs.map(\.id) ?? [])
+        ids.formUnion(TerminalController.shared.tabManager?.tabs.map(\.id) ?? [])
+        return ids
+    }
 
     let capacity: Int
+    /// Lets a full registry evict unfinished records whose workspace closed. Nil treats every
+    /// workspace as live.
+    private let isWorkspaceLive: (@MainActor (UUID) -> Bool)?
     /// Unfinished `runs_with_parent` helpers per workspace, shown on the sidebar row.
     /// Both counts publish together, once, and only when one changes: `updateActiveSurface`
     /// runs on every agent state report, and finishing a helper moves it between the two
@@ -129,13 +152,14 @@ final class AgentSupervisionRegistry: ObservableObject {
         didSet { refreshHelperCounts() }
     }
 
-    private struct TerminalHelpers {
+    private struct TerminalHelpers: Equatable {
         var workspaceId: UUID
         var records: [AgentTaskRecord]
     }
 
-    init(capacity: Int = 256) {
+    init(capacity: Int = 256, isWorkspaceLive: (@MainActor (UUID) -> Bool)? = nil) {
         self.capacity = max(1, capacity)
+        self.isWorkspaceLive = isWorkspaceLive
     }
 
     func record(id: UUID) -> AgentTaskRecord? {
@@ -279,7 +303,7 @@ final class AgentSupervisionRegistry: ObservableObject {
         let ids = recordsById.values.compactMap { record in
             record.host == host && record.session == session && !record.state.isFinished ? record.id : nil
         }
-        return try ids.map { try finish(id: $0, state: state, now: now) }
+        return ids.compactMap { try? finish(id: $0, state: state, now: now) }
     }
 
     func finishActiveSurface(
@@ -292,7 +316,7 @@ final class AgentSupervisionRegistry: ObservableObject {
             throw AgentSupervisionRegistryError.finishStateRequired
         }
         let ids = activeSurfaceRecordIds(workspaceId: workspaceId, surfaceId: surfaceId)
-        return try ids.map { try finish(id: $0, state: state, now: now) }
+        return ids.compactMap { try? finish(id: $0, state: state, now: now) }
     }
 
     func updateActiveSurface(
@@ -305,7 +329,7 @@ final class AgentSupervisionRegistry: ObservableObject {
             throw AgentSupervisionRegistryError.finishStateRequired
         }
         let ids = activeSurfaceRecordIds(workspaceId: workspaceId, surfaceId: surfaceId)
-        return try ids.map { try update(id: $0, state: state, now: now) }
+        return ids.compactMap { try? update(id: $0, state: state, now: now) }
     }
 
     /// Finishes the workspace's in-process helpers whose parent agent exited without a
@@ -353,8 +377,12 @@ final class AgentSupervisionRegistry: ObservableObject {
     }
 
     func retainWorkspaces(_ liveWorkspaceIds: Set<UUID>) {
-        recordsById = recordsById.filter { liveWorkspaceIds.contains($0.value.workspaceId) }
-        terminalHelpersBySurface = terminalHelpersBySurface.filter { liveWorkspaceIds.contains($0.value.workspaceId) }
+        if recordsById.values.contains(where: { !liveWorkspaceIds.contains($0.workspaceId) }) {
+            recordsById = recordsById.filter { liveWorkspaceIds.contains($0.value.workspaceId) }
+        }
+        if terminalHelpersBySurface.values.contains(where: { !liveWorkspaceIds.contains($0.workspaceId) }) {
+            terminalHelpersBySurface = terminalHelpersBySurface.filter { liveWorkspaceIds.contains($0.value.workspaceId) }
+        }
     }
 
     private func activeSurfaceRecordIds(workspaceId: UUID, surfaceId: UUID) -> [UUID] {
@@ -387,12 +415,15 @@ final class AgentSupervisionRegistry: ObservableObject {
 
     private func makeRoomForNewRecord() throws {
         guard recordsById.count >= capacity else { return }
-        guard let evicted = recordsById.values
-            .filter(\.state.isFinished)
-            .min(by: {
-                if $0.updatedAt != $1.updatedAt { return $0.updatedAt < $1.updatedAt }
-                return $0.startedAt < $1.startedAt
-            }) else {
+        let oldestFirst: (AgentTaskRecord, AgentTaskRecord) -> Bool = {
+            if $0.updatedAt != $1.updatedAt { return $0.updatedAt < $1.updatedAt }
+            return $0.startedAt < $1.startedAt
+        }
+        let evicted = recordsById.values.filter(\.state.isFinished).min(by: oldestFirst)
+            ?? isWorkspaceLive.flatMap { isLive in
+                recordsById.values.filter { !isLive($0.workspaceId) }.min(by: oldestFirst)
+            }
+        guard let evicted else {
             throw AgentSupervisionRegistryError.capacityReached
         }
         recordsById.removeValue(forKey: evicted.id)
@@ -526,9 +557,14 @@ extension AgentSupervisionRegistry {
         if next.isEmpty {
             if terminalHelpersBySurface[surfaceId] != nil { terminalHelpersBySurface.removeValue(forKey: surfaceId) }
         } else {
-            terminalHelpersBySurface[surfaceId] = TerminalHelpers(workspaceId: workspaceId, records: next)
+            let helpers = TerminalHelpers(workspaceId: workspaceId, records: next)
+            if terminalHelpersBySurface[surfaceId] != helpers { terminalHelpersBySurface[surfaceId] = helpers }
         }
         return newlyBlocked
+    }
+
+    func hasTerminalHelpers(surfaceId: UUID) -> Bool {
+        terminalHelpersBySurface[surfaceId] != nil
     }
 
     /// Drops terminal helpers of `workspaces` whose surface closed or moved to another

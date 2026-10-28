@@ -167,8 +167,11 @@ extension ProgramaCLI {
             default:
                 let message = ["message", "body", "text", "reason", "description"]
                     .lazy.compactMap { parsed.object?[$0] as? String }.first { !$0.isEmpty }
-                let fallback = command == "opencode-hook" ? "OpenCode needs your attention" : "Agent needs your attention"
-                (subtitle, body) = ("Permission", message ?? fallback)
+                // OpenCode only fires `notification` for `permission.asked`, matching its
+                // online provider; any other hook gets the neutral, non-blocking kind.
+                (subtitle, body) = command == "opencode-hook"
+                    ? ("Permission", message ?? "OpenCode needs your attention")
+                    : ("Attention", message ?? "Agent needs your attention")
             }
             emitProgramStatusForNotification(app: app, classifiedSubtitle: subtitle, body: body)
             if command == "claude-hook" {

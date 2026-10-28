@@ -106,8 +106,15 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
         var transitions: [ProgramStatusRecord?] = []
         var projectRoot = false
         let touchesChildren = events.contains { event in
-            if case .report(let report) = event { return !report.id.isEmpty || report.state == nil }
-            return true
+            switch event {
+            case .report(let report):
+                return !report.id.isEmpty || report.state == nil
+            case .prompt:
+                return !panel.programStatus.children.isEmpty
+                    || AgentSupervisionRegistry.shared.hasTerminalHelpers(surfaceId: key.surfaceId)
+            case .resetAll:
+                return true
+            }
         }
         for event in events {
             defer {
