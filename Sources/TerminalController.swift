@@ -1746,7 +1746,7 @@ class TerminalController {
             return v2Ok(id: id, result: v2Capabilities(requestPolicy: requestPolicy))
 
         case "system.identify":
-            return v2Ok(id: id, result: v2Identify(params: params, requestPolicy: requestPolicy))
+            return v2Result(id: id, v2Identify(params: params, requestPolicy: requestPolicy))
         case "system.tree":
             return v2Result(id: id, self.v2SystemTree(params: params, requestPolicy: requestPolicy))
         case "auth.login":

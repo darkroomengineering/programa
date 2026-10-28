@@ -32,21 +32,51 @@ private struct SystemTreeSnapshot {
 }
 
 extension TerminalController {
-    nonisolated func v2Identify(params: [String: Any], requestPolicy: SocketRequestPolicy) -> [String: Any] {
+    /// A target key that is present must resolve: a stale id fails with `not_found` instead of
+    /// reporting the focused window.
+    nonisolated func v2Identify(params: [String: Any], requestPolicy: SocketRequestPolicy) -> V2CallResult {
+        for key in ["window_id", "workspace_id", "surface_id", "tab_id"] where v2HasNonNullParam(params, key) {
+            guard let raw = v2String(params, key) else { return v2InvalidParam(key) }
+            guard v2UUID(params, key) == nil else { continue }
+            let parts = raw.split(separator: ":", omittingEmptySubsequences: false)
+            guard parts.count == 2, !parts[0].isEmpty, Int(parts[1]) != nil else { return v2InvalidParam(key) }
+            return v2IdentifyTargetNotFound(key: key, raw: raw)
+        }
         let input = v2SystemIdentifyInput(params: params)
-        guard let snapshot = v2MainSync({ self.v2SystemIdentifySnapshot(input: input) }) else {
-            return [
+        let (missingKey, snapshot) = v2MainSync { () -> (String?, SystemIdentifySnapshot?) in
+            if let missing = self.v2SystemIdentifyMissingTarget(input: input) { return (missing, nil) }
+            return (nil, self.v2SystemIdentifySnapshot(input: input))
+        }
+        if var missingKey {
+            if missingKey == "surface_id", !v2HasNonNullParam(params, "surface_id") { missingKey = "tab_id" }
+            return v2IdentifyTargetNotFound(key: missingKey, raw: v2String(params, missingKey) ?? "")
+        }
+        guard let snapshot else {
+            return .ok([
                 "socket_path": requestPolicy.socketPath,
                 "focused": NSNull(),
                 "caller": NSNull()
-            ]
+            ])
         }
 
-        return [
+        return .ok([
             "socket_path": requestPolicy.socketPath,
-            "focused": snapshot.focused.isEmpty ? NSNull() : snapshot.focused,
+            "focused": snapshot.focused.isEmpty ? (NSNull() as Any) : snapshot.focused,
             "caller": v2OrNull(snapshot.caller)
-        ]
+        ])
+    }
+
+    private nonisolated func v2IdentifyTargetNotFound(key: String, raw: String) -> V2CallResult {
+        .err(code: "not_found", message: "Target not found for the given \(key)", data: [key: raw])
+    }
+
+    @MainActor
+    private func v2SystemIdentifyMissingTarget(input: SystemIdentifyInput) -> String? {
+        guard let app = AppDelegate.shared else { return nil }
+        if let windowId = input.windowId, app.tabManagerFor(windowId: windowId) == nil { return "window_id" }
+        if let workspaceId = input.workspaceId, app.tabManagerFor(tabId: workspaceId) == nil { return "workspace_id" }
+        if let surfaceId = input.surfaceId, app.locateSurface(surfaceId: surfaceId) == nil { return "surface_id" }
+        return nil
     }
 
     nonisolated func v2SystemTree(params: [String: Any], requestPolicy: SocketRequestPolicy) -> V2CallResult {
@@ -311,6 +341,7 @@ extension TerminalController {
                 "branch": v2OrNull(workspace.panelGitBranches[panel.id]?.branch ?? workspace.gitBranch?.branch ?? workspace.worktreeBranch),
                 "agent_state": v2OrNull(workspace.panelAgentStates[panel.id]?.rawValue),
                 "agent_state_source": v2OrNull(workspace.panelAgentStateSources[panel.id]?.rawValue),
+                "shell_state": v2OrNull(workspace.panelShellActivityStates[panel.id]?.rawValue),
                 "program_status": workspace.programStatusWire(panelId: panel.id),
                 "helpers": workspaceHelpers
                     .filter { $0.surfaceId == panel.id }

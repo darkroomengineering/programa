@@ -677,9 +677,8 @@ extension CommandPaletteView {
                 snapshot.setBool(
                     CommandPaletteContextKeys.panelCanResumeAgent,
                     workspace.panelAgentPresence[panelId] == nil
-                        && AgentResumeStore.shared.target(panelId: panelId).flatMap {
-                            AgentResumeCommand.line(for: $0, paneDirectory: workspace.panelDirectories[panelId])
-                        } != nil
+                        && workspace.panelShellActivityStates[panelId] == .promptIdle
+                        && AgentResumeStore.shared.target(panelId: panelId).map(AgentResumeCommand.canResume) == true
                 )
                 let availableTargets = terminalOpenTargets ?? TerminalDirectoryOpenTarget.availableTargets()
                 for target in TerminalDirectoryOpenTarget.commandPaletteShortcutTargets {

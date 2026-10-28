@@ -28,18 +28,22 @@ OPENCODE_SESSION_ID = "ses_3a1f2b9c0ffeYq7RkT2mNp4LwX"
 
 
 class TreeRecorder(SocketRecorder):
-    """Answers system.tree with one terminal surface in a given directory and agent state."""
+    """Answers system.tree with one terminal surface in a given directory, agent and shell state."""
 
-    def __init__(self, directory: str, pane_dir: str, agent_state: str | None = None):
+    def __init__(
+        self, directory: str, pane_dir: str, agent_state: str | None = None, shell_state: str | None = "promptIdle"
+    ):
         super().__init__(directory)
         self.pane_dir = pane_dir
         self.agent_state = agent_state
+        self.shell_state = shell_state
 
     def _result_for(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         if method == "system.tree":
             surface = {
                 "id": SURFACE_ID, "ref": "surface:1", "type": "terminal", "focused": True,
                 "current_directory": self.pane_dir, "agent_state": self.agent_state,
+                "shell_state": self.shell_state,
             }
             workspace = {"id": WORKSPACE_ID, "ref": "workspace:1", "panes": [{"surfaces": [surface]}]}
             return {"windows": [{"workspaces": [workspace]}]}
@@ -92,9 +96,13 @@ class AgentResumeTests(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
-    def recorder(self, pane_dir: Path | None = None, agent_state: str | None = None) -> TreeRecorder:
+    def recorder(
+        self, pane_dir: Path | None = None, agent_state: str | None = None, shell_state: str | None = "promptIdle"
+    ) -> TreeRecorder:
         # A fresh directory per recorder: SocketRecorder never unlinks its socket file.
-        return TreeRecorder(tempfile.mkdtemp(dir=self._tmp.name), str(pane_dir or self.box.project), agent_state)
+        return TreeRecorder(
+            tempfile.mkdtemp(dir=self._tmp.name), str(pane_dir or self.box.project), agent_state, shell_state
+        )
 
     def test_session_end_keeps_the_session_and_print_shows_the_resume_command(self) -> None:
         now = time.time()
@@ -179,6 +187,23 @@ class AgentResumeTests(unittest.TestCase):
             self.assertIn("still running", merged_output(proc))
             self.assertEqual(sent(rec), [], "nothing may be typed into a running agent")
 
+    def test_refuses_unless_the_pane_is_at_its_shell_prompt(self) -> None:
+        # commandRunning is vim, ssh or a REPL; unknown and None mean no shell integration.
+        self.box.write_last_sessions(self.box.entry())
+        for state in ("commandRunning", "unknown", None):
+            with self.subTest(state):
+                with self.recorder(shell_state=state) as rec:
+                    refused = self.box.cli(rec, ["resume"])
+                self.assertNotEqual(refused.returncode, 0, merged_output(refused))
+                self.assertIn("the pane is running a program; return to the shell prompt or pass --force", merged_output(refused))
+                self.assertEqual(sent(rec), [], "nothing may be typed into a running program")
+                with self.recorder(shell_state=state) as rec:
+                    printed = self.box.cli(rec, ["resume", "--print"])
+                    forced = self.box.cli(rec, ["resume", "--force"])
+                self.assertEqual(printed.stdout.strip(), f"claude --resume '{SESSION_ID}'", merged_output(printed))
+                self.assertEqual(forced.returncode, 0, merged_output(forced))
+                self.assertEqual([f["params"].get("text") for f in sent(rec)][:1], [f"claude --resume '{SESSION_ID}'"])
+
     def test_missing_or_unsupported_session_fails_with_a_clear_error(self) -> None:
         cases = {
             "no record": ((), "no ended agent session"),
@@ -194,13 +219,41 @@ class AgentResumeTests(unittest.TestCase):
                 self.assertIn(message, merged_output(proc))
                 self.assertEqual(sent(rec), [])
 
-    def test_explicit_session_uses_its_recorded_provider_or_claude(self) -> None:
+    def test_explicit_session_uses_its_recorded_provider_or_the_provider_flag(self) -> None:
         self.box.write_last_sessions(self.box.entry(sessionId="codex-thread-1", provider="codex"))
         with self.recorder() as rec:
             recorded = self.box.cli(rec, ["resume", "--print", "--session", "codex-thread-1"])
-            unknown = self.box.cli(rec, ["resume", "--print", "--session", SESSION_ID])
+            unknown = self.box.cli(rec, ["resume", "--print", "--session", "abc123"])
+            flagged = self.box.cli(rec, ["resume", "--print", "--session", "abc123", "--provider", "codex"])
+            unsupported = self.box.cli(rec, ["resume", "--print", "--session", "abc123", "--provider", "gemini"])
         self.assertEqual(recorded.stdout.strip(), "codex resume 'codex-thread-1'", merged_output(recorded))
-        self.assertEqual(unknown.stdout.strip(), f"claude --resume '{SESSION_ID}'", merged_output(unknown))
+        self.assertNotEqual(unknown.returncode, 0, merged_output(unknown))
+        self.assertIn("session abc123 isn't recorded; pass --provider", merged_output(unknown))
+        self.assertEqual(flagged.returncode, 0, merged_output(flagged))
+        self.assertEqual(flagged.stdout.strip(), "codex resume 'abc123'")
+        self.assertNotEqual(unsupported.returncode, 0, merged_output(unsupported))
+        self.assertIn("unsupported --provider", merged_output(unsupported))
+        self.assertEqual(sent(rec), [])
+
+    def test_a_directory_with_a_quote_or_backslash_is_never_cd_into(self) -> None:
+        # fish reads \' inside single quotes as an escaped quote, so POSIX quoting cannot
+        # contain these names; the line falls back to the bare command.
+        for name in ("x'; touch pwned; #", "x\\'; touch pwned; #", "back\\slash"):
+            with self.subTest(name):
+                hostile = self.box.root / name
+                hostile.mkdir()
+                self.box.write_last_sessions(self.box.entry(cwd=str(hostile)))
+                with self.recorder(pane_dir=self.box.elsewhere) as rec:
+                    proc = self.box.cli(rec, ["resume", "--print"])
+                self.assertEqual(proc.returncode, 0, merged_output(proc))
+                self.assertEqual(proc.stdout.strip(), f"claude --resume '{SESSION_ID}'")
+
+    def test_unknown_workspace_is_reported_as_a_workspace(self) -> None:
+        self.box.write_last_sessions(self.box.entry())
+        with self.recorder() as rec:
+            proc = self.box.cli(rec, ["resume", "--print", "--workspace", "workspace:999"])
+        self.assertNotEqual(proc.returncode, 0, merged_output(proc))
+        self.assertIn("workspace not found: workspace:999", merged_output(proc))
 
 
 if __name__ == "__main__":
