@@ -136,6 +136,55 @@ final class AgentSupervisionRegistryTests: XCTestCase {
         XCTAssertEqual(registry.record(id: active.id)?.state, .working)
     }
 
+    func testFullRegistryEvictsOldestUnfinishedRecordOfAClosedWorkspace() throws {
+        let liveWorkspaceId = UUID()
+        let registry = AgentSupervisionRegistry(capacity: 3) { $0 == liveWorkspaceId }
+        let live = try registry.start(
+            host: "codex",
+            placement: .runsWithParent,
+            workspaceId: liveWorkspaceId,
+            now: Date(timeIntervalSince1970: 0)
+        )
+        let dead = try (1...2).map { second in
+            try registry.start(
+                host: "codex",
+                placement: .runsWithParent,
+                workspaceId: UUID(),
+                now: Date(timeIntervalSince1970: TimeInterval(second))
+            )
+        }
+
+        let newest = try registry.start(host: "claude", placement: .runsWithParent, workspaceId: liveWorkspaceId)
+        _ = try registry.start(host: "claude", placement: .runsWithParent, workspaceId: liveWorkspaceId)
+
+        XCTAssertNil(registry.record(id: dead[0].id))
+        XCTAssertNil(registry.record(id: dead[1].id))
+        XCTAssertEqual(registry.record(id: live.id)?.state, .working)
+        XCTAssertNotNil(registry.record(id: newest.id))
+        XCTAssertThrowsError(try registry.start(host: "claude", placement: .runsWithParent, workspaceId: liveWorkspaceId)) { error in
+            XCTAssertEqual(error as? AgentSupervisionRegistryError, .capacityReached)
+        }
+    }
+
+    func testSweepPrunesRecordsOfAClosedWorkspace() throws {
+        let manager = TabManager()
+        guard let kept = manager.selectedWorkspace else {
+            return XCTFail("Expected selected workspace")
+        }
+        let closed = manager.addWorkspace(select: true)
+        let registry = AgentSupervisionRegistry.shared
+        let keptHelper = try registry.start(host: "codex", placement: .runsWithParent, workspaceId: kept.id)
+        let closedHelper = try registry.start(host: "codex", placement: .runsWithParent, workspaceId: closed.id)
+        defer { [keptHelper, closedHelper].forEach { registry.discard(id: $0.id) } }
+
+        manager.closeWorkspace(closed)
+        manager.sweepStaleAgentPIDsForTesting()
+
+        XCTAssertNil(registry.record(id: closedHelper.id))
+        XCTAssertNil(registry.runningHelperCounts[closed.id])
+        XCTAssertEqual(registry.record(id: keptHelper.id)?.state, .working)
+    }
+
     func testMovingWorkspaceWithoutSurfaceClearsOldSurface() throws {
         let originalWorkspace = UUID()
         let nextWorkspace = UUID()
