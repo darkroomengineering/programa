@@ -71,6 +71,58 @@ programa stop-port --pid 4242
 one with `--pid`. Only processes that `list-ports` shows can be stopped. The socket methods are
 `ports.list` and `ports.stop`; see [socket-api.md](socket-api.md).
 
+## Helpers popover and checkpoints
+
+### Helpers popover
+
+A helper is a subagent or subtask that runs inside its parent agent or program and shares its
+terminal. A workspace's sidebar row shows "1 helper running" or "N helpers running" while it has any, and "N helpers
+finished" once all of them have stopped. Three sources report helpers:
+
+- Claude Code subagents, through the `claude` wrapper's SubagentStart and SubagentStop hooks.
+- OSC 7501 child records written by a program (see [program-status.md](program-status.md)).
+- `agent.task.start` over the socket, or the `agent_task_start` MCP tool, with the default
+  `runs_with_parent` placement.
+
+A helper started with `agent.spawn` gets its own workspace instead, nested under its parent in
+the sidebar, and does not appear in the popover.
+
+Click the helpers line to open the popover. Running helpers come first. Finished helpers follow
+under a **Finished** header, newest first. Each row shows:
+
+- a state icon: Idle, Working, Needs input, Done, Stopped or Failed;
+- the helper's task, or its agent type when no task was given, with the agent type underneath
+  when it differs;
+- a progress bar while the helper runs, when its program reports progress;
+- how long it has run, counting up while it runs.
+
+Click a row to show a preview of its final report, up to 8 lines of markdown.
+**Copy** puts the whole report on the clipboard, and **Open Report** opens it in a markdown
+pane beside the focused pane. A helper that is still running, or that finished without a
+report, says so instead. **Clear** next to the Finished header removes the finished helpers from
+the list, along with finished OSC 7501 child records in the workspace's terminals. The popover
+refreshes once a second while it is open.
+
+### Turn checkpoints
+
+Each time an agent starts a turn in a pane, Programa saves the files of that pane's git
+repository as a checkpoint. A prompt answered in the middle of a turn does not start a new
+one. The checkpoint holds tracked and untracked files and respects `.gitignore`; it lives under
+`refs/programa/checkpoints/` and never touches the repository's index, `HEAD` or branches.
+Programa keeps the newest 20 checkpoints per pane. It skips a checkpoint when more than 500
+paths have changed or an untracked file is larger than 10 MB. Closing the workspace deletes
+its checkpoints. Saving a checkpoint also deletes any other workspace's checkpoints in the same
+repository that are more than 7 days old, which covers workspaces from before a restart.
+
+To undo an agent's last turn, open the review panel for that pane (the sidebar's Review link,
+`programa review open`, or the command palette) and click **Revert Files to Before Last Turn**
+in its header. After you confirm, the files go back to how they were when the turn started:
+changed files are restored and files created since then are deleted. The agent's conversation is
+not rewound. Programa saves your current files first, so the same button then reads **Undo File
+Revert** and puts them back. A revert never changes the index, `HEAD`, ignored files or
+submodules. If the current files cannot be saved first (over the same limits), nothing changes
+and the panel says why.
+
 ## Resume an agent session
 
 When an agent exits in a pane, its session-end hook keeps the session id in
@@ -82,6 +134,8 @@ programa resume                      # the pane you run it from
 programa resume --surface surface:3
 programa resume --print              # print the command, type nothing
 programa resume --session <id>       # a specific session id
+programa resume --session <id> --provider claude   # when the id is not recorded
+programa resume --force              # type even when the pane is not at a prompt
 ```
 
 It takes the newest session that ended in the pane, or else the newest one that ended in the
@@ -89,7 +143,10 @@ pane's current directory. If that session ran in another directory that still ex
 command starts with `cd <dir> &&`. Claude Code (`claude --resume <id>`), Codex
 (`codex resume <id>`) and OpenCode (`opencode --session <id>`) are supported. OpenCode starts a
 new session when it no longer knows the id. `resume` refuses while an agent is still
-running in the pane, so nothing is typed into a live agent.
+running in the pane, and only types into a pane whose `shell_state` is `promptIdle`; `--force`
+skips the prompt check but not the running-agent check.
+`--provider` (`claude`, `codex` or `opencode`) names the agent for a `--session` id that was not
+recorded.
 
 After a restart, each terminal pane remembers the last agent session it ran. Focus the pane and
 run **Resume Agent Session** from the command palette (`⌘ ⇧ P`). The action appears only for a

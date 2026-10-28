@@ -6,7 +6,7 @@ Programa provides a notification panel for AI agents like Claude Code, Codex, an
 
 Each workspace row in the sidebar shows one agent indicator: a glyph plus a short label, "Needs input", "Working", or "Idle". The indicator is the only place the working/idle/blocked state appears, so nothing can fall out of sync. Verbose per-tool status text appears in its own row when the Claude Code verbose status setting is on.
 
-While Claude Code subagents run inside a workspace's agent, the row also shows "1 helper running" or "N helpers running", even after the parent's turn has ended and its indicator reads "Idle". Click it to open Agent Overview. The count drops when each subagent stops, and goes away entirely when the parent session ends or its process dies.
+While Claude Code subagents run inside a workspace's agent, the row also shows "1 helper running" or "N helpers running", even after the parent's turn has ended and its indicator reads "Idle". Click it to open the helpers popover, which lists each helper with its run time and final report (see [Helpers popover and checkpoints](workspace-interface.md#helpers-popover-and-checkpoints)). The count drops when each subagent stops. When the parent session ends or its process dies, any helper still running is marked stopped. Once none are running, the line reads "N helpers finished" and stays until you press Clear in the popover.
 
 "Needs input" appears only when a hook actually reports the agent is blocked on you (a permission prompt or a question), and it clears only when the agent resumes: a hook reports it's working or idle again, or the session ends. Opening or focusing the workspace does not clear it. It marks the notification read, but the agent still shows as needing input until the agent itself says otherwise. This is deliberate: closing the tab shouldn't silently answer a question that's still open.
 
@@ -181,7 +181,7 @@ Programa sets these in child shells:
 | `PROGRAMA_SOCKET_PATH` | Path to control socket |
 | `PROGRAMA_WORKSPACE_ID` | UUID of the current workspace (also `PROGRAMA_TAB_ID`) |
 | `PROGRAMA_SURFACE_ID` | UUID of the current surface (also `PROGRAMA_PANEL_ID`) |
-| `PROGRAMA_DEFAULT_BROWSER` | Short key of the system default browser (e.g. `chrome`, `safari`, `arc`) -- see [socket-api.md](socket-api.md#browser-availability-appbrowsers-programa_default_browser) |
+| `PROGRAMA_DEFAULT_BROWSER` | Short key of the system default browser (e.g. `chrome`, `safari`, `arc`) |
 | `PROGRAMA_DEFAULT_BROWSER_BUNDLE_ID` | Bundle identifier of the system default browser |
 
 See [environment-variables.md](environment-variables.md) for the full list.
@@ -191,11 +191,20 @@ See [environment-variables.md](environment-variables.md) for the full list.
 ```
 programa notify --title <text> [--subtitle <text>] [--body <text>] [--workspace <id|ref>] [--surface <id|ref>]
 programa list-notifications
-programa clear-notifications
+programa clear-notifications [--workspace <id|ref>]
 programa set-status <key> <value>
 programa clear-status <key>
 programa ping
 ```
+
+`clear-notifications` takes `--workspace <id|ref>` to clear one workspace. Run without it from a
+Programa terminal, it clears that terminal's workspace; anywhere else it clears every
+notification.
+
+With the global `--json` flag, `programa --json list-notifications` prints `{"notifications": [...]}`, one object per
+notification with `id`, `workspace_id`, `surface_id` (or `null`), `is_read`, `title`,
+`subtitle` and `body`. `programa --json clear-notifications` prints `{"ok": true}`, plus
+`"workspace_id"` and `"workspace_ref"` when the clear was scoped to one workspace.
 
 ## Best Practices
 

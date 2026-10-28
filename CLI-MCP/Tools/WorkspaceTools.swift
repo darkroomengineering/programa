@@ -110,7 +110,7 @@ enum WorkspaceTools {
                     "agent_id": ProgramaToolSchema.string("Helper UUID to finish."),
                     "state": ProgramaToolSchema.stringEnum("Final state. Defaults to completed.", ["completed", "failed", "cancelled"]),
                     "task": ProgramaToolSchema.string("Optional final task description."),
-                    "summary": ProgramaToolSchema.string("Optional final report shown in Agent Overview."),
+                    "summary": ProgramaToolSchema.string("Optional final report, shown in the sidebar helpers popover for helpers that run with their parent."),
                 ],
                 required: ["agent_id"]
             )

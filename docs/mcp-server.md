@@ -124,7 +124,7 @@ Each tool is named after the socket method it calls, with `.` replaced by `_`:
 
 ### The `focus_` prefix
 
-Thirteen tools can pull macOS focus to Programa and raise its window. They are named with a
+Ten tools can pull macOS focus to Programa and raise its window. They are named with a
 `focus_` prefix instead of their method name, so the name alone tells you the tool is
 disruptive before you read its description:
 
@@ -150,6 +150,12 @@ choosing which tool to call.
 `worktree_create` is a deliberate exception. The underlying method accepts a `focus`
 argument, but the tool does not expose it, so creating a worktree never moves your focus.
 Use `focus_worktree_open` if you want to jump to it.
+
+Leaving focus alone does not make a tool harmless. `surface_send_text`, `surface_send_key`
+and `surface_send_paste` can type into any terminal pane in any workspace, not only the agent's
+own, and `surface_read_text` can read any of them. Allowing `surface_send_text` or
+`surface_send_key` without a prompt in your agent's permission settings is the same as allowing
+it to run any shell command.
 
 ## Resources
 
@@ -178,8 +184,9 @@ Deliberate omissions, not oversights:
 - **App chrome** (`auth.login`, `settings.open`, `feedback.*`, `markdown.open`) and
   app-wide test hooks (`app.*`).
 
-The authoritative method list is `Sources/V2CommandCatalog.swift`. The tool table that
-mirrors it is `CLI-MCP/ToolCatalog.swift`.
+The authoritative method list is `contracts/v2/methods.json`, from which
+`Sources/V2CommandCatalog.swift` is generated. The tool table that mirrors it is
+`CLI-MCP/ToolCatalog.swift`.
 
 ## Troubleshooting
 

@@ -866,7 +866,7 @@ extension ProgramaCLI {
         }
     }
 
-    /// Claude-only: tracks a helper (subagent) as a virtual task record in Agent Overview.
+    /// Claude-only: tracks a helper (subagent) as a virtual task record in the sidebar helpers popover.
     private func runClaudeSubagentStart(_ ctx: AgentHookContext) {
         let client = ctx.client
         let mappedSession = ctx.parsed.sessionId.flatMap { ctx.store.lookup(sessionId: $0) }
@@ -2916,7 +2916,7 @@ extension ProgramaCLI {
 
     ## Spawning a helper agent and coordinating with it
 
-    When the `agent_spawn` tool is available, use it for helper agents. It opens the helper as a nested workspace under the current workspace, keeps the same folder, and does not move the user's focus. Set `needs_isolation` (with `repository_path` and `branch`) when the helper will make conflicting Git changes and needs a separate worktree. Programa then shows the helper in Agent Overview automatically.
+    When the `agent_spawn` tool is available, use it for helper agents. It opens the helper as a nested workspace under the current workspace, keeps the same folder, and does not move the user's focus. Set `needs_isolation` (with `repository_path` and `branch`) when the helper will make conflicting Git changes and needs a separate worktree. Programa then shows the helper's workspace nested under the current one in the sidebar.
 
     Use a split for a long-running shell command, or as a fallback when `agent_spawn` is unavailable. Launch the command with `send`, then treat it like any other sibling pane:
 

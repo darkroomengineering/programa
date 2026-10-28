@@ -12,7 +12,7 @@ each other, and `tests_v2` is not "the second attempt at `tests`".
 
 ## What `_v2` means
 
-The v2 **socket API** — the JSON-RPC surface in `Sources/V2CommandCatalog.swift`,
+The v2 **socket API** is the JSON-RPC surface listed in `contracts/v2/methods.json`,
 whose methods look like `debug.command_palette.visible` or `snapshot.restore`.
 Those tests connect to a running Programa over its control socket and drive the
 app through that API. The name is about the protocol, not about a previous

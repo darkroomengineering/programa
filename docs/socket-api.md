@@ -188,6 +188,11 @@ Two that scripts commonly meet:
 - `invalid_state`: `workspace.close` on a window's last workspace. Close the window with
   `window.close` instead.
 
+A `workspace_id`, `tab_id`, `pane_id` or `surface_id` that you pass and that does not resolve
+returns `not_found`. The method never falls back to the focused workspace, pane or surface in that
+case; only an omitted target means "the focused one". `workspace.create` returns `invalid_params`
+when `cwd` is not an existing directory.
+
 ### Units
 
 `pane.resize` takes `amount` in layout points along the resize axis. The handler defaults `amount` to 1
@@ -219,9 +224,12 @@ Errors:
 Notes:
 - `id` is echoed back when present (string or number).
 - v2 methods accept **IDs**; v2 responses may include ephemeral `index` fields for ordering/debugging, but IDs are the stable handles.
+- Short refs such as `workspace:3` or `surface:2` are numbered per app session: a ref keeps pointing at the same object while Programa runs, and the numbering starts over after a restart. Restored workspaces and surfaces also get new UUIDs, so a script that keeps ids across a restart has to look them up again, for example with `system.tree`.
 - Auth (`auth.login`) is handled as a connection-level preamble before protocol dispatch, not a regular method — it worked the same way for v1 and v2 clients and was unaffected by the v1 removal.
 
 ## Method Parity Reference (former v1 name -> v2 method)
+
+The complete list of v2 methods, with their params and results, is `contracts/v2/methods.json`.
 
 System:
 - ping -> `system.ping` (liveness; the CLI's `ping` subcommand calls this and prints "PONG" on success)
@@ -325,10 +333,11 @@ Notifications:
 - notify_target -> `notification.create_for_target`
 - list_notifications -> `notification.list`
 - clear_notifications -> `notification.clear` (accepts an optional `workspace_id` to scope the clear to one workspace, matching v1's `--tab=X`; omitting it clears all notifications, matching v1's bare `clear_notifications`)
+  - With `--json`, the CLI's `list-notifications` prints `{"notifications": [...]}` and `clear-notifications` prints `{"ok": true}`, plus `"workspace_id"` and `"workspace_ref"` when the clear was scoped to one workspace. See [notifications.md](notifications.md#cli-commands).
 - set_app_focus -> `app.focus_override.set`
 - simulate_app_active -> `app.simulate_active`
 - reload_config -> `app.reload_config`
-- (no v1 equivalent) -> `app.browsers` (new in v2: lists known browsers with install/running status and the system default; see "Browser Availability" below)
+- (no v1 equivalent) -> `app.browsers` (new in v2: lists known browsers with install/running status and the system default; see [`app.browsers`](#appbrowsers) below)
 
 Debug / Test-only:
 - set_shortcut -> `debug.shortcut.set`
@@ -442,6 +451,8 @@ does for child-exit) at a fixed ~100ms interval on the connection's own thread; 
 (`Workspace.updatePanelAgentState`/`clearPanelAgentState`, always called from
 `TerminalController+Telemetry.swift`'s `v2SurfaceReportAgentState`/`v2SurfaceClearAgentState` via
 `DispatchQueue.main.async`).
+
+Each `system.tree` surface item also has `shell_state`: `promptIdle`, `commandRunning`, `unknown`, or `null` when the shell has no integration. `programa resume` only types into a pane whose `shell_state` is `promptIdle` unless `--force` is passed.
 
 ### `program_status` on `surface.list` and `system.tree`
 
@@ -974,12 +985,11 @@ A process counts as left running when it still listens about 5 seconds after its
 
 Params: `pid` (integer, required). Sends SIGTERM, then SIGKILL if the process is still alive 3 seconds later, and returns `{"pid": <pid>, "signaled": true}` as soon as SIGTERM is sent. Only pids that `ports.list` reports can be stopped: any other pid, a pid that exited, and a pid that now belongs to a different program return `not_found`; `pid <= 1` and Programa's own pid return `invalid_params`; a failed `kill` returns `internal_error`.
 
-## Browser Availability (`app.browsers`, `PROGRAMA_DEFAULT_BROWSER*`)
+## `app.browsers`
 
-Two ways a terminal or agent can check which browsers are available, so scripts don't have
-to guess: the `app.browsers` socket command, and two env vars set on every spawned shell.
-
-### `app.browsers`
+Reports which browsers are installed and which one is the default, so scripts don't have to
+guess. Every terminal also gets the default browser in `PROGRAMA_DEFAULT_BROWSER` and
+`PROGRAMA_DEFAULT_BROWSER_BUNDLE_ID`; see [environment-variables.md](environment-variables.md).
 
 `{}` -> `{"default": "chrome", "browsers": [{"key": "chrome", "name": "Google Chrome", "bundle_id": "com.google.Chrome", "path": "/Applications/Google Chrome.app", "installed": true, "running": false}, ...]}`.
 
@@ -990,17 +1000,8 @@ Sidekick, Helium, Atlas, Ladybird, Chromium, Ungoogled Chromium, Aside). `instal
 only when the app itself resolves (by bundle identifier via `NSWorkspace`, falling back to an
 `/Applications`-style path scan). `running` matches
 against `NSWorkspace.shared.runningApplications`. `default` is the short key of the system
-default browser (`nil` if Launch Services can't resolve one), same resolution as
-`PROGRAMA_DEFAULT_BROWSER` below.
-
-### `PROGRAMA_DEFAULT_BROWSER` / `PROGRAMA_DEFAULT_BROWSER_BUNDLE_ID`
-
-Set once per shell spawn in `Sources/TerminalSurface.swift`, alongside the other
-`PROGRAMA_*` startup env vars. `PROGRAMA_DEFAULT_BROWSER` is the short key (`chrome`, `safari`,
-`arc`, `aside`, ...; falls back to the raw bundle identifier for anything not in
-`BrowserAvailability.shortKeysByBundleIdentifier`) and `PROGRAMA_DEFAULT_BROWSER_BUNDLE_ID` is
-the raw bundle identifier, resolved via one `NSWorkspace.urlForApplication(toOpen:)` Launch
-Services call. Both are omitted if resolution fails.
+default browser (`nil` if Launch Services can't resolve one), resolved the same way as
+`PROGRAMA_DEFAULT_BROWSER`.
 
 ## Debug-only methods
 

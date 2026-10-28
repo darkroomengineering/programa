@@ -7,6 +7,12 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 ## [Unreleased]
 
 ### Added
+- The "N helpers running" line on a sidebar row opens a popover with that workspace's helpers: Claude Code subagents, OSC 7501 child records and helpers reported over the socket. Each row shows the helper's state, task, run time and final report; copy the report or open it in a markdown pane beside the terminal. Finished helpers stay listed until you press Clear. See `docs/workspace-interface.md`.
+- Programs that report OSC 7501 child records get one helper per child in that popover, with a progress bar, and a notification when a child needs your input on a pane you are not looking at.
+- `programa resume` restarts the last Claude Code, Codex or OpenCode session that ended in a pane by typing its resume command into the pane's shell. After a restart, Resume Agent Session in the command palette does the same.
+- Programa saves the files of a pane's git repository each time an agent starts a turn there. "Revert Files to Before Last Turn" in the review panel puts them back, and "Undo File Revert" reverses that. The agent's conversation is not rewound.
+- When an agent turn changes files, the sidebar row shows how many changed, with a Review link that opens the review panel. Nothing opens on its own.
+- Claude Code sessions in a Programa pane get the `programa-mcp` server and a short prompt pointing at the `programa` skill with no setup, and `programa codex install-integration` registers the server with Codex. See `docs/mcp-server.md`.
 - An app connected to the socket can show the macOS banner for agent questions itself, so you get one banner per question instead of two. The new `notification.claim_banners` method holds Programa's own banner only while that app stays connected; the notification list, sidebar and Dock badge keep updating, and the banner comes back by itself when the app quits.
 - `programa usage` shows how many tokens each Claude Code and Codex session used, grouped by workspace, read from the agents' own transcripts. It shows no cost, because the transcripts don't record one per session. See `docs/agent-usage.md`.
 - Start work from a GitHub issue: `programa worktree create --from-issue 42` reads the issue with `gh`, names the branch after it and opens the worktree as a workspace. Add `--agent claude` (or `codex`, `opencode`) to start that agent on the issue right away.
@@ -47,6 +53,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - `programa themes` lists and sets themes without the interactive picker, and the app no longer bundles a second copy of the ghostty command-line tool (about 6 MB smaller). Unknown theme names suggest close matches.
 
 ### Removed
+- The Agent Overview window, replaced by the sidebar helpers popover. See `docs/removed/agent-overview-window.md`.
 - The built-in browser, its panes, the `browser.*` socket methods and the matching CLI and MCP tools. Links open in your default browser. See `docs/removed/built-in-browser.md`.
 - The library-validation and unsigned-executable-memory entitlements.
 - The `programa codex install-hooks` and `uninstall-hooks` legacy aliases. Use `programa codex install-integration` and `uninstall-integration`.
