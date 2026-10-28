@@ -708,6 +708,7 @@ extension CommandPaletteView {
             guard let context = Self.focusedPanelContext(in: tabManager),
                   let terminalPanel = context.panel as? TerminalPanel,
                   context.workspace.panelAgentPresence[context.panelId] == nil,
+                  context.workspace.panelShellActivityStates[context.panelId] == .promptIdle,
                   let target = AgentResumeStore.shared.target(panelId: context.panelId),
                   let line = AgentResumeCommand.line(
                     for: target, paneDirectory: context.workspace.panelDirectories[context.panelId]

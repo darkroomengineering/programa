@@ -77,13 +77,14 @@ extension ProgramaCLI {
         [
             CommandDescriptor(
                 names: ["resume"],
-                helpLines: ["resume [--surface <id|ref>] [--workspace <id|ref>] [--session <id>] [--print]"],
+                helpLines: ["resume [--surface <id|ref>] [--workspace <id|ref>] [--session <id> [--provider <name>]] [--print] [--force]"],
                 detailedUsage: """
                 Usage: programa resume [flags]
 
                 Resume the last agent session that ended in a pane: types the provider's resume
                 command into the pane's shell and presses Enter. The pane must be back at its
-                shell prompt; resume refuses while an agent is still running there.
+                shell prompt: resume refuses while an agent or any other program runs there, and
+                when the pane has no shell integration to report its prompt (override with --force).
 
                 The session is the newest one that ended in the target surface, or else the
                 newest one that ended in the pane's current directory. When the session ran in
@@ -95,16 +96,20 @@ extension ProgramaCLI {
                 Flags:
                   --surface <id|ref>     Target pane (default: $PROGRAMA_SURFACE_ID)
                   --workspace <id|ref>   Target the focused pane of this workspace
-                  --session <id>         Resume this session id (provider defaults to Claude Code)
+                  --session <id>         Resume this session id
+                  --provider <name>      Agent for a --session id that was never recorded:
+                                         claude, codex or opencode
                   --print                Print the command instead of typing it
+                  --force                Type the command even when the pane is not known to be
+                                         at its shell prompt
 
                 Example:
                   programa resume
                   programa resume --print
                   programa resume --surface surface:3
-                  programa resume --session 2f6c1d0e-8f7b-4a51-9c3e-0d4b1a2c3e4f
+                  programa resume --session 2f6c1d0e-8f7b-4a51-9c3e-0d4b1a2c3e4f --provider claude
                 """,
-                grammar: CLIArgumentGrammar(valueOptions: ["surface", "workspace", "session"], booleanOptions: ["print"]),
+                grammar: CLIArgumentGrammar(valueOptions: ["surface", "workspace", "session", "provider"], booleanOptions: ["print", "force"]),
                 execute: { ctx in try self.runResume(ctx) }
             ),
         ]
@@ -142,7 +147,15 @@ extension ProgramaCLI {
         let (surfaceArg, rem0) = parseOption(ctx.commandArgs, name: "--surface")
         let (workspaceArg, rem1) = parseOption(rem0, name: "--workspace")
         let (sessionArg, rem2) = parseOption(rem1, name: "--session")
-        let printOnly = rem2.contains("--print")
+        let (providerArg, rem3) = parseOption(rem2, name: "--provider")
+        let printOnly = rem3.contains("--print")
+        let force = rem3.contains("--force")
+        if providerArg != nil, sessionArg == nil {
+            throw CLIError(message: "resume: --provider needs --session <id>")
+        }
+        if let providerArg, !AgentResumeCommand.supportedProviders.contains(providerArg) {
+            throw CLIError(message: "resume: unsupported --provider \(providerArg) (supported: \(AgentResumeCommand.supportedProviders.joined(separator: ", ")))")
+        }
         let env = ProcessInfo.processInfo.environment
         let surfaceHandle = try normalizeSurfaceHandle(
             surfaceArg ?? (workspaceArg == nil && ctx.windowId == nil ? env["PROGRAMA_SURFACE_ID"] : nil),
@@ -156,7 +169,8 @@ extension ProgramaCLI {
         let tree = try ctx.client.sendV2(method: V2MethodNames.systemTree, params: ["all_windows": true])
         guard let found = resumeTargetSurface(in: tree, surfaceHandle: surfaceHandle, workspaceHandle: workspaceHandle),
               let surfaceId = found.surface["id"] as? String else {
-            throw CLIError(message: "resume: surface not found: \(surfaceHandle ?? workspaceHandle ?? "")")
+            if let surfaceHandle { throw CLIError(message: "resume: surface not found: \(surfaceHandle)") }
+            throw CLIError(message: "resume: workspace not found: \(workspaceHandle ?? "")")
         }
         let (workspace, surface) = found
         let surfaceLabel = (surface["ref"] as? String) ?? surfaceId
@@ -166,13 +180,19 @@ extension ProgramaCLI {
         if !printOnly, let state = surface["agent_state"] as? String {
             throw CLIError(message: "resume: an agent is still running in \(surfaceLabel) (agent_state: \(state)); exit it before resuming")
         }
+        if !printOnly, !force, (surface["shell_state"] as? String) != "promptIdle" {
+            throw CLIError(message: "resume: the pane is running a program; return to the shell prompt or pass --force")
+        }
         let paneDirectory = surface["current_directory"] as? String
 
         let entries = AgentLastSessionStore().entries()
         let target: AgentResumeTarget
         if let sessionArg {
             let recorded = entries.first { $0.sessionId == sessionArg }
-            target = AgentResumeTarget(provider: recorded?.provider ?? "claude-code", sessionId: sessionArg, cwd: recorded?.cwd)
+            guard let provider = providerArg ?? recorded?.provider else {
+                throw CLIError(message: "resume: session \(sessionArg) isn't recorded; pass --provider")
+            }
+            target = AgentResumeTarget(provider: provider, sessionId: sessionArg, cwd: recorded?.cwd)
         } else {
             let paneKey = paneDirectory.map(AgentResumeCommand.standardizedPath)
             guard let entry = entries.first(where: { $0.surfaceId == surfaceId })

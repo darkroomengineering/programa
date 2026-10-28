@@ -30,6 +30,11 @@ enum AgentResumeCommand {
         templates[provider] != nil
     }
 
+    /// Whether `line(for:)` returns a command for the target, without touching the filesystem.
+    static func canResume(_ target: AgentResumeTarget) -> Bool {
+        isSupported(provider: target.provider) && isValidSessionId(target.sessionId)
+    }
+
     /// The command line, or nil when the provider is unsupported or the session id is not a
     /// plain token. The line is typed into a live shell, so anything that could break out of
     /// the quoting or reach the shell as a control key is rejected, never sanitized.
@@ -43,7 +48,7 @@ enum AgentResumeCommand {
     ) -> String? {
         guard let template = templates[target.provider], isValidSessionId(target.sessionId) else { return nil }
         let command = (template + [shellQuoted(target.sessionId)]).joined(separator: " ")
-        guard let cwd = target.cwd, !cwd.isEmpty, !containsControlCharacters(cwd),
+        guard let cwd = target.cwd, !cwd.isEmpty, !containsUnsafeCharacters(cwd),
               standardizedPath(cwd) != paneDirectory.map(standardizedPath),
               directoryExists(cwd) else {
             return command
@@ -63,8 +68,10 @@ enum AgentResumeCommand {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
-    private static func containsControlCharacters(_ value: String) -> Bool {
-        value.unicodeScalars.contains { $0.value < 0x20 || $0.value == 0x7F }
+    /// fish reads `\'` inside single quotes as an escaped quote, so a cwd with a quote or a
+    /// backslash cannot be quoted safely for every shell the pane may run.
+    private static func containsUnsafeCharacters(_ value: String) -> Bool {
+        value.unicodeScalars.contains { $0.value < 0x20 || $0.value == 0x7F || $0 == "'" || $0 == "\\" }
     }
 
     static func standardizedPath(_ path: String) -> String {
