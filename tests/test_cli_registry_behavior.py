@@ -614,7 +614,7 @@ def main() -> int:
         check(methods == ["window.focus", "system.ping"], f"window focus/ping order changed: {methods!r}")
 
     # Claude's native subagent hooks automatically create and finish one stable
-    # virtual helper record in Agent Overview.
+    # virtual helper record in the sidebar helpers popover.
     subagent_payload = json.dumps({
         "session_id": "session-agent-overview",
         "agent_id": "agent-reviewer",

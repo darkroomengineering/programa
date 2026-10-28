@@ -132,7 +132,7 @@ enum AgentTranscriptUsage {
     }
 }
 
-/// Reads what Claude Code records about one subagent run, for the Agent Overview row.
+/// Reads what Claude Code records about one subagent run, for its helpers popover row.
 enum ClaudeSubagentTranscript {
     /// `<session>.jsonl` keeps subagent `<id>` at `<session>/subagents/agent-<id>.jsonl`.
     static func transcriptPath(sessionTranscriptPath: String, agentId: String) -> String? {

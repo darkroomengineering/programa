@@ -42,8 +42,9 @@ still apply. Records are not saved with the session.
 
 The root record drives the terminal's own status. Child records show up as helpers.
 
-- Helpers: every child record appears in the workspace's helpers popover (the "N helpers
-  running" line on the sidebar row), with its `title` as the name, `app` under it, a progress bar
+- Helpers: every child record appears in the workspace's
+  [helpers popover](workspace-interface.md#helpers-popover) (the "N helpers running" line on
+  the sidebar row), with its `title` as the name, `app` under it, a progress bar
   when `progress` is set, and `msg` as the report preview. `done` and `error` children fold under
   Finished; Clear removes them from the list and from the terminal's records. Child records never
   reach the socket: `agent.task.list` and `workspace.list` count only helpers reported there.
@@ -72,13 +73,27 @@ The root record drives the terminal's own status. Child records show up as helpe
 OSC 7501 outranks hooks, and hooks outrank screen inference.
 
 1. A program report always applies.
-2. While the root record is `working` or `blocked`, hook and inferred reports are ignored, and so
-   is a hook clear.
+2. While the root record is `working` or `blocked`, hook and inferred reports are ignored.
 3. While the root record is `idle`, `done` or `error`, a hook report is accepted only if it says
    `working` or `blocked`. Then the hook owns the surface's `agent_state`, and the record stays
    visible in `program_status`.
+4. Screen inference does not run on a surface that a program or a hook owns.
+5. While the program owns the surface, a hook or inferred clear is ignored in every state.
 
 `surface.report_agent_state` rejects `source: "program"`.
+
+The diagram shows a report for a surface whose `agent_state` the program owns:
+
+```mermaid
+flowchart TD
+  R[Report arrives] --> S{Source}
+  S -->|OSC 7501 program| A[Always applies]
+  S -->|hook or screen inference| Q{Root record state}
+  Q -->|working or blocked| X[Ignored, hook clear too]
+  Q -->|idle, done, error| H{Hook says working or blocked?}
+  H -->|yes| O[Hook owns agent_state]
+  H -->|no| X
+```
 
 ## Hooks emit it too
 

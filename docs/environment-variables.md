@@ -22,7 +22,7 @@ them to find the app and the terminal they run in.
 | `PROGRAMA_SOCKET` | The same path, kept for older scripts. |
 | `PROGRAMA_BUNDLED_CLI_PATH` | Absolute path of the `programa` CLI inside the app bundle. Set only when that file is executable. |
 | `PROGRAMA_BUNDLE_ID` | Bundle identifier of the running app. |
-| `PROGRAMA_DEFAULT_BROWSER` | Short key of the system default browser (`chrome`, `safari`, `arc`, ...). Unset when it cannot be resolved. |
+| `PROGRAMA_DEFAULT_BROWSER` | Short key of the system default browser (`chrome`, `safari`, `arc`, `aside`, ...), the same key `app.browsers` returns as `default`. A browser without a short key gets its bundle identifier. Resolved through Launch Services each time a terminal starts, and unset when it cannot be resolved. See [socket-api.md](socket-api.md#appbrowsers) for `app.browsers`. |
 | `PROGRAMA_DEFAULT_BROWSER_BUNDLE_ID` | Bundle identifier of the system default browser. Unset when it cannot be resolved. |
 | `PROGRAMA_PORT`, `PROGRAMA_PORT_END`, `PROGRAMA_PORT_RANGE` | First port, last port and size of the port range reserved for this terminal. Every terminal gets a block of 10 ports starting at 9100. |
 | `PROGRAMA_SHELL_INTEGRATION` | `1` when shell integration is on (`sidebarShellIntegration`, on by default). |
@@ -60,6 +60,7 @@ Read by the app, the CLI and `programa-mcp`. Modes and discovery are described i
 | `PROGRAMA_CLI_TTY_NAME`, `PROGRAMA_TTY_NAME` | Terminal device name that the agent hooks report for the surface. They fall back to `TTY` and `SSH_TTY`. |
 | `PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC` | CLI | Seconds the CLI waits for a socket response (default 15). |
 | `PROGRAMA_CLAUDE_HOOK_STATE_PATH` | Overrides where the Claude hooks keep their session state file. The Codex and OpenCode hooks always use `~/.programa/codex-hook-sessions.json` and `~/.programa/opencode-hook-sessions.json`. |
+| `PROGRAMA_AGENT_LAST_SESSIONS_PATH` | Overrides where the agent hooks record the last session each agent ended, which `programa resume` reads. The default is `~/.programa/agent-last-sessions.json`. |
 | `PROGRAMA_CLAUDE_PID` | Process id of the Claude Code instance a hook belongs to. Set by the `claude` wrapper. |
 | `PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN` | `programa` binary the `claude` wrapper's hooks call. |
 | `_PROGRAMA_CLAUDE_FLAGS_CACHE_KEY`, `_PROGRAMA_CLAUDE_FLAGS_CACHE_VAL` | Which optional flags (`--session-id`, `--mcp-config`, `--append-system-prompt`) the resolved `claude` binary supports, cached per binary path and mtime by the `claude` wrapper. |
@@ -95,9 +96,12 @@ The standalone daemon in `core/` is described in `core/docs/programad.md`.
 | `PROGRAMAD_PASSWORD` | Requires `auth.login` with this password. `--password-file PATH` is the file-based alternative. |
 
 `PROGRAMAD_AUTH_TOKEN`, `PROGRAMA_SOCKET_PASSWORD` and `PROGRAMA_SOCKET_AUTH_TOKEN` are removed
-from the environment of every child process the daemon starts. The shell integration clears
-`PROGRAMAD_UNIX_PATH` and `PROGRAMA_REMOTE_DAEMON_ALLOW_LOCAL_BUILD` from the shell environment;
-no app, CLI or daemon code reads them.
+from the environment of every child process the daemon starts.
+
+`PROGRAMAD_UNIX_PATH`, `PROGRAMA_REMOTE_DAEMON_ALLOW_LOCAL_BUILD` and `PROGRAMA_REPO_ROOT` appear
+only in the list of variables the zsh, bash and fish integrations sync with a tmux server's
+global environment.
+Nothing in the app, CLI, daemon or scripts sets or reads them.
 
 ## Build, reload and CI scripts
 

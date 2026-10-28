@@ -53,10 +53,6 @@ for defaults and [Windows testing](windows-testing.md) for validation status.
 
 ## Notifications
 
-Agent Overview is available from the command palette as **Open Agent Overview**. Its
-shortcut is unbound by default; assign it in Settings → Keyboard Shortcuts. Use the
-All, Needs input, and Failed filters or search by workspace/agent name to find attention items.
-
 | Shortcut | Action |
 |----------|--------|
 | ⌘ I | Show notifications panel |
