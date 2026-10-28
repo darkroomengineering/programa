@@ -331,8 +331,12 @@ extension TerminalController {
                 setupError = .err(code: "not_found", message: "Workspace not found", data: nil)
                 return
             }
-            let surfaceId = self.v2UUID(params, "surface_id") ?? ws.focusedPanelId
-            guard let surfaceId else {
+            let target = self.v2TargetSurfaceId(params, fallback: ws.focusedPanelId)
+            if case .failed(let error) = target {
+                setupError = error
+                return
+            }
+            guard case .resolved(let surfaceId?) = target else {
                 setupError = .err(code: "not_found", message: "No focused surface", data: nil)
                 return
             }

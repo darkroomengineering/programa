@@ -666,7 +666,7 @@ struct ProgramaCLI {
                         _ = try ctx.client.sendV2(method: V2MethodNames.windowFocus, params: ["window_id": target])
                         print("OK")
                     } catch let error as CLIError where error.message.hasPrefix("not_found:") {
-                        throw CLIError(message: "ERROR: Window not found")
+                        throw CLIError(message: "not_found: Window not found")
                     }
                 }
             ),
@@ -698,7 +698,7 @@ struct ProgramaCLI {
                         _ = try ctx.client.sendV2(method: V2MethodNames.windowClose, params: ["window_id": target])
                         print("OK")
                     } catch let error as CLIError where error.message.hasPrefix("not_found:") {
-                        throw CLIError(message: "ERROR: Window not found")
+                        throw CLIError(message: "not_found: Window not found")
                     }
                 }
             ),
@@ -2588,7 +2588,7 @@ struct ProgramaCLI {
                             dict["surface_id"] = item["surface_id"] as? String ?? NSNull()
                             return dict
                         }
-                        print(self.jsonString(payload))
+                        print(self.jsonString(["notifications": payload]))
                     } else if notifications.isEmpty {
                         print("No notifications")
                     } else {
@@ -2617,17 +2617,18 @@ struct ProgramaCLI {
                 """,
                 grammar: CLIArgumentGrammar(valueOptions: ["workspace"]),
                 execute: { ctx in
+                    let response: [String: Any]
                     if let wsFlag = self.optionValue(ctx.commandArgs, name: "--workspace") {
                         let wsId = try self.resolveWorkspaceId(wsFlag, client: ctx.client)
-                        _ = try ctx.client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": wsId])
+                        response = try ctx.client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": wsId])
                     } else if ctx.windowId == nil,
                               let envWs = ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"],
                               let wsId = try? self.resolveWorkspaceId(envWs, client: ctx.client) {
-                        _ = try ctx.client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": wsId])
+                        response = try ctx.client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": wsId])
                     } else {
-                        _ = try ctx.client.sendV2(method: V2MethodNames.notificationClear)
+                        response = try ctx.client.sendV2(method: V2MethodNames.notificationClear)
                     }
-                    print("OK")
+                    self.printV2Payload(response.merging(["ok": true]) { $1 }, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat, fallbackText: "OK")
                 }
             ),
 
@@ -4729,7 +4730,7 @@ struct ProgramaCLI {
                     if let id = item["id"] as? String { return id }
                 }
             }
-            throw CLIError(message: "Workspace ref not found: \(raw)")
+            throw CLIError(message: "not_found: Workspace ref not found: \(raw)")
         }
 
         if let raw, Int(raw) != nil {
@@ -4751,7 +4752,7 @@ struct ProgramaCLI {
             for item in items where (item["ref"] as? String) == raw {
                 if let id = item["id"] as? String { return id }
             }
-            throw CLIError(message: "Surface ref not found: \(raw)")
+            throw CLIError(message: "not_found: Surface ref not found: \(raw)")
         }
 
         if let raw, Int(raw) != nil {
