@@ -28,7 +28,7 @@ enum ChromeDensity {
     static let sidebarRowSpacingDefault: CGFloat = 1
     static var sidebarRowSpacing: CGFloat { resolved("sidebarRowSpacing", default: sidebarRowSpacingDefault) }
 
-    static let sidebarTitleFontSizeDefault: CGFloat = 12
+    static let sidebarTitleFontSizeDefault: CGFloat = 13
     static var sidebarTitleFontSize: CGFloat { resolved("sidebarTitleFontSize", default: sidebarTitleFontSizeDefault) }
 
     // MARK: - Window card / insets / radii

@@ -267,6 +267,7 @@ struct VerticalTabsSidebar: View {
                                         of: tab.id,
                                         in: hierarchyEntries
                                     )
+                                    let latestNotification = notificationStore.latestNotification(forTabId: tab.id)
                                     TabItemView(
                                         tabManager: tabManager,
                                         notificationStore: notificationStore,
@@ -282,13 +283,14 @@ struct VerticalTabsSidebar: View {
                                         accessibilityWorkspaceCount: workspaceCount,
                                         unreadCount: notificationStore.unreadCount(forTabId: tab.id),
                                         latestNotificationText: {
-                                            guard let notification = notificationStore.latestNotification(forTabId: tab.id) else {
+                                            guard let notification = latestNotification else {
                                                 return nil
                                             }
                                             let text = notification.body.isEmpty ? notification.title : notification.body
                                             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                                             return trimmed.isEmpty ? nil : trimmed
                                         }(),
+                                        latestNotificationDate: latestNotification?.createdAt,
                                         rowSpacing: tabRowSpacing,
                                         setSelectionToTabs: { selection = .tabs },
                                         selectedTabIds: $selectedTabIds,

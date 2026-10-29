@@ -138,6 +138,11 @@ struct SidebarAgentIndicator: Equatable {
     let label: String
     let tint: Tint
     let isStale: Bool
+    /// Last report from the winning presence. Same-state heartbeats refresh it, so it reads as
+    /// "time since the agent last reported", not "time in this state".
+    let lastEventAt: Date
+    /// Logo of the winning presence's agent (`Assets.xcassets/AgentIcons`), nil when unknown.
+    let iconAsset: String?
 
     /// Aggregates every surface's presence worst-first (blocked > working > idle), exactly as
     /// `Workspace.aggregateAgentState` does, and returns `nil` when the workspace has no
@@ -145,16 +150,20 @@ struct SidebarAgentIndicator: Equatable {
     /// won the aggregation, not every surface.
     @MainActor
     static func make(for workspace: Workspace, now: Date = Date()) -> SidebarAgentIndicator? {
-        let winner = workspace.panelAgentPresence.values.reduce(nil as AgentPresence?) { partial, presence in
-            guard let partial else { return presence }
-            if presence.indicatorSeverity != partial.indicatorSeverity {
-                return presence.indicatorSeverity > partial.indicatorSeverity ? presence : partial
+        let winnerEntry = workspace.panelAgentPresence.reduce(nil as (key: UUID, value: AgentPresence)?) { partial, entry in
+            guard let partial else { return entry }
+            let presence = entry.value
+            if presence.indicatorSeverity != partial.value.indicatorSeverity {
+                return presence.indicatorSeverity > partial.value.indicatorSeverity ? entry : partial
             }
             // Equal severity: the freshest report wins, so dictionary order never decides the
             // stale flag.
-            return presence.lastEventAt > partial.lastEventAt ? presence : partial
+            return presence.lastEventAt > partial.value.lastEventAt ? entry : partial
         }
-        guard let winner else { return nil }
+        guard let winnerEntry else { return nil }
+        let winner = winnerEntry.value
+        let lastEventAt = winner.lastEventAt
+        let iconAsset = workspace.terminalTabAgentIconAsset(forPanelId: winnerEntry.key)
 
         let isStale = winner.isStale(now: now)
         switch winner.state {
@@ -165,7 +174,9 @@ struct SidebarAgentIndicator: Equatable {
                     ? String(localized: "sidebar.agentIndicator.needsInputStale", defaultValue: "Needs input (stale)")
                     : String(localized: "sidebar.agentIndicator.needsInput", defaultValue: "Needs input"),
                 tint: .blocked,
-                isStale: isStale
+                isStale: isStale,
+                lastEventAt: lastEventAt,
+                iconAsset: iconAsset
             )
         case .working:
             return SidebarAgentIndicator(
@@ -174,28 +185,36 @@ struct SidebarAgentIndicator: Equatable {
                     ? String(localized: "sidebar.agentIndicator.workingStale", defaultValue: "Working (stale)")
                     : String(localized: "sidebar.agentIndicator.working", defaultValue: "Working"),
                 tint: .working,
-                isStale: isStale
+                isStale: isStale,
+                lastEventAt: lastEventAt,
+                iconAsset: iconAsset
             )
         case .idle where winner.programState == .done:
             return SidebarAgentIndicator(
                 systemImage: "checkmark.circle.fill",
                 label: String(localized: "sidebar.agentIndicator.done", defaultValue: "Done"),
                 tint: .done,
-                isStale: false
+                isStale: false,
+                lastEventAt: lastEventAt,
+                iconAsset: iconAsset
             )
         case .idle where winner.programState == .error:
             return SidebarAgentIndicator(
                 systemImage: "xmark.octagon.fill",
                 label: String(localized: "sidebar.agentIndicator.error", defaultValue: "Error"),
                 tint: .error,
-                isStale: false
+                isStale: false,
+                lastEventAt: lastEventAt,
+                iconAsset: iconAsset
             )
         case .idle:
             return SidebarAgentIndicator(
                 systemImage: "moon.fill",
                 label: String(localized: "sidebar.agentIndicator.idle", defaultValue: "Idle"),
                 tint: .idle,
-                isStale: false
+                isStale: false,
+                lastEventAt: lastEventAt,
+                iconAsset: iconAsset
             )
         }
     }
