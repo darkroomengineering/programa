@@ -217,7 +217,7 @@ struct TabItemView: View {
             onSelect()
         }
         .onHover { hovering in
-            // Keep icon rendering stable while hovering; only accessory/background elements animate.
+            // Hover swaps the background and accessory instantly; keep icon rendering stable.
             isHovered = hovering
         }
         // Right-click / ctrl-click context menu, built natively with NSMenu at click time.
@@ -472,8 +472,6 @@ struct TabItemView: View {
             }
         }
         .frame(width: TabBarMetrics.closeButtonSize, height: TabBarMetrics.closeButtonSize)
-        .animation(.easeInOut(duration: TabBarMetrics.hoverDuration), value: isHovered)
-        .animation(.easeInOut(duration: TabBarMetrics.hoverDuration), value: isCloseHovered)
     }
 }
 

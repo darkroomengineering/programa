@@ -36,15 +36,6 @@ final class WindowPaneChromePortalRegistry: NSObject, BonsplitPaneChromePortalBr
     private var anchorObservers: [PaneID: (anchor: NSView, tokens: [NSObjectProtocol])] = [:]
     private weak var cachedTerminalHost: WindowTerminalHostView?
     private var isTornDown = false
-    /// Workspace-level split controls, pinned to the terminal area's top-right like
-    /// Maps' map controls; they act on the focused pane rather than per-pane copies.
-    private let splitCluster = GlassIconClusterView(symbols: [
-        (name: "square.split.2x1", tooltip: String(localized: "tabBar.splitRight", defaultValue: "Split Right")),
-        (name: "square.split.1x2", tooltip: String(localized: "tabBar.splitDown", defaultValue: "Split Down")),
-    ])
-    private let newTabCluster = GlassIconClusterView(symbols: [
-        (name: "terminal", tooltip: String(localized: "tabBar.newTerminalTab", defaultValue: "New Terminal Tab")),
-    ])
 
     private init(window: NSWindow) {
         self.window = window
@@ -52,10 +43,6 @@ final class WindowPaneChromePortalRegistry: NSObject, BonsplitPaneChromePortalBr
         hostView.translatesAutoresizingMaskIntoConstraints = false
         hostView.wantsLayer = true
         hostView.layer?.backgroundColor = NSColor.clear.cgColor
-        hostView.addSubview(splitCluster)
-        hostView.addSubview(newTabCluster)
-        splitCluster.isHidden = true
-        newTabCluster.isHidden = true
         applyTerminalAppearance()
         installObservers(window)
         ensureInstalled()
@@ -101,100 +88,22 @@ final class WindowPaneChromePortalRegistry: NSObject, BonsplitPaneChromePortalBr
         }()
         bar.update(descriptor)
         synchronize(descriptor.paneID)
-        updateClusters()
+        refreshSplitAvailability()
         scheduleSettledSynchronize()
     }
 
-    /// Workspace-level controls follow the focused visible pane, sharing its tab
-    /// strip: pills on the left, both capsules side by side on the right, all
-    /// centered on the strip's midline. The pane's tab bar reserves trailing
-    /// space so pills never run under the controls.
-    private func updateClusters() {
-        // Anchors can move to another window (workspace drag-out); their stale
-        // descriptors must not steer this window's controls.
-        let inWindow = descriptors.values.filter { $0.anchorView?.window === window }
-        let visible = inWindow.filter(\.isVisible)
-        // A focused pane with a hidden strip (single tab) hides the controls instead of
-        // lending them to another pane, where they would act on the wrong pane.
-        let focused = inWindow.first(where: \.isFocused)
-        guard let active = focused.map({ $0.isVisible ? $0 : nil }) ?? visible.first,
-              let anchor = active.anchorView else {
-            newTabCluster.isHidden = true
-            splitCluster.isHidden = true
-            for bar in bars.values { bar.trailingReservedWidth = 0 }
-            return
-        }
-        // Matches the tab strip's own height so the capsules never outgrow the tabs.
-        let barHeight: CGFloat = ChromeDensity.tabBarHeight
-        // Chrome spacing grid: 4pt base, edges on 8.
-        let gap: CGFloat = 8
-        let strip = hostView.convert(anchor.bounds, from: anchor)
-        let y = strip.midY - barHeight / 2
-
-        newTabCluster.setActions([active.onNewTab])
-        newTabCluster.isHidden = false
-        ensureAboveBars(newTabCluster)
-        let newTabX = strip.maxX - gap - newTabCluster.preferredWidth
-        newTabCluster.frame = NSRect(
-            x: newTabX,
-            y: y,
-            width: newTabCluster.preferredWidth,
-            height: barHeight
-        )
-        var reserved = gap + newTabCluster.preferredWidth
-
-        // Cap workspace splits at a 2x2-equivalent depth; deeper trees degenerate
-        // into slivers. Checked here (live pane count) rather than at publish time,
-        // where it goes stale when panes collapse without a republish. At the cap
-        // the capsule stays visible but disabled so the affordance doesn't vanish.
-        // Counts registered panes, not visible ones: zoomed-away panes still
-        // exist, and the Workspace delegate vetoes splits on the same predicate.
-        if active.showsSplitButtons {
-            let canSplit = inWindow.count < SplitPolicy.maxPanesPerWorkspace
-            splitCluster.setActions([active.onSplitRight, active.onSplitDown])
-            splitCluster.setEnabled(
-                canSplit,
-                disabledTooltip: String(
-                    localized: "tabBar.splitLimitReached",
-                    defaultValue: "Split limit reached"
-                )
-            )
-            splitCluster.isHidden = false
-            ensureAboveBars(splitCluster)
-            splitCluster.frame = NSRect(
-                x: newTabX - gap - splitCluster.preferredWidth,
-                y: y,
-                width: splitCluster.preferredWidth,
-                height: barHeight
-            )
-            reserved += gap + splitCluster.preferredWidth
-        } else {
-            splitCluster.isHidden = true
-        }
-
-        for (paneID, bar) in bars {
-            bar.trailingReservedWidth = paneID == active.paneID ? reserved : 0
-        }
-    }
-
-    /// Re-adding an already-parented subview removes and re-inserts it, which
-    /// dirties layout — and updateClusters runs on every coalesced geometry
-    /// pass during animation storms. Reorder only when a pane bar (added on
-    /// top by updatePaneChrome) actually sits above the cluster.
-    private func ensureAboveBars(_ cluster: NSView) {
-        guard cluster.superview === hostView else {
-            hostView.addSubview(cluster)
-            return
-        }
-        let subviews = hostView.subviews
-        guard let clusterIndex = subviews.firstIndex(of: cluster) else { return }
-        let topBarIndex = subviews.enumerated()
-            .filter { $0.element is NativePaneTabBarView }
-            .map(\.offset)
-            .max()
-        if let topBarIndex, clusterIndex < topBarIndex {
-            hostView.addSubview(cluster)
-        }
+    /// Cap workspace splits at a 2x2-equivalent depth; deeper trees degenerate
+    /// into slivers. Checked here (live pane count) rather than at publish time,
+    /// where it goes stale when panes collapse without a republish. At the cap
+    /// the split buttons stay visible but disabled so the affordance doesn't vanish.
+    /// Counts registered panes, not visible ones: zoomed-away panes still
+    /// exist, and the Workspace delegate vetoes splits on the same predicate.
+    /// Anchors can move to another window (workspace drag-out); their stale
+    /// descriptors must not count toward this window's panes.
+    private func refreshSplitAvailability() {
+        let paneCount = descriptors.values.filter { $0.anchorView?.window === window }.count
+        let canSplit = paneCount < SplitPolicy.maxPanesPerWorkspace
+        for bar in bars.values { bar.setCanSplit(canSplit) }
     }
 
     func removePaneChrome(for paneID: PaneID, anchorView: NSView) {
@@ -211,7 +120,7 @@ final class WindowPaneChromePortalRegistry: NSObject, BonsplitPaneChromePortalBr
         if let entry = anchorObservers.removeValue(forKey: paneID) {
             for token in entry.tokens { NotificationCenter.default.removeObserver(token) }
         }
-        updateClusters()
+        refreshSplitAvailability()
         // Split-tree churn can register two anchor instances for one pane; the
         // dying instance publishes last and its dismantle lands here, deleting the
         // survivor's registration. Ask live anchors to reassert on the next turn —
@@ -423,7 +332,7 @@ final class WindowPaneChromePortalRegistry: NSObject, BonsplitPaneChromePortalBr
         guard !isTornDown else { return }
         ensureInstalled()
         for paneID in descriptors.keys { synchronize(paneID) }
-        updateClusters()
+        refreshSplitAvailability()
     }
 
     private func synchronize(_ paneID: PaneID) {
@@ -477,8 +386,6 @@ final class WindowPaneChromePortalRegistry: NSObject, BonsplitPaneChromePortalBr
         cachedTerminalHost = nil
         bars.values.forEach { $0.removeFromSuperview() }
         bars.removeAll()
-        splitCluster.isHidden = true
-        newTabCluster.isHidden = true
         hostView.removeFromSuperview()
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
         observers.removeAll()
@@ -610,8 +517,7 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
     private let scrollView = TabStripScrollView(frame: .zero)
     private let edgeFadeMask = CAGradientLayer()
     // Unflipped on purpose: a flipped document view mirrors the glass pills'
-    // built-in shadow upward (layer geometry flip flips shadowOffset), while
-    // the control capsules in the unflipped host cast theirs downward. Layout
+    // built-in shadow upward (layer geometry flip flips shadowOffset). Layout
     // doesn't care — every child spans the full row height at y = 0.
     private let documentView = PaneChromeDragBackgroundView(frame: .zero)
     private var pillViews: [TabID: NativeGlassTabPillView] = [:]
@@ -641,12 +547,10 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
         return button
     }()
     private var newTabAction: (() -> Void)?
-
-    /// Space kept clear at the trailing edge for the workspace control capsules
-    /// that share this strip.
-    var trailingReservedWidth: CGFloat = 0 {
-        didSet { if oldValue != trailingReservedWidth { needsLayout = true } }
-    }
+    /// Quiet per-pane controls at the strip's trailing edge, outside the scroll view.
+    private let controls = PaneHeaderControlsView(frame: .zero)
+    /// A pane with one tab drops the pill and reads as a plain card header.
+    private var isHeaderMode: Bool { descriptor?.tabs.count == 1 }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -678,7 +582,10 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
         newTabButton.target = self
         newTabButton.action = #selector(newTabPressed)
         documentView.addSubview(newTabButton)
+        addSubview(controls)
     }
+
+    func setCanSplit(_ canSplit: Bool) { controls.setCanSplit(canSplit) }
 
     @objc private func newTabPressed() { newTabAction?() }
 
@@ -688,8 +595,20 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
 
     override func layout() {
         super.layout()
-        var scrollFrame = bounds.insetBy(dx: 8, dy: 8)
-        scrollFrame.size.width = max(0, scrollFrame.width - trailingReservedWidth)
+        // Chrome spacing grid: 4pt base, edges on 8.
+        let edge: CGFloat = 8
+        controls.availableWidth = max(0, bounds.width - 2 * edge)
+        let controlsWidth = controls.preferredWidth
+        let controlsHeight = PaneHeaderControlsView.buttonSize
+        controls.frame = NSRect(
+            x: bounds.maxX - edge - controlsWidth,
+            y: ((bounds.height - controlsHeight) / 2).rounded(),
+            width: controlsWidth,
+            height: controlsHeight
+        )
+        var scrollFrame = bounds.insetBy(dx: edge, dy: edge)
+        let reserved = controlsWidth > 0 ? controlsWidth + edge : 0
+        scrollFrame.size.width = max(0, scrollFrame.width - reserved)
         scrollView.frame = scrollFrame
         layoutPills()
         // Early zero-sized layout passes can leave the clip view scrolled to a
@@ -708,6 +627,7 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
         for id in staleIDs {
             pillViews.removeValue(forKey: id)?.removeFromSuperview()
         }
+        let headerMode = isHeaderMode
         for tab in descriptor.tabs {
             let pill = pillViews[tab.id] ?? {
                 let view = NativeGlassTabPillView(frame: .zero)
@@ -715,6 +635,7 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
                 documentView.addSubview(view)
                 return view
             }()
+            pill.setHeaderMode(headerMode)
             pill.update(
                 tab,
                 select: { [weak descriptor] in descriptor?.onSelect(tab.id) },
@@ -726,6 +647,8 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
             )
         }
         newTabAction = descriptor.onNewTab
+        newTabButton.isHidden = headerMode
+        controls.update(descriptor, showsNewTab: headerMode)
         let selectedTabID = descriptor.tabs.first(where: \.isSelected)?.id
         if selectedTabID != lastSelectedTabID {
             lastSelectedTabID = selectedTabID
@@ -751,7 +674,11 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
 
         // Pills keep a width that fits their title; a row wider than the strip
         // scrolls instead of squeezing every title down to a clipped glyph.
-        let widths = pills.map { min(220, max(minPillWidth, $0.preferredWidth)) }
+        // A header title instead truncates at the strip's edge.
+        let headerWidth = max(0, scrollView.contentSize.width - leadingInset)
+        let widths = isHeaderMode
+            ? pills.map { min(headerWidth, $0.preferredWidth) }
+            : pills.map { min(220, max(minPillWidth, $0.preferredWidth)) }
 
         var x = leadingInset
         for (pill, width) in zip(pills, widths) {
@@ -759,8 +686,10 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
             pill.layoutSubtreeIfNeeded()
             x += width + gap
         }
-        newTabButton.frame = NSRect(x: x, y: 0, width: plusWidth, height: height)
-        x += plusWidth + gap
+        if !newTabButton.isHidden {
+            newTabButton.frame = NSRect(x: x, y: 0, width: plusWidth, height: height)
+            x += plusWidth + gap
+        }
         documentView.frame = NSRect(x: 0, y: 0, width: max(x, scrollView.contentSize.width), height: height)
         constrainClipOrigin()
         revealPendingTab()
@@ -912,106 +841,215 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
     }
 }
 
-/// A Maps-style always-visible control capsule: one glass surface holding a row
-/// of icon buttons (Maps groups map-mode + navigation in one pill the same way).
+/// Quiet trailing controls for one pane's header: new tab (single-tab panes),
+/// split right, split down, zoom and close. Each acts on its own pane, so
+/// every pane carries a copy instead of one workspace-level cluster.
 @MainActor
 @available(macOS 26.0, *)
-private final class GlassIconClusterView: NSView {
-    private let glass = NSGlassEffectView(frame: .zero)
-    private let container = NSView(frame: .zero)
-    private var buttons: [NSButton] = []
-    private var actions: [() -> Void] = []
-    private var defaultTooltips: [String] = []
+private final class PaneHeaderControlsView: NSView {
+    static let buttonSize: CGFloat = 22
+    private static let spacing: CGFloat = 2
 
-    static let buttonWidth: CGFloat = 34
-
-    init(symbols: [(name: String, tooltip: String)]) {
-        super.init(frame: .zero)
-        #if compiler(>=6.2)
-        glass.style = .regular
-        glass.cornerRadius = WindowGlassEffect.controlCornerRadius
-        glass.contentView = container
-        #endif
-        addSubview(glass)
-        for (index, symbol) in symbols.enumerated() {
-            let button = NSButton(frame: .zero)
-            button.image = NSImage(systemSymbolName: symbol.name, accessibilityDescription: symbol.tooltip)
-            button.isBordered = false
-            button.contentTintColor = .secondaryLabelColor
-            button.toolTip = symbol.tooltip
-            button.target = self
-            button.action = #selector(buttonPressed(_:))
-            button.tag = index
-            button.setAccessibilityLabel(symbol.tooltip)
-            container.addSubview(button)
-            buttons.append(button)
-        }
-        actions = Array(repeating: {}, count: symbols.count)
-        defaultTooltips = symbols.map(\.tooltip)
-        // Full-presence like the selected pill; the shared tint keeps the
-        // strip's three capsule surfaces in one material family.
-        alphaValue = 1.0
-        applySurfaceTint()
+    private let newTabButton = PaneHeaderControlButton(
+        symbol: "plus",
+        label: String(localized: "tabBar.newTab", defaultValue: "New Tab")
+    )
+    private let splitRightButton = PaneHeaderControlButton(
+        symbol: "square.split.2x1",
+        label: String(localized: "tabBar.splitRight", defaultValue: "Split Right")
+    )
+    private let splitDownButton = PaneHeaderControlButton(
+        symbol: "square.split.1x2",
+        label: String(localized: "tabBar.splitDown", defaultValue: "Split Down")
+    )
+    private let zoomButton = PaneHeaderControlButton(
+        symbol: "arrow.up.left.and.arrow.down.right",
+        label: String(localized: "tabBar.zoomPane", defaultValue: "Zoom Pane")
+    )
+    private let closeButton = PaneHeaderControlButton(
+        symbol: "xmark",
+        label: String(localized: "tabBar.closeTab", defaultValue: "Close Tab")
+    )
+    private var buttons: [PaneHeaderControlButton] {
+        [newTabButton, splitRightButton, splitDownButton, zoomButton, closeButton]
     }
+    private var canSplit = true
 
-    /// Same surface tone as the selected pill (see NativeGlassTabPillView.applySurfaceState).
-    private func applySurfaceTint() {
-        #if compiler(>=6.2)
-        glass.tintColor = WindowGlassEffect.surfaceLiftTint(for: effectiveAppearance)
-        #endif
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        applySurfaceTint()
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        for button in buttons { addSubview(button) }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    var preferredWidth: CGFloat { CGFloat(buttons.count) * Self.buttonWidth }
-
-    func setActions(_ newActions: [() -> Void]) {
-        guard newActions.count == buttons.count else { return }
-        actions = newActions
+    /// The width the header can give the row. A pane may be narrower than all
+    /// five controls, so the least essential ones drop out until the row fits.
+    var availableWidth: CGFloat = .greatestFiniteMagnitude {
+        didSet { if oldValue != availableWidth { needsLayout = true } }
     }
 
-    /// Disabled buttons keep the capsule visible (the affordance shouldn't
-    /// vanish at a limit) but explain themselves through the swapped tooltip.
-    func setEnabled(_ enabled: Bool, disabledTooltip: String? = nil) {
-        for (index, button) in buttons.enumerated() {
-            button.isEnabled = enabled
-            button.contentTintColor = enabled ? .secondaryLabelColor : .tertiaryLabelColor
-            button.toolTip = enabled ? defaultTooltips[index] : (disabledTooltip ?? defaultTooltips[index])
+    var preferredWidth: CGFloat { Self.width(of: fittedButtons().count) }
+
+    private static func width(of count: Int) -> CGFloat {
+        count == 0 ? 0 : CGFloat(count) * buttonSize + CGFloat(count - 1) * spacing
+    }
+
+    private func fittedButtons() -> [PaneHeaderControlButton] {
+        var fitted = buttons.filter(\.isWanted)
+        for dropped in [splitDownButton, splitRightButton, newTabButton, zoomButton]
+        where Self.width(of: fitted.count) > availableWidth {
+            fitted.removeAll { $0 === dropped }
         }
+        return fitted
+    }
+
+    func update(_ descriptor: BonsplitPaneChromeDescriptor, showsNewTab: Bool) {
+        let selectedTab = descriptor.tabs.first(where: \.isSelected) ?? descriptor.tabs.first
+        newTabButton.isWanted = showsNewTab
+        newTabButton.handler = { [weak descriptor] in descriptor?.onNewTab() }
+
+        splitRightButton.isWanted = descriptor.showsSplitButtons
+        splitDownButton.isWanted = descriptor.showsSplitButtons
+        splitRightButton.handler = { [weak descriptor] in descriptor?.onSplitRight() }
+        splitDownButton.handler = { [weak descriptor] in descriptor?.onSplitDown() }
+        applySplitAvailability()
+
+        // Same path as the tab context menu's Zoom Pane / Exit Zoom item.
+        zoomButton.setSymbol(
+            descriptor.isZoomed ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
+            label: descriptor.isZoomed
+                ? String(localized: "tabBar.exitZoom", defaultValue: "Exit Zoom")
+                : String(localized: "tabBar.zoomPane", defaultValue: "Zoom Pane")
+        )
+        zoomButton.setAvailable(descriptor.canZoom && selectedTab != nil)
+        let zoomTabID = selectedTab?.id
+        zoomButton.handler = { [weak descriptor] in
+            guard let zoomTabID else { return }
+            descriptor?.onContextAction(zoomTabID, .toggleZoom)
+        }
+
+        // A pinned tab refuses close (the pill hides its xmark); dim instead of hiding.
+        closeButton.setAvailable(selectedTab.map { !$0.isPinned } ?? false)
+        let closeTabID = selectedTab?.id
+        closeButton.handler = { [weak descriptor] in
+            guard let closeTabID else { return }
+            descriptor?.onClose(closeTabID)
+        }
+        needsLayout = true
+    }
+
+    func setCanSplit(_ canSplit: Bool) {
+        guard canSplit != self.canSplit else { return }
+        self.canSplit = canSplit
+        applySplitAvailability()
+    }
+
+    private func applySplitAvailability() {
+        let limitTooltip = String(localized: "tabBar.splitLimitReached", defaultValue: "Split limit reached")
+        splitRightButton.setAvailable(canSplit, unavailableTooltip: limitTooltip)
+        splitDownButton.setAvailable(canSplit, unavailableTooltip: limitTooltip)
     }
 
     override func layout() {
         super.layout()
-        glass.frame = bounds
-        container.frame = glass.bounds
-        for (index, button) in buttons.enumerated() {
-            button.frame = NSRect(
-                x: CGFloat(index) * Self.buttonWidth,
-                y: 0,
-                width: Self.buttonWidth,
-                height: bounds.height
-            )
+        let fitted = fittedButtons()
+        var x: CGFloat = 0
+        for button in buttons { button.isHidden = !fitted.contains { $0 === button } }
+        for button in fitted {
+            button.frame = NSRect(x: x, y: 0, width: Self.buttonSize, height: Self.buttonSize)
+            x += Self.buttonSize + Self.spacing
         }
     }
+}
 
-    /// Same NSGlassEffectView caveat as the tab pills: its internals do not
-    /// hit-test through to the reparented contentView, so route directly.
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        let local = convert(point, from: superview)
-        guard bounds.contains(local) else { return nil }
-        for button in buttons where button.frame.contains(local) { return button }
-        return self
+/// A borderless glyph button whose hover fill appears and disappears with no
+/// fade. Unavailable actions dim in place rather than vanish.
+@MainActor
+@available(macOS 26.0, *)
+private final class PaneHeaderControlButton: NSButton {
+    var handler: (() -> Void)?
+    /// Whether the pane offers this action; the row may still drop it when narrow.
+    var isWanted = true
+    private var label: String
+    private var unavailableTooltip: String?
+    private var isHovered = false {
+        didSet { if oldValue != isHovered { applyHoverFill() } }
     }
 
-    @objc private func buttonPressed(_ sender: NSButton) {
-        guard actions.indices.contains(sender.tag) else { return }
-        actions[sender.tag]()
+    init(symbol: String, label: String) {
+        self.label = label
+        super.init(frame: .zero)
+        isBordered = false
+        imagePosition = .imageOnly
+        contentTintColor = .tertiaryLabelColor
+        wantsLayer = true
+        layer?.cornerRadius = WindowGlassEffect.controlCornerRadius
+        target = self
+        action = #selector(pressed)
+        addTrackingArea(NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+            owner: self
+        ))
+        setSymbol(symbol, label: label)
     }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func setSymbol(_ symbol: String, label: String) {
+        self.label = label
+        let configuration = NSImage.SymbolConfiguration(pointSize: 11, weight: .regular)
+        let base = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+        image = base?.withSymbolConfiguration(configuration) ?? base
+        setAccessibilityLabel(label)
+        toolTip = isEnabled ? label : (unavailableTooltip ?? label)
+    }
+
+    func setAvailable(_ available: Bool, unavailableTooltip: String? = nil) {
+        self.unavailableTooltip = unavailableTooltip
+        isEnabled = available
+        alphaValue = available ? 1 : 0.35
+        toolTip = available ? label : (unavailableTooltip ?? label)
+        if !available { isHovered = false }
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = isEnabled
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+    }
+
+    /// A button hidden or moved out from under the pointer gets no exit event.
+    override func viewDidHide() {
+        super.viewDidHide()
+        isHovered = false
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        isHovered = false
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyHoverFill()
+    }
+
+    private func applyHoverFill() {
+        // Backing-layer property changes can pick up an implicit fade; hover is instant.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer?.backgroundColor = isHovered
+            ? WindowGlassEffect.surfaceLiftTint(for: effectiveAppearance, hover: true).cgColor
+            : nil
+        CATransaction.commit()
+    }
+
+    @objc private func pressed() { handler?() }
 }
 
 @MainActor
@@ -1037,7 +1075,30 @@ private final class NativeGlassTabPillView: NSView, NSDraggingSource {
     override func layout() {
         super.layout()
         glass.frame = bounds
-        control.frame = glass.bounds
+        control.frame = bounds
+    }
+
+    private var isHeader = false
+
+    /// Header mode drops the glass surface: the control moves out of the glass
+    /// and draws as a plain icon + title, keeping its select, drag and menu behavior.
+    func setHeaderMode(_ header: Bool) {
+        guard header != isHeader else { return }
+        isHeader = header
+        #if compiler(>=6.2)
+        if header {
+            glass.contentView = nil
+            glass.isHidden = true
+            addSubview(control)
+        } else {
+            control.removeFromSuperview()
+            glass.contentView = control
+            glass.isHidden = false
+        }
+        #endif
+        control.isHeader = header
+        applySurfaceState()
+        needsLayout = true
     }
 
     /// NSGlassEffectView's internal hierarchy does not reliably hit-test through
@@ -1082,11 +1143,13 @@ private final class NativeGlassTabPillView: NSView, NSDraggingSource {
     /// Accent fills fight the native material; tint with the text primary.
     private func applySurfaceState() {
         #if compiler(>=6.2)
-        // One shared surface tone across the strip: selected pills and the
-        // control capsules share it; quiet pills stay untinted. labelColor@0.12
+        // One shared surface tone across the strip: selected pills share it;
+        // quiet pills stay untinted. labelColor@0.12
         // is a white lift in dark mode, but the same alpha in light mode is a
         // black wash that reads muddy/pressed — halve it there.
-        if let customTint {
+        if isHeader {
+            glass.tintColor = nil
+        } else if let customTint {
             // Same low-opacity wash as the SwiftUI tab bar (0.2), lifted a little
             // for hover/selected so those states stay distinguishable.
             let alpha: CGFloat = isSelected ? 0.4 : (isHovered ? 0.3 : 0.2)
@@ -1099,7 +1162,7 @@ private final class NativeGlassTabPillView: NSView, NSDraggingSource {
             glass.tintColor = nil
         }
         #endif
-        alphaValue = isSelected ? 1.0 : (isHovered ? 0.94 : 0.85)
+        alphaValue = isHeader || isSelected ? 1.0 : (isHovered ? 0.94 : 0.85)
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -1128,11 +1191,27 @@ private final class NativeTabPillControl: NSControl, NSMenuDelegate, NSDraggingS
     private var dragState: ((Bool) -> Void)?
     var onHoverChanged: ((Bool) -> Void)?
     private var mouseDownPoint: NSPoint?
+    /// Plain card-header styling for a pane's only tab: smaller icon and title,
+    /// no close button (the header's trailing controls own close).
+    var isHeader = false {
+        didSet {
+            guard oldValue != isHeader else { return }
+            applyStyle()
+            needsLayout = true
+        }
+    }
+
+    private static let headerIconSize: CGFloat = 12
+    private static let headerTitleX: CGFloat = 12 + headerIconSize + 6
 
     var preferredWidth: CGFloat {
+        if isHeader {
+            // Mirror of layout(): title origin plus a little trailing room.
+            return ceil(titleField.intrinsicContentSize.width) + Self.headerTitleX + 6
+        }
         // Mirror of layout(): icon leading 12 + icon 16 + gap 6 + trailing close
         // region 34, plus breathing room so the label never truncates.
-        ceil(titleField.intrinsicContentSize.width) + 78
+        return ceil(titleField.intrinsicContentSize.width) + 78
     }
 
     override init(frame frameRect: NSRect) {
@@ -1158,6 +1237,17 @@ private final class NativeTabPillControl: NSControl, NSMenuDelegate, NSDraggingS
 
     override func layout() {
         super.layout()
+        if isHeader {
+            let icon = Self.headerIconSize
+            iconView.frame = NSRect(x: 12, y: ((bounds.height - icon) / 2).rounded(), width: icon, height: icon)
+            titleField.frame = NSRect(
+                x: Self.headerTitleX,
+                y: ((bounds.height - 16) / 2).rounded(),
+                width: max(10, bounds.width - Self.headerTitleX - 6),
+                height: 16
+            )
+            return
+        }
         iconView.frame = NSRect(x: 12, y: (bounds.height - 16) / 2, width: 16, height: 16)
         closeButton.frame = NSRect(x: bounds.width - 28, y: (bounds.height - 20) / 2, width: 20, height: 20)
         titleField.frame = NSRect(x: 34, y: (bounds.height - 18) / 2, width: max(10, bounds.width - 68), height: 18)
@@ -1198,12 +1288,7 @@ private final class NativeTabPillControl: NSControl, NSMenuDelegate, NSDraggingS
         self.dragData = dragData
         self.dragState = dragState
         titleField.stringValue = tab.title
-        titleField.font = .systemFont(ofSize: 13, weight: tab.isSelected ? .semibold : .medium)
-        titleField.textColor = tab.isSelected ? .labelColor : .secondaryLabelColor
-        // Selection reads through the title weight and surface tone; a primary-
-        // tinted filled glyph (terminal.fill is a solid box) overpowers the pill.
-        iconView.contentTintColor = .secondaryLabelColor
-        closeButton.contentTintColor = .secondaryLabelColor
+        applyStyle()
         if let data = tab.iconImageData, let image = NSImage(data: data) {
             iconView.image = image
         } else if let asset = tab.iconAsset, let image = NSImage(named: asset) {
@@ -1222,12 +1307,27 @@ private final class NativeTabPillControl: NSControl, NSMenuDelegate, NSDraggingS
         } else {
             iconView.image = nil
         }
-        closeButton.isHidden = tab.isPinned
         toolTip = tab.title
         setAccessibilityLabel(tab.title)
         setAccessibilityValue(tab.accessibilityValue)
         setAccessibilitySelected(tab.isSelected)
         needsLayout = true
+    }
+
+    private func applyStyle() {
+        let isSelected = tab?.isSelected ?? false
+        if isHeader {
+            titleField.font = .systemFont(ofSize: 12, weight: .medium)
+            titleField.textColor = .labelColor
+        } else {
+            titleField.font = .systemFont(ofSize: 13, weight: isSelected ? .semibold : .medium)
+            titleField.textColor = isSelected ? .labelColor : .secondaryLabelColor
+        }
+        // Selection reads through the title weight and surface tone; a primary-
+        // tinted filled glyph (terminal.fill is a solid box) overpowers the pill.
+        iconView.contentTintColor = .secondaryLabelColor
+        closeButton.contentTintColor = .secondaryLabelColor
+        closeButton.isHidden = isHeader || tab?.isPinned == true
     }
 
     override func accessibilityPerformPress() -> Bool {

@@ -14757,6 +14757,40 @@
         }
       }
     },
+    "tabBar.zoomPane": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom Pane"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ペインをズーム"
+          }
+        }
+      }
+    },
+    "tabBar.exitZoom": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exit Zoom"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ズームを終了"
+          }
+        }
+      }
+    },
     "tabBar.newTab": {
       "extractionState": "manual",
       "localizations": {

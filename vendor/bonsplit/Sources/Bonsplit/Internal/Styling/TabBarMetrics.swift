@@ -48,10 +48,6 @@ enum TabBarMetrics {
     static let minimumPaneWidth: CGFloat = 100
     static let minimumPaneHeight: CGFloat = 100
 
-    // MARK: - Animations
-
-    static let hoverDuration: Double = 0.1
-
     #if DEBUG
     private static func resolved(_ name: String, default defaultValue: CGFloat) -> CGFloat {
         guard let value = UserDefaults.standard.object(forKey: "chromeDensity.\(name)") as? Double else {
