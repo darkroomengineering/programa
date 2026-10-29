@@ -713,6 +713,103 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertEqual(decoded.agentResume, panel.agentResume)
     }
 
+    func testPanelSnapshotWithoutAgentWasRunningDecodesAsNil() throws {
+        let legacy = """
+        {"id":"2B9E3C1A-4D5F-4E6A-8B7C-9D0E1F2A3B4C","type":"terminal",
+         "isPinned":false,"isManuallyUnread":false,"listeningPorts":[],
+         "agentResume":{"provider":"claude-code","sessionId":"abc-123"}}
+        """
+        let decoded = try JSONDecoder().decode(SessionPanelSnapshot.self, from: Data(legacy.utf8))
+        XCTAssertNil(decoded.agentWasRunning)
+        XCTAssertNotNil(decoded.agentResume)
+    }
+
+    func testPanelSnapshotRoundTripsAgentWasRunning() throws {
+        let panel = try makeAutoResumePanel(wasRunning: true)
+        let decoded = try JSONDecoder().decode(SessionPanelSnapshot.self, from: JSONEncoder().encode(panel))
+        XCTAssertEqual(decoded.agentWasRunning, true)
+    }
+
+    func testAutoResumeInputIsNilWhenSettingIsOff() throws {
+        let panel = try makeAutoResumePanel(wasRunning: true)
+        XCTAssertNil(Workspace.autoResumeInput(for: panel, paneDirectory: "/tmp/project", isEnabled: false))
+    }
+
+    func testAutoResumeInputIsNilForLegacySnapshotWithoutRunningFlag() throws {
+        let panel = try makeAutoResumePanel(wasRunning: nil)
+        XCTAssertNil(Workspace.autoResumeInput(for: panel, paneDirectory: "/tmp/project", isEnabled: true))
+    }
+
+    func testAutoResumeInputIsNilWhenAgentWasNotRunningAtQuit() throws {
+        let panel = try makeAutoResumePanel(wasRunning: false)
+        XCTAssertNil(Workspace.autoResumeInput(for: panel, paneDirectory: "/tmp/project", isEnabled: true))
+    }
+
+    func testAutoResumeInputIsNilForNonTerminalPanel() throws {
+        var panel = try makeAutoResumePanel(wasRunning: true)
+        panel.type = .markdown
+        XCTAssertNil(Workspace.autoResumeInput(for: panel, paneDirectory: "/tmp/project", isEnabled: true))
+    }
+
+    func testAutoResumeInputIsNilWithoutResumeTarget() throws {
+        var panel = try makeAutoResumePanel(wasRunning: true)
+        panel.agentResume = nil
+        XCTAssertNil(Workspace.autoResumeInput(for: panel, paneDirectory: "/tmp/project", isEnabled: true))
+    }
+
+    func testAutoResumeInputTypesResumeLineForRunningClaudeSession() throws {
+        let panel = try makeAutoResumePanel(wasRunning: true, sessionId: "5f0c2a9e-1b2d-4c3e-8f4a-6b7c8d9e0f1a")
+        XCTAssertEqual(
+            Workspace.autoResumeInput(for: panel, paneDirectory: "/tmp/project", isEnabled: true, directoryExists: { _ in true }),
+            "claude --resume '5f0c2a9e-1b2d-4c3e-8f4a-6b7c8d9e0f1a'\n"
+        )
+    }
+
+    func testAutoResumeInputChangesDirectoryWhenPaneIsElsewhere() throws {
+        let panel = try makeAutoResumePanel(wasRunning: true, cwd: "/tmp/project")
+        XCTAssertEqual(
+            Workspace.autoResumeInput(for: panel, paneDirectory: "/tmp/other", isEnabled: true, directoryExists: { _ in true }),
+            "cd '/tmp/project' && claude --resume 'abc-123'\n"
+        )
+    }
+
+    func testAutoResumeInputIsNilForUnsupportedProvider() throws {
+        let panel = try makeAutoResumePanel(wasRunning: true, provider: "unknown-agent")
+        XCTAssertNil(Workspace.autoResumeInput(for: panel, paneDirectory: "/tmp/project", isEnabled: true))
+    }
+
+    func testAutoResumeInputIsNilForInvalidSessionId() throws {
+        let panel = try makeAutoResumePanel(wasRunning: true, sessionId: "abc; rm -rf ~")
+        XCTAssertNil(Workspace.autoResumeInput(for: panel, paneDirectory: "/tmp/project", isEnabled: true))
+    }
+
+    func testAgentAutoResumeSettingDefaultsOnAndToggles() throws {
+        let suite = "auto-resume-settings-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertTrue(AgentAutoResumeSettings.isEnabled(defaults: defaults))
+        AgentAutoResumeSettings.setEnabled(false, defaults: defaults)
+        XCTAssertFalse(AgentAutoResumeSettings.isEnabled(defaults: defaults))
+        AgentAutoResumeSettings.setEnabled(true, defaults: defaults)
+        XCTAssertTrue(AgentAutoResumeSettings.isEnabled(defaults: defaults))
+    }
+
+    private func makeAutoResumePanel(
+        wasRunning: Bool?,
+        provider: String = "claude-code",
+        sessionId: String = "abc-123",
+        cwd: String? = nil
+    ) throws -> SessionPanelSnapshot {
+        let base = """
+        {"id":"2B9E3C1A-4D5F-4E6A-8B7C-9D0E1F2A3B4C","type":"terminal",
+         "isPinned":false,"isManuallyUnread":false,"listeningPorts":[]}
+        """
+        var panel = try JSONDecoder().decode(SessionPanelSnapshot.self, from: Data(base.utf8))
+        panel.agentResume = AgentResumeTarget(provider: provider, sessionId: sessionId, cwd: cwd)
+        panel.agentWasRunning = wasRunning
+        return panel
+    }
+
     func testLoadRejectsSchemaVersionMismatch() {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("programa-session-tests-\(UUID().uuidString)", isDirectory: true)

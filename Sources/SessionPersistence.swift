@@ -295,6 +295,10 @@ struct SessionPanelSnapshot: Codable, Sendable {
     var review: SessionReviewPanelSnapshot?
     /// Terminal panels only: the agent session the panel last ran. Absent in older snapshots.
     var agentResume: AgentResumeTarget?
+    /// Terminal panels only: whether an agent was live in the panel when the snapshot was taken.
+    /// Absent in older snapshots, which restore as not running. `agentResume` alone cannot say
+    /// this, because the store keeps a target after its agent exits.
+    var agentWasRunning: Bool?
 }
 
 enum SessionSplitOrientation: String, Codable, Sendable {

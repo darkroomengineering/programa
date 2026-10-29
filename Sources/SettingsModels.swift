@@ -90,6 +90,20 @@ enum QuitWarningSettings {
     }
 }
 
+enum AgentAutoResumeSettings {
+    static let autoResumeAgentsKey = "sessionAutoResumeAgents"
+    static let defaultAutoResumeAgents = true
+    private static let flag = UserDefaultsFlag(key: autoResumeAgentsKey, defaultValue: defaultAutoResumeAgents)
+
+    static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
+        flag.isEnabled(defaults: defaults)
+    }
+
+    static func setEnabled(_ isEnabled: Bool, defaults: UserDefaults = .standard) {
+        flag.setEnabled(isEnabled, defaults: defaults)
+    }
+}
+
 enum ScrollbackPersistenceSettings {
     static let persistScrollbackKey = "sessionPersistScrollback"
     static let defaultPersistScrollback = true

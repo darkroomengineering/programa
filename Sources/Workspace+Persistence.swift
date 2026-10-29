@@ -344,6 +344,20 @@ extension Workspace {
         )
     }
 
+    /// The text typed into a freshly spawned restored shell to resume the agent that was running
+    /// in it at quit, or nil when nothing should be resumed.
+    nonisolated static func autoResumeInput(
+        for snapshot: SessionPanelSnapshot,
+        paneDirectory: String?,
+        isEnabled: Bool,
+        directoryExists: (String) -> Bool = { path in
+            var isDirectory: ObjCBool = false
+            return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue
+        }
+    ) -> String? {
+        nil
+    }
+
     nonisolated static func resolvedSnapshotTerminalScrollback(
         capturedScrollback: String?,
         fallbackScrollback: String?,
