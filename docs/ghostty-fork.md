@@ -27,7 +27,7 @@ display link parking, and the macOS responsibility disclaim.
 Prebuilt framework for the pinned head:
 
 - Release: `xcframework-7e4b75eef68a95234e0da273f7d98bf5840141c6`
-- Asset SHA-256: `PENDING`
+- Asset SHA-256: `7875e578de7d3cc9ee1169c933d5d5e0fe6803bd8ef40234a2286dac9aaf49c2`
 
 ### 1) macOS display link restart on display changes
 
