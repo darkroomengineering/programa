@@ -65,6 +65,10 @@ public final class BonsplitPaneChromeDescriptor {
     public let isVisible: Bool
     public let leadingInset: CGFloat
     public let showsSplitButtons: Bool
+    /// This pane is the workspace's zoomed pane.
+    public let isZoomed: Bool
+    /// The workspace has more than one pane, so zoom can toggle.
+    public let canZoom: Bool
     public let onSelect: (TabID) -> Void
     public let onClose: (TabID) -> Void
     public let onContextAction: (TabID, TabContextAction) -> Void
@@ -85,6 +89,8 @@ public final class BonsplitPaneChromeDescriptor {
         isVisible: Bool,
         leadingInset: CGFloat,
         showsSplitButtons: Bool,
+        isZoomed: Bool = false,
+        canZoom: Bool = false,
         onSelect: @escaping (TabID) -> Void,
         onClose: @escaping (TabID) -> Void,
         onContextAction: @escaping (TabID, TabContextAction) -> Void,
@@ -104,6 +110,8 @@ public final class BonsplitPaneChromeDescriptor {
         self.isVisible = isVisible
         self.leadingInset = leadingInset
         self.showsSplitButtons = showsSplitButtons
+        self.isZoomed = isZoomed
+        self.canZoom = canZoom
         self.onSelect = onSelect
         self.onClose = onClose
         self.onContextAction = onContextAction

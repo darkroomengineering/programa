@@ -193,6 +193,8 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
     let isFocused: Bool
     let isVisible: Bool
     let leadingInset: CGFloat
+    let isZoomed: Bool
+    let canZoom: Bool
 
     final class Coordinator {
         weak var bridge: (any BonsplitPaneChromePortalBridge)?
@@ -319,6 +321,8 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
             isVisible: isVisible,
             leadingInset: leadingInset,
             showsSplitButtons: true,
+            isZoomed: isZoomed,
+            canZoom: canZoom,
             onSelect: { [weak pane, weak bonsplitController] tabID in
                 guard let pane, let bonsplitController,
                       pane.tabs.contains(where: { $0.id == tabID.id }) else { return }
@@ -548,7 +552,9 @@ struct PaneContainerView<Content: View, EmptyContent: View>: View {
                     selectedTabID: pane.selectedTabId,
                     isFocused: isFocused,
                     isVisible: bonsplitController.isInteractive && showsTabStrip,
-                    leadingInset: leadingInset
+                    leadingInset: leadingInset,
+                    isZoomed: controller.zoomedPaneId == pane.id,
+                    canZoom: controller.rootNode.allPaneIds.count > 1
                 )
                 .frame(height: showsTabStrip ? TabBarGlassStyling.barHeight : 0)
                 .allowsHitTesting(false)

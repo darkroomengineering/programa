@@ -180,9 +180,8 @@ final class WindowGlassEffectTests: XCTestCase {
             XCTAssertFalse(bridge.performNativeTabDropForTesting(in: paneID, requestedIndex: 3))
 
             let glassViews = bridge.nativeGlassViewsForTesting()
-            // Two tab pills own NSControls; the workspace-level new-tab and
-            // split clusters contribute two more glass surfaces whose content
-            // is a plain button container.
+            // Only the two tab pills draw glass; the pane's header controls are
+            // plain buttons.
             let pillGlassViews = glassViews.filter { $0.contentView is NSControl }
             XCTAssertEqual(pillGlassViews.count, 2)
             for tab in tabs {
@@ -195,7 +194,7 @@ final class WindowGlassEffectTests: XCTestCase {
                 XCTAssertTrue(control.accessibilityPerformPress())
                 XCTAssertEqual(accessibilitySelection, tab.id)
             }
-            XCTAssertEqual(glassViews.count, 4)
+            XCTAssertEqual(glassViews.count, 2)
             XCTAssertTrue(bridge.hostViewForTesting.superview === terminalHost.superview)
             let siblings = terminalHost.superview?.subviews ?? []
             XCTAssertGreaterThan(
@@ -276,10 +275,11 @@ final class WindowGlassEffectTests: XCTestCase {
         throw XCTSkip("Native Liquid Glass requires the macOS 26 SDK and runtime")
     }
 
-    /// A focused pane whose strip is hidden must hide the new-tab and split controls. Lending
-    /// them to another visible pane would make them create tabs and splits in a pane the user
-    /// is not working in.
-    func testFocusedPaneWithHiddenStripHidesControlsInsteadOfLendingThem() throws {
+    /// Every visible pane carries its own header controls, and each acts on its own pane.
+    /// A pane whose strip is hidden shows none, rather than lending them to another pane
+    /// where they would create tabs in a pane the user is not working in. A pane with one
+    /// tab reads as a plain header: its tab draws no glass pill.
+    func testEachVisiblePaneOwnsHeaderControlsThatActOnThatPane() throws {
         #if compiler(>=6.2)
         if #available(macOS 26.0, *) {
             _ = NSApplication.shared
@@ -303,6 +303,7 @@ final class WindowGlassEffectTests: XCTestCase {
             let focusedPane = PaneID()
             let otherPane = PaneID()
             var newTabPanes: [PaneID] = []
+            var splitPanes: [PaneID] = []
             func publish(_ paneID: PaneID, anchor: NSView, focused: Bool, visible: Bool) {
                 let tabs = [BonsplitPaneChromeTabDescriptor(
                     id: TabID(), title: "Tab", icon: "terminal", iconImageData: nil,
@@ -315,32 +316,46 @@ final class WindowGlassEffectTests: XCTestCase {
                     onSelect: { _ in }, onClose: { _ in }, onContextAction: { _, _ in },
                     dragPasteboardData: { _ in nil }, onDragStateChanged: { _, _ in },
                     validatedDropIndex: { _ in nil }, onDropTab: { _ in false },
-                    onNewTab: { newTabPanes.append(paneID) }, onSplitRight: {}, onSplitDown: {}
+                    onNewTab: { newTabPanes.append(paneID) },
+                    onSplitRight: { splitPanes.append(paneID) }, onSplitDown: {}
                 ))
                 root.layoutSubtreeIfNeeded()
             }
-            // The clusters' glass carries a plain button container; tab pills carry an NSControl.
-            func visibleControlGlass() -> [NSGlassEffectView] {
-                bridge.nativeGlassViewsForTesting().filter {
-                    !($0.contentView is NSControl) && !$0.isHiddenOrHasHiddenAncestor
+            func visibleButtons(labeled label: String) -> [NSButton] {
+                func descendants(_ view: NSView) -> [NSView] {
+                    view.subviews.flatMap { [$0] + descendants($0) }
+                }
+                return descendants(bridge.hostViewForTesting).compactMap { $0 as? NSButton }.filter {
+                    $0.accessibilityLabel() == label && !$0.isHiddenOrHasHiddenAncestor
                 }
             }
+            func button(labeled label: String, in anchor: NSView) throws -> NSButton {
+                try XCTUnwrap(visibleButtons(labeled: label).first {
+                    anchor.frame.contains(bridge.hostViewForTesting.convert($0.bounds, from: $0))
+                })
+            }
+            let newTab = String(localized: "tabBar.newTab", defaultValue: "New Tab")
+            let splitRight = String(localized: "tabBar.splitRight", defaultValue: "Split Right")
 
             publish(otherPane, anchor: otherAnchor, focused: false, visible: true)
             publish(focusedPane, anchor: focusedAnchor, focused: true, visible: false)
-            XCTAssertTrue(
-                visibleControlGlass().isEmpty,
-                "Controls must hide with the focused pane's strip, not move to the unfocused pane"
+            XCTAssertEqual(
+                visibleButtons(labeled: newTab).count, 1,
+                "A hidden strip hides its pane's controls instead of lending them"
             )
+            try button(labeled: newTab, in: otherAnchor).performClick(nil)
+            XCTAssertEqual(newTabPanes, [otherPane])
 
             publish(focusedPane, anchor: focusedAnchor, focused: true, visible: true)
-            let shown = visibleControlGlass()
-            XCTAssertEqual(shown.count, 2, "New-tab and split controls return with the focused strip")
-            for glass in shown {
-                let frame = bridge.hostViewForTesting.convert(glass.bounds, from: glass)
-                XCTAssertLessThanOrEqual(frame.maxX, focusedAnchor.frame.maxX + 0.5,
-                                         "Controls sit on the focused pane's strip")
-            }
+            XCTAssertEqual(visibleButtons(labeled: newTab).count, 2, "Each visible pane has its own controls")
+            try button(labeled: newTab, in: focusedAnchor).performClick(nil)
+            XCTAssertEqual(newTabPanes, [otherPane, focusedPane])
+            try button(labeled: splitRight, in: otherAnchor).performClick(nil)
+            XCTAssertEqual(splitPanes, [otherPane], "An unfocused pane's split acts on that pane")
+            XCTAssertTrue(
+                bridge.nativeGlassViewsForTesting().allSatisfy { $0.isHiddenOrHasHiddenAncestor },
+                "A pane's only tab renders as a plain header, not a glass pill"
+            )
             return
         }
         #endif
