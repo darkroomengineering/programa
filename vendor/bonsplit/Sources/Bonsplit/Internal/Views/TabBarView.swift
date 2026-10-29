@@ -394,6 +394,14 @@ struct TabBarView: View {
         // which disables hit testing on all content views.
         let controller = splitViewController
         let dragGen = controller.dragGeneration
+        let bonsplitController = self.controller
+        let draggedTabId = TabID(id: tab.id)
+        // Escape cancels the drag but the mouse-up still follows; it must not tear the tab off.
+        var escapePressed = false
+        var escapeMonitorRef: Any? = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == 53 { escapePressed = true }
+            return event
+        }
         var monitorRef: Any?
         monitorRef = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { event in
             // One-shot: remove ourselves, then clean up stale drag state.
@@ -401,17 +409,25 @@ struct TabBarView: View {
                 NSEvent.removeMonitor(m)
                 monitorRef = nil
             }
+            if let m = escapeMonitorRef {
+                NSEvent.removeMonitor(m)
+                escapeMonitorRef = nil
+            }
+            let releasePoint = NSEvent.mouseLocation
             // Use async to avoid mutating @Observable state during event dispatch.
             DispatchQueue.main.async {
                 guard controller.dragGeneration == dragGen else { return }
                 if controller.draggingTab != nil || controller.activeDragTab != nil {
 #if DEBUG
-                    dlog("tab.dragCancel (stale draggingTab cleared)")
+                    dlog("tab.dragCancel (stale draggingTab cleared) escape=\(escapePressed ? 1 : 0)")
 #endif
                     controller.draggingTab = nil
                     controller.dragSourcePaneId = nil
                     controller.activeDragTab = nil
                     controller.activeDragSourcePaneId = nil
+                    if !escapePressed {
+                        bonsplitController.onTabDroppedOutside?(draggedTabId, releasePoint)
+                    }
                 }
             }
             return event

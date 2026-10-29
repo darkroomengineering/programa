@@ -387,6 +387,23 @@ extension TerminalController {
         return resp == "OK" ? .ok([:]) : .err(code: "internal_error", message: resp, data: nil)
     }
 
+    nonisolated func v2DebugTabTearOff(params: [String: Any]) -> V2CallResult {
+        guard let surfaceId = v2UUID(params, "surface_id") else { return v2InvalidParam("surface_id") }
+        guard let x = v2Double(params, "x") else { return v2InvalidParam("x") }
+        guard let y = v2Double(params, "y") else { return v2InvalidParam("y") }
+        // Main thread: creates a window and moves a live surface between AppKit hierarchies.
+        return v2MainSync {
+            guard let windowId = TabTearOff.tearOff(panelId: surfaceId, at: NSPoint(x: x, y: y), focus: false) else {
+                return .err(code: "not_found", message: "Surface not torn off", data: ["surface_id": surfaceId.uuidString])
+            }
+            return .ok([
+                "window_id": windowId.uuidString,
+                "window_ref": v2Ref(kind: .window, uuid: windowId),
+                "surface_id": surfaceId.uuidString
+            ])
+        }
+    }
+
     nonisolated func v2DebugFlashCount(params: [String: Any]) -> V2CallResult {
         guard let surfaceId = v2String(params, "surface_id") else {
             return .err(code: "invalid_params", message: "Missing surface_id", data: nil)

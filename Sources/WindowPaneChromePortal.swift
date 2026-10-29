@@ -1359,6 +1359,9 @@ private final class NativeTabPillControl: NSControl, NSMenuDelegate, NSDraggingS
 
     func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
         dragState?(false)
+        if operation == [], let tabId = tab?.id.uuid {
+            TabTearOff.handleDragEnded(bonsplitTabId: tabId, at: screenPoint)
+        }
     }
 }
 

@@ -2048,6 +2048,8 @@ class TerminalController {
             return v2Result(id: id, self.v2DebugCommandPaletteRenameInputSelection(params: params))
         case "debug.sidebar.visible":
             return v2Result(id: id, self.v2DebugSidebarVisible(params: params))
+        case "debug.tab.tear_off":
+            return v2Result(id: id, self.v2DebugTabTearOff(params: params))
         case "debug.terminal.is_focused":
             return v2Result(id: id, self.v2DebugIsTerminalFocused(params: params))
         case "debug.terminal.read_text":

@@ -44,6 +44,10 @@ public final class BonsplitController {
     /// Return `true` when the drop has been handled by the host application.
     @ObservationIgnored public var onExternalTabDrop: ((ExternalTabDropRequest) -> Bool)?
 
+    /// Called when a tab drag from the SwiftUI tab bar ends with no drop target
+    /// accepting it, with the release point in screen coordinates.
+    @ObservationIgnored public var onTabDroppedOutside: ((_ tabId: TabID, _ screenPoint: NSPoint) -> Void)?
+
     /// Called when the user explicitly requests to close a tab from the tab strip UI.
     /// Internal host-driven closes should not use this hook.
     @ObservationIgnored public var onTabCloseRequest: ((_ tabId: TabID, _ paneId: PaneID) -> Void)?
