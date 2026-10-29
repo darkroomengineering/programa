@@ -278,6 +278,51 @@ final class SessionPersistenceTests: XCTestCase {
         )
     }
 
+    func testRotateAndLoadWithPreReadDataMatchReadingFromDisk() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("programa-session-history-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        let diskURL = tempDir.appendingPathComponent("disk/session.json", isDirectory: false)
+        let dataURL = tempDir.appendingPathComponent("data/session.json", isDirectory: false)
+        let modifiedAt = Date(timeIntervalSince1970: 1_700_000_000)
+
+        var snapshot = makeSnapshot(version: SessionSnapshotSchema.currentVersion)
+        snapshot.windows[0].tabManager.workspaces[0].customTitle = "Title A"
+        for url in [diskURL, dataURL] {
+            XCTAssertTrue(SessionPersistenceStore.save(snapshot, fileURL: url))
+            try FileManager.default.setAttributes([.modificationDate: modifiedAt], ofItemAtPath: url.path)
+        }
+        let liveData = try XCTUnwrap(SessionPersistenceStore.boundedSnapshotData(at: dataURL))
+
+        XCTAssertTrue(SessionPersistenceStore.rotateIntoHistory(fileURL: diskURL))
+        XCTAssertTrue(SessionPersistenceStore.rotateIntoHistory(fileURL: dataURL, data: liveData))
+        let diskArchive = try XCTUnwrap(SessionPersistenceStore.historyFileURLs(fileURL: diskURL).first)
+        let dataArchive = try XCTUnwrap(SessionPersistenceStore.historyFileURLs(fileURL: dataURL).first)
+        XCTAssertEqual(diskArchive.lastPathComponent, dataArchive.lastPathComponent)
+        XCTAssertEqual(try Data(contentsOf: diskArchive), try Data(contentsOf: dataArchive))
+        XCTAssertFalse(
+            SessionPersistenceStore.rotateIntoHistory(fileURL: dataURL, data: liveData),
+            "Pre-read bytes identical to the newest archive should skip rotation like a disk read does"
+        )
+
+        let fromDisk = try XCTUnwrap(SessionPersistenceStore.loadWithHistoryFallback(fileURL: diskURL))
+        let fromData = try XCTUnwrap(SessionPersistenceStore.loadWithHistoryFallback(fileURL: dataURL, data: liveData))
+        XCTAssertEqual(fromDisk.version, fromData.version)
+        XCTAssertEqual(fromDisk.windows.count, fromData.windows.count)
+        XCTAssertEqual(fromData.windows.first?.tabManager.workspaces.first?.customTitle, "Title A")
+
+        // Same byte count, different content: the size shortcut must still archive it.
+        snapshot.windows[0].tabManager.workspaces[0].customTitle = "Title B"
+        XCTAssertTrue(SessionPersistenceStore.save(snapshot, fileURL: dataURL))
+        try FileManager.default.setAttributes(
+            [.modificationDate: modifiedAt.addingTimeInterval(60)], ofItemAtPath: dataURL.path
+        )
+        let changedData = try XCTUnwrap(SessionPersistenceStore.boundedSnapshotData(at: dataURL))
+        XCTAssertEqual(changedData.count, liveData.count)
+        XCTAssertTrue(SessionPersistenceStore.rotateIntoHistory(fileURL: dataURL, data: changedData))
+        XCTAssertEqual(SessionPersistenceStore.historyFileURLs(fileURL: dataURL).count, 2)
+    }
+
     func testRotateIntoHistoryPrunesToTenNewestEntries() throws {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("programa-session-history-tests-\(UUID().uuidString)", isDirectory: true)

@@ -558,10 +558,15 @@ enum SessionPersistenceStore {
     /// or an exhausted one -- is reported to the release diagnostics log so a version-bump-after-
     /// update drop is distinguishable from real data loss (a silent primary-file-missing case,
     /// e.g. first launch, is neither -- no diagnostics line, matching `load(fileURL:)`).
-    static func loadWithHistoryFallback(fileURL: URL? = nil, historyLookupLimit: Int = 5) -> AppSessionSnapshot? {
+    /// `data` is the primary file's bytes when the caller already read them; nil reads the file.
+    static func loadWithHistoryFallback(
+        fileURL: URL? = nil,
+        historyLookupLimit: Int = 5,
+        data: Data? = nil
+    ) -> AppSessionSnapshot? {
         guard let fileURL = fileURL ?? defaultSnapshotFileURL() else { return nil }
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
-        guard let data = boundedSnapshotData(at: fileURL) else {
+        guard let data = data ?? boundedSnapshotData(at: fileURL) else {
             return fallbackAfterPrimarySnapshotFailure(
                 reason: "read_bounds",
                 fileURL: fileURL,
@@ -756,9 +761,10 @@ enum SessionPersistenceStore {
     /// Archives the current snapshot file into `session-history/` before anything else can
     /// overwrite it, so a launch that clobbers `session-<bundleId>.json` (a cold boot with no
     /// clean shutdown, or an explicit-open-intent launch that skips restore entirely) never
-    /// destroys the previous layout for good. Copies rather than moves: the normal same-launch
-    /// restore path still reads the live file afterward, unchanged. Best-effort throughout --
-    /// every failure mode here must leave launch unaffected.
+    /// destroys the previous layout for good. Copies rather than moves: the live file stays in
+    /// place for the same-launch restore, and startup reads it once and passes those bytes as
+    /// `data` to both this and `loadWithHistoryFallback` (nil reads the file). Best-effort
+    /// throughout -- every failure mode here must leave launch unaffected.
     @discardableResult
     static func rotateIntoHistory(
         fileURL: URL? = nil,
@@ -766,11 +772,12 @@ enum SessionPersistenceStore {
         maxHistoryEntries: Int = SessionPersistencePolicy.maxSnapshotHistoryEntries,
         historyScanObserver: ((HistoryScanResult) -> Void)? = nil,
         includeScrollback: Bool = true,
-        bundleIdentifier: String? = Bundle.main.bundleIdentifier
+        bundleIdentifier: String? = Bundle.main.bundleIdentifier,
+        data: Data? = nil
     ) -> Bool {
         guard let fileURL = fileURL ?? defaultSnapshotFileURL(),
               let historyDirectory = historyDirectoryURL(fileURL: fileURL),
-              var data = boundedSnapshotData(at: fileURL) else {
+              var data = data ?? boundedSnapshotData(at: fileURL) else {
             return false
         }
         if !includeScrollback {
@@ -789,8 +796,7 @@ enum SessionPersistenceStore {
         let duplicateScan = historyEntries(in: historyDirectory, scanLimit: historyDirectoryScanLimit)
         historyScanObserver?(duplicateScan)
         if let newestEntry = duplicateScan.entries.first(where: { isHistoryArchive($0, suffix: archiveSuffix) }),
-           let newestData = boundedSnapshotData(at: newestEntry),
-           newestData == data {
+           isSameContent(at: newestEntry, as: data) {
             return false
         }
 
@@ -865,6 +871,16 @@ enum SessionPersistenceStore {
         // sorts newest-first lexicographically without needing to parse it back into a Date.
         candidates.sort { $0.lastPathComponent > $1.lastPathComponent }
         return HistoryScanResult(entries: candidates, inspectedEntryCount: inspectedEntryCount)
+    }
+
+    /// Compares sizes first so a changed snapshot never loads the multi-MB archive just to
+    /// find that it differs.
+    private static func isSameContent(at url: URL, as data: Data) -> Bool {
+        if let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber,
+           size.intValue != data.count {
+            return false
+        }
+        return boundedSnapshotData(at: url) == data
     }
 
     @discardableResult

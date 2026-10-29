@@ -461,7 +461,7 @@ private struct FakePortScanning: ProgramaCore.PortScanning {
 }
 
 private struct FakeSessionSnapshotting: ProgramaCore.SessionSnapshotting {
-    func loadWithHistoryFallback() -> AppSessionSnapshot? { nil }
+    func loadWithHistoryFallback(data: Data?) -> AppSessionSnapshot? { nil }
     func save(_ snapshot: AppSessionSnapshot) -> Bool { true }
 }
 

@@ -49,7 +49,7 @@ enum ProgramaCore {
     /// look like a core RPC boundary and would only be renamed by wrapping
     /// them here.
     protocol SessionSnapshotting {
-        func loadWithHistoryFallback() -> AppSessionSnapshot?
+        func loadWithHistoryFallback(data: Data?) -> AppSessionSnapshot?
         @discardableResult func save(_ snapshot: AppSessionSnapshot) -> Bool
     }
 
@@ -127,8 +127,8 @@ struct InProcessPortScanner: ProgramaCore.PortScanning {
 }
 
 struct InProcessSessionSnapshotting: ProgramaCore.SessionSnapshotting {
-    func loadWithHistoryFallback() -> AppSessionSnapshot? {
-        SessionPersistenceStore.loadWithHistoryFallback()
+    func loadWithHistoryFallback(data: Data?) -> AppSessionSnapshot? {
+        SessionPersistenceStore.loadWithHistoryFallback(data: data)
     }
 
     @discardableResult
