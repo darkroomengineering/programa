@@ -99,6 +99,11 @@
           "default": true,
           "description": "Show a confirmation before quitting Programa."
         },
+        "autoResumeAgents": {
+          "type": "boolean",
+          "default": true,
+          "description": "Resume Claude Code, Codex and OpenCode sessions that were running at quit when their pane is restored."
+        },
         "commandPaletteSearchesAllSurfaces": {
           "type": "boolean",
           "default": false,

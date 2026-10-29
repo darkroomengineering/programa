@@ -327,6 +327,7 @@ extension Workspace {
         startupEnvironment: [String: String] = [:],
         reviveDescriptor: TerminalSurfaceReviveDescriptor? = nil,
         pendingScrollbackSeedText: String? = nil,
+        initialInput: String? = nil,
         selectInPane: Bool = true
     ) -> TerminalPanel? {
         // `selectInPane: false` keeps the pane's selected tab (and therefore focus) unchanged.
@@ -335,7 +336,13 @@ extension Workspace {
         let previousFocusedPanelId = focusedPanelId
         let previousHostedView = focusedTerminalPanel?.hostedView
 
-        let inheritedConfig = inheritedTerminalConfig(inPane: paneId)
+        var inheritedConfig = inheritedTerminalConfig(inPane: paneId)
+        if let initialInput, !initialInput.isEmpty {
+            // Typed into the started shell; TTY input buffering runs it once the shell is ready.
+            var config = inheritedConfig ?? ProgramaSurfaceConfigTemplate()
+            config.initialInput = initialInput
+            inheritedConfig = config
+        }
 
         let newPanel = TerminalPanel(
             workspaceId: id,

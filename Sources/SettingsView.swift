@@ -48,6 +48,7 @@ struct SettingsView: View {
     @AppStorage(QuitWarningSettings.warnBeforeQuitKey) private var warnBeforeQuitShortcut = QuitWarningSettings.defaultWarnBeforeQuit
     @AppStorage(ScrollbackPersistenceSettings.persistScrollbackKey) private var sessionPersistScrollback = ScrollbackPersistenceSettings.defaultPersistScrollback
     @AppStorage(ScrollbackPersistenceSettings.failureKey) private var scrollbackPersistenceFailure: String?
+    @AppStorage(AgentAutoResumeSettings.autoResumeAgentsKey) private var sessionAutoResumeAgents = AgentAutoResumeSettings.defaultAutoResumeAgents
     @AppStorage(CommandPaletteSwitcherSearchSettings.searchAllSurfacesKey)
     private var commandPaletteSearchAllSurfaces = CommandPaletteSwitcherSearchSettings.defaultSearchAllSurfaces
     @AppStorage(ShortcutHintDebugSettings.alwaysShowHintsKey)
@@ -501,6 +502,20 @@ struct SettingsView: View {
                     }
                 }
             }
+
+            SettingsCardDivider()
+
+            SettingsCardRow(
+                String(localized: "settings.app.autoResumeAgents", defaultValue: "Resume Agents on Restart"),
+                subtitle: sessionAutoResumeAgents
+                    ? String(localized: "settings.app.autoResumeAgents.subtitleOn", defaultValue: "Claude Code, Codex and OpenCode sessions that were running at quit resume in their pane after a restart.")
+                    : String(localized: "settings.app.autoResumeAgents.subtitleOff", defaultValue: "Restored panes start a plain shell. Use Resume Agent Session to resume manually.")
+            ) {
+                Toggle("", isOn: $sessionAutoResumeAgents)
+                    .labelsHidden()
+                    .controlSize(.small)
+            }
+            .managedBySettingsFile(settingsFileStatus.isManaged(AgentAutoResumeSettings.autoResumeAgentsKey))
 
             SettingsCardDivider()
 
@@ -962,6 +977,7 @@ struct SettingsView: View {
         showMenuBarExtra = MenuBarExtraSettings.defaultShowInMenuBar
         warnBeforeQuitShortcut = QuitWarningSettings.defaultWarnBeforeQuit
         ScrollbackPersistenceSettings.setEnabled(ScrollbackPersistenceSettings.defaultPersistScrollback)
+        sessionAutoResumeAgents = AgentAutoResumeSettings.defaultAutoResumeAgents
         commandPaletteSearchAllSurfaces = CommandPaletteSwitcherSearchSettings.defaultSearchAllSurfaces
         ShortcutHintDebugSettings.resetVisibilityDefaults()
         alwaysShowShortcutHints = ShortcutHintDebugSettings.defaultAlwaysShowHints

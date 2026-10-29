@@ -9232,6 +9232,57 @@
         }
       }
     },
+    "settings.app.autoResumeAgents": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resume Agents on Restart"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再起動時にエージェントを再開"
+          }
+        }
+      }
+    },
+    "settings.app.autoResumeAgents.subtitleOff": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restored panes start a plain shell. Use Resume Agent Session to resume manually."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "復元されたペインは通常のシェルで起動します。手動で再開するには「エージェントセッションを再開」を使用してください。"
+          }
+        }
+      }
+    },
+    "settings.app.autoResumeAgents.subtitleOn": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Code, Codex and OpenCode sessions that were running at quit resume in their pane after a restart."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "終了時に実行中だった Claude Code、Codex、OpenCode のセッションは、再起動後に各ペインで再開されます。"
+          }
+        }
+      }
+    },
     "settings.app.commandPaletteSearchAllSurfaces": {
       "extractionState": "manual",
       "localizations": {

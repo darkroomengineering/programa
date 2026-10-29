@@ -340,8 +340,30 @@ extension Workspace {
             terminal: terminalSnapshot,
             markdown: markdownSnapshot,
             review: reviewSnapshot,
-            agentResume: panel.panelType == .terminal ? AgentResumeStore.shared.target(panelId: panelId) : nil
+            agentResume: panel.panelType == .terminal ? AgentResumeStore.shared.target(panelId: panelId) : nil,
+            agentWasRunning: panel.panelType == .terminal ? panelAgentPresence[panelId] != nil : nil
         )
+    }
+
+    /// The text typed into a freshly spawned restored shell to resume the agent that was running
+    /// in it at quit, or nil when nothing should be resumed.
+    nonisolated static func autoResumeInput(
+        for snapshot: SessionPanelSnapshot,
+        paneDirectory: String?,
+        isEnabled: Bool,
+        directoryExists: (String) -> Bool = { path in
+            var isDirectory: ObjCBool = false
+            return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue
+        }
+    ) -> String? {
+        guard isEnabled,
+              snapshot.type == .terminal,
+              snapshot.agentWasRunning == true,
+              let target = snapshot.agentResume,
+              let line = AgentResumeCommand.line(
+                for: target, paneDirectory: paneDirectory, directoryExists: directoryExists
+              ) else { return nil }
+        return line + "\n"
     }
 
     nonisolated static func resolvedSnapshotTerminalScrollback(
@@ -518,7 +540,13 @@ extension Workspace {
                 inPane: paneId,
                 focus: false,
                 workingDirectory: workingDirectory,
-                pendingScrollbackSeedText: preparedSeedText
+                pendingScrollbackSeedText: preparedSeedText,
+                // Fresh spawn only: a reattached pane (above) still has its agent running.
+                initialInput: Self.autoResumeInput(
+                    for: snapshot,
+                    paneDirectory: workingDirectory,
+                    isEnabled: AgentAutoResumeSettings.isEnabled()
+                )
             ) else {
                 return nil
             }
