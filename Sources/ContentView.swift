@@ -356,6 +356,10 @@ struct ContentView: View {
         }
     }
 
+    private var sidebarTransition: AnyTransition {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? .opacity : .move(edge: .leading)
+    }
+
     private var contentAndSidebarLayout: AnyView {
         let layout: AnyView
         let useWithinWindow = sidebarBlendMode == SidebarBlendModeOption.withinWindow.rawValue
@@ -373,6 +377,7 @@ struct ContentView: View {
                         .padding(.leading, sidebarState.isVisible ? sidebarWidth : 0)
                     if sidebarState.isVisible {
                         sidebarView
+                            .transition(sidebarTransition)
                     }
                 }
             )
@@ -383,6 +388,7 @@ struct ContentView: View {
                 HStack(spacing: 0) {
                     if sidebarState.isVisible {
                         sidebarView
+                            .transition(sidebarTransition)
                     }
                     terminalContentWithSidebarDropOverlay
                         .background { contentCardShadow }
