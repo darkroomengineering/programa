@@ -23,8 +23,16 @@ final class SidebarState: ObservableObject {
         self.persistedWidth = CGFloat(sanitized)
     }
 
-    func toggle() {
-        isVisible.toggle()
+    @MainActor func toggle() {
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        // The terminal is an AppKit portal; marking the toggle as an interactive resize makes
+        // it follow the animated SwiftUI frame every tick, as it does for a sidebar drag.
+        TerminalWindowPortalRegistry.beginInteractiveGeometryResize()
+        withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .snappy(duration: 0.24)) {
+            isVisible.toggle()
+        } completion: {
+            TerminalWindowPortalRegistry.endInteractiveGeometryResize()
+        }
     }
 }
 
