@@ -54,6 +54,7 @@ enum V2MethodNames {
     static let debugShortcutSet = "debug.shortcut.set"
     static let debugShortcutSimulate = "debug.shortcut.simulate"
     static let debugSidebarVisible = "debug.sidebar.visible"
+    static let debugTabTearOff = "debug.tab.tear_off"
     static let debugTerminalIsFocused = "debug.terminal.is_focused"
     static let debugTerminalReadText = "debug.terminal.read_text"
     static let debugTerminalRenderStats = "debug.terminal.render_stats"
