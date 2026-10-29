@@ -127,6 +127,7 @@ struct TabItemView: View, Equatable {
         lhs.accessibilityWorkspaceCount == rhs.accessibilityWorkspaceCount &&
         lhs.unreadCount == rhs.unreadCount &&
         lhs.latestNotificationText == rhs.latestNotificationText &&
+        lhs.latestNotificationDate == rhs.latestNotificationDate &&
         lhs.rowSpacing == rhs.rowSpacing &&
         lhs.showsModifierShortcutHints == rhs.showsModifierShortcutHints &&
         lhs.contextMenuWorkspaceIds == rhs.contextMenuWorkspaceIds &&
@@ -159,6 +160,7 @@ struct TabItemView: View, Equatable {
     let accessibilityWorkspaceCount: Int
     let unreadCount: Int
     let latestNotificationText: String?
+    let latestNotificationDate: Date?
     let rowSpacing: CGFloat
     let setSelectionToTabs: () -> Void
     @Binding var selectedTabIds: Set<UUID>
@@ -308,17 +310,17 @@ struct TabItemView: View, Equatable {
         SidebarAgentIndicator.make(for: tab)
     }
 
-    /// Program-set titles lose a leading spinner glyph only while the agent badge shows that
-    /// state; without a badge the glyph is the row's only activity sign. A title the user
+    /// Program-set titles lose a leading spinner glyph only while the agent status shows that
+    /// state; without it the glyph is the row's only activity sign. A title the user
     /// typed is shown exactly as written.
-    private var sidebarDisplayTitle: String {
-        guard tab.customTitle == nil, agentIndicator != nil else { return tab.title }
+    private func sidebarDisplayTitle(indicator: SidebarAgentIndicator?) -> String {
+        guard tab.customTitle == nil, indicator != nil else { return tab.title }
         return SidebarTitle.strippingLeadingStatusGlyph(tab.title)
     }
 
     /// Status entry keys/values that duplicate agent state in the metadata rows.
     /// Filtered out at render time so older CLI builds that still send them don't double up
-    /// with the badge above.
+    /// with the agent status line.
     private static let agentStateStatusKeys: Set<String> = ["claude_code", "codex", "opencode"]
     private static let agentStateStatusValues: Set<String> = ["Running", "Waiting", "Needs input", "Idle"]
 
@@ -349,6 +351,14 @@ struct TabItemView: View, Equatable {
         (isHovering || isActive) && canCloseWorkspace && !(showsModifierShortcutHints || alwaysShowShortcutHints)
     }
 
+    /// The close button or shortcut hint shows without hover, so the elapsed time steps left
+    /// of it. Hover is left out on purpose: the time hides on hover, and keying this on hover
+    /// would shift the title's fade edge the moment the pointer enters the row.
+    private var showsTrailingAccessory: Bool {
+        showsWorkspaceShortcutHint
+            || (isActive && canCloseWorkspace && !(showsModifierShortcutHints || alwaysShowShortcutHints))
+    }
+
     private var workspaceShortcutLabel: String? {
         guard let workspaceShortcutDigit else { return nil }
         return "\(workspaceShortcutModifierSymbol)\(workspaceShortcutDigit)"
@@ -374,6 +384,92 @@ struct TabItemView: View, Equatable {
         NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
 
+    /// Height of the title line; the leading icon centers on it.
+    private static let titleLineHeight: CGFloat = 18
+
+    private struct RowStatus {
+        enum Source { case agent, notification, log }
+        let text: String
+        let source: Source
+        /// Shown as a glyph beside the text when the agent state is what the line describes.
+        let indicator: SidebarAgentIndicator?
+        let date: Date?
+    }
+
+    private func rowStatus(indicator: SidebarAgentIndicator?) -> RowStatus? {
+        if let indicator, indicator.tint == .working || indicator.tint == .blocked {
+            return RowStatus(text: indicator.label, source: .agent, indicator: indicator, date: indicator.lastEventAt)
+        }
+        if let latestNotificationText {
+            return RowStatus(text: latestNotificationText, source: .notification, indicator: nil, date: latestNotificationDate)
+        }
+        if let indicator {
+            return RowStatus(text: indicator.label, source: .agent, indicator: indicator, date: indicator.lastEventAt)
+        }
+        if let latestLog = tab.logEntries.last {
+            return RowStatus(text: latestLog.message, source: .log, indicator: nil, date: latestLog.timestamp)
+        }
+        return nil
+    }
+
+    /// The program in the workspace: the reporting agent's logo, else a terminal glyph.
+    /// Worktree folder rows keep their collapse control here instead.
+    @ViewBuilder
+    private func leadingIcon(indicator: SidebarAgentIndicator?) -> some View {
+        let worktreeFolderTooltip = String(localized: "sidebar.worktreeFolder.tooltip", defaultValue: "Worktree folder")
+        if isWorktreeFolder {
+            if worktreeChildCount > 0 {
+                Button {
+                    tabManager.setWorktreeFolderCollapsed(
+                        tab,
+                        collapsed: !isWorktreeFolderCollapsed
+                    )
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: isWorktreeFolderCollapsed ? "chevron.right" : "chevron.down")
+                        Image(systemName: "folder.fill")
+                    }
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(activeSecondaryColor(0.78))
+                    .frame(height: 20)
+                }
+                .buttonStyle(.plain)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+                .padding(.horizontal, -12)
+                .padding(.vertical, -12)
+                .safeHelp(worktreeFolderTooltip)
+                .accessibilityLabel(Text(worktreeFolderTooltip))
+            } else {
+                Image(systemName: "folder")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(activeSecondaryColor(0.78))
+                    .safeHelp(worktreeFolderTooltip)
+                    .accessibilityLabel(Text(worktreeFolderTooltip))
+            }
+        } else if let iconAsset = indicator?.iconAsset {
+            Image(iconAsset, bundle: .main)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 14, height: 14)
+                .accessibilityHidden(true)
+        } else {
+            Image(systemName: "terminal")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(activeSecondaryColor(0.75))
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// Opens the row's context menu from the hover `•••` button, at the pointer.
+    private func showRowMenu() {
+        #if DEBUG
+        dlog("sidebar.contextMenu.open workspace=\(tab.id.uuidString.prefix(5)) targets=\(contextMenuWorkspaceIds.count) method=moreButton")
+        #endif
+        buildWorkspaceContextMenu(colorScheme: colorScheme)
+            .popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+    }
+
     var body: some View {
         let _ = workspaceObservationGeneration
         let closeWorkspaceTooltip = String(localized: "sidebar.closeWorkspace.tooltip", defaultValue: "Close Workspace")
@@ -386,384 +482,357 @@ struct TabItemView: View, Equatable {
             : KeyboardShortcutSettings.Action.closeWorkspace.tooltip(closeWorkspaceTooltip)
         let worktreeBadgeTooltip = String(localized: "sidebar.worktreeBadge.tooltip", defaultValue: "Git worktree workspace")
         let worktreeBadgeAccessibilityLabel = String(localized: "sidebar.worktreeBadge.accessibilityLabel", defaultValue: "Git worktree workspace")
-        let worktreeFolderTooltip = String(localized: "sidebar.worktreeFolder.tooltip", defaultValue: "Worktree folder")
         let accessibilityHintText = String(localized: "sidebar.workspace.accessibilityHint", defaultValue: "Activate to focus this workspace. Drag to reorder, or use Move Up and Move Down actions.")
         let moveUpActionText = String(localized: "sidebar.workspace.moveUpAction", defaultValue: "Move Up")
         let moveDownActionText = String(localized: "sidebar.workspace.moveDownAction", defaultValue: "Move Down")
-        let latestNotificationSubtitle = latestNotificationText
-        let effectiveSubtitle = latestNotificationSubtitle
         // Read from cache — updated only by the debounced publisher and onAppear.
         // Title-keystroke re-renders skip this tree walk.
-        let branchDirectoryLines: [VerticalBranchDirectoryLine] = cachedBranchDirectoryLines
+        let branchDirectoryLines: [VerticalBranchDirectoryLine] = cachedBranchDirectoryLines.compactMap {
+            $0.droppingRedundantDirectory(title: tab.title)
+        }
         let pullRequestRows: [PullRequestDisplay] = cachedPullRequestRows
         let branchLinesContainBranch = sidebarShowGitBranch && branchDirectoryLines.contains { $0.branch != nil }
 
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: SidebarRowMetrics.leadingIconGap) {
-                HStack(spacing: 4) {
-                if isWorktreeFolder {
-                    if worktreeChildCount > 0 {
-                        Button {
-                            tabManager.setWorktreeFolderCollapsed(
-                                tab,
-                                collapsed: !isWorktreeFolderCollapsed
-                            )
-                        } label: {
-                            HStack(spacing: 3) {
-                                Image(systemName: isWorktreeFolderCollapsed ? "chevron.right" : "chevron.down")
-                                Image(systemName: "folder.fill")
-                            }
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundColor(activeSecondaryColor(0.78))
-                            .frame(height: 20)
-                        }
-                        .buttonStyle(.plain)
-                        .frame(minWidth: 44, minHeight: 44)
-                        .contentShape(Rectangle())
-                        .padding(.horizontal, -12)
-                        .padding(.vertical, -12)
-                        .safeHelp(worktreeFolderTooltip)
-                        .accessibilityLabel(Text(worktreeFolderTooltip))
-                    } else {
-                        Image(systemName: "folder")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundColor(activeSecondaryColor(0.78))
-                            .safeHelp(worktreeFolderTooltip)
-                            .accessibilityLabel(Text(worktreeFolderTooltip))
-                    }
-                } else if showsWorktreeBadge {
-                    Image(systemName: "arrow.triangle.branch")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundColor(activeSecondaryColor(0.7))
-                        .safeHelp(worktreeBadgeTooltip)
-                        .accessibilityLabel(Text(worktreeBadgeAccessibilityLabel))
-                }
+        let indicator = agentIndicator
+        let status = rowStatus(indicator: indicator)
+        let moreActionsLabel = String(localized: "sidebar.workspace.moreActions", defaultValue: "More Actions")
 
-                if tab.isPinned {
-                    Image(systemName: "pin.fill")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundColor(activeSecondaryColor(0.8))
-                        .safeHelp(protectedWorkspaceTooltip)
-                }
-                }
-                .frame(minWidth: SidebarRowMetrics.leadingIconSlotWidth, alignment: .center)
+        HStack(alignment: .top, spacing: SidebarRowMetrics.leadingIconGap) {
+            leadingIcon(indicator: indicator)
+                .frame(minWidth: SidebarRowMetrics.leadingIconSlotWidth, minHeight: Self.titleLineHeight, alignment: .center)
 
-                let displayTitle = sidebarDisplayTitle
-                Text(displayTitle)
-                    .font(.system(size: rowMetrics.titleFontSize, weight: titleFontWeight))
-                    .foregroundColor(activePrimaryTextColor)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .layoutPriority(1)
-                    .safeHelp(displayTitle)
-
-                Spacer(minLength: 0)
-
-                // Dynamic state sits trailing so the static titles share one left edge.
-                if let agentIndicator {
-                    HStack(spacing: 3) {
-                        Image(systemName: agentIndicator.systemImage)
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundColor(agentIndicatorTintColor(agentIndicator))
-                            .opacity(agentIndicator.isStale ? 0.55 : 1)
-                        Text(agentIndicator.label)
-                            .font(.system(size: 10))
-                            .foregroundColor(agentIndicatorTintColor(agentIndicator))
-                            .opacity(agentIndicator.isStale ? 0.55 : 1)
-                            .lineLimit(1)
-                    }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    // The tints (accent blue, green, red) can match the selected row's fill or the
-                    // wallpaper behind the glass, so the badge carries its own backing: a translucent
-                    // window-tinted fill that still lets the glass through, with a Liquid Glass-style rim.
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(Color(nsColor: .windowBackgroundColor).opacity(0.8))
-                            .overlay(
-                                Capsule(style: .continuous)
-                                    .strokeBorder(
-                                        LinearGradient(
-                                            colors: [.white.opacity(0.38), .white.opacity(0.08)],
-                                            startPoint: .top,
-                                            endPoint: .bottom
-                                        ),
-                                        lineWidth: 0.75
-                                    )
-                            )
-                    )
-                    // The badge keeps its full width; the title truncates first.
-                    .fixedSize(horizontal: true, vertical: false)
-                    .layoutPriority(2)
-                    .safeHelp(agentIndicator.label)
-                    .accessibilityLabel(Text(agentIndicator.label))
-                }
-
-                if unreadCount > 0 {
-                    ZStack {
-                        Circle()
-                            .fill(activeUnreadBadgeFillColor)
-                        Text("\(unreadCount)")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundColor(.white)
-                    }
-                    .frame(width: 16, height: 16)
-                }
-
-                SidebarTrailingAccessorySlot(
-                    minimumWidth: trailingAccessoryWidth,
-                    minimumHeight: 16,
-                    alignment: .trailing
-                ) {
-                    ZStack(alignment: .trailing) {
-                        Button(action: {
-                            #if DEBUG
-                            dlog("sidebar.close workspace=\(tab.id.uuidString.prefix(5)) method=button")
-                            #endif
-                            tabManager.closeWorkspaceWithConfirmation(tab)
-                        }) {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundColor(activeSecondaryColor(0.7))
-                        }
-                        .buttonStyle(.plain)
-                        .safeHelp(closeButtonTooltip)
-                        .frame(width: SidebarTrailingAccessoryWidthPolicy.closeButtonWidth, height: 16, alignment: .center)
-                        .opacity(showCloseButton && !showsWorkspaceShortcutHint ? 1 : 0)
-                        .allowsHitTesting(showCloseButton && !showsWorkspaceShortcutHint)
-
-                        if showsWorkspaceShortcutHint, let workspaceShortcutLabel {
-                            ShortcutHintPill(emphasis: shortcutHintEmphasis) {
-                                Text(workspaceShortcutLabel)
-                                    .lineLimit(1)
-                                    .fixedSize(horizontal: true, vertical: false)
-                                    .font(.system(size: 10, weight: .semibold, design: .rounded))
-                                    .monospacedDigit()
-                                    .foregroundColor(activePrimaryTextColor)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                            }
-                                .offset(
-                                    x: ShortcutHintDebugSettings.clamped(sidebarShortcutHintXOffset),
-                                    y: ShortcutHintDebugSettings.clamped(sidebarShortcutHintYOffset)
-                                )
-                                .transition(.opacity)
-                        }
-                    }
-                    .animation(.easeOut(duration: 0.14), value: showsModifierShortcutHints || alwaysShowShortcutHints)
-                }
-            }
-
-            if let description = tab.customDescription {
-                SidebarWorkspaceDescriptionText(
-                    markdown: description,
-                    isActive: usesInvertedActiveForeground
-                )
-                .id(description)
-            }
-
-            if let subtitle = effectiveSubtitle {
-                Text(subtitle)
-                    .font(.system(size: 10))
-                    .foregroundColor(activeSecondaryColor(0.8))
-                    .lineLimit(2)
-                    .truncationMode(.tail)
-                    .multilineTextAlignment(.leading)
-            }
-
-            if runningHelperCount > 0 || finishedHelperCount > 0 {
-                Button(action: {
-                    isShowingHelpers.toggle()
-                }) {
+            VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 4) {
-                        Image(systemName: "person.2")
-                            .font(.system(size: 8))
-                            .accessibilityHidden(true)
-                        Text(helperLineLabel)
-                            .lineLimit(1)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 7, weight: .semibold))
-                            .accessibilityHidden(true)
-                        Spacer(minLength: 0)
+                        let displayTitle = sidebarDisplayTitle(indicator: indicator)
+                        Text(displayTitle)
+                            .font(.system(size: rowMetrics.titleFontSize, weight: titleFontWeight))
+                            .foregroundColor(activePrimaryTextColor)
+                            .modifier(SidebarTrailingFade())
+                            .layoutPriority(1)
+                            .safeHelp(displayTitle)
+
+                        if showsWorktreeBadge && !isWorktreeFolder {
+                            Image(systemName: "arrow.triangle.branch")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundColor(activeSecondaryColor(0.7))
+                                .safeHelp(worktreeBadgeTooltip)
+                                .accessibilityLabel(Text(worktreeBadgeAccessibilityLabel))
+                        }
+
+                        if tab.isPinned {
+                            Image(systemName: "pin.fill")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundColor(activeSecondaryColor(0.8))
+                                .safeHelp(protectedWorkspaceTooltip)
+                        }
+
+                        if unreadCount > 0 {
+                            ZStack {
+                                Circle()
+                                    .fill(activeUnreadBadgeFillColor)
+                                Text("\(unreadCount)")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundColor(.white)
+                            }
+                            .frame(width: 16, height: 16)
+                        }
+
+                        // The elapsed time sits flush right while the trailing controls are hidden.
+                        // On hover the `•••` menu replaces it; both swap instantly.
+                        ZStack(alignment: .trailing) {
+                            if let since = status?.date {
+                                SidebarElapsedTimeLabel(since: since, color: activeSecondaryColor(0.7))
+                                    .padding(.trailing, showsTrailingAccessory ? trailingAccessoryWidth + 4 : 0)
+                                    .opacity(isHovering ? 0 : 1)
+                            }
+                            HStack(spacing: 4) {
+                                Button(action: { showRowMenu() }) {
+                                    Image(systemName: "ellipsis")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundColor(activeSecondaryColor(0.8))
+                                        .frame(width: 18, height: 16)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .safeHelp(moreActionsLabel)
+                                .accessibilityLabel(Text(moreActionsLabel))
+                                .opacity(isHovering ? 1 : 0)
+                                .allowsHitTesting(isHovering)
+
+                                SidebarTrailingAccessorySlot(
+                                    minimumWidth: trailingAccessoryWidth,
+                                    minimumHeight: 16,
+                                    alignment: .trailing
+                                ) {
+                                    ZStack(alignment: .trailing) {
+                                        Button(action: {
+                                            #if DEBUG
+                                            dlog("sidebar.close workspace=\(tab.id.uuidString.prefix(5)) method=button")
+                                            #endif
+                                            tabManager.closeWorkspaceWithConfirmation(tab)
+                                        }) {
+                                            Image(systemName: "xmark")
+                                                .font(.system(size: 9, weight: .medium))
+                                                .foregroundColor(activeSecondaryColor(0.7))
+                                        }
+                                        .buttonStyle(.plain)
+                                        .safeHelp(closeButtonTooltip)
+                                        .frame(width: SidebarTrailingAccessoryWidthPolicy.closeButtonWidth, height: 16, alignment: .center)
+                                        .opacity(showCloseButton && !showsWorkspaceShortcutHint ? 1 : 0)
+                                        .allowsHitTesting(showCloseButton && !showsWorkspaceShortcutHint)
+
+                                        if showsWorkspaceShortcutHint, let workspaceShortcutLabel {
+                                            ShortcutHintPill(emphasis: shortcutHintEmphasis) {
+                                                Text(workspaceShortcutLabel)
+                                                    .lineLimit(1)
+                                                    .fixedSize(horizontal: true, vertical: false)
+                                                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                                                    .monospacedDigit()
+                                                    .foregroundColor(activePrimaryTextColor)
+                                                    .padding(.horizontal, 6)
+                                                    .padding(.vertical, 2)
+                                            }
+                                                .offset(
+                                                    x: ShortcutHintDebugSettings.clamped(sidebarShortcutHintXOffset),
+                                                    y: ShortcutHintDebugSettings.clamped(sidebarShortcutHintYOffset)
+                                                )
+                                                .transition(.opacity)
+                                        }
+                                    }
+                                    .animation(.easeOut(duration: 0.14), value: showsModifierShortcutHints || alwaysShowShortcutHints)
+                                }
+                            }
+                        }
                     }
-                    .font(.system(size: 10))
-                    .foregroundColor(activeSecondaryColor(0.8))
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .safeHelp(String(localized: "sidebar.helpers.show", defaultValue: "Show helpers and their reports"))
-                .popover(isPresented: $isShowingHelpers, arrowEdge: .trailing) {
-                    AgentHelpersPopover(workspace: tab)
-                }
-            }
+                    .frame(minHeight: Self.titleLineHeight)
 
-            // The agent badge above is the single source for agent state, so drop status
-            // entries that repeat it (older CLI builds still send them). Other status
-            // entries (verbose tool descriptions, progress, ports, PR) render as is.
-            let metadataEntries = tab.sidebarStatusEntriesInDisplayOrder().filter { entry in
-                !(Self.agentStateStatusKeys.contains(entry.key) && Self.agentStateStatusValues.contains(entry.value))
-            }
-            let metadataBlocks = tab.sidebarMetadataBlocksInDisplayOrder()
-            if !metadataEntries.isEmpty {
-                SidebarMetadataRows(
-                    entries: metadataEntries,
-                    isActive: usesInvertedActiveForeground,
-                    onFocus: { updateSelection() }
-                )
-                .transition(.opacity)
-            }
-            if !metadataBlocks.isEmpty {
-                SidebarMetadataMarkdownBlocks(
-                    blocks: metadataBlocks,
-                    isActive: usesInvertedActiveForeground,
-                    onFocus: { updateSelection() }
-                )
-                .transition(.opacity)
-            }
+                    // One status line: agent state while it works or waits, else the latest
+                    // message, else the agent's resting state, else the latest log line.
+                    if let status {
+                        HStack(spacing: 4) {
+                            if let statusIndicator = status.indicator {
+                                Image(systemName: statusIndicator.systemImage)
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundColor(
+                                        usesInvertedActiveForeground
+                                            ? activeSecondaryColor(0.8)
+                                            : agentIndicatorTintColor(statusIndicator)
+                                    )
+                                    .opacity(statusIndicator.isStale ? 0.55 : 1)
+                                    .accessibilityHidden(true)
+                            }
+                            Text(status.text)
+                                .font(.system(size: 11))
+                                .foregroundColor(activeSecondaryColor(0.8))
+                                .modifier(SidebarTrailingFade())
+                        }
+                        .safeHelp(status.text)
+                    }
+                }
 
-            if let latestLog = tab.logEntries.last {
-                HStack(spacing: 4) {
-                    Image(systemName: logLevelIcon(latestLog.level))
-                        .font(.system(size: 8))
-                        .foregroundColor(logLevelColor(latestLog.level, isActive: usesInvertedActiveForeground))
-                    Text(latestLog.message)
+                if let description = tab.customDescription {
+                    SidebarWorkspaceDescriptionText(
+                        markdown: description,
+                        isActive: usesInvertedActiveForeground
+                    )
+                    .id(description)
+                }
+
+                if runningHelperCount > 0 || finishedHelperCount > 0 {
+                    Button(action: {
+                        isShowingHelpers.toggle()
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "person.2")
+                                .font(.system(size: 8))
+                                .accessibilityHidden(true)
+                            Text(helperLineLabel)
+                                .lineLimit(1)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 7, weight: .semibold))
+                                .accessibilityHidden(true)
+                            Spacer(minLength: 0)
+                        }
                         .font(.system(size: 10))
                         .foregroundColor(activeSecondaryColor(0.8))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-                .transition(.opacity)
-            }
-
-            if let progress = tab.progress {
-                VStack(alignment: .leading, spacing: 2) {
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule()
-                                .fill(activeProgressTrackColor)
-                            Capsule()
-                                .fill(activeProgressFillColor)
-                                .frame(width: max(0, geo.size.width * CGFloat(progress.value)))
-                        }
+                        .contentShape(Rectangle())
                     }
-                    .frame(height: 3)
-
-                    if let label = progress.label {
-                        Text(label)
-                            .font(.system(size: 9))
-                            .foregroundColor(activeSecondaryColor(0.6))
-                            .lineLimit(1)
+                    .buttonStyle(.plain)
+                    .safeHelp(String(localized: "sidebar.helpers.show", defaultValue: "Show helpers and their reports"))
+                    .popover(isPresented: $isShowingHelpers, arrowEdge: .trailing) {
+                        AgentHelpersPopover(workspace: tab)
                     }
                 }
-                .transition(.opacity)
-            }
 
-            if !branchDirectoryLines.isEmpty {
-                HStack(alignment: .top, spacing: 3) {
-                    if sidebarShowGitBranchIcon, branchLinesContainBranch {
-                        Image(systemName: "arrow.triangle.branch")
-                            .font(.system(size: 9))
-                            .foregroundColor(activeSecondaryColor(0.6))
-                    }
-                    VStack(alignment: .leading, spacing: 1) {
-                        ForEach(Array(branchDirectoryLines.enumerated()), id: \.offset) { _, line in
-                            HStack(spacing: 3) {
-                                if let branch = line.branch {
-                                    Text(branch)
-                                        .font(.system(size: 10, design: .monospaced))
-                                        .foregroundColor(activeSecondaryColor(0.75))
-                                        .lineLimit(1)
-                                        .truncationMode(.tail)
-                                }
-                                if line.branch != nil, line.directory != nil {
-                                    Image(systemName: "circle.fill")
-                                        .font(.system(size: 3))
-                                        .foregroundColor(activeSecondaryColor(0.6))
-                                        .padding(.horizontal, 1)
-                                }
-                                if let directory = line.directory {
-                                    Text(directory)
-                                        .font(.system(size: 10, design: .monospaced))
-                                        .foregroundColor(activeSecondaryColor(0.75))
-                                        .lineLimit(1)
-                                        .truncationMode(.tail)
-                                }
-                            }
-                        }
-                    }
+                // The agent status line is the single source for agent state, so drop status
+                // entries that repeat it (older CLI builds still send them). Other status
+                // entries (verbose tool descriptions, progress, ports, PR) render as is.
+                let metadataEntries = tab.sidebarStatusEntriesInDisplayOrder().filter { entry in
+                    !(Self.agentStateStatusKeys.contains(entry.key) && Self.agentStateStatusValues.contains(entry.value))
                 }
-            }
-
-            if !pullRequestRows.isEmpty {
-                VStack(alignment: .leading, spacing: 1) {
-                    ForEach(pullRequestRows) { pullRequest in
-                        Button(action: {
-                            openPullRequestLink(pullRequest.url)
-                        }) {
-                            HStack(spacing: 4) {
-                                PullRequestStatusIcon(
-                                    status: pullRequest.status,
-                                    color: pullRequestForegroundColor
-                                )
-                                Text("\(pullRequest.label) #\(pullRequest.number)")
-                                    .underline()
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
-                                Text(pullRequestStatusLabel(pullRequest.status, checks: pullRequest.checks))
-                                    .lineLimit(1)
-                                Spacer(minLength: 0)
-                            }
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(pullRequestForegroundColor)
-                        }
-                        .buttonStyle(.plain)
-                        .safeHelp(String(localized: "sidebar.pullRequest.openTooltip", defaultValue: "Open \(pullRequest.label) #\(pullRequest.number)"))
-                    }
+                let metadataBlocks = tab.sidebarMetadataBlocksInDisplayOrder()
+                if !metadataEntries.isEmpty {
+                    SidebarMetadataRows(
+                        entries: metadataEntries,
+                        isActive: usesInvertedActiveForeground,
+                        onFocus: { updateSelection() }
+                    )
+                    .transition(.opacity)
                 }
-            }
+                if !metadataBlocks.isEmpty {
+                    SidebarMetadataMarkdownBlocks(
+                        blocks: metadataBlocks,
+                        isActive: usesInvertedActiveForeground,
+                        onFocus: { updateSelection() }
+                    )
+                    .transition(.opacity)
+                }
 
-            // Review nudge: the last agent turn left uncommitted changes. Click-only, never opens itself.
-            if let reviewNudge = tab.reviewNudgeTarget {
-                Button(action: {
-                    openReviewFromNudge(panelId: reviewNudge.panelId)
-                }) {
+                if status?.source != .log, let latestLog = tab.logEntries.last {
                     HStack(spacing: 4) {
-                        Image(systemName: "plus.forwardslash.minus")
-                            .font(.system(size: 9, weight: .semibold))
-                            .accessibilityHidden(true)
-                        Text(reviewNudgeFileCountLabel(reviewNudge.fileCount))
+                        Image(systemName: logLevelIcon(latestLog.level))
+                            .font(.system(size: 8))
+                            .foregroundColor(logLevelColor(latestLog.level, isActive: usesInvertedActiveForeground))
+                        Text(latestLog.message)
+                            .font(.system(size: 10))
+                            .foregroundColor(activeSecondaryColor(0.8))
                             .lineLimit(1)
-                        Text(verbatim: "·")
-                            .accessibilityHidden(true)
-                        Text(String(localized: "sidebar.reviewNudge.action", defaultValue: "Review"))
-                            .underline()
-                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    .transition(.opacity)
+                }
+
+                if let progress = tab.progress {
+                    VStack(alignment: .leading, spacing: 2) {
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule()
+                                    .fill(activeProgressTrackColor)
+                                Capsule()
+                                    .fill(activeProgressFillColor)
+                                    .frame(width: max(0, geo.size.width * CGFloat(progress.value)))
+                            }
+                        }
+                        .frame(height: 3)
+
+                        if let label = progress.label {
+                            Text(label)
+                                .font(.system(size: 9))
+                                .foregroundColor(activeSecondaryColor(0.6))
+                                .lineLimit(1)
+                        }
+                    }
+                    .transition(.opacity)
+                }
+
+                if !branchDirectoryLines.isEmpty {
+                    HStack(alignment: .top, spacing: 3) {
+                        if sidebarShowGitBranchIcon, branchLinesContainBranch {
+                            Image(systemName: "arrow.triangle.branch")
+                                .font(.system(size: 9))
+                                .foregroundColor(activeSecondaryColor(0.6))
+                        }
+                        VStack(alignment: .leading, spacing: 1) {
+                            ForEach(Array(branchDirectoryLines.enumerated()), id: \.offset) { _, line in
+                                HStack(spacing: 3) {
+                                    if let branch = line.branch {
+                                        Text(branch)
+                                            .font(.system(size: 10, design: .monospaced))
+                                            .foregroundColor(activeSecondaryColor(0.75))
+                                            .lineLimit(1)
+                                            .truncationMode(.tail)
+                                    }
+                                    if line.branch != nil, line.directory != nil {
+                                        Image(systemName: "circle.fill")
+                                            .font(.system(size: 3))
+                                            .foregroundColor(activeSecondaryColor(0.6))
+                                            .padding(.horizontal, 1)
+                                    }
+                                    if let directory = line.directory {
+                                        Text(directory)
+                                            .font(.system(size: 10, design: .monospaced))
+                                            .foregroundColor(activeSecondaryColor(0.75))
+                                            .lineLimit(1)
+                                            .truncationMode(.tail)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if !pullRequestRows.isEmpty {
+                    VStack(alignment: .leading, spacing: 1) {
+                        ForEach(pullRequestRows) { pullRequest in
+                            Button(action: {
+                                openPullRequestLink(pullRequest.url)
+                            }) {
+                                HStack(spacing: 4) {
+                                    PullRequestStatusIcon(
+                                        status: pullRequest.status,
+                                        color: pullRequestForegroundColor
+                                    )
+                                    Text("\(pullRequest.label) #\(pullRequest.number)")
+                                        .underline()
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                    Text(pullRequestStatusLabel(pullRequest.status, checks: pullRequest.checks))
+                                        .lineLimit(1)
+                                    Spacer(minLength: 0)
+                                }
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(pullRequestForegroundColor)
+                            }
+                            .buttonStyle(.plain)
+                            .safeHelp(String(localized: "sidebar.pullRequest.openTooltip", defaultValue: "Open \(pullRequest.label) #\(pullRequest.number)"))
+                        }
+                    }
+                }
+
+                // Review nudge: the last agent turn left uncommitted changes. Click-only, never opens itself.
+                if let reviewNudge = tab.reviewNudgeTarget {
+                    Button(action: {
+                        openReviewFromNudge(panelId: reviewNudge.panelId)
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "plus.forwardslash.minus")
+                                .font(.system(size: 9, weight: .semibold))
+                                .accessibilityHidden(true)
+                            Text(reviewNudgeFileCountLabel(reviewNudge.fileCount))
+                                .lineLimit(1)
+                            Text(verbatim: "·")
+                                .accessibilityHidden(true)
+                            Text(String(localized: "sidebar.reviewNudge.action", defaultValue: "Review"))
+                                .underline()
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(pullRequestForegroundColor)
+                    }
+                    .buttonStyle(.plain)
+                    .safeHelp(String(localized: "sidebar.reviewNudge.tooltip", defaultValue: "Open the review panel for these changes"))
+                }
+
+                if !tab.listeningPorts.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(tab.listeningPorts, id: \.self) { port in
+                            Button(action: {
+                                openPortLink(port)
+                            }) {
+                                Text(verbatim: ":\(port)")
+                                    .underline()
+                            }
+                            .buttonStyle(.plain)
+                            .safeHelp(String(localized: "sidebar.port.openTooltip", defaultValue: "Open localhost:\(String(port))"))
+                        }
                         Spacer(minLength: 0)
                     }
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(pullRequestForegroundColor)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(activeSecondaryColor(0.75))
+                    .lineLimit(1)
                 }
-                .buttonStyle(.plain)
-                .safeHelp(String(localized: "sidebar.reviewNudge.tooltip", defaultValue: "Open the review panel for these changes"))
-            }
-
-            if !tab.listeningPorts.isEmpty {
-                HStack(spacing: 4) {
-                    ForEach(tab.listeningPorts, id: \.self) { port in
-                        Button(action: {
-                            openPortLink(port)
-                        }) {
-                            Text(verbatim: ":\(port)")
-                                .underline()
-                        }
-                        .buttonStyle(.plain)
-                        .safeHelp(String(localized: "sidebar.port.openTooltip", defaultValue: "Open localhost:\(String(port))"))
-                    }
-                    Spacer(minLength: 0)
-                }
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundColor(activeSecondaryColor(0.75))
-                .lineLimit(1)
             }
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: tab.logEntries.count)
@@ -1442,6 +1511,12 @@ struct TabItemView: View, Equatable {
     private struct VerticalBranchDirectoryLine {
         let branch: String?
         let directory: String?
+
+        /// The home directory, or a directory the title already shows, adds no information.
+        func droppingRedundantDirectory(title: String) -> VerticalBranchDirectoryLine? {
+            guard let directory, directory == "~" || directory == title else { return self }
+            return branch.map { VerticalBranchDirectoryLine(branch: $0, directory: nil) }
+        }
     }
 
     /// Recomputes the expensive sidebar detail caches (bonsplit tree walk,
@@ -2323,5 +2398,60 @@ private struct SidebarRowHoverProbe: View {
             .onHover { hovering in
                 isHovering = hovering
             }
+    }
+}
+
+/// One line of text that fades out at the trailing edge instead of ending in an
+/// ellipsis. The text keeps its full width and the full-width frame clips it, so
+/// a short line never reaches the faded zone.
+private struct SidebarTrailingFade: ViewModifier {
+    private static let fadeWidth: CGFloat = 18
+
+    func body(content: Content) -> some View {
+        content
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+            .clipped()
+            .mask {
+                HStack(spacing: 0) {
+                    Rectangle()
+                    LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                        .frame(width: Self.fadeWidth)
+                }
+            }
+    }
+}
+
+/// Compact elapsed time ("now", "3m", "2h", "4d"). The timeline ticks inside this
+/// leaf, so the row itself never re-renders for the clock.
+private struct SidebarElapsedTimeLabel: View {
+    let since: Date
+    let color: Color
+
+    var body: some View {
+        TimelineView(.periodic(from: since, by: 60)) { context in
+            Text(Self.format(context.date.timeIntervalSince(since)))
+                .font(.system(size: 10).monospacedDigit())
+                .foregroundColor(color)
+                .lineLimit(1)
+                .fixedSize()
+        }
+    }
+
+    static func format(_ interval: TimeInterval) -> String {
+        let minutes = Int(max(interval, 0) / 60)
+        if minutes < 1 {
+            return String(localized: "sidebar.elapsed.now", defaultValue: "now")
+        }
+        if minutes < 60 {
+            return String(localized: "sidebar.elapsed.minutes", defaultValue: "\(minutes)m")
+        }
+        let hours = minutes / 60
+        if hours < 24 {
+            return String(localized: "sidebar.elapsed.hours", defaultValue: "\(hours)h")
+        }
+        let days = hours / 24
+        return String(localized: "sidebar.elapsed.days", defaultValue: "\(days)d")
     }
 }
