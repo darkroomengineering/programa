@@ -50,6 +50,24 @@ Common symptoms:
   `PROGRAMA_SOCKET_PASSWORD`.
 - Connection refused or no such file: Programa is not running, or the socket mode is `off`.
 
+## High memory use
+
+Most of Programa's memory is terminal history. Each terminal keeps up to 50 MB of scrollback,
+so ten terminals that have printed a lot of output can hold about 500 MB between them. For a
+few seconds after a burst of output, panes you are not looking at can add more, until Programa
+releases their rendered frames about 30 seconds after they were last visible.
+
+To keep less history, lower the cap in your Ghostty config (`~/.config/ghostty/config`). It
+applies to terminals opened after the change:
+
+```
+scrollback-limit-bytes = 10000000
+```
+
+`scrollback-limit-lines` sets a line count instead; when both are set, the first limit reached
+wins. A restored session keeps only the last part of each terminal's history, so memory after a
+relaunch is much lower than before it.
+
 ## Bug report checklist
 
 Include:
