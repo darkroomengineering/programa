@@ -22,7 +22,7 @@ enum ChromeDensity {
     static let sidebarRowHorizontalPaddingDefault: CGFloat = 8
     static var sidebarRowHorizontalPadding: CGFloat { resolved("sidebarRowHorizontalPadding", default: sidebarRowHorizontalPaddingDefault) }
 
-    static let sidebarRowCornerRadiusDefault: CGFloat = 6
+    static let sidebarRowCornerRadiusDefault: CGFloat = 10
     static var sidebarRowCornerRadius: CGFloat { resolved("sidebarRowCornerRadius", default: sidebarRowCornerRadiusDefault) }
 
     static let sidebarRowSpacingDefault: CGFloat = 1
@@ -44,6 +44,14 @@ enum ChromeDensity {
 
     static let contentCardInsetDefault: CGFloat = 4
     static var contentCardInset: CGFloat { resolved("contentCardInset", default: contentCardInsetDefault) }
+
+    /// Soft shadow the content card casts on the backdrop and sidebar, so the
+    /// terminal reads as lifted. Opacity is a percentage.
+    static let contentCardShadowRadiusDefault: CGFloat = 10
+    static var contentCardShadowRadius: CGFloat { resolved("contentCardShadowRadius", default: contentCardShadowRadiusDefault) }
+
+    static let contentCardShadowOpacityDefault: CGFloat = 22
+    static var contentCardShadowOpacity: CGFloat { resolved("contentCardShadowOpacity", default: contentCardShadowOpacityDefault) }
 
     static let controlCornerRadiusDefault: CGFloat = 6
     static var controlCornerRadius: CGFloat { resolved("controlCornerRadius", default: controlCornerRadiusDefault) }

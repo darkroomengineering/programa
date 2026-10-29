@@ -333,6 +333,29 @@ struct ContentView: View {
             ? WindowGlassEffect.contentCardInset : 0
     }
 
+    /// Shadow under the content card, masked to outside the card so a
+    /// translucent terminal background never shows it through.
+    @ViewBuilder private var contentCardShadow: some View {
+        let opacity = ChromeDensity.contentCardShadowOpacity / 100
+        if cardInsetAmount > 0, opacity > 0 {
+            let card = RoundedRectangle(
+                cornerRadius: WindowGlassEffect.contentCardCornerRadius,
+                style: .continuous
+            )
+            let radius = ChromeDensity.contentCardShadowRadius
+            card
+                .fill(Color.black)
+                .shadow(color: .black.opacity(opacity), radius: radius, x: 0, y: 1)
+                .mask {
+                    Rectangle()
+                        .padding(-radius * 2)
+                        .overlay(card.blendMode(.destinationOut))
+                        .compositingGroup()
+                }
+                .allowsHitTesting(false)
+        }
+    }
+
     private var contentAndSidebarLayout: AnyView {
         let layout: AnyView
         let useWithinWindow = sidebarBlendMode == SidebarBlendModeOption.withinWindow.rawValue
@@ -343,6 +366,7 @@ struct ContentView: View {
             layout = AnyView(
                 ZStack(alignment: .leading) {
                     terminalContentWithSidebarDropOverlay
+                        .background { contentCardShadow }
                         .padding(cardInsetAmount)
                         // Empty inset chrome drags without covering the tab controls.
                         .background(WindowDragHandleView())
@@ -361,6 +385,7 @@ struct ContentView: View {
                         sidebarView
                     }
                     terminalContentWithSidebarDropOverlay
+                        .background { contentCardShadow }
                         .padding(cardInsetAmount)
                         .background(WindowDragHandleView())
                 }

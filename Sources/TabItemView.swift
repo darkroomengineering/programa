@@ -773,8 +773,12 @@ struct TabItemView: View, Equatable {
         .padding(.horizontal, rowMetrics.horizontalPadding)
         .padding(.vertical, rowMetrics.verticalPadding)
         .background(
-            RoundedRectangle(cornerRadius: rowMetrics.cornerRadius, style: .continuous)
-                .fill(backgroundColor)
+            SidebarRowFill(
+                baseColor: backgroundColor,
+                isRaised: usesRaisedSelection,
+                isHovered: isHovering && !isActive && !isMultiSelected,
+                cornerRadius: rowMetrics.cornerRadius
+            )
                 .overlay {
                     RoundedRectangle(cornerRadius: rowMetrics.cornerRadius, style: .continuous)
                         .strokeBorder(activeBorderColor, lineWidth: activeBorderLineWidth)
@@ -1195,6 +1199,13 @@ struct TabItemView: View, Equatable {
         // Default: quiet neutral selection that harmonizes with the glass sidebar
         // instead of a saturated accent card.
         return NSColor.quaternaryLabelColor
+    }
+
+    /// The default active row is a raised pill; a custom selection color keeps
+    /// its flat fill.
+    private var usesRaisedSelection: Bool {
+        isActive && activeTabIndicatorStyle == .leftRail
+            && sidebarSelectionColorHex.flatMap { NSColor(hex: $0) } == nil
     }
 
     private var backgroundColor: Color {
@@ -2269,6 +2280,35 @@ private struct SidebarMetadataMarkdownBlockRow: View {
             markdown: block.markdown,
             options: .init(interpretedSyntax: .full)
         )
+    }
+}
+
+/// Row background. Reads window key state and color scheme here rather than in
+/// `TabItemView`, whose `==` must not grow environment dependencies. Hover and
+/// selection changes are deliberately unanimated.
+private struct SidebarRowFill: View {
+    let baseColor: Color
+    let isRaised: Bool
+    let isHovered: Bool
+    let cornerRadius: CGFloat
+
+    @Environment(\.controlActiveState) private var controlActiveState
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        if isRaised && controlActiveState != .inactive {
+            let isDark = colorScheme == .dark
+            shape
+                .fill(isDark ? Color.white.opacity(0.12) : Color.white)
+                .shadow(color: .black.opacity(isDark ? 0.35 : 0.10), radius: 3, x: 0, y: 1)
+        } else if isRaised {
+            shape.fill(Color(nsColor: .quaternaryLabelColor))
+        } else if isHovered {
+            shape.fill(Color.primary.opacity(0.05))
+        } else {
+            shape.fill(baseColor)
+        }
     }
 }
 
