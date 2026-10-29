@@ -644,16 +644,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         // Archive whatever the previous launch left behind before any code path below (or
         // later in startup) can overwrite it -- including a launch that skips restore entirely
         // (explicit open intent), which otherwise clobbers the file with no way back.
-        let captureEnabled = SessionWALStore.shared.currentCapturePolicy().enabled
-        let archivedWithContent = captureEnabled ? try? SessionScrollbackPolicyStore.withContentPermission(
-            at: SessionScrollbackPolicyPaths.make(), capturedGeneration: nil,
-            { SessionPersistenceStore.rotateIntoHistory() }
-        ) : nil
-        if archivedWithContent == nil {
-            SessionPersistenceStore.rotateIntoHistory(includeScrollback: false)
+        // This runs from ProgramaApp.init, before the run loop drains its first autorelease
+        // pool; the local pool frees the multi-MB snapshot buffers before startup continues.
+        autoreleasepool {
+            let captureEnabled = SessionWALStore.shared.currentCapturePolicy().enabled
+            // One read of the live file, shared by rotation and restore. Nothing in between
+            // writes it: rotation writes only into session-history/.
+            let liveData = SessionPersistenceStore.defaultSnapshotFileURL()
+                .flatMap { SessionPersistenceStore.boundedSnapshotData(at: $0) }
+            let archivedWithContent = captureEnabled ? try? SessionScrollbackPolicyStore.withContentPermission(
+                at: SessionScrollbackPolicyPaths.make(), capturedGeneration: nil,
+                { SessionPersistenceStore.rotateIntoHistory(data: liveData) }
+            ) : nil
+            if archivedWithContent == nil {
+                SessionPersistenceStore.rotateIntoHistory(includeScrollback: false, data: liveData)
+            }
+            guard !didHandleExplicitOpenIntentAtStartup, SessionRestorePolicy.shouldAttemptRestore() else { return }
+            startupSessionSnapshot = core.sessionSnapshots.loadWithHistoryFallback(data: liveData)
         }
-        guard !didHandleExplicitOpenIntentAtStartup, SessionRestorePolicy.shouldAttemptRestore() else { return }
-        startupSessionSnapshot = core.sessionSnapshots.loadWithHistoryFallback()
     }
 
     private func persistedWindowGeometry(
