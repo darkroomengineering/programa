@@ -292,11 +292,10 @@ private struct TitlebarControlButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(
-                RoundedRectangle(cornerRadius: config.buttonCornerRadius, style: .continuous)
+                // Hover and press fills switch instantly, with no fade, like native toolbar buttons.
+                RoundedRectangle(cornerRadius: WindowGlassEffect.controlCornerRadius, style: .continuous)
                     .fill(Color.primary.opacity(backgroundOpacity(isPressed: configuration.isPressed)))
             )
-            .animation(.easeOut(duration: 0.12), value: isHovering)
-            .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
     }
 
     private func backgroundOpacity(isPressed: Bool) -> Double {
@@ -314,6 +313,7 @@ struct TitlebarControlsView: View {
     let onToggleNotifications: () -> Void
     let onNewTab: () -> Void
     let visibilityMode: TitlebarControlsVisibilityMode
+    var layout: TitlebarControlsLayout = .contiguous
     @AppStorage("titlebarControlsStyle") private var styleRawValue = TitlebarControlsStyle.classic.rawValue
     @AppStorage(ShortcutHintDebugSettings.titlebarHintXKey) private var titlebarShortcutHintXOffset = ShortcutHintDebugSettings.defaultTitlebarHintX
     @AppStorage(ShortcutHintDebugSettings.titlebarHintYKey) private var titlebarShortcutHintYOffset = ShortcutHintDebugSettings.defaultTitlebarHintY
@@ -368,13 +368,7 @@ struct TitlebarControlsView: View {
         let _ = shortcutRefreshTick
         let style = TitlebarControlsStyle(rawValue: styleRawValue) ?? .classic
         let config = style.config
-        controlsGroup(config: config)
-            // Leading inset mirrors the inter-icon spacing (see TitlebarControlsRhythm) so the
-            // gap between the last traffic light and the first titlebar icon matches the gap
-            // between the icons themselves — one rhythm, not two.
-            .padding(.leading, config.spacing)
-            .padding(.trailing, titlebarHintTrailingInset(for: config))
-            .contentShape(Rectangle())
+        laidOutControls(config: config)
             .opacity(shouldShowControls ? 1 : 0)
             .allowsHitTesting(shouldShowControls)
             .animation(.easeOut(duration: 0.14), value: shouldShowControls)
@@ -415,54 +409,38 @@ struct TitlebarControlsView: View {
     }
 
     @ViewBuilder
-    private func controlsGroup(config: TitlebarControlsStyleConfig) -> some View {
-        let hintLayoutItems = titlebarHintLayoutItems(config: config)
+    private func laidOutControls(config: TitlebarControlsStyleConfig) -> some View {
+        switch layout {
+        case .contiguous:
+            controlsGroup(slots: HintSlot.allCases, config: config)
+                // Leading inset mirrors the inter-icon spacing (see TitlebarControlsRhythm) so the
+                // gap between the last traffic light and the first titlebar icon matches the gap
+                // between the icons themselves — one rhythm, not two.
+                .padding(.leading, config.spacing)
+                .padding(.trailing, titlebarHintTrailingInset(for: config))
+                .contentShape(Rectangle())
+        case .splitLeadingToggle(let leadingInset):
+            // Only the two button groups take a content shape: the gap between them must
+            // stay inert so the header strip underneath keeps dragging the window.
+            HStack(spacing: 0) {
+                controlsGroup(slots: [.toggleSidebar], config: config)
+                    .contentShape(Rectangle())
+                Spacer(minLength: 0)
+                controlsGroup(slots: [.showNotifications, .newTab], config: config)
+                    .contentShape(Rectangle())
+            }
+            .padding(.leading, leadingInset)
+            .padding(.trailing, titlebarHintTrailingInset(for: config))
+        }
+    }
+
+    @ViewBuilder
+    private func controlsGroup(slots: [HintSlot], config: TitlebarControlsStyleConfig) -> some View {
+        let hintLayoutItems = titlebarHintLayoutItems(slots: slots, config: config)
         let content = HStack(spacing: config.spacing) {
-            TitlebarControlButton(config: config, action: {
-                #if DEBUG
-                dlog("titlebar.toggleSidebar")
-                #endif
-                onToggleSidebar()
-            }) { isHovering in
-                iconLabel(systemName: "sidebar.left", config: config, isHovering: isHovering)
+            ForEach(slots, id: \.self) { slot in
+                controlButton(for: slot, config: config)
             }
-            .accessibilityIdentifier("titlebarControl.toggleSidebar")
-            .accessibilityLabel(String(localized: "titlebar.sidebar.accessibilityLabel", defaultValue: "Toggle Sidebar"))
-            .safeHelp(KeyboardShortcutSettings.Action.toggleSidebar.tooltip(String(localized: "titlebar.sidebar.tooltip", defaultValue: "Show or hide the sidebar")))
-
-            TitlebarControlButton(config: config, action: {
-                #if DEBUG
-                dlog("titlebar.notifications")
-                #endif
-                onToggleNotifications()
-            }) { isHovering in
-                Group {
-                    if notificationStore.unreadCount > 0 {
-                        Image(systemName: "bell.fill")
-                            .font(.system(size: titlebarIconRenderSize(for: "bell.fill", config: config), weight: .regular))
-                            .foregroundColor(programaAccentColor())
-                    } else {
-                        iconLabel(systemName: "bell", config: config, isHovering: isHovering)
-                    }
-                }
-                .frame(width: config.buttonSize, height: config.buttonSize)
-            }
-            .accessibilityIdentifier("titlebarControl.showNotifications")
-            .background(NotificationsAnchorView { viewModel.notificationsAnchorView = $0 })
-            .accessibilityLabel(String(localized: "titlebar.notifications.accessibilityLabel", defaultValue: "Notifications"))
-            .safeHelp(KeyboardShortcutSettings.Action.showNotifications.tooltip(String(localized: "titlebar.notifications.tooltip", defaultValue: "Show notifications")))
-
-            TitlebarControlButton(config: config, action: {
-                #if DEBUG
-                dlog("titlebar.newTab")
-                #endif
-                onNewTab()
-            }) { isHovering in
-                iconLabel(systemName: "plus", config: config, isHovering: isHovering)
-            }
-            .accessibilityIdentifier("titlebarControl.newTab")
-            .accessibilityLabel(String(localized: "titlebar.newWorkspace.accessibilityLabel", defaultValue: "New Workspace"))
-            .safeHelp(KeyboardShortcutSettings.Action.newTab.tooltip(String(localized: "titlebar.newWorkspace.tooltip", defaultValue: "New workspace")))
         }
 
         let paddedContent = content.padding(config.groupPadding)
@@ -488,9 +466,61 @@ struct TitlebarControlsView: View {
         }
     }
 
-    private func titlebarHintLayoutItems(config: TitlebarControlsStyleConfig) -> [TitlebarHintLayoutItem] {
+    @ViewBuilder
+    private func controlButton(for slot: HintSlot, config: TitlebarControlsStyleConfig) -> some View {
+        switch slot {
+        case .toggleSidebar:
+            TitlebarControlButton(config: config, action: {
+                #if DEBUG
+                dlog("titlebar.toggleSidebar")
+                #endif
+                onToggleSidebar()
+            }) { isHovering in
+                iconLabel(systemName: "sidebar.left", config: config, isHovering: isHovering)
+            }
+            .accessibilityIdentifier("titlebarControl.toggleSidebar")
+            .accessibilityLabel(String(localized: "titlebar.sidebar.accessibilityLabel", defaultValue: "Toggle Sidebar"))
+            .safeHelp(KeyboardShortcutSettings.Action.toggleSidebar.tooltip(String(localized: "titlebar.sidebar.tooltip", defaultValue: "Show or hide the sidebar")))
+        case .showNotifications:
+            TitlebarControlButton(config: config, action: {
+                #if DEBUG
+                dlog("titlebar.notifications")
+                #endif
+                onToggleNotifications()
+            }) { isHovering in
+                Group {
+                    if notificationStore.unreadCount > 0 {
+                        Image(systemName: "bell.fill")
+                            .font(.system(size: titlebarIconRenderSize(for: "bell.fill", config: config), weight: .regular))
+                            .foregroundColor(programaAccentColor())
+                    } else {
+                        iconLabel(systemName: "bell", config: config, isHovering: isHovering)
+                    }
+                }
+                .frame(width: config.buttonSize, height: config.buttonSize)
+            }
+            .accessibilityIdentifier("titlebarControl.showNotifications")
+            .background(NotificationsAnchorView { viewModel.notificationsAnchorView = $0 })
+            .accessibilityLabel(String(localized: "titlebar.notifications.accessibilityLabel", defaultValue: "Notifications"))
+            .safeHelp(KeyboardShortcutSettings.Action.showNotifications.tooltip(String(localized: "titlebar.notifications.tooltip", defaultValue: "Show notifications")))
+        case .newTab:
+            TitlebarControlButton(config: config, action: {
+                #if DEBUG
+                dlog("titlebar.newTab")
+                #endif
+                onNewTab()
+            }) { isHovering in
+                iconLabel(systemName: "plus", config: config, isHovering: isHovering)
+            }
+            .accessibilityIdentifier("titlebarControl.newTab")
+            .accessibilityLabel(String(localized: "titlebar.newWorkspace.accessibilityLabel", defaultValue: "New Workspace"))
+            .safeHelp(KeyboardShortcutSettings.Action.newTab.tooltip(String(localized: "titlebar.newWorkspace.tooltip", defaultValue: "New workspace")))
+        }
+    }
+
+    private func titlebarHintLayoutItems(slots: [HintSlot], config: TitlebarControlsStyleConfig) -> [TitlebarHintLayoutItem] {
         let xOffset = CGFloat(ShortcutHintDebugSettings.clamped(titlebarShortcutHintXOffset))
-        let intervals = titlebarHintIntervals(config: config, xOffset: xOffset)
+        let intervals = titlebarHintIntervals(slots: slots, config: config, xOffset: xOffset)
         guard !intervals.isEmpty else { return [] }
 
         // Keep all titlebar hints on the same Y lane and resolve overlaps by shifting left.
@@ -516,19 +546,22 @@ struct TitlebarControlsView: View {
         return items
     }
 
+    /// Hint x positions are relative to the group that hosts `slots`; each group carries
+    /// its own overlay, so a button's position is its index within that group.
     private func titlebarHintIntervals(
+        slots: [HintSlot],
         config: TitlebarControlsStyleConfig,
         xOffset: CGFloat
     ) -> [(action: KeyboardShortcutSettings.Action, shortcut: StoredShortcut, width: CGFloat, interval: ClosedRange<CGFloat>)] {
         guard shouldShowTitlebarShortcutHints else { return [] }
 
-        return HintSlot.allCases.compactMap { slot in
+        return slots.enumerated().compactMap { position, slot in
             let shortcut = KeyboardShortcutSettings.shortcut(for: slot.action)
             guard shortcut.command else { return nil }
 
             let width = titlebarHintWidth(for: shortcut, config: config)
             let rightEdge = config.groupPadding.leading
-                + titlebarButtonRightEdge(for: slot, config: config)
+                + titlebarButtonRightEdge(at: position, config: config)
                 + xOffset
                 + titlebarHintRightSafetyShift
                 + titlebarHintBaseXShift
@@ -542,8 +575,8 @@ struct TitlebarControlsView: View {
         return ceil(textWidth) + 12
     }
 
-    private func titlebarButtonRightEdge(for slot: HintSlot, config: TitlebarControlsStyleConfig) -> CGFloat {
-        let index = CGFloat(slot.rawValue)
+    private func titlebarButtonRightEdge(at position: Int, config: TitlebarControlsStyleConfig) -> CGFloat {
+        let index = CGFloat(position)
         return (index + 1) * config.buttonSize + index * config.spacing
     }
 
@@ -612,10 +645,14 @@ struct HiddenTitlebarSidebarControlsView: View {
     @ObservedObject var notificationStore: TerminalNotificationStore
     @ObservedObject var sidebarState: SidebarState
     @StateObject private var viewModel = TitlebarControlsViewModel()
+    /// Header-local x where the sidebar toggle starts; nil while the traffic lights
+    /// are not in this window (fullscreen, hidden), which keeps the trailing cluster.
+    /// Seeded from the last measurement: hiding the sidebar unmounts this view, and an
+    /// unseeded first frame would draw the toggle trailing before it snaps leading.
+    @State private var toggleLeadingInset: CGFloat? = Self.leadingInset(
+        forZoomMaxX: TrafficLightsTrailingEdgeView.lastMeasuredMaxX
+    )
 
-    // Sized to hug the 3 buttons at the roomiest style config (3x28 + spacing
-    // + trailing hint inset) so the box doesn't reach toward the traffic lights.
-    private let hostWidth: CGFloat = 140
     private let hostHeight: CGFloat = 28
 
     var body: some View {
@@ -630,9 +667,116 @@ struct HiddenTitlebarSidebarControlsView: View {
                 )
             },
             onNewTab: { _ = AppDelegate.shared?.tabManager?.addTab() },
-            visibilityMode: .alwaysVisible
+            visibilityMode: .alwaysVisible,
+            layout: toggleLeadingInset.map { .splitLeadingToggle(leadingInset: $0) } ?? .contiguous
         )
-        .frame(width: hostWidth, height: hostHeight, alignment: .trailing)
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .frame(height: hostHeight)
+        .background(alignment: .leading) {
+            TrafficLightsTrailingEdgeReader { maxX in
+                let inset = Self.leadingInset(forZoomMaxX: maxX)
+                if inset != toggleLeadingInset {
+                    toggleLeadingInset = inset
+                }
+            }
+            .frame(width: 0, height: 0)
+        }
+    }
+
+    private static func leadingInset(forZoomMaxX maxX: CGFloat?) -> CGFloat? {
+        maxX.map { $0 + TitlebarControlsRhythm.trafficLightGap }
+    }
+}
+
+enum TitlebarControlsLayout: Equatable {
+    /// All controls in one row, hugging the trailing edge.
+    case contiguous
+    /// Sidebar toggle at `leadingInset` from the host's leading edge (just past the
+    /// traffic lights); notifications and new-workspace stay trailing.
+    case splitLeadingToggle(leadingInset: CGFloat)
+}
+
+/// Reports the zoom button's maxX in this view's own coordinates, or nil when the
+/// traffic lights are not laid out in this window (fullscreen moves them into the
+/// fullscreen toolbar window). Measuring in local space keeps the result correct
+/// whatever inset the sidebar sits at.
+private struct TrafficLightsTrailingEdgeReader: NSViewRepresentable {
+    let onChange: (CGFloat?) -> Void
+
+    func makeNSView(context: Context) -> TrafficLightsTrailingEdgeView {
+        let view = TrafficLightsTrailingEdgeView()
+        view.onChange = onChange
+        return view
+    }
+
+    func updateNSView(_ nsView: TrafficLightsTrailingEdgeView, context: Context) {
+        nsView.onChange = onChange
+        nsView.scheduleMeasure()
+    }
+
+    static func dismantleNSView(_ nsView: TrafficLightsTrailingEdgeView, coordinator: ()) {
+        nsView.stopObservingWindow()
+    }
+}
+
+private final class TrafficLightsTrailingEdgeView: NSView {
+    /// Last non-fullscreen measurement, shared by every window: the traffic-light
+    /// geometry relative to the sidebar header is the same in all of them.
+    static var lastMeasuredMaxX: CGFloat?
+
+    var onChange: ((CGFloat?) -> Void)?
+    private var windowObservers: [NSObjectProtocol] = []
+    private var measurePending = false
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        stopObservingWindow()
+        guard let window else { return }
+        let names: [Notification.Name] = [
+            NSWindow.didEnterFullScreenNotification,
+            NSWindow.didExitFullScreenNotification,
+        ]
+        windowObservers = names.map { name in
+            NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                self?.scheduleMeasure()
+            }
+        }
+        scheduleMeasure()
+    }
+
+    override func setFrameOrigin(_ newOrigin: NSPoint) {
+        super.setFrameOrigin(newOrigin)
+        scheduleMeasure()
+    }
+
+    func stopObservingWindow() {
+        windowObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        windowObservers = []
+    }
+
+    /// Deferred to the next main-queue turn so the measurement sees settled layout and
+    /// the SwiftUI state write never lands inside a layout or update pass.
+    func scheduleMeasure() {
+        guard !measurePending else { return }
+        measurePending = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.measurePending = false
+            self.onChange?(self.measureZoomButtonMaxX())
+        }
+    }
+
+    private func measureZoomButtonMaxX() -> CGFloat? {
+        guard let window,
+              !window.styleMask.contains(.fullScreen),
+              let zoom = window.standardWindowButton(.zoomButton),
+              zoom.window === window,
+              !zoom.isHiddenOrHasHiddenAncestor else { return nil }
+        let maxX = zoom.convert(zoom.bounds, to: self).maxX
+        Self.lastMeasuredMaxX = maxX
+        return maxX
     }
 }
 

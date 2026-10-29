@@ -223,17 +223,13 @@ struct VerticalTabsSidebar: View {
         let finishedHelperCounts = agentSupervision.finishedHelperCounts
         let sidebarContent = VStack(spacing: 0) {
             // Single header row shared with the traffic lights (Maps-style): the
-            // lights float over its leading side, controls sit trailing, and the
-            // whole strip drags/double-clicks like a titlebar.
-            HStack(spacing: 0) {
-                Spacer(minLength: 0)
-                // Right-aligned: the controls view carries its own ~18pt trailing
-                // inset (shortcut-hint clearance), which serves as the edge padding.
-                HiddenTitlebarSidebarControlsView(
-                    notificationStore: notificationStore,
-                    sidebarState: sidebarState
-                )
-            }
+            // lights float over its leading side with the sidebar toggle right after
+            // them, the other controls sit trailing, and the gaps drag/double-click
+            // like a titlebar.
+            HiddenTitlebarSidebarControlsView(
+                notificationStore: notificationStore,
+                sidebarState: sidebarState
+            )
             .frame(height: trafficLightPadding)
             // Flush sidebar (no panel inset): keep the header aligned with
             // AppKit's native titlebar controls.
