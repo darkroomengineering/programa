@@ -13,20 +13,21 @@ When we change the fork, update this document and the parent submodule SHA.
 
 ## Current fork changes
 
-The pinned fork head is `a6d95cc23` on the fork branch `programa/kitty-osc99`, which is
+The pinned fork head is `7e4b75eef` on the fork branch `fix/inc-384-disclaim-responsibility`,
+which is `a6d95cc23` on `programa/kitty-osc99` plus the responsibility disclaim. `a6d95cc23` is
 fork `main`'s `bccfc8333fecf707dd918d46e3849fc8ed72cca0` plus the OSC 7501 patch group, the
-idle display link park and the OSC 99 dispatch. Never delete that branch: the pin and its xcframework release point at it. It is built on
+idle display link park and the OSC 99 dispatch. Never delete either branch: the pin and its xcframework release point at them. It is built on
 `ghostty-org/ghostty` `main` at `c8634f3fce12f8189ed058e018195eb693f8562b` and Zig 0.16.0, and
-carries the twelve patch groups below: display-link restart, resize stale-frame mitigation, OSC 99
+carries the thirteen patch groups below: display-link restart, resize stale-frame mitigation, OSC 99
 notifications, theme picker hooks, color scheme mode 2031, keyboard copy mode selection API,
 layer-background flag, occluded-surface throttle, offscreen renderer realization, session
-introspection and revival APIs (which include the PTY tee), OSC 7501 program status, and idle
-display link parking.
+introspection and revival APIs (which include the PTY tee), OSC 7501 program status, idle
+display link parking, and the macOS responsibility disclaim.
 
 Prebuilt framework for the pinned head:
 
-- Release: `xcframework-a6d95cc23ee76efd016fee4711007d49f5e73316`
-- Asset SHA-256: `992da6a332817fd2bc3fd7f89f5d4a2a3d03405ff1078cc878525e7b5d55774e`
+- Release: `xcframework-7e4b75eef68a95234e0da273f7d98bf5840141c6`
+- Asset SHA-256: `PENDING`
 
 ### 1) macOS display link restart on display changes
 
@@ -216,6 +217,25 @@ tend to conflict together during rebases.
   - Upstream reworks `syncDisplayLink` and the vsync path in `Thread.drawFrame` from time to time.
     Keep the `resumeVsync` call at the `!now` draw gate and the idle-timer reset wherever the link
     starts.
+
+### 13) macOS responsibility disclaim for spawned commands
+
+- Commit: `7e4b75eef` (macos: disclaim responsibility for spawned commands)
+- Files:
+  - `src/Command.zig`
+- Summary:
+  - macOS treats every process a terminal spawns, and every app launched from those processes,
+    as part of the terminal app (its "responsible process"). Force quitting one of those apps from
+    the Dock killed Programa and every pane with it.
+  - The child now replaces its image with `posix_spawn(POSIX_SPAWN_SETEXEC)` and
+    `responsibility_spawnattrs_setdisclaim`, so each spawned command is its own responsible
+    process. The attribute is built in the parent, because `dlsym` and allocation are unsafe
+    between `fork` and `exec`. If the symbol or `posix_spawn` fails, it falls back to `execve`.
+  - Side effect: panes no longer inherit Programa's privacy grants. macOS prompts again the first
+    time a pane reads a protected folder such as `~/Desktop` or `~/Documents`.
+- Conflict notes:
+  - Keep both `execve` call sites in `startPosix` routed through `ExecAttr.exec`, and keep
+    `ExecAttr.init` before `fork`.
 
 ## Upstreamed fork changes
 
