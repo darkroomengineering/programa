@@ -21,6 +21,7 @@ General app preferences from Settings > App.
 | `newWorkspacePlacement` | string | `"afterCurrent"` | Where new workspaces are inserted in the sidebar. One of: `top`, `afterCurrent`, `end`. |
 | `minimalMode` | boolean | `false` | Hide the workspace title bar and move controls into the sidebar. |
 | `warnBeforeQuit` | boolean | `true` | Show a confirmation before quitting Programa. |
+| `autoResumeAgents` | boolean | `true` | Resume Claude Code, Codex and OpenCode sessions that were running at quit when their pane is restored. |
 | `commandPaletteSearchesAllSurfaces` | boolean | `false` | Search every surface in the command palette switcher instead of only the active workspace. |
 
 ## `notifications`

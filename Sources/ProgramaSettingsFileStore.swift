@@ -441,6 +441,9 @@ final class ProgramaSettingsFileStore {
         if let value = jsonBool(section["warnBeforeQuit"]) {
             snapshot.managedUserDefaults[QuitWarningSettings.warnBeforeQuitKey] = .bool(value)
         }
+        if let value = jsonBool(section["autoResumeAgents"]) {
+            snapshot.managedUserDefaults[AgentAutoResumeSettings.autoResumeAgentsKey] = .bool(value)
+        }
         if let value = jsonBool(section["commandPaletteSearchesAllSurfaces"]) {
             snapshot.managedUserDefaults[CommandPaletteSwitcherSearchSettings.searchAllSurfacesKey] = .bool(value)
         }
@@ -1159,6 +1162,7 @@ final class ProgramaSettingsFileStore {
                     "newWorkspacePlacement": WorkspacePlacementSettings.defaultPlacement.rawValue,
                     "minimalMode": WorkspacePresentationModeSettings.defaultMode == .minimal,
                     "warnBeforeQuit": QuitWarningSettings.defaultWarnBeforeQuit,
+                    "autoResumeAgents": AgentAutoResumeSettings.defaultAutoResumeAgents,
                     "commandPaletteSearchesAllSurfaces": CommandPaletteSwitcherSearchSettings.defaultSearchAllSurfaces,
                 ],
             ],
