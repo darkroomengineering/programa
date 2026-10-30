@@ -101,6 +101,10 @@ struct WorkspaceContentView: View {
                     isSplit: isSplit,
                     appearance: appearance,
                     hasUnreadNotification: showsNotificationRing,
+                    interruptedAgentState: workspace.interruptedAgentPanels[panel.id],
+                    onInterruptedAgentAction: { action in
+                        workspace.handleInterruptedAgentAction(action, panelId: panel.id)
+                    },
                     onFocus: {
                         // Keep bonsplit focus in sync with the AppKit first responder for the
                         // active workspace. This prevents divergence between the blue focused-tab

@@ -2238,6 +2238,33 @@ class TabManager: ObservableObject {
         )
 #endif
 
+        let rootPid = tab.terminalPanel(for: surfaceId)?.surface.surface
+            .map { ghostty_surface_child_pid($0) } ?? -1
+        // A pane whose agent was still running is kept with a Resume banner instead of
+        // closing: its processes were killed from outside, and closing would lose the
+        // session the user was in. A `.shellAlive` pane is not kept: its agent was already
+        // gone, so the shell exiting is the user's own `exit` or Ctrl-D.
+        let keep = tab.panelAgentPresence[surfaceId] != nil || tab.interruptedAgentPanels[surfaceId] == .paneDead
+        let resumable = AgentResumeStore.shared.target(panelId: surfaceId).map {
+            AgentResumeCommand.canResume($0) && !AgentResumeCommand.claudeTranscriptIsMissing(for: $0)
+        } == true
+        dilog("surface", "childExited panel=\(surfaceId.uuidString.prefix(8)) kept=\(keep && resumable) rootPid=\(rootPid)")
+        if keep, resumable {
+            tab.interruptedAgentPanels[surfaceId] = .paneDead
+            tab.clearPanelAgentState(panelId: surfaceId, force: true)
+            return
+        }
+
+        closePanelAfterChildExitedUnconditionally(tab: tab, surfaceId: surfaceId)
+    }
+
+    /// The close half of `closePanelAfterChildExited`, also used by the interrupted-agent
+    /// banner's Close and Resume actions for a pane whose processes are gone.
+    func closePanelAfterChildExitedUnconditionally(tab: Workspace, surfaceId: UUID) {
+        let tabId = tab.id
+        if tab.interruptedAgentPanels[surfaceId] != nil {
+            tab.interruptedAgentPanels.removeValue(forKey: surfaceId)
+        }
         // Child-exit on the last panel should collapse the workspace, matching explicit close
         // semantics (and close the window when it was the last workspace).
         if tab.panels.count <= 1 {

@@ -15,6 +15,8 @@ struct TerminalPanelView: View {
     let isSplit: Bool
     let appearance: PanelAppearance
     let hasUnreadNotification: Bool
+    let interruptedAgentState: InterruptedAgentState?
+    let onInterruptedAgentAction: (AgentInterruptedBannerAction) -> Void
     let onFocus: () -> Void
     let onTriggerFlash: () -> Void
 
@@ -28,6 +30,8 @@ struct TerminalPanelView: View {
         isSplit: Bool,
         appearance: PanelAppearance,
         hasUnreadNotification: Bool,
+        interruptedAgentState: InterruptedAgentState? = nil,
+        onInterruptedAgentAction: @escaping (AgentInterruptedBannerAction) -> Void = { _ in },
         onFocus: @escaping () -> Void,
         onTriggerFlash: @escaping () -> Void
     ) {
@@ -40,6 +44,8 @@ struct TerminalPanelView: View {
         self.isSplit = isSplit
         self.appearance = appearance
         self.hasUnreadNotification = hasUnreadNotification
+        self.interruptedAgentState = interruptedAgentState
+        self.onInterruptedAgentAction = onInterruptedAgentAction
         self.onFocus = onFocus
         self.onTriggerFlash = onTriggerFlash
     }
@@ -58,6 +64,8 @@ struct TerminalPanelView: View {
             inactiveOverlayColor: appearance.unfocusedOverlayNSColor,
             inactiveOverlayOpacity: appearance.unfocusedOverlayOpacity,
             searchState: panel.searchState,
+            interruptedAgentState: interruptedAgentState,
+            onInterruptedAgentAction: onInterruptedAgentAction,
             reattachToken: panel.viewReattachToken,
             onFocus: { _ in onFocus() },
             onTriggerFlash: onTriggerFlash

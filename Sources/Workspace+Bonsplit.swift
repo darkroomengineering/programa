@@ -715,6 +715,9 @@ extension Workspace: @preconcurrency BonsplitDelegate {
             AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: id, surfaceId: panelId)
             clearPanelAgentState(panelId: panelId, force: true)
             AgentResumeStore.shared.forget(panelId: panelId)
+            if interruptedAgentPanels[panelId] != nil {
+                interruptedAgentPanels.removeValue(forKey: panelId)
+            }
         }
         if progressSourcePanelId == panelId {
             progress = nil
