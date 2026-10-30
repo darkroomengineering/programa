@@ -468,7 +468,7 @@ extension ProgramaCLI {
                 print("Aside MCP client: \(change.summary)")
                 do {
                     try applyAsideSettingsChange(change)
-                    print("Open Aside's MCP settings and press Connect next to programa so its agent can use the tools.")
+                    print("Open Aside's MCP settings and choose Refresh tools from the ⋯ menu on the programa row so its agent can use the tools.")
                 } catch {
                     failures.append("Aside \(AsideProgramaRegistration.serverName): \(error)")
                 }

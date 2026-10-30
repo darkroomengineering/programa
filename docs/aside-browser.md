@@ -56,7 +56,7 @@ pointing at the `programa-mcp` next to the CLI (`Programa.app/Contents/Resources
 to `mcp.servers` in the signed-in account's `~/.aside/u/<account>/settings.json`. Every other
 setting stays as it is, and the confirmation prompt lists the change before anything is
 written. Aside's agent only sees a server's tools after Aside has listed them, so open
-Aside's MCP settings and press Connect next to `programa` afterwards.
+Aside's MCP settings and choose Refresh tools from the ⋯ menu on the `programa` row afterwards.
 `programa-mcp` finds the running Programa's socket on its own and needs no arguments or
 environment.
 
