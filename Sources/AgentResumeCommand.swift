@@ -56,6 +56,69 @@ enum AgentResumeCommand {
         return "cd \(shellQuoted(cwd)) && \(command)"
     }
 
+    /// Claude Code writes a session's transcript only after its first prompt, so a session quit
+    /// before one has nothing to resume and `claude --resume <id>` fails with "No conversation
+    /// found". Other providers are never reported missing.
+    static func claudeTranscriptIsMissing(
+        for target: AgentResumeTarget,
+        transcriptExists: (String) -> Bool = { claudeTranscriptExists(sessionId: $0) }
+    ) -> Bool {
+        (target.provider == "claude-code" || target.provider == "claude") && !transcriptExists(target.sessionId)
+    }
+
+    /// `$CLAUDE_CONFIG_DIR/projects` when set, then `~/.claude/projects`.
+    static func claudeProjectsRoots(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        homeDirectory: String = NSHomeDirectory()
+    ) -> [URL] {
+        var roots: [URL] = []
+        if let configured = environment["CLAUDE_CONFIG_DIR"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !configured.isEmpty {
+            roots.append(URL(fileURLWithPath: NSString(string: configured).expandingTildeInPath, isDirectory: true)
+                .appendingPathComponent("projects", isDirectory: true))
+        }
+        let defaultRoot = URL(fileURLWithPath: homeDirectory, isDirectory: true)
+            .appendingPathComponent(".claude/projects", isDirectory: true)
+        if !roots.contains(where: { $0.standardizedFileURL == defaultRoot.standardizedFileURL }) {
+            roots.append(defaultRoot)
+        }
+        return roots
+    }
+
+    /// Whether Claude Code has a non-empty transcript for the session: `<project>/<id>.jsonl`, or
+    /// `<project>/<id>/messages/<id>.jsonl`, in any project under any root. Every project
+    /// directory is searched instead of deriving Claude's directory name from a cwd, because the
+    /// directory a pane reports can differ from the one Claude started in.
+    ///
+    /// True when no root is a readable directory: an app launched from Finder does not see a
+    /// `CLAUDE_CONFIG_DIR` set only in the shell, and an unreadable root is no evidence that the
+    /// transcript is missing.
+    static func claudeTranscriptExists(sessionId: String, projectsRoots: [URL] = claudeProjectsRoots()) -> Bool {
+        guard !sessionId.isEmpty, sessionId != ".", sessionId != "..",
+              !sessionId.contains("/"), !sessionId.contains("\\") else { return false }
+        var sawReadableRoot = false
+        for root in projectsRoots {
+            guard let projects = try? FileManager.default.contentsOfDirectory(atPath: root.path) else { continue }
+            sawReadableRoot = true
+            for project in projects {
+                let projectURL = root.appendingPathComponent(project, isDirectory: true)
+                let direct = projectURL.appendingPathComponent("\(sessionId).jsonl")
+                let nested = projectURL.appendingPathComponent(sessionId, isDirectory: true)
+                    .appendingPathComponent("messages", isDirectory: true)
+                    .appendingPathComponent("\(sessionId).jsonl")
+                if isNonEmptyRegularFile(atPath: direct.path) || isNonEmptyRegularFile(atPath: nested.path) {
+                    return true
+                }
+            }
+        }
+        return !sawReadableRoot
+    }
+
+    static func isNonEmptyRegularFile(atPath path: String) -> Bool {
+        var info = stat()
+        return stat(path, &info) == 0 && info.st_mode & S_IFMT == S_IFREG && info.st_size > 0
+    }
+
     static func isValidSessionId(_ value: String) -> Bool {
         guard !value.isEmpty, value.utf8.count <= 128 else { return false }
         return value.unicodeScalars.allSatisfy { scalar in

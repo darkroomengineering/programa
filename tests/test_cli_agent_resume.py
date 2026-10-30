@@ -219,6 +219,24 @@ class AgentResumeTests(unittest.TestCase):
                 self.assertIn(message, merged_output(proc))
                 self.assertEqual(sent(rec), [])
 
+    def test_claude_session_without_its_reported_transcript_is_not_resumed(self) -> None:
+        # Claude writes the transcript only after the first prompt; resuming before that fails
+        # with "No conversation found".
+        transcript = self.box.home / ".claude" / "projects" / "-project" / f"{SESSION_ID}.jsonl"
+        transcript.parent.mkdir(parents=True)
+        self.box.write_last_sessions(self.box.entry(transcriptPath=str(transcript)))
+        with self.recorder() as rec:
+            missing = self.box.cli(rec, ["resume"])
+        self.assertNotEqual(missing.returncode, 0, merged_output(missing))
+        self.assertIn("has no saved conversation to resume", merged_output(missing))
+        self.assertEqual(sent(rec), [])
+
+        transcript.write_text('{"type":"user"}\n', encoding="utf-8")
+        with self.recorder() as rec:
+            present = self.box.cli(rec, ["resume", "--print"])
+        self.assertEqual(present.returncode, 0, merged_output(present))
+        self.assertEqual(present.stdout.strip(), f"claude --resume '{SESSION_ID}'")
+
     def test_explicit_session_uses_its_recorded_provider_or_the_provider_flag(self) -> None:
         self.box.write_last_sessions(self.box.entry(sessionId="codex-thread-1", provider="codex"))
         with self.recorder() as rec:
