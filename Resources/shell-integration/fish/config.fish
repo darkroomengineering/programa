@@ -262,6 +262,18 @@ printf "%s\\n" "$ticket" > "$file"'
         printf '\033[>m\033[<8u'
     end
 
+    # A TUI killed mid-run (SIGKILL, a crash) leaves its modes on: mouse
+    # reporting types reports like 35;1;13M at the prompt. fish_postexec fires
+    # before fish's reader turns bracketed paste back on, which fish_prompt
+    # would not guarantee. A hidden cursor comes back. ESC 7 keeps the cursor
+    # in place when 1049l runs on the primary screen; tmux and screen keep the
+    # 1049 cursor apart from ESC 7, so the prompt would jump there.
+    function _programa_reset_terminal_leftover_modes --on-event fish_postexec
+        isatty stdout; or test -n "$PROGRAMA_TEST_FORCE_KEYBOARD_RESET"; or return 0
+        printf '\033[?9l\033[?1000l\033[?1002l\033[?1003l\033[?1005l\033[?1006l\033[?1015l\033[?1016l\033[?1004l\033[?2004l\033[?25h'
+        test -n "$TMUX$STY"; or printf '\033\067\033[?1049l'
+    end
+
     function _programa_tmux_sync_key_is_managed --argument-names candidate
         contains -- "$candidate" $_PROGRAMA_TMUX_SYNC_KEYS
     end

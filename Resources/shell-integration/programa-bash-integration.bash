@@ -881,7 +881,24 @@ _programa_bash_preexec_hook() {
     _programa_preexec_command "$@"
 }
 
+_programa_reset_terminal_leftover_modes() {
+    [[ -t 1 || -n "${PROGRAMA_TEST_FORCE_KEYBOARD_RESET:-}" ]] || return 0
+    # A TUI killed mid-run (SIGKILL, a crash) leaves its modes on: mouse
+    # reporting types reports like 35;1;13M at the prompt. The shell is the
+    # foreground job here, before readline turns bracketed paste back on. A
+    # hidden cursor comes back. Cursor-key mode (?1) stays, as in zsh, where
+    # zle sets it after the prompt hook.
+    printf '\033[?9l\033[?1000l\033[?1002l\033[?1003l\033[?1005l\033[?1006l\033[?1015l\033[?1016l\033[?1004l\033[?2004l\033[?25h'
+    # Leaving the alternate screen restores a saved cursor; ESC 7 makes that
+    # the prompt's own spot on Ghostty's primary screen. tmux and screen keep
+    # the 1049 cursor apart from ESC 7, so there the prompt would jump.
+    [[ -n "${TMUX:-}${STY:-}" ]] || printf '\033\067\033[?1049l'
+}
+
 _programa_prompt_command() {
+    # Runs before the socket checks below: a pane whose app socket is gone
+    # still has the dead TUI's mouse modes on.
+    _programa_reset_terminal_leftover_modes
     _programa_tmux_sync_programa_environment
 
     local programa_has_unix_socket=0

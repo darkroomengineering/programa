@@ -3525,6 +3525,70 @@ final class ZshShellIntegrationHandoffTests: XCTestCase {
         try contents.write(to: url, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
     }
+
+    // MARK: - Leftover Modes From A Killed Program
+
+    func testZshPromptHookResetsModesAKilledProgramLeftOn() throws {
+        let output = try runInteractiveZsh(
+            programaLoadGhosttyIntegration: false,
+            programaLoadShellIntegration: true,
+            command: "_programa_precmd",
+            extraEnvironment: ["PROGRAMA_TEST_FORCE_KEYBOARD_RESET": "1"]
+        )
+
+        XCTAssertTrue(
+            output.hasPrefix(LeftoverModeResetBytes.modes + LeftoverModeResetBytes.leaveAlternateScreen),
+            output.debugDescription
+        )
+    }
+
+    func testZshLeftoverModeResetKeepsTmuxOnItsAlternateScreen() throws {
+        let output = try runInteractiveZsh(
+            programaLoadGhosttyIntegration: false,
+            programaLoadShellIntegration: true,
+            command: "_programa_reset_terminal_leftover_modes",
+            extraEnvironment: [
+                "PROGRAMA_TEST_FORCE_KEYBOARD_RESET": "1",
+                "TMUX": "/tmp/tmux-test/default,1,0",
+            ]
+        )
+
+        XCTAssertEqual(output, LeftoverModeResetBytes.modes)
+    }
+
+    func testBashPromptHookResetsModesAKilledProgramLeftOn() throws {
+        let result = try runInteractiveBash(
+            programaLoadShellIntegration: true,
+            command: "_programa_prompt_command",
+            extraEnvironment: ["PROGRAMA_TEST_FORCE_KEYBOARD_RESET": "1"]
+        )
+
+        XCTAssertTrue(
+            result.stdout.hasPrefix(LeftoverModeResetBytes.modes + LeftoverModeResetBytes.leaveAlternateScreen),
+            result.stdout.debugDescription
+        )
+    }
+
+    func testBashLeftoverModeResetKeepsScreenOnItsAlternateScreen() throws {
+        let result = try runInteractiveBash(
+            programaLoadShellIntegration: true,
+            command: "_programa_reset_terminal_leftover_modes",
+            extraEnvironment: [
+                "PROGRAMA_TEST_FORCE_KEYBOARD_RESET": "1",
+                "STY": "12345.ttys001.host",
+            ]
+        )
+
+        XCTAssertEqual(result.stdout, LeftoverModeResetBytes.modes)
+    }
+}
+
+/// What the shell prompt hooks write to undo modes a SIGKILLed TUI left on.
+private enum LeftoverModeResetBytes {
+    static let modes =
+        "\u{1B}[?9l\u{1B}[?1000l\u{1B}[?1002l\u{1B}[?1003l\u{1B}[?1005l\u{1B}[?1006l"
+        + "\u{1B}[?1015l\u{1B}[?1016l\u{1B}[?1004l\u{1B}[?2004l\u{1B}[?25h"
+    static let leaveAlternateScreen = "\u{1B}7\u{1B}[?1049l"
 }
 
 final class FishShellIntegrationHandoffTests: XCTestCase {
@@ -3713,6 +3777,27 @@ final class FishShellIntegrationHandoffTests: XCTestCase {
         )
 
         XCTAssertEqual(output, "\u{1B}[>m\u{1B}[<8u")
+    }
+
+    func testFishPostexecResetsModesAKilledProgramLeftOn() throws {
+        let output = try runInteractiveFish(
+            command: "emit fish_postexec",
+            extraEnvironment: ["PROGRAMA_TEST_FORCE_KEYBOARD_RESET": "1"]
+        )
+
+        XCTAssertEqual(output, LeftoverModeResetBytes.modes + LeftoverModeResetBytes.leaveAlternateScreen)
+    }
+
+    func testFishLeftoverModeResetKeepsTmuxOnItsAlternateScreen() throws {
+        let output = try runInteractiveFish(
+            command: "_programa_reset_terminal_leftover_modes",
+            extraEnvironment: [
+                "PROGRAMA_TEST_FORCE_KEYBOARD_RESET": "1",
+                "TMUX": "/tmp/tmux-test/default,1,0",
+            ]
+        )
+
+        XCTAssertEqual(output, LeftoverModeResetBytes.modes)
     }
 
     private func resolveFishExecutablePath() -> String? {
