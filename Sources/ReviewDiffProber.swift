@@ -25,6 +25,8 @@ struct ReviewDiffSnapshot: Equatable, Sendable {
     var repositoryRoot: String?
     var resolvedBaseBranch: String?
     var error: ReviewDiffError?
+    /// The `git diff` text the tracked `files` were parsed from. Untracked files are not in it.
+    var rawDiff: String = ""
 
     var diffableFileCount: Int {
         files.filter { $0.notDiffableReason == nil }.count
@@ -176,9 +178,10 @@ struct ReviewDiffProber {
             // A failed diff must never look clean: skip the untracked-file merge and surface the
             // error instead of returning a partial (or empty) file list.
             return ReviewDiffSnapshot(files: [], repositoryRoot: repoRoot, resolvedBaseBranch: nil, error: error)
-        case .success(var files):
+        case .success(let diff):
+            var files = diff.files
             files.append(contentsOf: untrackedFileDiffs(repoRoot: repoRoot))
-            return ReviewDiffSnapshot(files: files, repositoryRoot: repoRoot, resolvedBaseBranch: nil, error: nil)
+            return ReviewDiffSnapshot(files: files, repositoryRoot: repoRoot, resolvedBaseBranch: nil, error: nil, rawDiff: diff.rawDiff)
         }
     }
 
@@ -191,8 +194,8 @@ struct ReviewDiffProber {
             switch diffAndOverrides(repoRoot: repoRoot, diffRangeArgs: ["\(mergeBase)..HEAD"]) {
             case .failure(let error):
                 return ReviewDiffSnapshot(files: [], repositoryRoot: repoRoot, resolvedBaseBranch: candidate, error: error)
-            case .success(let files):
-                return ReviewDiffSnapshot(files: files, repositoryRoot: repoRoot, resolvedBaseBranch: candidate, error: nil)
+            case .success(let diff):
+                return ReviewDiffSnapshot(files: diff.files, repositoryRoot: repoRoot, resolvedBaseBranch: candidate, error: nil, rawDiff: diff.rawDiff)
             }
         }
         return ReviewDiffSnapshot(repositoryRoot: repoRoot, resolvedBaseBranch: nil, error: .unknownBaseBranch(baseBranch))
@@ -231,7 +234,7 @@ struct ReviewDiffProber {
 
     // MARK: - Diff + binary/size overrides
 
-    private nonisolated static func diffAndOverrides(repoRoot: String, diffRangeArgs: [String]) -> Result<[ReviewFileDiff], ReviewDiffError> {
+    private nonisolated static func diffAndOverrides(repoRoot: String, diffRangeArgs: [String]) -> Result<(files: [ReviewFileDiff], rawDiff: String), ReviewDiffError> {
         switch runCommandResult(
             directory: repoRoot,
             executable: "git",
@@ -246,7 +249,7 @@ struct ReviewDiffProber {
                 return .failure(error)
             case .success(let binaryPaths):
                 applyOverrides(files: &files, binaryPaths: binaryPaths)
-                return .success(files)
+                return .success((files: files, rawDiff: diffText))
             }
         }
     }

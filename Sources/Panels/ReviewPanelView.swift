@@ -169,6 +169,7 @@ struct ReviewPanelView: View {
     @State private var rowPlanner = ReviewPanelRowPlanner()
     @State private var isConfirmingCheckpointRevert = false
     @FocusState private var isComposerFocused: Bool
+    @AppStorage(ReviewDiffWebView.debugToggleKey) private var renderDiffsWithPierre = false
 
     private struct InlineComposerState {
         let filePath: String
@@ -190,23 +191,27 @@ struct ReviewPanelView: View {
                     .padding(.vertical, 8)
             }
             Divider()
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    if let lastError = panel.lastError {
-                        errorBanner(for: lastError)
-                            .padding(16)
-                    } else if panel.files.isEmpty {
-                        emptyStateView
-                            .padding(24)
-                    } else {
-                        ForEach(reviewRows) { row in
-                            reviewRow(row)
+            if usesPierreDiffs, let bundleDirectory = ReviewDiffWebView.bundleDirectory {
+                pierreDiffContent(bundleDirectory: bundleDirectory)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        if let lastError = panel.lastError {
+                            errorBanner(for: lastError)
+                                .padding(16)
+                        } else if panel.files.isEmpty {
+                            emptyStateView
+                                .padding(24)
+                        } else {
+                            ForEach(reviewRows) { row in
+                                reviewRow(row)
+                            }
                         }
-                    }
 
-                    if !panel.comments.isEmpty {
-                        pendingCommentsSection
-                            .padding(16)
+                        if !panel.comments.isEmpty {
+                            pendingCommentsSection
+                                .padding(16)
+                        }
                     }
                 }
             }
@@ -252,6 +257,71 @@ struct ReviewPanelView: View {
                     .allowsHitTesting(false)
             } animation: { phaseIndex in
                 FocusFlashPattern.phaseAnimation(at: phaseIndex)
+            }
+        }
+    }
+
+    // MARK: - Pierre diff viewer (debug spike)
+
+    /// Debug builds only, so a stray `defaults write` cannot switch a Release build over.
+    private var usesPierreDiffs: Bool {
+#if DEBUG
+        renderDiffsWithPierre
+#else
+        false
+#endif
+    }
+
+    /// Same states as the native list, but the diff rows come from `ReviewDiffWebView`, which
+    /// scrolls itself. The composer and pending comments stay native below it.
+    private func pierreDiffContent(bundleDirectory: URL) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let lastError = panel.lastError {
+                errorBanner(for: lastError)
+                    .padding(16)
+                Spacer(minLength: 0)
+            } else if panel.files.isEmpty {
+                emptyStateView
+                    .padding(24)
+                Spacer(minLength: 0)
+            } else if isVisibleInUI {
+                ReviewDiffWebView(
+                    rawDiff: panel.rawDiff,
+                    revision: panel.filesRevision,
+                    style: .split,
+                    bundleDirectory: bundleDirectory
+                ) { selection in
+                    composer = InlineComposerState(
+                        filePath: selection.filePath,
+                        anchorLine: selection.startLine,
+                        startLine: selection.startLine,
+                        endLine: selection.endLine
+                    )
+                    isComposerFocused = true
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                Spacer(minLength: 0)
+            }
+
+            if let composer {
+                Divider()
+                Text(verbatim: "\(composer.filePath):\(composer.startLine == composer.endLine ? "\(composer.startLine)" : "\(composer.startLine)-\(composer.endLine)")")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 6)
+                inlineComposer(composer)
+                    .padding(.bottom, 4)
+            }
+
+            if !panel.comments.isEmpty {
+                ScrollView {
+                    pendingCommentsSection
+                        .padding(16)
+                }
+                .frame(maxHeight: 240)
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

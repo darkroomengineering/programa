@@ -27,6 +27,8 @@ final class ReviewPanel: Panel, ObservableObject {
     @Published private(set) var baseBranch: String
     @Published private(set) var files: [ReviewFileDiff] = []
     private(set) var filesRevision: UInt64 = 0
+    /// Raw `git diff` text behind `files`, served to the Pierre diff viewer (debug spike).
+    @Published private(set) var rawDiff = ""
     @Published private(set) var comments: [ReviewComment] = []
     @Published private(set) var commentDeliveryFailed = false
     @Published private(set) var isRefreshing: Bool = false
@@ -145,6 +147,7 @@ final class ReviewPanel: Panel, ObservableObject {
     func apply(snapshot: ReviewDiffSnapshot, generation: UInt64) {
         guard generation == refreshGeneration else { return }
         files = snapshot.files
+        rawDiff = snapshot.rawDiff
         filesRevision &+= 1
         lastError = snapshot.error
         lastRefreshedAt = snapshot.generatedAt
