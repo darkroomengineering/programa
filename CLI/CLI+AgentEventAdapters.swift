@@ -14,7 +14,8 @@ extension ProgramaCLI {
         workspaceId: String,
         surfaceId: String,
         sessionId: String? = nil,
-        pid: Int? = nil
+        pid: Int? = nil,
+        transcriptPath: String? = nil
     ) {
         var params: [String: Any] = [
             "provider": provider,
@@ -27,6 +28,9 @@ extension ProgramaCLI {
         }
         if let pid {
             params["pid"] = pid
+        }
+        if let transcriptPath, !transcriptPath.isEmpty {
+            params["transcript_path"] = transcriptPath
         }
         _ = try? client.sendV2(method: V2MethodNames.agentEvent, params: params)
     }
@@ -43,7 +47,8 @@ extension ProgramaCLI {
         surfaceId: String,
         state: CLIAgentActivityState,
         sessionId: String? = nil,
-        pid: Int? = nil
+        pid: Int? = nil,
+        transcriptPath: String? = nil
     ) {
         switch eventType {
         case "turn.started", "item.started": emitProgramStatus(state: "working", app: provider)
@@ -51,7 +56,10 @@ extension ProgramaCLI {
         default: break
         }
         reportAgentState(client: client, workspaceId: workspaceId, surfaceId: surfaceId, state: state, provider: provider, sessionId: sessionId, pid: pid)
-        reportAgentEvent(client: client, provider: provider, eventType: eventType, workspaceId: workspaceId, surfaceId: surfaceId, sessionId: sessionId, pid: pid)
+        reportAgentEvent(
+            client: client, provider: provider, eventType: eventType, workspaceId: workspaceId, surfaceId: surfaceId,
+            sessionId: sessionId, pid: pid, transcriptPath: transcriptPath
+        )
     }
 
     /// Sends `agent.needs_input` (docs/plans/agent-state-unification.md T2): one atomic

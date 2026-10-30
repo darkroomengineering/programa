@@ -805,7 +805,10 @@ final class SessionPersistenceTests: XCTestCase {
     func testAutoResumeInputTypesResumeLineForRunningClaudeSession() throws {
         let panel = try makeAutoResumePanel(wasRunning: true, sessionId: "5f0c2a9e-1b2d-4c3e-8f4a-6b7c8d9e0f1a")
         XCTAssertEqual(
-            Workspace.autoResumeInput(for: panel, paneDirectory: "/tmp/project", isEnabled: true, directoryExists: { _ in true }),
+            Workspace.autoResumeInput(
+                for: panel, paneDirectory: "/tmp/project", isEnabled: true,
+                directoryExists: { _ in true }, claudeTranscriptExists: { _ in true }
+            ),
             "claude --resume '5f0c2a9e-1b2d-4c3e-8f4a-6b7c8d9e0f1a'\n"
         )
     }
@@ -813,8 +816,137 @@ final class SessionPersistenceTests: XCTestCase {
     func testAutoResumeInputChangesDirectoryWhenPaneIsElsewhere() throws {
         let panel = try makeAutoResumePanel(wasRunning: true, cwd: "/tmp/project")
         XCTAssertEqual(
-            Workspace.autoResumeInput(for: panel, paneDirectory: "/tmp/other", isEnabled: true, directoryExists: { _ in true }),
+            Workspace.autoResumeInput(
+                for: panel, paneDirectory: "/tmp/other", isEnabled: true,
+                directoryExists: { _ in true }, claudeTranscriptExists: { _ in true }
+            ),
             "cd '/tmp/project' && claude --resume 'abc-123'\n"
+        )
+    }
+
+    func testAutoResumeInputResumesClaudeSessionOnlyWhenItsTranscriptExists() throws {
+        let projects = try makeClaudeProjectsRoot()
+        let panel = try makeAutoResumePanel(wasRunning: true, sessionId: "abc-123")
+        let exists: (String) -> Bool = { AgentResumeCommand.claudeTranscriptExists(sessionId: $0, projectsRoots: [projects]) }
+        XCTAssertNil(
+            Workspace.autoResumeInput(for: panel, paneDirectory: "/tmp/project", isEnabled: true, claudeTranscriptExists: exists),
+            "a Claude session quit before its first prompt has no transcript and must reopen as a plain shell"
+        )
+
+        try writeTranscript("{}\n", to: projects.appendingPathComponent("-tmp-project/abc-123.jsonl"))
+        XCTAssertEqual(
+            Workspace.autoResumeInput(for: panel, paneDirectory: "/tmp/project", isEnabled: true, claudeTranscriptExists: exists),
+            "claude --resume 'abc-123'\n"
+        )
+    }
+
+    func testAutoResumeInputUsesReportedTranscriptPathOverRootSearch() throws {
+        let projects = try makeClaudeProjectsRoot()
+        let transcript = projects.appendingPathComponent("custom-config/projects/-tmp-project/abc-123.jsonl")
+        try writeTranscript("{}\n", to: transcript)
+        var panel = try makeAutoResumePanel(wasRunning: true, sessionId: "abc-123")
+        panel.agentResume?.transcriptPath = transcript.path
+        XCTAssertEqual(
+            Workspace.autoResumeInput(
+                for: panel, paneDirectory: "/tmp/project", isEnabled: true, claudeTranscriptExists: { _ in false }
+            ),
+            "claude --resume 'abc-123'\n",
+            "a session run with a CLAUDE_CONFIG_DIR the app cannot see still resumes from its reported transcript"
+        )
+    }
+
+    func testAutoResumeInputIsNilWhenReportedTranscriptIsMissing() throws {
+        let projects = try makeClaudeProjectsRoot()
+        var panel = try makeAutoResumePanel(wasRunning: true, sessionId: "abc-123")
+        panel.agentResume?.transcriptPath = projects.appendingPathComponent("-tmp-project/abc-123.jsonl").path
+        XCTAssertNil(
+            Workspace.autoResumeInput(
+                for: panel, paneDirectory: "/tmp/project", isEnabled: true, claudeTranscriptExists: { _ in true }
+            )
+        )
+    }
+
+    func testAgentResumeTargetDecodesWithoutTranscriptPath() throws {
+        let saved = #"{"provider":"claude-code","sessionId":"abc-123","cwd":"/tmp/project"}"#
+        let decoded = try JSONDecoder().decode(AgentResumeTarget.self, from: Data(saved.utf8))
+        XCTAssertEqual(decoded, AgentResumeTarget(provider: "claude-code", sessionId: "abc-123", cwd: "/tmp/project"))
+        XCTAssertNil(decoded.transcriptPath)
+
+        let withPath = AgentResumeTarget(
+            provider: "claude-code", sessionId: "abc-123", cwd: nil, transcriptPath: "/tmp/abc-123.jsonl"
+        )
+        XCTAssertEqual(try JSONDecoder().decode(AgentResumeTarget.self, from: JSONEncoder().encode(withPath)), withPath)
+    }
+
+    func testAutoResumeInputIgnoresClaudeTranscriptsForOtherProviders() throws {
+        let projects = try makeClaudeProjectsRoot()
+        let panel = try makeAutoResumePanel(wasRunning: true, provider: "codex", sessionId: "abc-123")
+        XCTAssertEqual(
+            Workspace.autoResumeInput(
+                for: panel, paneDirectory: "/tmp/project", isEnabled: true,
+                claudeTranscriptExists: { AgentResumeCommand.claudeTranscriptExists(sessionId: $0, projectsRoots: [projects]) }
+            ),
+            "codex resume 'abc-123'\n"
+        )
+    }
+
+    func testClaudeTranscriptExistsFindsTranscriptInAnyProjectDirectory() throws {
+        let projects = try makeClaudeProjectsRoot()
+        try FileManager.default.createDirectory(
+            at: projects.appendingPathComponent("-tmp-unrelated"), withIntermediateDirectories: true
+        )
+        XCTAssertFalse(AgentResumeCommand.claudeTranscriptExists(sessionId: "abc-123", projectsRoots: [projects]))
+
+        try writeTranscript("{}\n", to: projects.appendingPathComponent("-Users-someone-elsewhere/abc-123.jsonl"))
+        XCTAssertTrue(AgentResumeCommand.claudeTranscriptExists(sessionId: "abc-123", projectsRoots: [projects]))
+        XCTAssertFalse(AgentResumeCommand.claudeTranscriptExists(sessionId: "other-id", projectsRoots: [projects]))
+    }
+
+    func testClaudeTranscriptExistsAcceptsNestedMessagesTranscript() throws {
+        let projects = try makeClaudeProjectsRoot()
+        try writeTranscript("{}\n", to: projects.appendingPathComponent("-tmp-project/abc-123/messages/abc-123.jsonl"))
+        XCTAssertTrue(AgentResumeCommand.claudeTranscriptExists(sessionId: "abc-123", projectsRoots: [projects]))
+    }
+
+    func testClaudeTranscriptExistsRejectsEmptyTranscriptAndDirectory() throws {
+        let projects = try makeClaudeProjectsRoot()
+        try writeTranscript("", to: projects.appendingPathComponent("-tmp-project/abc-123.jsonl"))
+        try FileManager.default.createDirectory(
+            at: projects.appendingPathComponent("-tmp-other/abc-123.jsonl"), withIntermediateDirectories: true
+        )
+        XCTAssertFalse(AgentResumeCommand.claudeTranscriptExists(sessionId: "abc-123", projectsRoots: [projects]))
+    }
+
+    func testClaudeTranscriptExistsSearchesEveryRootAndAssumesPresentWhenNoneIsReadable() throws {
+        let configured = try makeClaudeProjectsRoot()
+        let fallback = try makeClaudeProjectsRoot()
+        let unreadable = configured.appendingPathComponent("does-not-exist", isDirectory: true)
+        try writeTranscript("{}\n", to: fallback.appendingPathComponent("-tmp-project/abc-123.jsonl"))
+        XCTAssertTrue(AgentResumeCommand.claudeTranscriptExists(sessionId: "abc-123", projectsRoots: [configured, fallback]))
+        XCTAssertFalse(AgentResumeCommand.claudeTranscriptExists(sessionId: "abc-123", projectsRoots: [configured, unreadable]))
+        XCTAssertTrue(
+            AgentResumeCommand.claudeTranscriptExists(sessionId: "abc-123", projectsRoots: [unreadable]),
+            "with no readable projects root there is no evidence the transcript is missing"
+        )
+        XCTAssertFalse(AgentResumeCommand.claudeTranscriptExists(sessionId: "..", projectsRoots: [unreadable]))
+    }
+
+    func testClaudeProjectsRootsPutsConfiguredDirectoryFirst() {
+        XCTAssertEqual(
+            AgentResumeCommand.claudeProjectsRoots(environment: [:], homeDirectory: "/Users/someone").map(\.path),
+            ["/Users/someone/.claude/projects"]
+        )
+        XCTAssertEqual(
+            AgentResumeCommand.claudeProjectsRoots(
+                environment: ["CLAUDE_CONFIG_DIR": "/opt/claude-work"], homeDirectory: "/Users/someone"
+            ).map(\.path),
+            ["/opt/claude-work/projects", "/Users/someone/.claude/projects"]
+        )
+        XCTAssertEqual(
+            AgentResumeCommand.claudeProjectsRoots(
+                environment: ["CLAUDE_CONFIG_DIR": "/Users/someone/.claude/"], homeDirectory: "/Users/someone"
+            ).map(\.path),
+            ["/Users/someone/.claude/projects"]
         )
     }
 
@@ -837,6 +969,19 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertFalse(AgentAutoResumeSettings.isEnabled(defaults: defaults))
         AgentAutoResumeSettings.setEnabled(true, defaults: defaults)
         XCTAssertTrue(AgentAutoResumeSettings.isEnabled(defaults: defaults))
+    }
+
+    private func makeClaudeProjectsRoot() throws -> URL {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("programa-claude-projects-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        return root
+    }
+
+    private func writeTranscript(_ contents: String, to url: URL) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(contents.utf8).write(to: url)
     }
 
     private func makeAutoResumePanel(

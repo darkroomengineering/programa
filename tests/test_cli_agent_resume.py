@@ -128,6 +128,19 @@ class AgentResumeTests(unittest.TestCase):
         self.assertEqual(printed.stdout.strip(), f"claude --resume '{SESSION_ID}'")
         self.assertEqual(sent(rec), [], "--print must not type anything")
 
+    def test_session_start_reports_the_transcript_path_to_the_app(self) -> None:
+        # The app keeps it with the pane's resume target, so relaunch can tell whether Claude
+        # wrote the transcript even under a CLAUDE_CONFIG_DIR the app cannot see.
+        transcript = str(self.box.root / "custom-config" / "projects" / "-project" / f"{SESSION_ID}.jsonl")
+        payload = json.dumps({"session_id": SESSION_ID, "cwd": str(self.box.project), "transcript_path": transcript})
+        with self.recorder() as rec:
+            started = self.box.cli(rec, ["claude-hook", "session-start"], input_text=payload)
+        self.assertEqual(started.returncode, 0, merged_output(started))
+        events = [f["params"] for f in rec.frames if f.get("method") == "agent.event"]
+        self.assertEqual([e.get("event_type") for e in events], ["session.started"], rec.frames)
+        self.assertEqual(events[0].get("session_id"), SESSION_ID)
+        self.assertEqual(events[0].get("transcript_path"), transcript)
+
     def test_resume_types_the_command_then_enter_into_the_pane(self) -> None:
         self.box.write_last_sessions(self.box.entry())
         with self.recorder() as rec:
@@ -218,6 +231,24 @@ class AgentResumeTests(unittest.TestCase):
                 self.assertNotEqual(proc.returncode, 0, merged_output(proc))
                 self.assertIn(message, merged_output(proc))
                 self.assertEqual(sent(rec), [])
+
+    def test_claude_session_without_its_reported_transcript_is_not_resumed(self) -> None:
+        # Claude writes the transcript only after the first prompt; resuming before that fails
+        # with "No conversation found".
+        transcript = self.box.home / ".claude" / "projects" / "-project" / f"{SESSION_ID}.jsonl"
+        transcript.parent.mkdir(parents=True)
+        self.box.write_last_sessions(self.box.entry(transcriptPath=str(transcript)))
+        with self.recorder() as rec:
+            missing = self.box.cli(rec, ["resume"])
+        self.assertNotEqual(missing.returncode, 0, merged_output(missing))
+        self.assertIn("has no saved conversation to resume", merged_output(missing))
+        self.assertEqual(sent(rec), [])
+
+        transcript.write_text('{"type":"user"}\n', encoding="utf-8")
+        with self.recorder() as rec:
+            present = self.box.cli(rec, ["resume", "--print"])
+        self.assertEqual(present.returncode, 0, merged_output(present))
+        self.assertEqual(present.stdout.strip(), f"claude --resume '{SESSION_ID}'")
 
     def test_explicit_session_uses_its_recorded_provider_or_the_provider_flag(self) -> None:
         self.box.write_last_sessions(self.box.entry(sessionId="codex-thread-1", provider="codex"))

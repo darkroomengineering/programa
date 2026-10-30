@@ -593,6 +593,22 @@ final class AgentActivityStateTests: XCTestCase {
         )
     }
 
+    func testHookTranscriptPathIsKeptOnResumeTargetFromFirstReportCarryingIt() {
+        let workspace = Workspace(title: "Test")
+        let panel = UUID()
+        defer { AgentResumeStore.shared.forget(panelId: panel) }
+        let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
+        workspace.updatePanelAgentState(panelId: panel, state: .idle, source: .hooks, sessionKey: key)
+        XCTAssertNil(AgentResumeStore.shared.target(panelId: panel)?.transcriptPath)
+        workspace.updatePanelAgentState(
+            panelId: panel, state: .working, source: .hooks, sessionKey: key, transcriptPath: "/tmp/a/session-1.jsonl"
+        )
+        workspace.updatePanelAgentState(
+            panelId: panel, state: .idle, source: .hooks, sessionKey: key, transcriptPath: "/tmp/b/session-1.jsonl"
+        )
+        XCTAssertEqual(AgentResumeStore.shared.target(panelId: panel)?.transcriptPath, "/tmp/a/session-1.jsonl")
+    }
+
     func testRestingProgramAcceptsOnlyActiveHookClaims() {
         let workspace = Workspace(title: "Test")
         let panel = UUID()

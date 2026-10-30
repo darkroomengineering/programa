@@ -346,7 +346,8 @@ extension Workspace {
     }
 
     /// The text typed into a freshly spawned restored shell to resume the agent that was running
-    /// in it at quit, or nil when nothing should be resumed.
+    /// in it at quit, or nil when nothing should be resumed. A Claude session quit before its
+    /// first prompt has no transcript, so its pane reopens as a plain shell.
     nonisolated static func autoResumeInput(
         for snapshot: SessionPanelSnapshot,
         paneDirectory: String?,
@@ -354,7 +355,8 @@ extension Workspace {
         directoryExists: (String) -> Bool = { path in
             var isDirectory: ObjCBool = false
             return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue
-        }
+        },
+        claudeTranscriptExists: (String) -> Bool = { AgentResumeCommand.claudeTranscriptExists(sessionId: $0) }
     ) -> String? {
         guard isEnabled,
               snapshot.type == .terminal,
@@ -362,7 +364,9 @@ extension Workspace {
               let target = snapshot.agentResume,
               let line = AgentResumeCommand.line(
                 for: target, paneDirectory: paneDirectory, directoryExists: directoryExists
-              ) else { return nil }
+              ),
+              !AgentResumeCommand.claudeTranscriptIsMissing(for: target, transcriptExists: claudeTranscriptExists)
+        else { return nil }
         return line + "\n"
     }
 

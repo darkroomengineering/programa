@@ -242,6 +242,7 @@ extension Workspace {
         state: AgentActivityState,
         source: AgentStateSource = .hooks,
         sessionKey: AgentSessionKey? = nil,
+        transcriptPath: String? = nil,
         inferredAgent: String? = nil,
         programState: ProgramStatusState? = nil,
         at now: Date = Date()
@@ -252,7 +253,8 @@ extension Workspace {
         // session runs in the panel, and Programa's own hooks emit OSC 7501 ahead of this report.
         if source == .hooks, let sessionKey, let sessionId = sessionKey.sessionId {
             AgentResumeStore.shared.note(
-                panelId: panelId, provider: sessionKey.provider, sessionId: sessionId, cwd: panelDirectories[panelId]
+                panelId: panelId, provider: sessionKey.provider, sessionId: sessionId, cwd: panelDirectories[panelId],
+                transcriptPath: transcriptPath
             )
         }
 

@@ -403,6 +403,8 @@ extension TerminalController {
             )
         }
         let eventType = rawEventType.lowercased()
+        let rawTranscriptPath = v2RawString(params, "transcript_path")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let transcriptPath = rawTranscriptPath?.isEmpty == false ? rawTranscriptPath : nil
 
         let provider: String?
         let reportedPid: pid_t?
@@ -425,7 +427,10 @@ extension TerminalController {
         switch outcome {
         case .applyState(let state):
             v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { [weak self] tabManager, tab, sid in
-                tabManager.updateSurfaceAgentState(tabId: workspaceId, surfaceId: sid, state: state, source: .hooks, sessionKey: sessionKey)
+                tabManager.updateSurfaceAgentState(
+                    tabId: workspaceId, surfaceId: sid, state: state, source: .hooks, sessionKey: sessionKey,
+                    transcriptPath: transcriptPath
+                )
                 _ = try? AgentSupervisionRegistry.shared.updateActiveSurface(
                     workspaceId: workspaceId,
                     surfaceId: sid,
