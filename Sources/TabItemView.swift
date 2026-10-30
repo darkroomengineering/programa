@@ -335,6 +335,42 @@ struct TabItemView: View, Equatable {
         }
     }
 
+    private func agentStatusPill(_ indicator: SidebarAgentIndicator) -> some View {
+        let tint = agentIndicatorTintColor(indicator)
+        return HStack(spacing: 3) {
+            Image(systemName: indicator.systemImage)
+                .font(.system(size: 9, weight: .semibold))
+                .accessibilityHidden(true)
+            Text(indicator.label)
+                .font(.system(size: 10))
+                .lineLimit(1)
+        }
+        .foregroundColor(tint)
+        .opacity(indicator.isStale ? 0.55 : 1)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        // The tints (accent blue, green, red) can match the selected row's fill or the
+        // wallpaper behind the glass, so the pill carries its own backing: a translucent
+        // window-tinted fill that still lets the glass through, with a Liquid Glass-style rim.
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color(nsColor: .windowBackgroundColor).opacity(0.8))
+                .overlay(
+                    Capsule(style: .continuous)
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [.white.opacity(0.38), .white.opacity(0.08)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ),
+                            lineWidth: 0.75
+                        )
+                )
+        )
+        .fixedSize(horizontal: true, vertical: false)
+        .safeHelp(indicator.label)
+    }
+
     private var activeProgressTrackColor: Color {
         usesInvertedActiveForeground ? Color.white.opacity(0.15) : Color.secondary.opacity(0.2)
     }
@@ -609,25 +645,14 @@ struct TabItemView: View, Equatable {
 
                     // One status line: agent state while it works or waits, else the latest
                     // message, else the agent's resting state, else the latest log line.
-                    if let status {
-                        HStack(spacing: 4) {
-                            if let statusIndicator = status.indicator {
-                                Image(systemName: statusIndicator.systemImage)
-                                    .font(.system(size: 9, weight: .semibold))
-                                    .foregroundColor(
-                                        usesInvertedActiveForeground
-                                            ? activeSecondaryColor(0.8)
-                                            : agentIndicatorTintColor(statusIndicator)
-                                    )
-                                    .opacity(statusIndicator.isStale ? 0.55 : 1)
-                                    .accessibilityHidden(true)
-                            }
-                            Text(status.text)
-                                .font(.system(size: 11))
-                                .foregroundColor(activeSecondaryColor(0.8))
-                                .modifier(SidebarTrailingFade())
-                        }
-                        .safeHelp(status.text)
+                    if let status, let statusIndicator = status.indicator {
+                        agentStatusPill(statusIndicator)
+                    } else if let status {
+                        Text(status.text)
+                            .font(.system(size: 11))
+                            .foregroundColor(activeSecondaryColor(0.8))
+                            .modifier(SidebarTrailingFade())
+                            .safeHelp(status.text)
                     }
                 }
 
