@@ -578,7 +578,7 @@ extension ProgramaCLI {
         if let pid {
             setAgentPid(hook, ctx, workspaceId: workspaceId, sessionId: ctx.parsed.sessionId, pid: pid)
         }
-        reportAgentEvent(client: ctx.client, provider: hook.provider, eventType: "session.started", workspaceId: workspaceId, surfaceId: surfaceId, sessionId: ctx.parsed.sessionId)
+        reportAgentEvent(client: ctx.client, provider: hook.provider, eventType: "session.started", workspaceId: workspaceId, surfaceId: surfaceId, sessionId: ctx.parsed.sessionId, transcriptPath: ctx.parsed.transcriptPath)
     }
 
     private func agentHookPromptSubmit(_ hook: AgentHookProvider, _ ctx: AgentHookContext) throws {
@@ -607,7 +607,7 @@ extension ProgramaCLI {
         let surfaceId = try resolvePreferredSurfaceIdForClaudeHook(
             preferred: mapped?.surfaceId, fallback: ctx.surfaceArg, workspaceId: workspaceId, client: ctx.client
         )
-        reportAgentStateAndEvent(client: ctx.client, provider: hook.provider, eventType: "turn.started", workspaceId: workspaceId, surfaceId: surfaceId, state: .working, sessionId: ctx.parsed.sessionId)
+        reportAgentStateAndEvent(client: ctx.client, provider: hook.provider, eventType: "turn.started", workspaceId: workspaceId, surfaceId: surfaceId, state: .working, sessionId: ctx.parsed.sessionId, transcriptPath: ctx.parsed.transcriptPath)
     }
 
     private func agentHookStop(_ hook: AgentHookProvider, _ ctx: AgentHookContext) throws {
@@ -652,7 +652,7 @@ extension ProgramaCLI {
             client: ctx.client, key: hook.statusKey, workspaceId: workspaceId,
             value: "Idle", icon: "pause.circle.fill", color: "#8E8E93"
         )
-        reportAgentStateAndEvent(client: ctx.client, provider: hook.provider, eventType: "turn.completed", workspaceId: workspaceId, surfaceId: surfaceId, state: .idle, sessionId: ctx.parsed.sessionId)
+        reportAgentStateAndEvent(client: ctx.client, provider: hook.provider, eventType: "turn.completed", workspaceId: workspaceId, surfaceId: surfaceId, state: .idle, sessionId: ctx.parsed.sessionId, transcriptPath: ctx.parsed.transcriptPath)
     }
 
     private func agentHookNotification(_ hook: AgentHookProvider, _ ctx: AgentHookContext) throws {

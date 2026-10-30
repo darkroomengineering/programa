@@ -118,6 +118,9 @@
           "pid": {
             "type": "integer"
           },
+          "transcript_path": {
+            "type": "string"
+          },
           "turn_id": {
             "type": "string"
           },

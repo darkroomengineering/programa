@@ -128,6 +128,19 @@ class AgentResumeTests(unittest.TestCase):
         self.assertEqual(printed.stdout.strip(), f"claude --resume '{SESSION_ID}'")
         self.assertEqual(sent(rec), [], "--print must not type anything")
 
+    def test_session_start_reports_the_transcript_path_to_the_app(self) -> None:
+        # The app keeps it with the pane's resume target, so relaunch can tell whether Claude
+        # wrote the transcript even under a CLAUDE_CONFIG_DIR the app cannot see.
+        transcript = str(self.box.root / "custom-config" / "projects" / "-project" / f"{SESSION_ID}.jsonl")
+        payload = json.dumps({"session_id": SESSION_ID, "cwd": str(self.box.project), "transcript_path": transcript})
+        with self.recorder() as rec:
+            started = self.box.cli(rec, ["claude-hook", "session-start"], input_text=payload)
+        self.assertEqual(started.returncode, 0, merged_output(started))
+        events = [f["params"] for f in rec.frames if f.get("method") == "agent.event"]
+        self.assertEqual([e.get("event_type") for e in events], ["session.started"], rec.frames)
+        self.assertEqual(events[0].get("session_id"), SESSION_ID)
+        self.assertEqual(events[0].get("transcript_path"), transcript)
+
     def test_resume_types_the_command_then_enter_into_the_pane(self) -> None:
         self.box.write_last_sessions(self.box.entry())
         with self.recorder() as rec:

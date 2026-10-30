@@ -840,6 +840,44 @@ final class SessionPersistenceTests: XCTestCase {
         )
     }
 
+    func testAutoResumeInputUsesReportedTranscriptPathOverRootSearch() throws {
+        let projects = try makeClaudeProjectsRoot()
+        let transcript = projects.appendingPathComponent("custom-config/projects/-tmp-project/abc-123.jsonl")
+        try writeTranscript("{}\n", to: transcript)
+        var panel = try makeAutoResumePanel(wasRunning: true, sessionId: "abc-123")
+        panel.agentResume?.transcriptPath = transcript.path
+        XCTAssertEqual(
+            Workspace.autoResumeInput(
+                for: panel, paneDirectory: "/tmp/project", isEnabled: true, claudeTranscriptExists: { _ in false }
+            ),
+            "claude --resume 'abc-123'\n",
+            "a session run with a CLAUDE_CONFIG_DIR the app cannot see still resumes from its reported transcript"
+        )
+    }
+
+    func testAutoResumeInputIsNilWhenReportedTranscriptIsMissing() throws {
+        let projects = try makeClaudeProjectsRoot()
+        var panel = try makeAutoResumePanel(wasRunning: true, sessionId: "abc-123")
+        panel.agentResume?.transcriptPath = projects.appendingPathComponent("-tmp-project/abc-123.jsonl").path
+        XCTAssertNil(
+            Workspace.autoResumeInput(
+                for: panel, paneDirectory: "/tmp/project", isEnabled: true, claudeTranscriptExists: { _ in true }
+            )
+        )
+    }
+
+    func testAgentResumeTargetDecodesWithoutTranscriptPath() throws {
+        let saved = #"{"provider":"claude-code","sessionId":"abc-123","cwd":"/tmp/project"}"#
+        let decoded = try JSONDecoder().decode(AgentResumeTarget.self, from: Data(saved.utf8))
+        XCTAssertEqual(decoded, AgentResumeTarget(provider: "claude-code", sessionId: "abc-123", cwd: "/tmp/project"))
+        XCTAssertNil(decoded.transcriptPath)
+
+        let withPath = AgentResumeTarget(
+            provider: "claude-code", sessionId: "abc-123", cwd: nil, transcriptPath: "/tmp/abc-123.jsonl"
+        )
+        XCTAssertEqual(try JSONDecoder().decode(AgentResumeTarget.self, from: JSONEncoder().encode(withPath)), withPath)
+    }
+
     func testAutoResumeInputIgnoresClaudeTranscriptsForOtherProviders() throws {
         let projects = try makeClaudeProjectsRoot()
         let panel = try makeAutoResumePanel(wasRunning: true, provider: "codex", sessionId: "abc-123")

@@ -1,12 +1,14 @@
 import Foundation
 
 /// An agent session a pane can resume: the provider name as the agent hooks report it
-/// (`claude-code`, `codex`, ...), the provider's session id, and the directory it ran in.
-/// Persisted in session snapshots, so field names are a stored contract.
+/// (`claude-code`, `codex`, ...), the provider's session id, the directory it ran in, and the
+/// transcript path its hooks reported. Persisted in session snapshots, so field names are a
+/// stored contract; a field added later must stay optional so older snapshots still decode.
 struct AgentResumeTarget: Codable, Equatable, Sendable {
     var provider: String
     var sessionId: String
     var cwd: String?
+    var transcriptPath: String? = nil
 }
 
 /// Builds the shell line that resumes an agent session. Compiled into both the app and the
@@ -59,11 +61,19 @@ enum AgentResumeCommand {
     /// Claude Code writes a session's transcript only after its first prompt, so a session quit
     /// before one has nothing to resume and `claude --resume <id>` fails with "No conversation
     /// found". Other providers are never reported missing.
+    ///
+    /// The transcript path Claude's hooks reported is checked exactly, because Claude may have
+    /// run with a `CLAUDE_CONFIG_DIR` this process cannot see. Without one (a target saved
+    /// before hooks reported it), `transcriptExists` searches the projects roots.
     static func claudeTranscriptIsMissing(
         for target: AgentResumeTarget,
         transcriptExists: (String) -> Bool = { claudeTranscriptExists(sessionId: $0) }
     ) -> Bool {
-        (target.provider == "claude-code" || target.provider == "claude") && !transcriptExists(target.sessionId)
+        guard target.provider == "claude-code" || target.provider == "claude" else { return false }
+        if let path = target.transcriptPath?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty {
+            return !isNonEmptyRegularFile(atPath: path)
+        }
+        return !transcriptExists(target.sessionId)
     }
 
     /// `$CLAUDE_CONFIG_DIR/projects` when set, then `~/.claude/projects`.

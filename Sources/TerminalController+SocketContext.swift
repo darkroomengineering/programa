@@ -67,7 +67,7 @@ extension TerminalController {
     ]
     nonisolated static let v2AgentIdentityLimits: [(key: String, maxBytes: Int)] = [
         "provider", "session_id", "turn_id", "item_id", "label", "resolution",
-    ].map { ($0, SidebarTelemetryLimits.maxKeyBytes) }
+    ].map { ($0, SidebarTelemetryLimits.maxKeyBytes) } + [("transcript_path", SidebarTelemetryLimits.maxDirectoryBytes)]
 
     nonisolated func v2TextLimitError(_ params: [String: Any], _ limits: [(key: String, maxBytes: Int)]) -> V2CallResult? {
         for limit in limits {

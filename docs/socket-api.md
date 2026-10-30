@@ -881,6 +881,7 @@ tri-state model, not a new wire value.
 | `workspace_id` / `surface_id` | uuid | yes | Same resolution as other `surface.*` telemetry calls. |
 | `event_type` | string | yes | One of: `session.started`, `session.exited`, `turn.started`, `turn.completed`, `turn.aborted`, `request.opened`, `request.resolved`, `user-input.requested`, `user-input.resolved`, `item.started`, `item.completed`. Case/whitespace-insensitive. Unrecognized values return `invalid_params`. |
 | `provider` / `session_id` / `turn_id` / `item_id` / `label` / `resolution` | string | no | Passed through for future richer consumers (e.g. a turn-progress UI); not used for state classification in this pass. |
+| `transcript_path` | string | no | The transcript path the provider's hook reported (Claude Code sends it). Kept with the pane's resumable session: a Claude session whose transcript file is missing or empty is not resumed on relaunch. |
 
 `event_type` maps to a tri-state write via `AgentEventNormalizer.classify` — see
 docs/plans/agent-events.md's mapping table for the full list, and its "Provider coverage" table

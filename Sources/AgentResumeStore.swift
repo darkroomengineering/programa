@@ -16,12 +16,18 @@ final class AgentResumeStore {
 
     /// Records the session a hook reported for the panel. A repeat report of the same session
     /// keeps the directory first seen: the agent's own working directory never reaches the
-    /// panel while it runs, and its provider resolves a session id from where it started.
-    func note(panelId: UUID, provider: String, sessionId: String, cwd: String?) {
+    /// panel while it runs, and its provider resolves a session id from where it started. A
+    /// transcript path is kept from whichever report first carries one.
+    func note(panelId: UUID, provider: String, sessionId: String, cwd: String?, transcriptPath: String? = nil) {
         if let existing = targets[panelId], existing.provider == provider, existing.sessionId == sessionId {
+            if existing.transcriptPath == nil, let transcriptPath {
+                targets[panelId]?.transcriptPath = transcriptPath
+            }
             return
         }
-        targets[panelId] = AgentResumeTarget(provider: provider, sessionId: sessionId, cwd: cwd)
+        targets[panelId] = AgentResumeTarget(
+            provider: provider, sessionId: sessionId, cwd: cwd, transcriptPath: transcriptPath
+        )
     }
 
     func restore(_ target: AgentResumeTarget, panelId: UUID) {
