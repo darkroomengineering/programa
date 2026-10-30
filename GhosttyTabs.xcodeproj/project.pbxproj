@@ -159,6 +159,7 @@
 		A5001421 /* MarkdownPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001419 /* MarkdownPanelView.swift */; };
 		MDRD00000000000000000001 /* MarkdownDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MDRD00000000000000000002 /* MarkdownDocumentView.swift */; };
 		MRMD000001 /* MermaidDiagramView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MRMD000002 /* MermaidDiagramView.swift */; };
+		PDIF00000001 /* ReviewDiffWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PDIF00000002 /* ReviewDiffWebView.swift */; };
 		MCMP000001 /* MarkdownCompareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MCMP000002 /* MarkdownCompareView.swift */; };
 		RVPN00000000000000000002 /* ReviewComment.swift in Sources */ = {isa = PBXBuildFile; fileRef = RVPN00000000000000000001 /* ReviewComment.swift */; };
 		RVPN00000000000000000004 /* ReviewCommentSerializer.swift in Sources */ = {isa = PBXBuildFile; fileRef = RVPN00000000000000000003 /* ReviewCommentSerializer.swift */; };
@@ -332,6 +333,7 @@
 		DA7A10CA710E000000000003 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = DA7A10CA710E000000000001 /* Localizable.xcstrings */; };
 		DA7A10CA710E000000000004 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = DA7A10CA710E000000000002 /* InfoPlist.xcstrings */; };
 		MRMD000003 /* mermaid.min.js in Resources */ = {isa = PBXBuildFile; fileRef = MRMD000004 /* mermaid.min.js */; };
+		PDIF00000003 /* review-diff-viewer in Resources */ = {isa = PBXBuildFile; fileRef = PDIF00000004 /* review-diff-viewer */; };
 					46F6AC15863EC84DCD3770A2 /* TerminalAndGhosttyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02FC74F2C27127CC565B3E8C /* TerminalAndGhosttyTests.swift */; };
 					6B524A0BA34FD46A771335AB /* WorkspaceUnitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71F8ED91A4B55D34BE6A0668 /* WorkspaceUnitTests.swift */; };
 					063BC42CEE257D6213A2E30C /* WindowAndDragTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEE83F8394D90ACACD8E19DD /* WindowAndDragTests.swift */; };
@@ -606,6 +608,7 @@
 		A5001419 /* MarkdownPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MarkdownPanelView.swift; sourceTree = "<group>"; };
 		MDRD00000000000000000002 /* MarkdownDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MarkdownDocumentView.swift; sourceTree = "<group>"; };
 		MRMD000002 /* MermaidDiagramView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MermaidDiagramView.swift; sourceTree = "<group>"; };
+		PDIF00000002 /* ReviewDiffWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/ReviewDiffWebView.swift; sourceTree = "<group>"; };
 		MCMP000002 /* MarkdownCompareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Panels/MarkdownCompareView.swift; sourceTree = "<group>"; };
 		A5001416 /* Workspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Workspace.swift; sourceTree = "<group>"; };
 		NRWS00000000000000000027 /* Workspace+Persistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Workspace+Persistence.swift"; sourceTree = "<group>"; };
@@ -756,6 +759,7 @@
 		DA7A10CA710E000000000001 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		DA7A10CA710E000000000002 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 		MRMD000004 /* mermaid.min.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = mermaid.min.js; sourceTree = "<group>"; };
+		PDIF00000004 /* review-diff-viewer */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "review-diff-viewer"; sourceTree = "<group>"; };
 				02FC74F2C27127CC565B3E8C /* TerminalAndGhosttyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalAndGhosttyTests.swift; sourceTree = "<group>"; };
 				71F8ED91A4B55D34BE6A0668 /* WorkspaceUnitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceUnitTests.swift; sourceTree = "<group>"; };
 				BEE83F8394D90ACACD8E19DD /* WindowAndDragTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAndDragTests.swift; sourceTree = "<group>"; };
@@ -846,6 +850,7 @@
 				DA7A10CA710E000000000003 /* Localizable.xcstrings in Resources */,
 				DA7A10CA710E000000000004 /* InfoPlist.xcstrings in Resources */,
 				MRMD000003 /* mermaid.min.js in Resources */,
+				PDIF00000003 /* review-diff-viewer in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1091,6 +1096,7 @@
 				A5001419 /* MarkdownPanelView.swift */,
 				MDRD00000000000000000002 /* MarkdownDocumentView.swift */,
 				MRMD000002 /* MermaidDiagramView.swift */,
+				PDIF00000002 /* ReviewDiffWebView.swift */,
 				MCMP000002 /* MarkdownCompareView.swift */,
 				A5001415 /* PanelContentView.swift */,
 				A5001211 /* UpdateController.swift */,
@@ -1218,6 +1224,7 @@
 				DA7A10CA710E000000000001 /* Localizable.xcstrings */,
 				DA7A10CA710E000000000002 /* InfoPlist.xcstrings */,
 				MRMD000004 /* mermaid.min.js */,
+				PDIF00000004 /* review-diff-viewer */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -1670,6 +1677,7 @@
 				A5001421 /* MarkdownPanelView.swift in Sources */,
 				MDRD00000000000000000001 /* MarkdownDocumentView.swift in Sources */,
 				MRMD000001 /* MermaidDiagramView.swift in Sources */,
+				PDIF00000001 /* ReviewDiffWebView.swift in Sources */,
 				MCMP000001 /* MarkdownCompareView.swift in Sources */,
 				A5001405 /* PanelContentView.swift in Sources */,
 				A5001201 /* UpdateController.swift in Sources */,
