@@ -156,6 +156,8 @@ final class GhosttySurfaceScrollView: NSView {
     private var deferredSearchOverlayMutationWorkItem: DispatchWorkItem?
     private var lastSearchOverlayStateID: ObjectIdentifier?
     private var searchOverlayMutationGeneration: UInt64 = 0
+    private var agentInterruptedBannerHostingView: NSHostingView<AgentInterruptedBanner>?
+    private var agentInterruptedBannerAction: ((AgentInterruptedBannerAction) -> Void)?
 #if DEBUG
     // Test-only override for the mounted-search-field-focus path's window.isKeyWindow
     // guard. Headless XCTest hosts frequently cannot make a plain NSWindow genuinely
@@ -711,6 +713,7 @@ final class GhosttySurfaceScrollView: NSView {
         if let overlay = searchOverlayHostingView {
             _ = setFrameIfNeeded(overlay, to: bounds)
         }
+        layoutAgentInterruptedBanner()
         // NSScrollView can defer clip-view/content-size updates until its own layout pass,
         // which makes interactive width changes arrive a queue turn late on Sequoia.
         scrollView.layoutSubtreeIfNeeded()
@@ -1322,6 +1325,50 @@ final class GhosttySurfaceScrollView: NSView {
                 force: true
             )
         }
+    }
+
+    /// Shows or removes the interrupted-agent bar across the top of the pane. Mounted here, in
+    /// the portal layer, for the same reason as the find overlay.
+    func setAgentInterruptedBanner(
+        state: InterruptedAgentState?,
+        onAction: ((AgentInterruptedBannerAction) -> Void)?
+    ) {
+        agentInterruptedBannerAction = onAction
+        guard let state else {
+            agentInterruptedBannerHostingView?.removeFromSuperview()
+            agentInterruptedBannerHostingView = nil
+            return
+        }
+        if let banner = agentInterruptedBannerHostingView {
+            if banner.rootView.state != state {
+                banner.rootView = makeAgentInterruptedBanner(state: state)
+            }
+        } else {
+            let banner = NSHostingView(rootView: makeAgentInterruptedBanner(state: state))
+            // No safe area inside a pane (issue #307).
+            banner.safeAreaRegions = []
+            banner.autoresizingMask = [.width, .minYMargin]
+            agentInterruptedBannerHostingView = banner
+        }
+        if let banner = agentInterruptedBannerHostingView, banner.superview !== self {
+            addSubview(banner, positioned: .above, relativeTo: nil)
+        }
+        layoutAgentInterruptedBanner()
+    }
+
+    private func makeAgentInterruptedBanner(state: InterruptedAgentState) -> AgentInterruptedBanner {
+        AgentInterruptedBanner(state: state) { [weak self] action in
+            self?.agentInterruptedBannerAction?(action)
+        }
+    }
+
+    private func layoutAgentInterruptedBanner() {
+        guard let banner = agentInterruptedBannerHostingView else { return }
+        let height = min(banner.fittingSize.height, bounds.height)
+        _ = setFrameIfNeeded(
+            banner,
+            to: NSRect(x: bounds.minX, y: bounds.maxY - height, width: bounds.width, height: height)
+        )
     }
 
     func syncKeyStateIndicator(text: String?) {

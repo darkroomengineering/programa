@@ -27,6 +27,8 @@
 			A2E500000000000000000002 /* AgentResumeCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2E500000000000000000001 /* AgentResumeCommand.swift */; };
 			A2E500000000000000000003 /* AgentResumeCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2E500000000000000000001 /* AgentResumeCommand.swift */; };
 			A2E500000000000000000005 /* AgentResumeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2E500000000000000000004 /* AgentResumeStore.swift */; };
+		A42200000000000000000004 /* AgentInterruptedBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42200000000000000000003 /* AgentInterruptedBanner.swift */; };
+		A42200000000000000000002 /* LeftoverProcessReaper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A42200000000000000000001 /* LeftoverProcessReaper.swift */; };
 			TTAI0001A1B2C3D4E5F60719 /* TerminalTabAgentIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = TTAI0002A1B2C3D4E5F60719 /* TerminalTabAgentIcon.swift */; };
 			7501A0000000000000000003 /* GhosttyApp+ProgramStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7501A0000000000000000004 /* GhosttyApp+ProgramStatus.swift */; };
 			7501A0000000000000000001 /* ProgramStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7501A0000000000000000002 /* ProgramStatus.swift */; };
@@ -461,6 +463,8 @@
 			AGST0002A1B2C3D4E5F60719 /* AgentActivityState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AgentActivityState.swift"; sourceTree = "<group>"; };
 			A2E500000000000000000001 /* AgentResumeCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentResumeCommand.swift; sourceTree = "<group>"; };
 			A2E500000000000000000004 /* AgentResumeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentResumeStore.swift; sourceTree = "<group>"; };
+		A42200000000000000000003 /* AgentInterruptedBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentInterruptedBanner.swift; sourceTree = "<group>"; };
+		A42200000000000000000001 /* LeftoverProcessReaper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeftoverProcessReaper.swift; sourceTree = "<group>"; };
 			TTAI0002A1B2C3D4E5F60719 /* TerminalTabAgentIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalTabAgentIcon.swift"; sourceTree = "<group>"; };
 			7501A0000000000000000002 /* ProgramStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramStatus.swift; sourceTree = "<group>"; };
 			7501A0000000000000000008 /* TerminalController+SurfaceWaitProgram.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+SurfaceWaitProgram.swift"; sourceTree = "<group>"; };
@@ -946,6 +950,8 @@
 					AGST0002A1B2C3D4E5F60719 /* AgentActivityState.swift */,
 					A2E500000000000000000001 /* AgentResumeCommand.swift */,
 					A2E500000000000000000004 /* AgentResumeStore.swift */,
+				A42200000000000000000003 /* AgentInterruptedBanner.swift */,
+				A42200000000000000000001 /* LeftoverProcessReaper.swift */,
 					TTAI0002A1B2C3D4E5F60719 /* TerminalTabAgentIcon.swift */,
 					7501A0000000000000000002 /* ProgramStatus.swift */,
 					7501A0000000000000000008 /* TerminalController+SurfaceWaitProgram.swift */,
@@ -1516,6 +1522,8 @@
 					AGST0001A1B2C3D4E5F60719 /* AgentActivityState.swift in Sources */,
 					A2E500000000000000000002 /* AgentResumeCommand.swift in Sources */,
 					A2E500000000000000000005 /* AgentResumeStore.swift in Sources */,
+				A42200000000000000000004 /* AgentInterruptedBanner.swift in Sources */,
+				A42200000000000000000002 /* LeftoverProcessReaper.swift in Sources */,
 					TTAI0001A1B2C3D4E5F60719 /* TerminalTabAgentIcon.swift in Sources */,
 					7501A0000000000000000001 /* ProgramStatus.swift in Sources */,
 					7501A0000000000000000007 /* TerminalController+SurfaceWaitProgram.swift in Sources */,

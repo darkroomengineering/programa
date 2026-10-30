@@ -12,6 +12,8 @@ struct PanelContentView: View {
     let isSplit: Bool
     let appearance: PanelAppearance
     let hasUnreadNotification: Bool
+    let interruptedAgentState: InterruptedAgentState?
+    let onInterruptedAgentAction: (AgentInterruptedBannerAction) -> Void
     let onFocus: () -> Void
     let onRequestPanelFocus: () -> Void
     let onTriggerFlash: () -> Void
@@ -29,6 +31,8 @@ struct PanelContentView: View {
                     isSplit: isSplit,
                     appearance: appearance,
                     hasUnreadNotification: hasUnreadNotification,
+                    interruptedAgentState: interruptedAgentState,
+                    onInterruptedAgentAction: onInterruptedAgentAction,
                     onFocus: onFocus,
                     onTriggerFlash: onTriggerFlash
                 )

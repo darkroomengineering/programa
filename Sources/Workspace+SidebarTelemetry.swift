@@ -257,6 +257,14 @@ extension Workspace {
                 transcriptPath: transcriptPath
             )
         }
+        if source == .hooks, let sessionKey {
+            if interruptedAgentPanels[panelId] != nil {
+                interruptedAgentPanels.removeValue(forKey: panelId)
+            }
+            if let pid = sessionKey.pid, sessionKey.provider == "claude-code" || sessionKey.provider == "claude" {
+                LeftoverProcessReaper.shared.trackAgent(pid: pid)
+            }
+        }
 
         if source != .program, let current, current.source == .program,
            current.state != .idle || state == .idle {
@@ -826,6 +834,10 @@ extension Workspace {
             return false
         }
         agentPIDs[key] = pid
+        // SessionStart reports Claude's pid here; per-surface presence only gets it on a tool call.
+        if key == "claude_code" {
+            LeftoverProcessReaper.shared.trackAgent(pid: pid)
+        }
         return true
     }
 

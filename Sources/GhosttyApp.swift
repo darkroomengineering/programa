@@ -772,6 +772,10 @@ class GhosttyApp {
                    let manager = app.tabManagerFor(tabId: callbackTabId) ?? app.tabManager,
                    let workspace = manager.tabs.first(where: { $0.id == callbackTabId }),
                    workspace.panels[callbackSurfaceId] != nil {
+                    // Ghostty closes the surface itself right after SHOW_CHILD_EXITED (and on
+                    // any key press in a dead surface); a pane kept for its interrupted agent
+                    // closes only from its banner.
+                    if workspace.interruptedAgentPanels[callbackSurfaceId] == .paneDead { return }
                     if needsConfirmClose {
                         manager.closeRuntimeSurfaceWithConfirmation(
                             tabId: callbackTabId,

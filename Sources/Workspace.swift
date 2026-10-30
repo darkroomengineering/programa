@@ -158,6 +158,9 @@ final class Workspace: Identifiable, ObservableObject {
     var panelAgentStateSources: [UUID: AgentStateSource] {
         panelAgentPresence.mapValues(\.source)
     }
+    /// Panels whose agent died without a clean SessionEnd; each shows the interrupted-agent
+    /// banner. See AgentInterruptedBanner.swift.
+    @Published var interruptedAgentPanels: [UUID: InterruptedAgentState] = [:]
     @Published var surfaceListeningPorts: [UUID: [Int]] = [:]
     var agentListeningPorts: [Int] = []
     @Published var listeningPorts: [Int] = []
