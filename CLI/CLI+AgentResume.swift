@@ -187,12 +187,14 @@ extension ProgramaCLI {
 
         let entries = AgentLastSessionStore().entries()
         let target: AgentResumeTarget
+        let transcriptPath: String?
         if let sessionArg {
             let recorded = entries.first { $0.sessionId == sessionArg }
             guard let provider = providerArg ?? recorded?.provider else {
                 throw CLIError(message: "resume: session \(sessionArg) isn't recorded; pass --provider")
             }
             target = AgentResumeTarget(provider: provider, sessionId: sessionArg, cwd: recorded?.cwd)
+            transcriptPath = recorded?.transcriptPath
         } else {
             let paneKey = paneDirectory.map(AgentResumeCommand.standardizedPath)
             guard let entry = entries.first(where: { $0.surfaceId == surfaceId })
@@ -200,12 +202,21 @@ extension ProgramaCLI {
                 throw CLIError(message: "resume: no ended agent session recorded for \(surfaceLabel) or its directory")
             }
             target = AgentResumeTarget(provider: entry.provider, sessionId: entry.sessionId, cwd: entry.cwd)
+            transcriptPath = entry.transcriptPath
         }
         guard AgentResumeCommand.isSupported(provider: target.provider) else {
             throw CLIError(message: "resume: \(target.provider) sessions cannot be resumed (supported: \(AgentResumeCommand.supportedProviders.joined(separator: ", ")))")
         }
         guard let line = AgentResumeCommand.line(for: target, paneDirectory: paneDirectory) else {
             throw CLIError(message: "resume: invalid session id: \(target.sessionId)")
+        }
+        // Only the transcript path Claude reported is evidence: this process may not see the
+        // CLAUDE_CONFIG_DIR the session ran with.
+        if let transcriptPath = transcriptPath?.trimmingCharacters(in: .whitespacesAndNewlines), !transcriptPath.isEmpty,
+           AgentResumeCommand.claudeTranscriptIsMissing(for: target, transcriptExists: { _ in
+               AgentResumeCommand.isNonEmptyRegularFile(atPath: transcriptPath)
+           }) {
+            throw CLIError(message: "resume: Claude session \(target.sessionId) has no saved conversation to resume (it ended before its first prompt)")
         }
 
         if printOnly {

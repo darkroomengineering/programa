@@ -712,7 +712,8 @@ extension CommandPaletteView {
                   let target = AgentResumeStore.shared.target(panelId: context.panelId),
                   let line = AgentResumeCommand.line(
                     for: target, paneDirectory: context.workspace.panelDirectories[context.panelId]
-                  ) else {
+                  ),
+                  !AgentResumeCommand.claudeTranscriptIsMissing(for: target) else {
                 NSSound.beep()
                 return
             }

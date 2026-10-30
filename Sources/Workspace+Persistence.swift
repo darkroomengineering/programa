@@ -364,7 +364,9 @@ extension Workspace {
               let target = snapshot.agentResume,
               let line = AgentResumeCommand.line(
                 for: target, paneDirectory: paneDirectory, directoryExists: directoryExists
-              ) else { return nil }
+              ),
+              !AgentResumeCommand.claudeTranscriptIsMissing(for: target, transcriptExists: claudeTranscriptExists)
+        else { return nil }
         return line + "\n"
     }
 
