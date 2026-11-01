@@ -299,6 +299,45 @@ struct SessionPanelSnapshot: Codable, Sendable {
     /// Absent in older snapshots, which restore as not running. `agentResume` alone cannot say
     /// this, because the store keeps a target after its agent exits.
     var agentWasRunning: Bool?
+    /// Terminal panels revived from escrow only: the ids the surviving shell reports with.
+    /// Absent for a shell this app instance spawned, whose ids match the panel's.
+    var reattachedShellIds: RestoredSessionIdAliases.ShellIds?
+}
+
+/// A shell revived from escrow after a relaunch keeps the `PROGRAMA_SURFACE_ID` and
+/// `PROGRAMA_WORKSPACE_ID` it was spawned with, while its restored panel and workspace get new
+/// ids. This maps those old ids to the live ones so the shell's socket reports (shell state,
+/// cwd, branch, ports, tty) reach its panel. Entries come only from a successful reattach,
+/// whose old surface is gone, so an alias never shadows a live id.
+final class RestoredSessionIdAliases: @unchecked Sendable {
+    struct ShellIds: Codable, Equatable, Sendable {
+        var surfaceId: UUID
+        var workspaceId: UUID?
+    }
+
+    static let shared = RestoredSessionIdAliases()
+
+    private let lock = NSLock()
+    private var liveIdByOldId: [UUID: UUID] = [:]
+    private var shellIdsByPanelId: [UUID: ShellIds] = [:]
+
+    /// `workspaceId` nil leaves the shell's workspace id unaliased (it still names a live workspace).
+    func registerReattach(_ shellIds: ShellIds, panelId: UUID, workspaceId: UUID?) {
+        lock.withLock {
+            if shellIds.surfaceId != panelId { liveIdByOldId[shellIds.surfaceId] = panelId }
+            if let old = shellIds.workspaceId, let workspaceId, old != workspaceId { liveIdByOldId[old] = workspaceId }
+            shellIdsByPanelId[panelId] = shellIds
+        }
+    }
+
+    /// The live id for an id a reattached shell reports with, or `id` itself.
+    func resolve(_ id: UUID) -> UUID {
+        lock.withLock { liveIdByOldId[id] } ?? id
+    }
+
+    func shellIds(forPanelId panelId: UUID) -> ShellIds? {
+        lock.withLock { shellIdsByPanelId[panelId] }
+    }
 }
 
 enum SessionSplitOrientation: String, Codable, Sendable {

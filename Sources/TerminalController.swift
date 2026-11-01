@@ -2346,7 +2346,7 @@ class TerminalController {
     nonisolated func v2CachedUUID(_ params: [String: Any], _ key: String) -> UUID? {
         guard let s = v2String(params, key) else { return nil }
         if let uuid = UUID(uuidString: s) {
-            return uuid
+            return RestoredSessionIdAliases.shared.resolve(uuid)
         }
         // Telemetry must not block on main to refresh the handle store: clients can use UUIDs
         // or already-issued cached refs, while unknown or unissued refs fail immediately by design.

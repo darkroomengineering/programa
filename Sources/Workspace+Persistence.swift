@@ -86,6 +86,8 @@ extension Workspace {
         // are applied. See `TerminalSurface.isSessionRestoreSettling`'s doc
         // comment for the divider race this prevents.
         let restoreGeneration = TerminalSurface.beginSessionRestorePass()
+        restoringSnapshotWorkspaceId = snapshot.id
+        defer { restoringSnapshotWorkspaceId = nil }
 
         if let normalizedCurrentDirectory = normalizedSidebarDirectory(snapshot.currentDirectory) {
             currentDirectory = normalizedCurrentDirectory
@@ -341,7 +343,8 @@ extension Workspace {
             markdown: markdownSnapshot,
             review: reviewSnapshot,
             agentResume: panel.panelType == .terminal ? AgentResumeStore.shared.target(panelId: panelId) : nil,
-            agentWasRunning: panel.panelType == .terminal ? panelAgentPresence[panelId] != nil : nil
+            agentWasRunning: panel.panelType == .terminal ? panelAgentPresence[panelId] != nil : nil,
+            reattachedShellIds: RestoredSessionIdAliases.shared.shellIds(forPanelId: panelId)
         )
     }
 
@@ -642,10 +645,14 @@ extension Workspace {
         inPane paneId: PaneID,
         workingDirectory: String?
     ) -> UUID? {
+        // A shell revived on an earlier relaunch still reports with the ids it was spawned with.
+        let shellIds = snapshot.reattachedShellIds
+            ?? RestoredSessionIdAliases.ShellIds(surfaceId: snapshot.id, workspaceId: restoringSnapshotWorkspaceId)
         guard let panelId = revivePanel(
             sessionId: snapshot.id.uuidString,
             inPane: paneId,
-            workingDirectory: workingDirectory
+            workingDirectory: workingDirectory,
+            shellIds: shellIds
         ) else {
             return nil
         }
@@ -673,7 +680,8 @@ extension Workspace {
     func revivePanel(
         sessionId: String,
         inPane paneId: PaneID,
-        workingDirectory: String?
+        workingDirectory: String?,
+        shellIds: RestoredSessionIdAliases.ShellIds? = nil
     ) -> UUID? {
         guard !SessionMachineryGate.isUnitTesting else { return nil }
         let oldSessionId = sessionId
@@ -734,6 +742,15 @@ extension Workspace {
         // stale despite a fresh-looking heartbeat, and the preservation
         // check must not keep this directory alive.
         SessionWALStore.shared.discardOrphanedSession(sessionId: oldSessionId, force: true)
+        // A manual snapshot restore can run while the original panel is still open; its live id
+        // must keep reaching it, so only a surface that no longer exists gets an alias.
+        if let shellIds = shellIds ?? UUID(uuidString: oldSessionId).map({ .init(surfaceId: $0, workspaceId: nil) }),
+           AppDelegate.shared?.locateSurface(surfaceId: shellIds.surfaceId) == nil {
+            let workspaceIsGone = shellIds.workspaceId.map { AppDelegate.shared?.tabManagerFor(tabId: $0) == nil } ?? false
+            RestoredSessionIdAliases.shared.registerReattach(
+                shellIds, panelId: terminalPanel.id, workspaceId: workspaceIsGone ? id : nil
+            )
+        }
         dilog("escrow.reattach", "session=\(oldSessionId.prefix(8)) outcome=revived newPanel=\(terminalPanel.id.uuidString.prefix(8))")
         return terminalPanel.id
     }
