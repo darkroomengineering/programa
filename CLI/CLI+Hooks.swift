@@ -840,9 +840,9 @@ extension ProgramaCLI {
             client: client
         )
 
-        // Clear the badge first: it is the indicator a user reads as "Claude is stuck",
-        // and it is the only one of the three that can't be re-derived from anything else.
-        if let surfaceId {
+        // Clear the badge first, unless Claude reports its own state: this hook is async, and a
+        // late "working" would override Claude's idle after an Esc (claudeReportsOwnStatus).
+        if let surfaceId, !claudeReportsOwnStatus {
             reportAgentStateAndEvent(client: client, provider: "claude-code", eventType: "item.started", workspaceId: workspaceId, surfaceId: surfaceId, state: .working, sessionId: ctx.parsed.sessionId, pid: claudePid)
         }
 
