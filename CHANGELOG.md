@@ -28,6 +28,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - Tab colors and the Tab Color menu in the glass tab bar; pane tabs show their color as a tinted background.
 - `programa wait-surface --agent-state <idle|working|blocked|any_change>` waits for the agent in a surface to reach a state.
 - On Windows, pasting text with line breaks or control characters into a program that has not turned on bracketed paste (cmd.exe, PowerShell) asks first, with a preview.
+- `programa aside install-mcp` also registers Programa in Aside's own MCP settings, so Aside can start agents in Programa panes and read their results. `uninstall-mcp` removes it and `programa aside status` shows it. See `docs/aside-browser.md`.
 
 ### Changed
 - A workspace with a single tab hides its tab bar, along with the new-tab and split buttons, and leaves an empty strip in its place so the window can still be dragged from the top. A glass + button in that strip's right corner opens a new tab. The bar comes back when the pane gets a second tab or the workspace is split, so every split pane keeps its close and new-tab buttons.
@@ -61,6 +62,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 
 ### Fixed
 - `programa handoff` pastes into a pane whose terminal has not started yet instead of failing.
+- `programa aside install-mcp --with-devtools` connects `aside-devtools` to Aside wherever its remote debugging is listening, read from Aside's `DevToolsActivePort`, and `programa aside status` reports that endpoint. Both assumed port 9223, which Aside does not use. Turn on remote debugging in Aside at `chrome://inspect/#remote-debugging`.
 - `programa race --agent opencode` now hands OpenCode the prompt with `--prompt`. OpenCode read the bare argument as a project path, so the prompt never arrived.
 - With dozens of tabs in a pane, each tab keeps a width that shows its title instead of shrinking to one letter. The tab bar scrolls with a regular mouse wheel and keeps the selected tab in view.
 - Renaming a tab, or a program changing its title, updates the tab bar right away.
