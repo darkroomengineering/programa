@@ -266,7 +266,6 @@ extension TerminalController {
             guard let windowId = v2UUID(params, "window_id") else {
                 return v2InvalidParam("window_id")
             }
-            let focus = v2FocusAllowed(requested: v2Bool(params, "focus") ?? false)
 
             guard let srcTM = AppDelegate.shared?.tabManagerFor(tabId: wsId) else {
                 return .err(code: "not_found", message: "Workspace not found", data: ["workspace_id": wsId.uuidString])
@@ -278,11 +277,7 @@ extension TerminalController {
                 return .err(code: "not_found", message: "Workspace not found", data: ["workspace_id": wsId.uuidString])
             }
 
-            dstTM.attachWorkspace(ws, select: focus)
-            if focus {
-                _ = AppDelegate.shared?.focusMainWindow(windowId: windowId)
-                setActiveTabManager(dstTM)
-            }
+            dstTM.attachWorkspace(ws, select: false)
             return .ok([
                 "workspace_id": wsId.uuidString,
                 "workspace_ref": v2Ref(kind: .workspace, uuid: wsId),

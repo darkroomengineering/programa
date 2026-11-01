@@ -414,11 +414,11 @@ class ProgramaClient:
             raise ProgramaClientError("No current workspace")
         return wsid
 
-    def move_workspace_to_window(self, workspace: Union[str, int], window_id: str, focus: bool = True) -> None:
+    def move_workspace_to_window(self, workspace: Union[str, int], window_id: str) -> None:
         wsid = self._resolve_workspace_id(workspace)
         self._call(
             "workspace.move_to_window",
-            {"workspace_id": wsid, "window_id": str(window_id), "focus": bool(focus)},
+            {"workspace_id": wsid, "window_id": str(window_id)},
         )
 
     def reorder_workspace(

@@ -187,7 +187,6 @@ enum WorkspaceTools {
                 properties: [
                     "workspace_id": ProgramaToolSchema.string("Workspace UUID or short ref to move."),
                     "window_id": ProgramaToolSchema.string("Destination window UUID or short ref."),
-                    "focus": ProgramaToolSchema.boolean("If true, bring the destination window forward and select the moved workspace after moving. Defaults to false."),
                 ],
                 required: ["workspace_id", "window_id"]
             )

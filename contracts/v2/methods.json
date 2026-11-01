@@ -4989,9 +4989,6 @@
       "params": {
         "additionalProperties": false,
         "properties": {
-          "focus": {
-            "type": "boolean"
-          },
           "window_id": {
             "format": "window:N",
             "type": "string"
