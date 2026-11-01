@@ -63,6 +63,11 @@ def main() -> int:
             raise ProgramaClientError(f"Expected >=2 surfaces before move, got {len(before_ids)} ({before_ids})")
 
         c.move_workspace_to_window(ws, w2, focus=True)
+        # workspace.move_to_window is not a focus-intent method, so its `focus` flag cannot
+        # select anything (socket focus policy). Only a selected workspace has its terminals
+        # mounted in the window, so select it explicitly before checking in_window.
+        c.focus_window(w2)
+        c.select_workspace(ws)
         time.sleep(0.5)
 
         # Wait for reattachment after cross-window move.
