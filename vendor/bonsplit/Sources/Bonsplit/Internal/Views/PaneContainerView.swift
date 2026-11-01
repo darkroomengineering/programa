@@ -654,7 +654,15 @@ struct PaneContainerView<Content: View, EmptyContent: View>: View {
     private var contentArea: some View {
         Group {
             if pane.tabs.isEmpty {
-                emptyPaneView
+                // Closing a pane's last tab collapses the pane, but this view's own hosting
+                // controller re-renders on the tab removal before the split container swaps it
+                // out. Only a pane still in the tree is genuinely empty; a removed one must not
+                // flash the empty-pane placeholder on its way out.
+                if controller.rootNode.findPane(pane.id) != nil {
+                    emptyPaneView
+                } else {
+                    Color.clear
+                }
             } else {
                 // Every tab's view stays in the hierarchy so terminal state survives tab
                 // switches; only the selected one is visible and hit-testable.
