@@ -1177,15 +1177,10 @@ private struct BackgroundDebugView: View {
 
     private func updateWindowGlassTint() {
         let window: NSWindow? = {
-            if let key = NSApp.keyWindow,
-               let raw = key.identifier?.rawValue,
-               raw == "programa.main" || raw.hasPrefix("programa.main.") {
+            if let key = NSApp.keyWindow, key.hasProgramaMainIdentifier {
                 return key
             }
-            return NSApp.windows.first(where: {
-                guard let raw = $0.identifier?.rawValue else { return false }
-                return raw == "programa.main" || raw.hasPrefix("programa.main.")
-            })
+            return NSApp.windows.first(where: \.hasProgramaMainIdentifier)
         }()
         guard let window else { return }
         let tintColor = (NSColor(hex: bgGlassTintHex) ?? .black).withAlphaComponent(bgGlassTintOpacity)

@@ -2528,14 +2528,10 @@ class GhosttyApp {
 
     private func activeMainWindow() -> NSWindow? {
         let keyWindow = NSApp.keyWindow
-        if let raw = keyWindow?.identifier?.rawValue,
-           raw == "programa.main" || raw.hasPrefix("programa.main.") {
+        if let keyWindow, keyWindow.hasProgramaMainIdentifier {
             return keyWindow
         }
-        return NSApp.windows.first(where: { window in
-            guard let raw = window.identifier?.rawValue else { return false }
-            return raw == "programa.main" || raw.hasPrefix("programa.main.")
-        })
+        return NSApp.windows.first(where: \.hasProgramaMainIdentifier)
     }
 
     func logBackground(_ message: String) {

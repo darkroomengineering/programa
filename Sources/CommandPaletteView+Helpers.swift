@@ -838,12 +838,14 @@ extension CommandPaletteView {
         }
         return nil
     }
+    /// Any of these held turns a rename-field Delete into an editing shortcut, not a plain Delete.
+    static let commandPaletteRenameBlockedModifiers: EventModifiers = [.command, .control, .option, .shift]
+
     static func commandPaletteShouldPopRenameInputOnDelete(
         renameDraft: String,
         modifiers: EventModifiers
     ) -> Bool {
-        let blockedModifiers: EventModifiers = [.command, .control, .option, .shift]
-        guard modifiers.intersection(blockedModifiers).isEmpty else { return false }
+        guard modifiers.intersection(commandPaletteRenameBlockedModifiers).isEmpty else { return false }
         return renameDraft.isEmpty
     }
     static func shouldHandleCommandPaletteRequest(

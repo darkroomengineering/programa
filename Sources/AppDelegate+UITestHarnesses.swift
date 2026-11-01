@@ -153,8 +153,7 @@ extension AppDelegate {
         let deadline = Date().addingTimeInterval(20.0)
         func hasMainTerminalWindow() -> Bool {
             NSApp.windows.contains { window in
-                guard let raw = window.identifier?.rawValue else { return false }
-                return raw == "programa.main" || raw.hasPrefix("programa.main.")
+                window.hasProgramaMainIdentifier
             }
         }
 
@@ -173,8 +172,7 @@ extension AppDelegate {
                 return
             }
             if let mainWindow = NSApp.windows.first(where: { window in
-                guard let raw = window.identifier?.rawValue else { return false }
-                return raw == "programa.main" || raw.hasPrefix("programa.main.")
+                window.hasProgramaMainIdentifier
             }) {
                 let screenFrame = mainWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame
                 if let screenFrame {

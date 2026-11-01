@@ -654,10 +654,7 @@ extension TerminalController {
         return v2MainSync {
             NSApp.activate(ignoringOtherApps: true)
             NSApp.unhide(nil)
-            let hasMainTerminalWindow = NSApp.windows.contains { window in
-                guard let raw = window.identifier?.rawValue else { return false }
-                return raw == "programa.main" || raw.hasPrefix("programa.main.")
-            }
+            let hasMainTerminalWindow = NSApp.windows.contains(where: \.hasProgramaMainIdentifier)
 
             if !hasMainTerminalWindow {
                 AppDelegate.shared?.openNewMainWindow(nil)
@@ -665,10 +662,7 @@ extension TerminalController {
 
             if let window = NSApp.mainWindow
                 ?? NSApp.keyWindow
-                ?? NSApp.windows.first(where: { win in
-                    guard let raw = win.identifier?.rawValue else { return false }
-                    return raw == "programa.main" || raw.hasPrefix("programa.main.")
-                })
+                ?? NSApp.windows.first(where: \.hasProgramaMainIdentifier)
                 ?? NSApp.windows.first {
                 window.makeKeyAndOrderFront(nil)
             }
