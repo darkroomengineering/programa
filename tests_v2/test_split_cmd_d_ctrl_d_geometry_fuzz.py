@@ -35,7 +35,7 @@ MAX_PANES = int(os.environ.get("PROGRAMA_SPLIT_FUZZ_MAX_PANES", "4"))
 EPSILON = float(os.environ.get("PROGRAMA_SPLIT_FUZZ_EPSILON", "0.0"))
 TRACE_TAIL = int(os.environ.get("PROGRAMA_SPLIT_FUZZ_TRACE_TAIL", "40"))
 ASSERT_NO_UNDERFLOW = os.environ.get("PROGRAMA_SPLIT_FUZZ_ASSERT_NO_UNDERFLOW", "0") == "1"
-ASSERT_NO_EMPTY_PANEL = os.environ.get("PROGRAMA_SPLIT_FUZZ_ASSERT_NO_EMPTY_PANEL", "0") == "1"
+ASSERT_NO_EMPTY_PANEL = os.environ.get("PROGRAMA_SPLIT_FUZZ_ASSERT_NO_EMPTY_PANEL", "1") == "1"
 
 
 def _pane_count(layout_payload: dict) -> int:
