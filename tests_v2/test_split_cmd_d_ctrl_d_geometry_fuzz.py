@@ -21,6 +21,10 @@ from v2_support import container_frame as _container_frame
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 FUZZ_SEED = int(os.environ.get("PROGRAMA_SPLIT_FUZZ_SEED", "424242"))
 FUZZ_STEPS = int(os.environ.get("PROGRAMA_SPLIT_FUZZ_STEPS", "1400"))
+# Stops early once this many seconds pass, so it fits the 300 s per-test limit of the CI runner.
+TIME_BUDGET_S = float(os.environ.get("PROGRAMA_SPLIT_FUZZ_TIME_BUDGET_S", "240"))
+# Fewer steps than this inside the budget means the app is too slow to churn, which is itself a failure.
+MIN_STEPS = int(os.environ.get("PROGRAMA_SPLIT_FUZZ_MIN_STEPS", "100"))
 SAMPLES_PER_STEP = int(os.environ.get("PROGRAMA_SPLIT_FUZZ_SAMPLES", "4"))
 SAMPLE_INTERVAL_S = float(os.environ.get("PROGRAMA_SPLIT_FUZZ_SAMPLE_INTERVAL_S", "0.0015"))
 ACTION_JITTER_MAX_S = float(os.environ.get("PROGRAMA_SPLIT_FUZZ_ACTION_JITTER_MAX_S", "0.0035"))
@@ -83,6 +87,7 @@ def main() -> int:
     rng = random.Random(FUZZ_SEED)
     recent_actions: deque[str] = deque(maxlen=max(8, TRACE_TAIL))
     total_actions = 0
+    steps_done = 0
 
     with ProgramaClient(SOCKET_PATH) as c:
         ws = c.new_workspace()
@@ -98,7 +103,11 @@ def main() -> int:
         if _pane_count(initial) < 2:
             raise ProgramaClientError("Expected at least 2 panes after warm start split")
 
+        deadline = time.monotonic() + TIME_BUDGET_S
         for step in range(1, FUZZ_STEPS + 1):
+            if time.monotonic() >= deadline:
+                break
+            steps_done = step
             burst = rng.randint(1, max(1, BURST_MAX))
 
             for burst_index in range(1, burst + 1):
@@ -145,6 +154,11 @@ def main() -> int:
                 if SAMPLE_INTERVAL_S > 0:
                     time.sleep(rng.uniform(0.0, SAMPLE_INTERVAL_S))
 
+        if steps_done < min(MIN_STEPS, FUZZ_STEPS):
+            raise ProgramaClientError(
+                f"only {steps_done} fuzz steps finished in {TIME_BUDGET_S:.0f}s; want at least {min(MIN_STEPS, FUZZ_STEPS)}"
+            )
+
         underflows = c.bonsplit_underflow_count()
         if ASSERT_NO_UNDERFLOW and underflows != 0:
             raise ProgramaClientError(f"bonsplit arranged-subview underflow observed during fuzz run: {underflows}")
@@ -155,7 +169,7 @@ def main() -> int:
 
     print(
         "PASS: cmd+d/ctrl+d fuzz geometry invariant "
-        f"(seed={FUZZ_SEED}, steps={FUZZ_STEPS}, samples={SAMPLES_PER_STEP}, burst_max={BURST_MAX}, "
+        f"(seed={FUZZ_SEED}, steps={steps_done}/{FUZZ_STEPS}, samples={SAMPLES_PER_STEP}, burst_max={BURST_MAX}, "
         f"actions={total_actions}, epsilon={EPSILON}, underflows={underflows}, empty_panel={flashes})"
     )
     return 0
