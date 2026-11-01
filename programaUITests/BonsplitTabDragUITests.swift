@@ -403,18 +403,18 @@ final class BonsplitTabDragUITests: XCTestCase {
         let betaTab = app.buttons[betaTitle]
         XCTAssertTrue(betaTab.waitForExistence(timeout: 5.0), "Expected beta tab to exist")
 
-        // The workspace-level capsule (new terminal, split right/down) is always visible
-        // beside the pane tab strip; it does not depend on hover.
-        let newTerminalButton = app.buttons["New Terminal Tab"]
+        // Each pane header carries its own split, zoom and close controls at the
+        // strip's trailing edge; they are always visible and do not depend on hover.
+        let splitRightButton = app.buttons["Split Right"].firstMatch
         XCTAssertTrue(
-            waitForCondition(timeout: 5.0) { newTerminalButton.exists && newTerminalButton.isHittable },
-            "Expected the pane tab bar controls to be visible in collapsed-sidebar minimal mode. window=\(window.frame) alphaTab=\(alphaTab.frame) betaTab=\(betaTab.frame) button=\(newTerminalButton.debugDescription)"
+            waitForCondition(timeout: 5.0) { splitRightButton.exists && splitRightButton.isHittable },
+            "Expected the pane tab bar controls to be visible in collapsed-sidebar minimal mode. window=\(window.frame) alphaTab=\(alphaTab.frame) betaTab=\(betaTab.frame) button=\(splitRightButton.debugDescription)"
         )
 
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8)).hover()
         XCTAssertTrue(
-            waitForCondition(timeout: 2.0) { newTerminalButton.exists && newTerminalButton.isHittable },
-            "Expected pane tab bar controls to stay visible away from the pane tab bar. button=\(newTerminalButton.debugDescription)"
+            waitForCondition(timeout: 2.0) { splitRightButton.exists && splitRightButton.isHittable },
+            "Expected pane tab bar controls to stay visible away from the pane tab bar. button=\(splitRightButton.debugDescription)"
         )
     }
 

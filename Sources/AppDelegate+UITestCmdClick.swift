@@ -89,7 +89,9 @@ extension AppDelegate {
             displayToken = resolvedFileName
             let blockLine = "\(linePrefix)\(resolvedFileName)"
             let shellBlockLine = singleQuotedShellLiteral(blockLine)
-            shellCommand = "clear\rprintf '\\033[?1049h\\033[H\\033[2J'; for i in $(seq 1 48); do printf '%s\\n' '\(shellBlockLine)'; done\r"
+            // The trailing sleep holds the alternate screen the way a TUI does: the
+            // shell integration leaves the alternate screen at every prompt.
+            shellCommand = "clear\rprintf '\\033[?1049h\\033[H\\033[2J'; for i in $(seq 1 48); do printf '%s\\n' '\(shellBlockLine)'; done; sleep 600\r"
         default:
             switch resolvedDisplayMode {
             case "raw":
