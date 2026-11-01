@@ -5220,23 +5220,6 @@
         }
       }
     },
-    "commandPalette.rename.tabDescription": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Choose a custom tab name."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "カスタムタブ名を選択してください。"
-          }
-        }
-      }
-    },
     "commandPalette.rename.tabInputHint": {
       "extractionState": "manual",
       "localizations": {
@@ -5271,40 +5254,6 @@
         }
       }
     },
-    "commandPalette.rename.tabTitle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rename Tab"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "タブの名前を変更"
-          }
-        }
-      }
-    },
-    "commandPalette.rename.workspaceDescription": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Choose a custom workspace name."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "カスタムワークスペース名を選択してください。"
-          }
-        }
-      }
-    },
     "commandPalette.rename.workspaceInputHint": {
       "extractionState": "manual",
       "localizations": {
@@ -5335,23 +5284,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "ワークスペース名"
-          }
-        }
-      }
-    },
-    "commandPalette.rename.workspaceTitle": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rename Workspace"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ワークスペースの名前を変更"
           }
         }
       }
