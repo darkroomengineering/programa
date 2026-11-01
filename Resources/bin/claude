@@ -228,9 +228,9 @@ else
             _claude_flags+="${_flag} "
         fi
     done
-    # Claude Code 2.1.310+ reports its own OSC 7501 status once Programa answers its probe.
+    # Claude Code 2.1.295+ reports its own OSC 7501 status once Programa answers its probe.
     if [[ "$("$REAL_CLAUDE" --version 2>/dev/null)" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]] \
-        && (( BASH_REMATCH[1] > 2 || (BASH_REMATCH[1] == 2 && (BASH_REMATCH[2] > 1 || (BASH_REMATCH[2] == 1 && BASH_REMATCH[3] >= 310))) )); then
+        && (( BASH_REMATCH[1] > 2 || (BASH_REMATCH[1] == 2 && (BASH_REMATCH[2] > 1 || (BASH_REMATCH[2] == 1 && BASH_REMATCH[3] >= 295))) )); then
         _claude_flags+="program-status "
     fi
     export _PROGRAMA_CLAUDE_FLAGS_CACHE_KEY="$_claude_cache_key"
