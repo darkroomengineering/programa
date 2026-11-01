@@ -923,6 +923,59 @@ def main() -> int:
                     check("timeout" in error or "timed out" in error,
                           f"slow response failed for a reason other than its deadline: {error!r}")
 
+    # Claude Code reports its own OSC 7501 root record and re-sends it only when it changes,
+    # so a late async PreToolUse hook that writes "working" after Claude reported idle would
+    # pin the pane at Working. With PROGRAMA_CLAUDE_NATIVE_STATUS=1 the hook leaves the root
+    # record and the surface state to Claude; it still clears notifications.
+    def pre_tool_use_writes(native: bool) -> tuple[bytes, list[str]]:
+        master, slave = os.openpty()
+        try:
+            with tempfile.TemporaryDirectory(prefix="pcli-", dir="/tmp") as directory:
+                env = dict(os.environ)
+                for key in ("PROGRAMA_SOCKET", "PROGRAMA_SOCKET_PATH", "PROGRAMA_SOCKET_PASSWORD", "TMUX", "STY",
+                            "PROGRAMA_CLAUDE_NATIVE_STATUS"):
+                    env.pop(key, None)
+                env.update(hook_env, PROGRAMA_CLAUDE_HOOK_STATE_PATH=str(Path(directory) / "sessions.json"),
+                           TTY=os.ttyname(slave))
+                if native:
+                    env["PROGRAMA_CLAUDE_NATIVE_STATUS"] = "1"
+                with SocketRecorder(directory) as recorder:
+                    subprocess.run(
+                        [CLI_PATH, "--socket", recorder.path, "claude-hook", "pre-tool-use"],
+                        input=json.dumps({"session_id": "native-status-session", "tool_name": "Bash",
+                                          "tool_input": {"command": "ls"}}),
+                        capture_output=True, text=True, check=False, timeout=8.0, env=env,
+                        start_new_session=True,
+                    )
+                methods = [str(frame.get("method")) for frame in recorder.frames]
+            os.set_blocking(master, False)
+            written = b""
+            try:
+                while chunk := os.read(master, 4096):
+                    written += chunk
+            except BlockingIOError:
+                pass
+            return written, methods
+        finally:
+            os.close(master)
+            os.close(slave)
+
+    def root_status_writes(written: bytes) -> list[bytes]:
+        return [seq for seq in written.split(b"\x1b]7501;")[1:] if b"id=" not in seq.split(b"\x1b\\")[0]]
+
+    state_methods = {"surface.report_agent_state", "agent.event"}
+    hook_written, hook_methods = pre_tool_use_writes(native=False)
+    check(any(b"state=working" in seq for seq in root_status_writes(hook_written)),
+          f"pre-tool-use without native status wrote no root working record: {hook_written!r}")
+    check(state_methods <= set(hook_methods), f"pre-tool-use without native status sent {hook_methods!r}")
+    native_written, native_methods = pre_tool_use_writes(native=True)
+    check(root_status_writes(native_written) == [],
+          f"pre-tool-use with native status still wrote the root record: {native_written!r}")
+    check(not state_methods & set(native_methods),
+          f"pre-tool-use with native status still reported agent state: {native_methods!r}")
+    check("notification.clear" in native_methods,
+          f"pre-tool-use with native status stopped clearing notifications: {native_methods!r}")
+
     if failures:
         print(f"FAIL: {len(failures)} CLI registry behavior assertion(s) failed")
         for failure in failures:

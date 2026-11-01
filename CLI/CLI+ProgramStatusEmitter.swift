@@ -87,8 +87,16 @@ enum ProgramStatusSequence {
 }
 
 extension ProgramaCLI {
+    /// Set by Resources/bin/claude when Claude Code reports its own OSC 7501 root record.
+    /// Claude re-sends that record only when its state changes, so a hook write landing after
+    /// Claude's (the async PreToolUse hook after an Esc) would pin the wrong state.
+    var claudeReportsOwnStatus: Bool {
+        ProcessInfo.processInfo.environment["PROGRAMA_CLAUDE_NATIVE_STATUS"] == "1"
+    }
+
     /// Emits one OSC 7501 status report to the agent's terminal. No-op unless
-    /// `PROGRAMA_SURFACE_ID` is set (also true over SSH when forwarded) and not inside tmux.
+    /// `PROGRAMA_SURFACE_ID` is set (also true over SSH when forwarded) and not inside tmux,
+    /// and for Claude's root record while Claude reports it itself (`clear` still goes out).
     func emitProgramStatus(
         state: String,
         kind: String? = nil,
@@ -100,6 +108,7 @@ extension ProgramaCLI {
         let env = ProcessInfo.processInfo.environment
         guard let surface = env["PROGRAMA_SURFACE_ID"], !surface.isEmpty else { return }
         if env["TMUX"] != nil { return }
+        if app == "claude-code", id == nil, state != "clear", claudeReportsOwnStatus { return }
         let bytes = ProgramStatusSequence.build(state: state, kind: kind, app: app, msg: msg, id: id, title: title)
         guard let fd = openProgramStatusTTY(env: env) else { return }
         defer { close(fd) }

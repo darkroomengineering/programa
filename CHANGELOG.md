@@ -61,6 +61,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - The `programa omo`, `omx` and `omc` wrappers for oh-my-openagent, Oh My Codex and Oh My Claude Code. The `programa claude`, `codex` and `opencode` integrations are unchanged. See `docs/removed/omo-omx-omc-wrappers.md` to restore them.
 
 ### Fixed
+- Pressing Esc to interrupt Claude Code no longer leaves its pane showing Working for good. Claude Code 2.1.295 and later reports its own status, so Programa's hooks stop writing it on top.
 - `programa handoff` pastes into a pane whose terminal has not started yet instead of failing.
 - `programa aside install-mcp --with-devtools` connects `aside-devtools` to Aside wherever its remote debugging is listening, read from Aside's `DevToolsActivePort`, and `programa aside status` reports that endpoint. Both assumed port 9223, which Aside does not use. Turn on remote debugging in Aside at `chrome://inspect/#remote-debugging`.
 - `programa race --agent opencode` now hands OpenCode the prompt with `--prompt`. OpenCode read the bare argument as a project path, so the prompt never arrived.
