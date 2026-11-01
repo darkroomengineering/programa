@@ -743,6 +743,14 @@ private final class TrafficLightsTrailingEdgeView: NSView {
                 self?.scheduleMeasure()
             }
         }
+        // Measurements are skipped while the sidebar slides, so measure once it settles.
+        windowObservers.append(
+            NotificationCenter.default.addObserver(
+                forName: .programaSidebarToggleDidSettle, object: nil, queue: .main
+            ) { [weak self] _ in
+                self?.scheduleMeasure()
+            }
+        )
         scheduleMeasure()
     }
 
@@ -764,6 +772,8 @@ private final class TrafficLightsTrailingEdgeView: NSView {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.measurePending = false
+            // Mid-slide frames carry the transition offset; the settle notification re-measures.
+            guard !TerminalWindowPortalRegistry.isInteractiveGeometryResizeActive else { return }
             self.onChange?(self.measureZoomButtonMaxX())
         }
     }

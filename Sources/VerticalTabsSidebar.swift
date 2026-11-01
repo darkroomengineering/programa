@@ -6,6 +6,9 @@ import SwiftUI
 extension Notification.Name {
     static let programaSidebarVisibilityDidChange =
         Notification.Name("programaSidebarVisibilityDidChange")
+    /// Posted with the `SidebarState` as object when its show/hide animation finishes.
+    static let programaSidebarToggleDidSettle =
+        Notification.Name("programaSidebarToggleDidSettle")
 }
 
 final class SidebarState: ObservableObject {
@@ -16,6 +19,17 @@ final class SidebarState: ObservableObject {
         }
     }
     @Published var persistedWidth: CGFloat
+    /// Slides whose completion has not run; released in deinit so a window closed
+    /// mid-slide cannot leave the global portal resize counter raised.
+    private var pendingSlides = 0
+
+    deinit {
+        let pending = pendingSlides
+        guard pending > 0 else { return }
+        Task { @MainActor in
+            for _ in 0..<pending { TerminalWindowPortalRegistry.endInteractiveGeometryResize() }
+        }
+    }
 
     init(isVisible: Bool = true, persistedWidth: CGFloat = CGFloat(SessionPersistencePolicy.defaultSidebarWidth)) {
         self.isVisible = isVisible
@@ -28,10 +42,19 @@ final class SidebarState: ObservableObject {
         // The terminal is an AppKit portal; marking the toggle as an interactive resize makes
         // it follow the animated SwiftUI frame every tick, as it does for a sidebar drag.
         TerminalWindowPortalRegistry.beginInteractiveGeometryResize()
-        withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .snappy(duration: 0.24)) {
+        pendingSlides += 1
+        // `.removed` waits for the visual end: the default (logically complete) fires as soon as
+        // another toggle retargets the slide, which ended the portal resize mid-motion.
+        withAnimation(
+            reduceMotion ? .easeOut(duration: 0.15) : .snappy(duration: 0.24),
+            completionCriteria: .removed
+        ) {
             isVisible.toggle()
-        } completion: {
+        } completion: { [weak self] in
+            guard let self else { return }
+            self.pendingSlides -= 1
             TerminalWindowPortalRegistry.endInteractiveGeometryResize()
+            NotificationCenter.default.post(name: .programaSidebarToggleDidSettle, object: self)
         }
     }
 }

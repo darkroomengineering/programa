@@ -731,6 +731,11 @@ struct ContentView: View {
                 updateSidebarResizerBandState()
                 syncTrafficLightInset()
             }
+            // The portal stops following SwiftUI frames when the slide ends; sync it to the final one.
+            .onReceive(NotificationCenter.default.publisher(for: .programaSidebarToggleDidSettle, object: sidebarState)) { _ in
+                guard let observedWindow else { return }
+                TerminalWindowPortalRegistry.scheduleExternalGeometrySynchronize(for: observedWindow)
+            }
             .onChange(of: sidebarMatchTerminalBackground) {
                 guard sidebarState.isVisible,
                       sidebarBlendMode == SidebarBlendModeOption.withinWindow.rawValue else { return }
