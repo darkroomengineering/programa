@@ -57,5 +57,6 @@ test_tab_workspace_action_naming.py
 test_terminal_focus_routing.py
 test_tmux_compat_geometry.py
 test_visual_typing_char_by_char.py
+test_windows_api.py
 test_workspace_create_background_starts_terminal.py
 test_workspace_split_title_updates.py
