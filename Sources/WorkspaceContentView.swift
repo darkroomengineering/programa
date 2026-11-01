@@ -123,9 +123,13 @@ struct WorkspaceContentView: View {
                 .onTapGesture {
                     workspace.bonsplitController.focusPane(paneId)
                 }
-            } else {
+            } else if workspace.bonsplitController.tabs(inPane: paneId).contains(where: { $0.id == tab.id }) {
                 // Fallback for tabs without panels (shouldn't happen normally)
                 EmptyPanelView(workspace: workspace, paneId: paneId)
+            } else {
+                // A closed tab's ForEach row can update once more in its pane's own hosting
+                // view after the tab and its panel are gone; it is on its way out, so draw nothing.
+                Color.clear
             }
         } emptyPane: { paneId in
             EmptyPanelView(workspace: workspace, paneId: paneId)
