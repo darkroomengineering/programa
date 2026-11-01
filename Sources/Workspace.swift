@@ -57,6 +57,8 @@ final class Workspace: Identifiable, ObservableObject {
     /// When true, the split-cap delegate veto is bypassed: session restore must
     /// rebuild pre-cap layouts (5+ panes) without losing panes.
     var isRestoringSessionLayout = false
+    /// The snapshot's workspace id while `restoreSessionSnapshot` runs, for reattach aliases.
+    var restoringSnapshotWorkspaceId: UUID?
     var hasAppliedCustomLayout = false
     var debugStressPreloadSelectionDepth = 0
 

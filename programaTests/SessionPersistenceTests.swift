@@ -3536,3 +3536,43 @@ final class ScrollbackSeedOrphanedHeadTests: XCTestCase {
         )
     }
 }
+
+final class RestoredSessionIdAliasesTests: XCTestCase {
+    func testReattachedShellIdsResolveToTheRestoredPanelAndWorkspace() {
+        let aliases = RestoredSessionIdAliases()
+        let oldSurface = UUID(), oldWorkspace = UUID(), panel = UUID(), workspace = UUID(), unrelated = UUID()
+        let shellIds = RestoredSessionIdAliases.ShellIds(surfaceId: oldSurface, workspaceId: oldWorkspace)
+
+        aliases.registerReattach(shellIds, panelId: panel, workspaceId: workspace)
+
+        XCTAssertEqual(aliases.resolve(oldSurface), panel)
+        XCTAssertEqual(aliases.resolve(oldWorkspace), workspace)
+        XCTAssertEqual(aliases.resolve(unrelated), unrelated)
+        XCTAssertEqual(aliases.shellIds(forPanelId: panel), shellIds)
+    }
+
+    func testWorkspaceStaysUnaliasedWhenItIsStillLive() {
+        let aliases = RestoredSessionIdAliases()
+        let oldSurface = UUID(), liveWorkspace = UUID(), panel = UUID()
+
+        aliases.registerReattach(.init(surfaceId: oldSurface, workspaceId: liveWorkspace), panelId: panel, workspaceId: nil)
+
+        XCTAssertEqual(aliases.resolve(oldSurface), panel)
+        XCTAssertEqual(aliases.resolve(liveWorkspace), liveWorkspace)
+    }
+
+    func testPanelSnapshotCarriesReattachedShellIdsAndOlderSnapshotsDecodeWithout() throws {
+        let shellIds = RestoredSessionIdAliases.ShellIds(surfaceId: UUID(), workspaceId: UUID())
+        let snapshot = SessionPanelSnapshot(
+            id: UUID(), type: .terminal, isPinned: false, isManuallyUnread: false, listeningPorts: [],
+            reattachedShellIds: shellIds
+        )
+        let data = try JSONEncoder().encode(snapshot)
+        XCTAssertEqual(try JSONDecoder().decode(SessionPanelSnapshot.self, from: data).reattachedShellIds, shellIds)
+
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        legacy.removeValue(forKey: "reattachedShellIds")
+        let legacyData = try JSONSerialization.data(withJSONObject: legacy)
+        XCTAssertNil(try JSONDecoder().decode(SessionPanelSnapshot.self, from: legacyData).reattachedShellIds)
+    }
+}
