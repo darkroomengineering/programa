@@ -8,7 +8,7 @@ before that, a focused quiet terminal woke on every screen refresh. Runaway
 animations, polling timers and unpaused TimelineViews show up here too.
 
 What it measures: the app process's CPU time over a fixed window
-(`ps -o time=` delta / wall delta, via test_cpu_occlusion_throttle.sample_cpu),
+(`ps -o time=` delta / wall delta, `sample_cpu` below),
 not `ps -o %cpu`, which on macOS is a decayed average since launch.
 
 Exit codes: 0 within budget, 1 over budget, 2 harness error (the scenario could
@@ -26,18 +26,15 @@ Environment:
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import time
+from dataclasses import dataclass
 from typing import Optional
 
 _TESTS_V2_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _TESTS_V2_DIR)
 from programa_client import ProgramaClient, ProgramaClientError  # noqa: E402
-from test_cpu_occlusion_throttle import (  # noqa: E402
-    resolve_app_pid,
-    resolve_target_socket,
-    sample_cpu,
-)
 
 BUDGET_PCT = float(os.environ.get("PROGRAMA_IDLE_CPU_BUDGET_PCT", "8.0"))
 DURATION_S = float(os.environ.get("PROGRAMA_IDLE_CPU_DURATION_S", "30.0"))
@@ -45,6 +42,91 @@ SETTLE_S = float(os.environ.get("PROGRAMA_IDLE_CPU_SETTLE_S", "5.0"))
 RESULT_FILE = os.environ.get("PROGRAMA_IDLE_CPU_RESULT_FILE", "")
 
 FOCUS_KEYS = ("inWindow", "windowIsKey", "windowOcclusionVisible", "appIsActive", "isActive", "isFirstResponder")
+
+
+@dataclass
+class SampleResult:
+    wall_s: float
+    app_cpu_pct: float
+    total_cpu_pct: float
+
+
+def parse_ps_time(raw: str) -> float:
+    """Seconds from `ps -o time=`: "M:SS.ss", "HH:MM:SS", or "DD-HH:MM:SS" past a day."""
+    s = raw.strip()
+    days = 0.0
+    if "-" in s:
+        day_part, s = s.split("-", 1)
+        days = float(day_part)
+    parts = [float(p) for p in s.split(":")]
+    if len(parts) == 2:
+        parts.insert(0, 0.0)
+    if len(parts) != 3:
+        raise ValueError(f"Unexpected ps time format: {raw!r}")
+    hours, minutes, seconds = parts
+    return days * 86400.0 + hours * 3600.0 + minutes * 60.0 + seconds
+
+
+def get_cpu_time(pid: int) -> Optional[float]:
+    result = subprocess.run(["ps", "-o", "time=", "-p", str(pid)], capture_output=True, text=True)
+    try:
+        return parse_ps_time(result.stdout) if result.returncode == 0 and result.stdout.strip() else None
+    except ValueError:
+        return None
+
+
+def descendant_pids(root_pid: int) -> list[int]:
+    seen, frontier = {root_pid}, [root_pid]
+    while frontier:
+        children: list[int] = []
+        for pid in frontier:
+            result = subprocess.run(["pgrep", "-P", str(pid)], capture_output=True, text=True)
+            children += [int(p) for p in result.stdout.split() if p.isdigit() and int(p) not in seen]
+        seen.update(children)
+        frontier = children
+    return sorted(seen - {root_pid})
+
+
+def sample_cpu(app_pid: int, window_s: float) -> SampleResult:
+    """CPU time delta over wall time for the app and the shells it had at the start of the window."""
+    tracked = [app_pid] + descendant_pids(app_pid)
+    start_times = {pid: get_cpu_time(pid) for pid in tracked}
+    wall_start = time.time()
+    time.sleep(window_s)
+    wall_delta = time.time() - wall_start
+
+    app_delta = total_delta = 0.0
+    for pid in tracked:
+        start, end = start_times.get(pid), get_cpu_time(pid)
+        if start is None or end is None:
+            continue
+        delta = max(0.0, end - start)
+        total_delta += delta
+        if pid == app_pid:
+            app_delta = delta
+    scale = 100.0 / wall_delta if wall_delta > 0 else 0.0
+    return SampleResult(wall_s=wall_delta, app_cpu_pct=app_delta * scale, total_cpu_pct=total_delta * scale)
+
+
+def resolve_target_socket() -> str:
+    socket_path = os.environ.get("PROGRAMA_SOCKET_PATH")
+    if not socket_path:
+        raise ProgramaClientError("PROGRAMA_SOCKET_PATH is required; point it at a tagged dev socket")
+    if os.path.basename(socket_path) in {"programa.sock", "programa-debug.sock"}:
+        raise ProgramaClientError(f"refusing to run against main socket {socket_path!r}; use a tagged dev instance")
+    return socket_path
+
+
+def resolve_app_pid(socket_path: str) -> int:
+    result = subprocess.run(["lsof", "-t", socket_path], capture_output=True, text=True)
+    for line in result.stdout.split():
+        if line.isdigit() and int(line) != os.getpid():
+            return int(line)
+    result = subprocess.run(["pgrep", "-f", r"Programa DEV.*\.app/Contents/MacOS/Programa DEV"],
+                            capture_output=True, text=True)
+    if result.returncode == 0 and result.stdout.split():
+        return int(result.stdout.split()[0])
+    raise ProgramaClientError(f"could not find the app pid listening on {socket_path}")
 
 
 def write_result(line: str) -> None:
@@ -89,8 +171,8 @@ def main() -> int:
 
     client: Optional[ProgramaClient] = None
     try:
-        socket_path = resolve_target_socket(None)
-        app_pid = resolve_app_pid(socket_path, None)
+        socket_path = resolve_target_socket()
+        app_pid = resolve_app_pid(socket_path)
         client = ProgramaClient(socket_path=socket_path)
         client.connect()
 

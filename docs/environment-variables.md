@@ -135,11 +135,9 @@ the top of each file for names and defaults.
 |---|---|
 | `PROGRAMA_LAG_*` | `tests_v2/test_workspace_churn_up_arrow_lag.py` |
 | `PROGRAMA_REFRESH_COST_*` | `tests_v2/test_text_input_refresh_cost.py` |
-| `PROGRAMA_CPU_HARNESS_*` | `tests_v2/test_cpu_occlusion_throttle.py` (see [cpu-harness.md](cpu-harness.md)) |
 | `PROGRAMA_SPLIT_2PANE_*`, `PROGRAMA_SPLIT_FUZZ_*` | `tests_v2/test_split_cmd_d_ctrl_d_two_pane_frame_guard.py`, `tests_v2/test_split_cmd_d_ctrl_d_geometry_fuzz.py` |
 | `PROGRAMA_PORTAL_ORPHAN_*` | `tests_v2/test_split_cmd_shift_d_ctrl_d_no_portal_orphans.py` |
 | `PROGRAMA_WORKSPACE_STRESS_*` | `programaTests/WorkspaceStressProfileTests.swift` |
 
-The `*_ALLOW_MAIN_SOCKET` variants (`PROGRAMA_LAG_`, `PROGRAMA_REFRESH_COST_`,
-`PROGRAMA_CPU_HARNESS_`) let a harness run against the default production socket. Leave them unset
+The `*_ALLOW_MAIN_SOCKET` variants (`PROGRAMA_LAG_`, `PROGRAMA_REFRESH_COST_`) let a harness run against the default production socket. Leave them unset
 unless you mean it.

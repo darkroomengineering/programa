@@ -28,7 +28,7 @@ as a subprocess through `PROGRAMA_CLI_BIN`.
 **`tests_v2/`** — the thing under test is app behaviour you can observe over the
 socket. Everything here talks to a live instance, whether through `tests_v2/programa_client.py` or
 by speaking JSON-RPC directly. The lag/perf/CPU harnesses live here for that
-reason. See `docs/cpu-harness.md` for the CPU measurement harness specifically.
+reason.
 
 **`programaTests/`** — policy types, decision functions, snapshot encoding,
 layout maths, and AppKit integration through the configured app test host.

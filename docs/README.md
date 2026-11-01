@@ -25,7 +25,6 @@
 ## Building, testing and releasing
 
 - [testing-layout.md](testing-layout.md): the four test harnesses and how to run them.
-- [cpu-harness.md](cpu-harness.md): the CPU occlusion measurement harness.
 - [release.md](release.md): how a commit becomes a release, and the required secrets.
 - [ghostty-fork.md](ghostty-fork.md): the patches Programa carries on Ghostty and how to update the fork.
 - [windows-testing.md](windows-testing.md): testing the Windows build.
