@@ -1,8 +1,5 @@
 import XCTest
 
-// Search-engine timing/throughput is measured out-of-band, not in this unit suite —
-// see tests_v2/test_cpu_occlusion_throttle.py and docs/cpu-harness.md.
-
 #if canImport(Programa_DEV)
 @testable import Programa_DEV
 #elseif canImport(Programa)

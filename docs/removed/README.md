@@ -20,5 +20,6 @@ Reductive pass of 2026-09-02, base commit 903027ccef. Core kept: the Ghostty ter
 | Settings options (editor, reorder, opacity and blur overrides, notification command, long-command threshold, sidebar tints, ports, Claude path, workspace colors, hold hints) | [settings-knobs-2026-10.md](settings-knobs-2026-10.md) | 2,100 |
 | omo, omx and omc agent wrappers (`programa omo`, `omx`, `omc`) | [omo-omx-omc-wrappers.md](omo-omx-omc-wrappers.md) | 750 |
 | Agent Overview window (replaced by the sidebar helpers popover) | [agent-overview-window.md](agent-overview-window.md) | 1,550 |
+| CPU occlusion harness (`tests_v2/test_cpu_occlusion_throttle.py`) | [cpu-occlusion-harness.md](cpu-occlusion-harness.md) | 530 |
 
 Line counts are git-tracked lines at removal time and include tests and vendored code.
