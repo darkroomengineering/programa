@@ -66,10 +66,7 @@ enum AppFocusState {
         guard let keyWindow = NSApp.keyWindow, keyWindow.isKeyWindow else { return false }
         // Only treat the app as "focused" for notification suppression when a main terminal window
         // is key. If Settings/About/debug panels are key, we still want notifications to show.
-        if let raw = keyWindow.identifier?.rawValue {
-            return raw == "programa.main" || raw.hasPrefix("programa.main.")
-        }
-        return false
+        return keyWindow.hasProgramaMainIdentifier
     }
 }
 

@@ -441,8 +441,7 @@ extension CommandPaletteView {
         modifiers: EventModifiers
     ) -> BackportKeyPressResult {
         guard case .renameInput = commandPaletteController.commandPaletteMode else { return .ignored }
-        let blockedModifiers: EventModifiers = [.command, .control, .option, .shift]
-        guard modifiers.intersection(blockedModifiers).isEmpty else { return .ignored }
+        guard modifiers.intersection(Self.commandPaletteRenameBlockedModifiers).isEmpty else { return .ignored }
 
         if Self.commandPaletteShouldPopRenameInputOnDelete(
             renameDraft: commandPaletteController.commandPaletteRenameDraft,

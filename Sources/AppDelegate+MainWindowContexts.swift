@@ -1,6 +1,14 @@
 import AppKit
 import Bonsplit
 
+extension NSWindow {
+    /// True for a main terminal window: identifier `programa.main` or `programa.main.<window id>`.
+    var hasProgramaMainIdentifier: Bool {
+        guard let raw = identifier?.rawValue else { return false }
+        return raw == "programa.main" || raw.hasPrefix("programa.main.")
+    }
+}
+
 extension AppDelegate {
     final class MainWindowContext {
         let windowId: UUID
@@ -404,8 +412,7 @@ extension AppDelegate {
         if mainWindowContexts[ObjectIdentifier(window)] != nil {
             return true
         }
-        guard let raw = window.identifier?.rawValue else { return false }
-        return raw == "programa.main" || raw.hasPrefix("programa.main.")
+        return window.hasProgramaMainIdentifier
     }
 
     func contextContainingTabId(_ tabId: UUID) -> MainWindowContext? {

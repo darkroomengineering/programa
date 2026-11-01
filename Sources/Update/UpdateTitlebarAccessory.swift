@@ -1823,8 +1823,7 @@ final class UpdateTitlebarAccessoryController {
     }
 
     private func isMainTerminalWindow(_ window: NSWindow) -> Bool {
-        guard let raw = window.identifier?.rawValue else { return false }
-        return raw == "programa.main" || raw.hasPrefix("programa.main.")
+        window.hasProgramaMainIdentifier
     }
 
     private func preferredNotificationsController(
