@@ -35,16 +35,16 @@ final class ClaudeQuotaSnapshotParserTests: XCTestCase {
     func testParsesRealPayload() throws {
         let snapshot = try XCTUnwrap(ClaudeQuotaSnapshotParser.parse(data: payload()))
 
-        XCTAssertEqual(snapshot.fiveHour.usedPercent, 17)
-        XCTAssertEqual(snapshot.sevenDay.usedPercent, 3)
+        XCTAssertEqual(snapshot.fiveHour?.usedPercent, 17)
+        XCTAssertEqual(snapshot.sevenDay?.usedPercent, 3)
     }
 
     /// `resets_at` is a string holding epoch SECONDS.
     func testResetsAtIsParsedAsEpochSeconds() throws {
         let snapshot = try XCTUnwrap(ClaudeQuotaSnapshotParser.parse(data: payload()))
 
-        XCTAssertEqual(snapshot.fiveHour.resetsAt.timeIntervalSince1970, 1_785_171_600, accuracy: 1)
-        XCTAssertEqual(snapshot.sevenDay.resetsAt.timeIntervalSince1970, 1_785_664_800, accuracy: 1)
+        XCTAssertEqual(try XCTUnwrap(snapshot.fiveHour).resetsAt.timeIntervalSince1970, 1_785_171_600, accuracy: 1)
+        XCTAssertEqual(try XCTUnwrap(snapshot.sevenDay).resetsAt.timeIntervalSince1970, 1_785_664_800, accuracy: 1)
     }
 
     /// `updated_at` is a number holding epoch MILLISECONDS -- a different unit from
@@ -60,8 +60,10 @@ final class ClaudeQuotaSnapshotParserTests: XCTestCase {
     func testUpdatedAtPrecedesResetTimes() throws {
         let snapshot = try XCTUnwrap(ClaudeQuotaSnapshotParser.parse(data: payload()))
 
-        XCTAssertLessThan(snapshot.updatedAt, snapshot.fiveHour.resetsAt)
-        XCTAssertLessThan(snapshot.fiveHour.resetsAt, snapshot.sevenDay.resetsAt)
+        let fiveHour = try XCTUnwrap(snapshot.fiveHour)
+        let sevenDay = try XCTUnwrap(snapshot.sevenDay)
+        XCTAssertLessThan(snapshot.updatedAt, fiveHour.resetsAt)
+        XCTAssertLessThan(fiveHour.resetsAt, sevenDay.resetsAt)
     }
 
     func testReturnsNilForMalformedJSON() {
@@ -72,13 +74,47 @@ final class ClaudeQuotaSnapshotParserTests: XCTestCase {
         XCTAssertNil(ClaudeQuotaSnapshotParser.parse(data: Data()))
     }
 
-    func testReturnsNilWhenAWindowIsMissing() {
-        let data = Data("""
-        {"five_hour":{"used_percentage":17,"resets_at":"1785171600"},
-         "updated_at":1785168986314}
+    /// Claude Code writes only the windows it currently has; a weekly-only cache is real.
+    private func weeklyOnlyPayload(updatedAt: String = "1785168986314") -> Data {
+        Data("""
+        {"seven_day":{"used_percentage":12,"resets_at":"1785664800"},
+         "updated_at":\(updatedAt)}
         """.utf8)
+    }
 
-        XCTAssertNil(ClaudeQuotaSnapshotParser.parse(data: data))
+    func testShowsTheWindowsPresentWhenTheCacheHasOnlyTheWeeklyWindow() {
+        let result = ClaudeUsageSnapshotParser.parse(data: weeklyOnlyPayload())
+
+        guard case let .available(snapshot) = result else {
+            return XCTFail("A weekly-only Claude cache must still show usage, got \(result)")
+        }
+        XCTAssertEqual(snapshot.windows.map(\.id), ["claude.seven_day"])
+        XCTAssertEqual(snapshot.windows.map(\.usedPercent), [12])
+    }
+
+    func testFetcherShowsClaudeWhenTheCacheHasOnlyTheWeeklyWindow() async throws {
+        let now = Date(timeIntervalSince1970: 1_785_168_986)
+        let fixture = try ClaudeUsageFixture.make(
+            authBody: #"print -r -- '{"loggedIn":true}'"#,
+            cacheData: weeklyOnlyPayload(updatedAt: String(Int(now.timeIntervalSince1970 * 1_000)))
+        )
+        addTeardownBlock { try? FileManager.default.removeItem(at: fixture.directoryURL) }
+
+        let result = await ClaudeProviderUsageFetcher.fetchForTesting(
+            executableURL: fixture.executableURL,
+            cacheURL: fixture.cacheURL,
+            timeout: 1,
+            now: now
+        )
+
+        guard case let .available(snapshot) = result else {
+            return XCTFail("A signed-in Claude with a weekly-only cache must not be hidden, got \(result)")
+        }
+        XCTAssertEqual(snapshot.windows.map(\.id), ["claude.seven_day"])
+    }
+
+    func testReturnsNilWhenBothWindowsAreMissing() {
+        XCTAssertNil(ClaudeQuotaSnapshotParser.parse(data: Data(#"{"updated_at":1785168986314}"#.utf8)))
     }
 
     func testReturnsNilWhenPercentageHasWrongType() {
@@ -103,8 +139,8 @@ final class ClaudeQuotaSnapshotParserTests: XCTestCase {
             let snapshot = try XCTUnwrap(ClaudeQuotaSnapshotParser.parse(data: payload(
                 fiveHourResets: "\"\(seconds)\"", sevenDayResets: "\"\(seconds)\""
             )))
-            XCTAssertEqual(snapshot.fiveHour.resetsAt.timeIntervalSince1970, seconds)
-            XCTAssertEqual(snapshot.sevenDay.resetsAt.timeIntervalSince1970, seconds)
+            XCTAssertEqual(snapshot.fiveHour?.resetsAt.timeIntervalSince1970, seconds)
+            XCTAssertEqual(snapshot.sevenDay?.resetsAt.timeIntervalSince1970, seconds)
         }
     }
 
@@ -115,8 +151,8 @@ final class ClaudeQuotaSnapshotParserTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(snapshot.fiveHour.usedPercent, 0)
-        XCTAssertEqual(snapshot.sevenDay.usedPercent, 100)
+        XCTAssertEqual(snapshot.fiveHour?.usedPercent, 0)
+        XCTAssertEqual(snapshot.sevenDay?.usedPercent, 100)
     }
 
     func testMapsTheExistingClaudeCacheIntoTheNormalizedProviderModel() {
