@@ -17,6 +17,7 @@
 // engine can't just call `TerminalController.v2MainSync` the way the output-poll loop does. All
 // classification/hysteresis work happens back on the background thread, and only
 // `DispatchQueue.main.async` hops to main when a surface's *reported* state actually changes.
+import AppKit
 import Foundation
 
 /// Singleton screen-manifest detection engine. Samples recognized (candidate) terminal surfaces
@@ -191,6 +192,10 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
         var samples: [(surfaceId: UUID, workspaceId: UUID, text: String)] = []
         DispatchQueue.main.sync {
             MainActor.assumeIsolated {
+                // Recognition only promotes new candidates, so it can wait until a window is
+                // visible again; skipping it keeps a hidden app from reading every pane's text
+                // every few seconds. Phase B keeps sampling existing candidates regardless.
+                guard NSApp?.occlusionState.contains(.visible) ?? true else { return }
                 guard let contexts = AppDelegate.shared?.mainWindowContexts.values else { return }
                 for context in contexts {
                     for workspace in context.tabManager.tabs {

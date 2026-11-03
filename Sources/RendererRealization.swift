@@ -65,7 +65,7 @@ final class RendererRealizationController {
     func start() {
         guard timer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: timerQueue)
-        timer.schedule(deadline: .now() + 10, repeating: 20)
+        timer.schedule(deadline: .now() + 10, repeating: 20, leeway: .seconds(5))
         timer.setEventHandler {
             let now = Date()
             Task { @MainActor in
