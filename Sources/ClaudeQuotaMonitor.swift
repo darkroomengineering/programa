@@ -11,9 +11,12 @@ struct ClaudeQuotaWindow: Equatable {
 }
 
 /// A single point-in-time read of the cc-settings statusline's local rate-limit file.
+///
+/// Claude Code writes only the windows it currently has, so either may be absent; at least one is
+/// always present.
 struct ClaudeQuotaSnapshot: Equatable {
-    let fiveHour: ClaudeQuotaWindow
-    let sevenDay: ClaudeQuotaWindow
+    let fiveHour: ClaudeQuotaWindow?
+    let sevenDay: ClaudeQuotaWindow?
     let updatedAt: Date
 }
 
@@ -29,10 +32,9 @@ enum ClaudeQuotaSnapshotParser {
             return nil
         }
         guard
-            let fiveHourRaw = json["five_hour"] as? [String: Any],
-            let sevenDayRaw = json["seven_day"] as? [String: Any],
-            let fiveHour = parseWindow(fiveHourRaw),
-            let sevenDay = parseWindow(sevenDayRaw),
+            let fiveHour = optionalWindow(json["five_hour"]),
+            let sevenDay = optionalWindow(json["seven_day"]),
+            fiveHour != nil || sevenDay != nil,
             let updatedAtMillis = json["updated_at"] as? Int
         else {
             return nil
@@ -40,6 +42,15 @@ enum ClaudeQuotaSnapshotParser {
 
         let updatedAt = Date(timeIntervalSince1970: Double(updatedAtMillis) / 1000)
         return ClaudeQuotaSnapshot(fiveHour: fiveHour, sevenDay: sevenDay, updatedAt: updatedAt)
+    }
+
+    /// `.some(nil)` for an absent window; `nil` for a present window that does not parse.
+    private static func optionalWindow(_ raw: Any?) -> ClaudeQuotaWindow?? {
+        guard let raw, !(raw is NSNull) else { return .some(nil) }
+        guard let dictionary = raw as? [String: Any], let window = parseWindow(dictionary) else {
+            return nil
+        }
+        return .some(window)
     }
 
     private static func parseWindow(_ raw: [String: Any]) -> ClaudeQuotaWindow? {
@@ -260,25 +271,29 @@ enum ClaudeUsageSnapshotParser {
             ProviderUsageSnapshot(
                 provider: .claude,
                 windows: [
-                    ProviderUsageWindow(
-                        id: "claude.five_hour",
-                        label: String(
-                            localized: "sidebar.usage.window.currentSession",
-                            defaultValue: "Current session"
-                        ),
-                        usedPercent: snapshot.fiveHour.usedPercent,
-                        resetsAt: snapshot.fiveHour.resetsAt
-                    ),
-                    ProviderUsageWindow(
-                        id: "claude.seven_day",
-                        label: String(
-                            localized: "sidebar.usage.window.weekly",
-                            defaultValue: "Weekly"
-                        ),
-                        usedPercent: snapshot.sevenDay.usedPercent,
-                        resetsAt: snapshot.sevenDay.resetsAt
-                    ),
-                ]
+                    snapshot.fiveHour.map {
+                        ProviderUsageWindow(
+                            id: "claude.five_hour",
+                            label: String(
+                                localized: "sidebar.usage.window.currentSession",
+                                defaultValue: "Current session"
+                            ),
+                            usedPercent: $0.usedPercent,
+                            resetsAt: $0.resetsAt
+                        )
+                    },
+                    snapshot.sevenDay.map {
+                        ProviderUsageWindow(
+                            id: "claude.seven_day",
+                            label: String(
+                                localized: "sidebar.usage.window.weekly",
+                                defaultValue: "Weekly"
+                            ),
+                            usedPercent: $0.usedPercent,
+                            resetsAt: $0.resetsAt
+                        )
+                    },
+                ].compactMap { $0 }
             )
         )
     }
