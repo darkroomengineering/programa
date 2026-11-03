@@ -14,7 +14,7 @@ extension TabManager {
     func startAgentPIDSweepTimer() {
         guard !isStopped, agentPIDSweepTimer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
-        timer.schedule(deadline: .now() + 30, repeating: 30)
+        timer.schedule(deadline: .now() + 30, repeating: 30, leeway: .seconds(5))
         timer.setEventHandler { [weak self] in
             DispatchQueue.main.async { [weak self] in
                 guard let self, !self.isStopped else { return }
@@ -32,7 +32,7 @@ extension TabManager {
         guard !isStopped, workspaceGitMetadataPollTimer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
         let interval = Self.workspaceGitMetadataPollInterval
-        timer.schedule(deadline: .now() + interval, repeating: interval)
+        timer.schedule(deadline: .now() + interval, repeating: interval, leeway: .seconds(1))
         timer.setEventHandler { [weak self] in
             DispatchQueue.main.async { [weak self] in
                 guard let self, !self.isStopped, NSApp.isActive else { return }
@@ -53,7 +53,7 @@ extension TabManager {
         guard !isStopped, selectedWorkspaceGitMetadataPollTimer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
         let interval = Self.selectedWorkspaceGitMetadataPollInterval
-        timer.schedule(deadline: .now() + interval, repeating: interval)
+        timer.schedule(deadline: .now() + interval, repeating: interval, leeway: .seconds(1))
         timer.setEventHandler { [weak self] in
             DispatchQueue.main.async { [weak self] in
                 guard let self, !self.isStopped, self.isFrontmostForGitMetadataPolling else { return }

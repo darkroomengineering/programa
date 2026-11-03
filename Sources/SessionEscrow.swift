@@ -946,7 +946,8 @@ final class SessionEscrowClient {
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(
             deadline: .now() + SessionEscrowPolicy.heartbeatInterval,
-            repeating: SessionEscrowPolicy.heartbeatInterval
+            repeating: SessionEscrowPolicy.heartbeatInterval,
+            leeway: .milliseconds(500)
         )
         timer.setEventHandler { [weak self] in
             guard let self, let fd = self.connectionFD else { return }

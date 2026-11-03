@@ -387,7 +387,8 @@ final class PortScanner: @unchecked Sendable {
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(
             deadline: .now() + Self.agentRescanInterval,
-            repeating: Self.agentRescanInterval
+            repeating: Self.agentRescanInterval,
+            leeway: .seconds(2)
         )
         timer.setEventHandler { [weak self] in
             self?.runTrackedAgentScan()

@@ -1495,7 +1495,7 @@ final class SessionWALStore {
             if frameCaptureTimer == nil {
                 let timer = DispatchSource.makeTimerSource(queue: writeQueue)
                 let interval = SessionWALPolicy.frameCaptureCheckInterval
-                timer.schedule(deadline: .now() + interval, repeating: interval)
+                timer.schedule(deadline: .now() + interval, repeating: interval, leeway: .seconds(1))
                 timer.setEventHandler { [weak self] in
                     self?.considerFrameCaptureTick()
                 }
