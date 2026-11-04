@@ -229,6 +229,7 @@ final class LeftoverProcessReaper {
         dilog("reaper", "owner=\(pid) exited reaped=\(targets.count) skippedNohup=\(skippedNohup) names=\(names)")
         guard !targets.isEmpty else { return }
         system.runAfter(Self.killGrace, queue) { [system] in
+            guard system.isEnabled() else { return }
             for target in targets where system.processInfo(target.pid)?.startTime == target.leftover.startTime {
                 _ = system.sendSignal(target.pid, SIGKILL)
             }
