@@ -344,7 +344,13 @@ struct GitWorktreeManager {
                 ":(glob)**/.env*", ":(exclude,glob)**/node_modules/**",
             ]
         ), result.outcome == .exited, result.exitStatus == 0, let stdout = result.stdout else { return nil }
-        return !stdout.isEmpty
+        // git lists every nested repository as `dir/` whatever the pathspec says, so only
+        // entries that are themselves `.env*` files count.
+        return stdout.split(separator: "\0").contains { entry in
+            guard !entry.hasSuffix("/") else { return false }
+            let components = entry.split(separator: "/")
+            return components.last?.hasPrefix(".env") == true && !components.dropLast().contains("node_modules")
+        }
     }
 
     /// Ignored directories whose contents a build or package install recreates. Matched against
