@@ -2,9 +2,9 @@
 
 Programa exposes a local control socket. Its protocol is v2 JSON-RPC: one JSON object per line
 over a Unix domain socket. The CLI, the MCP server, shell integration and your own scripts all
-use it. A line that does not start with `{` gets a terse `v1_removed` error. The method table
-below lists the former line-protocol command names next to their v2 methods, for reading old
-scripts and bug reports.
+use it. A line that does not start with `{` gets a terse `v1_removed` error. The
+[command name index](#command-name-index) maps the line-protocol command names that older
+scripts and bug reports use to their v2 methods.
 
 The machine-readable contract is `contracts/v2/methods.json` (methods) and
 `contracts/v2/protocol.json` (framing and auth handshake). See [Contract](#contract).
@@ -225,14 +225,20 @@ Notes:
 - `id` is echoed back when present (string or number).
 - v2 methods accept **IDs**; v2 responses may include ephemeral `index` fields for ordering/debugging, but IDs are the stable handles.
 - Short refs such as `workspace:3` or `surface:2` are numbered per app session: a ref keeps pointing at the same object while Programa runs, and the numbering starts over after a restart. Restored workspaces and surfaces also get new UUIDs, so a script that keeps ids across a restart has to look them up again, for example with `system.tree`.
-- Auth (`auth.login`) is handled as a connection-level preamble before protocol dispatch, not a regular method — it worked the same way for v1 and v2 clients and was unaffected by the v1 removal.
+- Auth (`auth.login`) is handled as a connection-level preamble before protocol dispatch, not as a regular method.
 
-## Method Parity Reference (former v1 name -> v2 method)
+## Command name index
 
-The complete list of v2 methods, with their params and results, is `contracts/v2/methods.json`.
+Each entry is a v2 method, preceded by its line-protocol command name when it has one
+(`list_windows -> window.list`). The complete list of methods, with their params and results,
+is `contracts/v2/methods.json`.
 
 System:
 - ping -> `system.ping` (liveness; the CLI's `ping` subcommand calls this and prints "PONG" on success)
+- `system.identify` (params: `caller`, `surface_id`, `tab_id`, `window_id`, `workspace_id`)
+- `settings.open` (params: `activate`, `target`)
+- `feedback.open` (params: `activate`, `window_id`, `workspace_id`)
+- `feedback.submit` (no params in the contract)
 
 Windows:
 - list_windows -> `window.list`
@@ -248,29 +254,36 @@ Workspaces:
 - select_workspace -> `workspace.select`
 - current_workspace -> `workspace.current`
 - close_workspace -> `workspace.close`
+- `workspace.next`, `workspace.previous`, `workspace.last` (params: `surface_id`, `tab_id`, `window_id`, `workspace_id`)
+- `workspace.reorder` (params: `workspace_id` (required), `index`, `before_workspace_id`, `after_workspace_id`, `surface_id`, `tab_id`, `window_id`)
+- `workspace.equalize_splits` (params: `orientation`, `surface_id`, `tab_id`, `window_id`, `workspace_id`)
+- `workspace.action` (params: `action`, plus `title`, `description` or `color` for the actions that take them, and `surface_id`, `tab_id`, `window_id`, `workspace_id`). `action` is required, though the contract omits it: `pin`, `unpin`, `rename` (`title`), `clear_name`, `set_description` (`description`), `clear_description`, `move_up`, `move_down`, `move_top`, `close_others`, `close_above`, `close_below`, `mark_read`, `mark_unread`, `set_color` (`color`), `clear_color`.
 
-Worktrees (new in v2, no v1 predecessor -- see "worktree.* / layout.*" below):
-- (no v1 equivalent) -> `worktree.create`
-- (no v1 equivalent) -> `worktree.open`
-- (no v1 equivalent) -> `worktree.remove`
-- (no v1 equivalent) -> `worktree.list`
+Worktrees (see "worktree.* / layout.*" below):
+- `worktree.create`
+- `worktree.open`
+- `worktree.remove`
+- `worktree.list`
 
-Storage (new in v2, no v1 predecessor -- see "storage.*" below):
-- (no v1 equivalent) -> `storage.scan`
-- (no v1 equivalent) -> `storage.clean`
+Storage (see "storage.*" below):
+- `storage.scan`
+- `storage.clean`
 
-Layouts (new in v2, no v1 predecessor -- see "worktree.* / layout.*" below):
-- (no v1 equivalent) -> `layout.save`
-- (no v1 equivalent) -> `layout.apply`
-- (no v1 equivalent) -> `layout.list`
+Layouts (see "worktree.* / layout.*" below):
+- `layout.save`
+- `layout.apply`
+- `layout.list`
 
-Session snapshot history (new in v2, no v1 predecessor -- see `docs/plans/snapshot-restore.md`):
-- (no v1 equivalent) -> `snapshot.list`
-- (no v1 equivalent) -> `snapshot.restore`
+Session snapshot history (see `docs/plans/snapshot-restore.md`):
+- `snapshot.list`
+- `snapshot.restore`
 
-Agent detection (new in v2, no v1 predecessor -- see "agent.detection.*" below):
-- (no v1 equivalent) -> `agent.detection.list`
-- (no v1 equivalent) -> `agent.detection.classify`
+Agent helpers (see "agent.task.*" below):
+- `agent.task.start`, `agent.task.update`, `agent.task.finish`, `agent.task.finish_session`, `agent.task.list`
+
+Agent detection (see "agent.detection.*" below):
+- `agent.detection.list`
+- `agent.detection.classify`
 
 Surfaces / Splits:
 - list_surfaces -> `surface.list`
@@ -281,11 +294,16 @@ Surfaces / Splits:
 - drag_surface_to_split -> `surface.drag_to_split`
 - refresh_surfaces -> `surface.refresh`
 - surface_health -> `surface.health`
-- trigger_flash -> `surface.trigger_flash` (new in v2)
-- (no v1 equivalent) -> `surface.wait` (new in v2, see "surface.wait" below)
-- (no v1 equivalent) -> `agent.prompt` (new in v2, see "agent.prompt" below)
-- (no v1 equivalent) -> `subscribe`/`unsubscribe` (new in v2, see "Socket Event Subscriptions" below)
-- (no v1 equivalent) -> `review.open` / `review.refresh` / `review.comment.add` / `review.comment.remove` / `review.comment.list` / `review.send_comments` (new in v2, see "Review Panel" below)
+- trigger_flash -> `surface.trigger_flash`
+- `surface.current` (params: `surface_id`, `tab_id`, `window_id`, `workspace_id`)
+- `surface.move` (params: `surface_id` (required), `pane_id`, `index`, `before_surface_id`, `after_surface_id`, `focus`, `window_id`, `workspace_id`)
+- `surface.reorder` (params: `surface_id` (required), `index`, `before_surface_id`, `after_surface_id`)
+- `surface.clear_history` (params: `surface_id`, `tab_id`, `window_id`, `workspace_id`)
+- `tab.action`, and its alias `surface.action` (params: `action`, `title` for `rename`, and `surface_id`, `tab_id`, `window_id`, `workspace_id`). `action` is required, though the contract omits it: `rename` (`title`), `clear_name`, `close_left`, `close_right`, `close_others`, `new_terminal_right`, `pin`, `unpin`, `mark_read`, `mark_unread`.
+- `surface.wait` (see "surface.wait" below)
+- `agent.prompt` (see "agent.prompt" below)
+- `subscribe`/`unsubscribe` (see "Socket Event Subscriptions" below)
+- `review.open` / `review.refresh` / `review.comment.add` / `review.comment.remove` / `review.comment.list` / `review.send_comments` (see "Review Panel" below)
 
 Surface Telemetry (report_*/ports/git/pr — off-main parse, main.async mutate; see "Socket
 command threading policy" in the root `CLAUDE.md`):
@@ -305,6 +323,10 @@ Panes:
 - focus_pane -> `pane.focus`
 - list_pane_surfaces -> `pane.surfaces`
 - new_pane -> `pane.create`
+- `pane.last` (params: `surface_id`, `tab_id`, `window_id`, `workspace_id`)
+- `pane.break` (params: `pane_id`, `focus`, `surface_id`, `tab_id`, `window_id`, `workspace_id`)
+- `pane.join` (params: `target_pane_id` (required), `pane_id`, `surface_id`, `focus`)
+- `pane.swap` (params: `pane_id` (required), `target_pane_id` (required), `focus`)
 
 Input:
 - send / send_surface -> `surface.send_text`
@@ -336,12 +358,12 @@ Notifications:
 - notify_surface -> `notification.create_for_surface`
 - notify_target -> `notification.create_for_target`
 - list_notifications -> `notification.list`
-- clear_notifications -> `notification.clear` (accepts an optional `workspace_id` to scope the clear to one workspace, matching v1's `--tab=X`; omitting it clears all notifications, matching v1's bare `clear_notifications`)
+- clear_notifications -> `notification.clear` (accepts an optional `workspace_id` to scope the clear to one workspace; omitting it clears all notifications)
   - With `--json`, the CLI's `list-notifications` prints `{"notifications": [...]}` and `clear-notifications` prints `{"ok": true}`, plus `"workspace_id"` and `"workspace_ref"` when the clear was scoped to one workspace. See [notifications.md](notifications.md#cli-commands).
 - set_app_focus -> `app.focus_override.set`
 - simulate_app_active -> `app.simulate_active`
 - reload_config -> `app.reload_config`
-- (no v1 equivalent) -> `app.browsers` (new in v2: lists known browsers with install/running status and the system default; see [`app.browsers`](#appbrowsers) below)
+- `app.browsers` (lists known browsers with install/running status and the system default; see [`app.browsers`](#appbrowsers) below)
 
 Debug / Test-only:
 - set_shortcut -> `debug.shortcut.set`
@@ -352,12 +374,19 @@ Debug / Test-only:
 - read_terminal_text -> `debug.terminal.read_text`
 - render_stats -> `debug.terminal.render_stats`
 - layout_debug -> `debug.layout`
-- bonsplit_underflow_count/reset -> `debug.bonsplit_underflow.*`
-- empty_panel_count/reset -> `debug.empty_panel.*`
+- bonsplit_underflow_count / bonsplit_underflow_reset -> `debug.bonsplit_underflow.count` / `debug.bonsplit_underflow.reset`
+- empty_panel_count / empty_panel_reset -> `debug.empty_panel.count` / `debug.empty_panel.reset`
 - focus_notification -> `debug.notification.focus`
-- flash_count/reset -> `debug.flash.*`
-- panel_snapshot/panel_snapshot_reset -> `debug.panel_snapshot.*`
+- flash_count / flash_reset -> `debug.flash.count` (`surface_id` required) / `debug.flash.reset`
+- panel_snapshot / panel_snapshot_reset -> `debug.panel_snapshot` / `debug.panel_snapshot.reset`
 - screenshot -> `debug.window.screenshot`
+- `debug.command_palette.toggle`, `debug.command_palette.visible`, `debug.command_palette.selection`, `debug.command_palette.results`, `debug.command_palette.rename_tab.open`, `debug.command_palette.rename_input.interact`, `debug.command_palette.rename_input.selection`, `debug.command_palette.rename_input.delete_backward` (params: `window_id`; `debug.command_palette.results` also takes `limit`)
+- `debug.glass.set` (params: `enabled` (required), `surface` (required))
+- `debug.portal.stats` (no params)
+- `debug.samples.stats`, `debug.samples.reset` (params: `bucket`)
+- `debug.sidebar.visible` (params: `window_id` (required))
+- `debug.tab.tear_off` (params: `surface_id`, `x`, `y`, all required): moves a surface into a new window placed at a screen point, as a tab drag dropped outside every window does.
+- `debug.terminals`, `debug.notification.banner_count`, `debug.notification.banner_reset` (see "Debug-only methods" below)
 
 ## `surface.wait` (#166)
 
@@ -755,7 +784,7 @@ server-side cap on concurrent subscriptions.
 
 ## `worktree.*` / `layout.*` (docs/plans/worktree-and-layouts.md)
 
-Native git worktree workflow + named layout configs. Both new in v2 (no v1 predecessor). All
+Native git worktree workflow + named layout configs. All
 seven methods parse/validate params off-main; the actual git/filesystem I/O runs inside
 `GitWorktreeManager`/`ProgramaLayoutStore` (blocking by construction, same pattern as
 `GitMetadataProber`); `v2MainSync` is used only around the final `tabManager.addWorkspace` /
@@ -957,6 +986,55 @@ and `agent`; `pane_id` and `pane_ref` identify the pane hosting the spawned term
 callers can target it without a separate lookup. The new workspace is created without taking
 focus.
 
+## `agent.task.*`
+
+The helper registry behind the sidebar helpers popover (see
+[workspace-interface.md](workspace-interface.md#helpers-popover)) and the MCP `agent_task_*`
+tools. `contracts/v2/methods.json` does not list these params yet; the tables below come from
+the handlers in `Sources/TerminalController+AgentSupervision.swift`. `state` is one of `idle`,
+`working`, `blocked`, `completed`, `failed` or `cancelled`. `agent.task.start`,
+`agent.task.update` and `agent.task.finish` return `{"agent": {...}}`; `agent.task.finish_session`
+and `agent.task.list` return `{"agents": [...], "count": N}`.
+
+### `agent.task.start`
+
+Reports a helper that is already running.
+
+| Param | Required | Notes |
+|---|---|---|
+| `workspace_id` | yes | Workspace that owns the helper. |
+| `host` | yes | Host name, such as `claude` or `codex`. |
+| `agent_id` | no | Stable helper id. Programa creates one when omitted. |
+| `parent_id` | no | Parent helper id, which must belong to the same workspace. |
+| `surface_id` | no | Terminal surface in that workspace. |
+| `session` | no | Host session id. |
+| `task` | no | Short task description. |
+| `role` | no | Helper role. |
+| `summary` | no | Final report text. |
+| `state` | no | Defaults to `working`. |
+| `placement` | no | `runs_with_parent` (default), `nested_workspace` or `separate_worktree`. |
+
+### `agent.task.update`
+
+Updates a running helper. Params: `agent_id` (required), and any of `workspace_id`,
+`surface_id`, `session`, `task`, `role` and `state`.
+
+### `agent.task.finish`
+
+Marks a helper as done. Params: `agent_id` (required), `state` (`completed`, the default,
+`failed` or `cancelled`), `task`, and `summary`, the final report shown in the helpers popover.
+
+### `agent.task.finish_session`
+
+Finishes every helper still active for a host session when that session ends. Params: `host`
+and `session` (both required), and `state` (`completed`, `failed` or `cancelled`; defaults to
+`cancelled`).
+
+### `agent.task.list`
+
+Lists helpers. Params, all optional: `workspace_id`, `parent_id`, and `include_finished`
+(defaults to `true`).
+
 ## `agent.event` (docs/plans/agent-events.md)
 
 A normalized alternative to `surface.report_agent_state` for providers whose hooks carry more
@@ -985,16 +1063,15 @@ every other telemetry report echoes. Errors: `invalid_params` (missing/invalid
 CLI: `programa agent-event --event <event_type> [--provider <p>] [--session-id <id>] [--turn-id <id>] [--item-id <id>] [--label <text>] [--resolution <r>] [--workspace <id|ref>] [--surface <id|ref>]`.
 
 `surface.report_agent_state` and `agent.event` both also accept optional `provider`, `session_id`,
-and `pid` params now. They key the report to a hook session and register the pid for the stale-PID
-watchdog and port scanning; older CLI builds that omit them still work, they just leave the report
-unkeyed.
+and `pid` params. They key the report to a hook session and register the pid for the stale-PID
+watchdog and port scanning; a report without them still works and is left unkeyed.
 
 ## `agent.needs_input` (docs/plans/agent-state-unification.md)
 
 Atomically reports a surface as blocked on user input and posts the matching notification, in one
-socket round trip instead of the three separate calls (`notification.create_for_target`,
-`workspace.set_status`, `surface.report_agent_state`) a blocking-prompt hook used to make. Any one
-of those three could fail independently; `agent.needs_input` can't leave the sidebar badge, the
+socket round trip instead of three separate calls (`notification.create_for_target`,
+`workspace.set_status`, `surface.report_agent_state`). Any one of those three can fail
+independently; `agent.needs_input` can't leave the sidebar badge, the
 notification panel, and agent supervision disagreeing with each other, because it's a single write.
 
 | Field | Type | Required | Notes |

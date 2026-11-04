@@ -139,8 +139,7 @@ Options:
                          Sets app name, bundle id, and derived data path unless overridden.
   --launch               Launch the app after building. Without this flag, the script
                          builds and prints the app path but does not open it.
-  --isolated             Give this tag its own DerivedData directory (today's
-                         default behavior before shared builds). Without this,
+  --isolated             Give this tag its own DerivedData directory. Without this,
                          all tags share one DerivedData dir so a tag switch is
                          a warm incremental build instead of a cold one. Tags
                          still get their own bundle id, app name, socket, and

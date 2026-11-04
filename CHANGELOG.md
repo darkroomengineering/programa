@@ -7,6 +7,12 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 ## [Unreleased]
 
 ### Added
+- A Storage button in the sidebar footer opens a popover with your free disk space, the worktrees Programa can remove, Xcode, Android and package manager caches, and how much disk each open workspace uses with its biggest build folders. Each Clean button shows what it would remove and removes nothing until you confirm. See `docs/workspace-interface.md`.
+- `programa storage scan` lists every git worktree and developer cache with its size and the reason it would be kept, and `programa storage clean` removes merged worktrees and the caches their tools rebuild on their own. `--xcode`, `--android` and `--packages` limit a run to one kind of cache and `--dry-run` shows what would go. The `storage.scan` and `storage.clean` socket methods do the same.
+- Every 6 hours Programa removes worktrees under `~/.programa/worktrees` whose branch is merged and that went unused for 24 hours, along with Xcode DerivedData, Gradle and package manager caches unused for 14 days and unavailable simulators. It keeps any worktree with uncommitted changes, an ignored `.env` file, an open workspace or a process running inside it. Turn it off with `worktrees.autoRemoveMerged` and `storage.autoCleanCaches`.
+- When free space on your home volume drops below 20 GB, Programa sends one notification that opens the Storage popover. Change the threshold with `storage.lowDiskWarningGB`, or set it to 0 to turn the warning off.
+- On macOS 26 each pane card has a header with split right, split down, zoom and close buttons that act on that pane, plus a new tab button when the pane has one tab. In a narrow pane the buttons drop out one at a time, and close always stays.
+- Drag a tab out of the window and release it to open it in a new window, with its shell and scrollback intact. Press Escape during the drag to cancel.
 - The "N helpers running" line on a sidebar row opens a popover with that workspace's helpers: Claude Code subagents, OSC 7501 child records and helpers reported over the socket. Each row shows the helper's state, task, run time and final report; copy the report or open it in a markdown pane beside the terminal. Finished helpers stay listed until you press Clear. See `docs/workspace-interface.md`.
 - Programs that report OSC 7501 child records get one helper per child in that popover, with a progress bar, and a notification when a child needs your input on a pane you are not looking at.
 - `programa resume` restarts the last Claude Code, Codex or OpenCode session that ended in a pane by typing its resume command into the pane's shell. After a restart, Resume Agent Session in the command palette does the same.
@@ -31,6 +37,10 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - `programa aside install-mcp` also registers Programa in Aside's own MCP settings, so Aside can start agents in Programa panes and read their results. `uninstall-mcp` removes it and `programa aside status` shows it. See `docs/aside-browser.md`.
 
 ### Changed
+- Sidebar rows start with the running agent's icon, or a terminal symbol, and show one status line under the title, with the agent's state as a colored pill and how long ago the status changed on the right. Hover a row for a ••• button that opens its right-click menu. The directory line is hidden when it is `~` or repeats the title, and the selected row is a raised white pill while the window is active.
+- The sidebar toggle, notifications bell and new workspace button sit right after the window's traffic lights.
+- The sidebar slides in and out when you toggle it, and fades instead when Reduce Motion is on.
+- The diagnostics log keeps weeks of history instead of about a day and a half, because it no longer records routine socket connections that open and close within a second.
 - A workspace with a single tab hides its tab bar, along with the new-tab and split buttons, and leaves an empty strip in its place so the window can still be dragged from the top. A glass + button in that strip's right corner opens a new tab. The bar comes back when the pane gets a second tab or the workspace is split, so every split pane keeps its close and new-tab buttons.
 - A focused terminal that has nothing new to show uses about half as much CPU. It stops waking up on every screen refresh after a quarter second of quiet and starts again on the next change.
 - Only one copy of Programa runs at a time: launching a second copy brings the running app forward and exits.
@@ -61,6 +71,12 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - The `programa omo`, `omx` and `omc` wrappers for oh-my-openagent, Oh My Codex and Oh My Claude Code. The `programa claude`, `codex` and `opencode` integrations are unchanged. See `docs/removed/omo-omx-omc-wrappers.md` to restore them.
 
 ### Fixed
+- When Claude Code is killed, its tab stays open with a banner offering Resume or Close, and processes the session left running are stopped.
+- `programa resume` skips a Claude session that ended before its first prompt, since there is nothing to reopen.
+- After a program is killed, the next prompt resets mouse reporting and the alternate screen, so the terminal stops acting as if the program were still running.
+- Closing a split no longer flashes the empty panel view for a frame.
+- The usage popover in the sidebar footer shows Claude's usage when Claude Code has written only one of its two rate limit windows. The Claude section was hidden in that case, so only OpenAI showed.
+- Force quitting an app you launched from a pane no longer quits Programa and every pane with it. Panes no longer share Programa's privacy permissions, so macOS asks the first time a pane reads Desktop, Documents or Downloads.
 - Pressing Esc to interrupt Claude Code no longer leaves its pane showing Working for good. Claude Code 2.1.295 and later reports its own status, so Programa's hooks stop writing it on top.
 - A shell that survives a restart keeps updating its pane: its prompt state, folder, branch and ports reach the restored pane, so `programa resume` works there without `--force`. Before, the shell kept reporting to the pane id from before the restart.
 - `programa handoff` pastes into a pane whose terminal has not started yet instead of failing.

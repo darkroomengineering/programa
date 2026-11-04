@@ -144,7 +144,7 @@
         "showClaudeQuota": {
           "type": "boolean",
           "default": true,
-          "description": "Show Claude Code rate-limit headroom (5h/7d windows) in the sidebar footer, read from ~/.claude/tmp/rate-limits.json when present."
+          "description": "Show the Provider Usage button in the sidebar footer, with Claude and OpenAI usage when available."
         }
       }
     },
