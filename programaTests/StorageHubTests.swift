@@ -142,11 +142,11 @@ final class StorageHubTests: XCTestCase {
         ], homePath: home.path)
 
         XCTAssertEqual(sessions.count, 2, "Aliases share one disk measurement and broad directories are excluded")
-        let resolvedProject = project.resolvingSymlinksInPath().path
+        let resolvedProject = WorktreeStorage.resolvedPath(project.path)
         let merged = try XCTUnwrap(sessions.first { $0.id == resolvedProject })
         XCTAssertEqual(merged.path, resolvedProject)
         XCTAssertEqual(merged.title, "Editor, Shell", "Both workspaces remain identifiable after merging their disk usage")
-        XCTAssertEqual(sessions.first { $0.path == other.resolvingSymlinksInPath().path }?.title, "Other")
+        XCTAssertEqual(sessions.first { $0.path == WorktreeStorage.resolvedPath(other.path) }?.title, "Other")
     }
 
     func testLiveSessionHeavyFoldersFilterDirectDirectoriesAndSortByAllocatedSize() throws {
