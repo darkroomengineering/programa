@@ -33,8 +33,9 @@ final class WorktreeStorageTests: XCTestCase {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("worktree-storage-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        // Resolve /var -> /private/var so paths compare equal to what git prints.
-        tempRoot = base.resolvingSymlinksInPath()
+        // realpath gives /private/var, matching the scanner. resolvingSymlinksInPath would strip
+        // /private instead.
+        tempRoot = URL(fileURLWithPath: WorktreeStorage.resolvedPath(base.path), isDirectory: true)
 
         try configFixtureGit(["init", "--bare", "-b", "main", "remote.git"], in: tempRoot)
         let seed = tempRoot.appendingPathComponent("seed", isDirectory: true)
@@ -106,7 +107,7 @@ final class WorktreeStorageTests: XCTestCase {
     }
 
     private func resolved(_ path: String) -> String {
-        URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+        WorktreeStorage.resolvedPath(path)
     }
 
     private func entry(_ worktree: URL, in entries: [WorktreeStorageEntry]) throws -> WorktreeStorageEntry {

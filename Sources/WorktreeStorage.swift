@@ -151,6 +151,7 @@ enum WorktreeStorage {
     ) -> [WorktreeStorageEntry] {
         let programaRoot = resolvedPath(programaDirectory)
         let resolvedOpenDirectories = openDirectories.map(resolvedPath)
+        let resolvedCwds = Set(processCwds.map(resolvedPath))
         var entries: [WorktreeStorageEntry] = []
         for repository in repositories {
             let linked = repository.worktrees.dropFirst().filter { entry in
@@ -168,7 +169,7 @@ enum WorktreeStorage {
                     defaultBranch: defaultBranch,
                     programaRoot: programaRoot,
                     openDirectories: resolvedOpenDirectories,
-                    processCwds: processCwds,
+                    processCwds: resolvedCwds,
                     sizeWalkTimeout: sizeWalkTimeout
                 ))
             }
@@ -258,7 +259,7 @@ enum WorktreeStorage {
         guard !candidates.isEmpty else { return outcome }
 
         let freshOpenDirectories = openDirectories().map(resolvedPath)
-        let freshCwds = processCwds()
+        let freshCwds = Set(processCwds().map(resolvedPath))
         for entry in candidates {
             let resolved = resolvedPath(entry.path)
             if freshOpenDirectories.contains(where: { isPath($0, equalToOrInside: resolved, caseInsensitive: true) }) {
