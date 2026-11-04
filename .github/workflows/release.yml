@@ -373,7 +373,7 @@ jobs:
         run: |
           ./scripts/verify_sparkle_artifact.sh \
             "build-universal/Build/Products/Release/Programa.app" \
-            "2.9.6"
+            "2.10.1"
 
       - name: Notarize app
         env:

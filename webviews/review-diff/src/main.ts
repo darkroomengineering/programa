@@ -116,7 +116,7 @@ let generation = 0;
 function itemsFromPatch(patchText: string, cacheKey: string): CodeViewDiffItem[] {
   const items: CodeViewDiffItem[] = [];
   const seenIds = new Map<string, number>();
-  for (const patch of parsePatchFiles(patchText, cacheKey)) {
+  for (const patch of parsePatchFiles(patchText, { cacheKeyPrefix: cacheKey })) {
     for (const fileDiff of patch.files) {
       const filetype = getFiletypeFromFileName(fileDiff.name);
       if (!HIGHLIGHTED_LANGUAGE_IDS.has(filetype)) {
