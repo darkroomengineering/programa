@@ -211,6 +211,19 @@
         }
       }
     },
+    "storage": {
+      "title": "storage",
+      "description": "Developer cache cleanup settings.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "autoCleanCaches": {
+          "type": "boolean",
+          "default": true,
+          "description": "Every 6 hours, clean eligible developer caches when their tools are idle. Manual-only caches are kept."
+        }
+      }
+    },
     "worktrees": {
       "title": "worktrees",
       "description": "Native git worktree workflow settings.",

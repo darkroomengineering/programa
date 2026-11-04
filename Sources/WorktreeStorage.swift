@@ -496,27 +496,32 @@ final class WorktreeStorageMonitor: @unchecked Sendable {
             return
         }
         defer { WorktreeStorage.passLock.unlock() }
-        guard ProgramaWorktreeSettings.autoRemoveMerged() else { return }
-
-        let policy = WorktreeRemovalPolicy.automatic(gracePeriodHours: ProgramaWorktreeSettings.autoRemoveAfterHours())
-        let entries = WorktreeStorage.scanAll(openDirectories: Self.openDirectoriesFromMain())
-        let outcome = WorktreeStorage.clean(
-            entries: entries,
-            policy: policy,
-            now: Date(),
-            dryRun: false,
-            openDirectories: Self.openDirectoriesFromMain,
-            processCwds: WorktreeStorage.processWorkingDirectories
-        )
-        for entry in outcome.removed {
-            logger.info("Removed merged worktree \(entry.path, privacy: .private) (\(entry.sizeBytes, privacy: .public) bytes)")
-        }
-        for kept in outcome.kept {
-            if case .gitRefused(let message) = kept.reason {
-                logger.error("git refused to remove \(kept.entry.path, privacy: .private): \(message, privacy: .private)")
+        if ProgramaWorktreeSettings.autoRemoveMerged() {
+            let policy = WorktreeRemovalPolicy.automatic(gracePeriodHours: ProgramaWorktreeSettings.autoRemoveAfterHours())
+            let entries = WorktreeStorage.scanAll(openDirectories: Self.openDirectoriesFromMain())
+            let outcome = WorktreeStorage.clean(
+                entries: entries,
+                policy: policy,
+                now: Date(),
+                dryRun: false,
+                openDirectories: Self.openDirectoriesFromMain,
+                processCwds: WorktreeStorage.processWorkingDirectories
+            )
+            for entry in outcome.removed {
+                logger.info("Removed merged worktree \(entry.path, privacy: .private) (\(entry.sizeBytes, privacy: .public) bytes)")
             }
+            for kept in outcome.kept {
+                if case .gitRefused(let message) = kept.reason {
+                    logger.error("git refused to remove \(kept.entry.path, privacy: .private): \(message, privacy: .private)")
+                }
+            }
+            logger.info("Worktree cleanup scanned \(entries.count, privacy: .public), removed \(outcome.removed.count, privacy: .public), reclaimed \(outcome.reclaimedBytes, privacy: .public) bytes")
         }
-        logger.info("Worktree cleanup scanned \(entries.count, privacy: .public), removed \(outcome.removed.count, privacy: .public), reclaimed \(outcome.reclaimedBytes, privacy: .public) bytes")
+        if ProgramaStorageSettings.autoCleanCaches() {
+            let items = StorageCategories.scan()
+            let outcome = StorageCategories.clean(items: items, automaticOnly: true, dryRun: false)
+            logger.info("Cache cleanup scanned \(items.count, privacy: .public), removed \(outcome.removed.count, privacy: .public), kept \(outcome.kept.count, privacy: .public), reclaimed \(outcome.reclaimedBytes, privacy: .public) bytes")
+        }
     }
 
     private static func openDirectoriesFromMain() -> [String] {

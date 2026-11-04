@@ -110,6 +110,10 @@
 		WTMG000001 /* GitWorktreeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTMG000002 /* GitWorktreeManager.swift */; };
 		WTST000001 /* WorktreeStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTST000002 /* WorktreeStorage.swift */; };
 		STCT000001 /* StorageCategories.swift in Sources */ = {isa = PBXBuildFile; fileRef = STCT000002 /* StorageCategories.swift */; };
+		SCCH000001 /* StorageCacheSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = SCCH000002 /* StorageCacheSupport.swift */; };
+		SCCH000003 /* StorageXcodeCaches.swift in Sources */ = {isa = PBXBuildFile; fileRef = SCCH000004 /* StorageXcodeCaches.swift */; };
+		SCCH000005 /* StorageAndroidCaches.swift in Sources */ = {isa = PBXBuildFile; fileRef = SCCH000006 /* StorageAndroidCaches.swift */; };
+		SCCH000007 /* StoragePackageCaches.swift in Sources */ = {isa = PBXBuildFile; fileRef = SCCH000008 /* StoragePackageCaches.swift */; };
 		WTMG000005 /* ProgramaLayoutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTMG000006 /* ProgramaLayoutStore.swift */; };
 		NRTM00000002 /* TabManager+UITestHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTM00000001 /* TabManager+UITestHarness.swift */; };
 			A5001004 /* GhosttyConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001014 /* GhosttyConfig.swift */; };
@@ -317,6 +321,7 @@
 					BEEF50200000000000000004 /* WorkspaceFixSweepWKSPRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF50200000000000000003 /* WorkspaceFixSweepWKSPRegressionTests.swift */; };
 					BEEF5050000000000000A003 /* EscrowFDPassingRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF5050000000000000A004 /* EscrowFDPassingRegressionTests.swift */; };
 				WTST000101 /* WorktreeStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTST000102 /* WorktreeStorageTests.swift */; };
+				SCCH000101 /* StorageCategoriesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SCCH000102 /* StorageCategoriesTests.swift */; };
 				BEEF5040A1B2C3D4E5F60001 /* ConfigFixSweepCONFTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF5040A1B2C3D4E5F60002 /* ConfigFixSweepCONFTests.swift */; };
 					BEEF5050000000000000A001 /* EscrowFixSweepSESSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF5050000000000000A002 /* EscrowFixSweepSESSTests.swift */; };
 					BEEF50200000000000000002 /* WorkspaceFixSweepWKSPTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF50200000000000000001 /* WorkspaceFixSweepWKSPTests.swift */; };
@@ -549,6 +554,10 @@
 		WTMG000002 /* GitWorktreeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitWorktreeManager.swift; sourceTree = "<group>"; };
 		WTST000002 /* WorktreeStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorktreeStorage.swift; sourceTree = "<group>"; };
 		STCT000002 /* StorageCategories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageCategories.swift; sourceTree = "<group>"; };
+		SCCH000002 /* StorageCacheSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageCacheSupport.swift; sourceTree = "<group>"; };
+		SCCH000004 /* StorageXcodeCaches.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageXcodeCaches.swift; sourceTree = "<group>"; };
+		SCCH000006 /* StorageAndroidCaches.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageAndroidCaches.swift; sourceTree = "<group>"; };
+		SCCH000008 /* StoragePackageCaches.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoragePackageCaches.swift; sourceTree = "<group>"; };
 		WTMG000006 /* ProgramaLayoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaLayoutStore.swift; sourceTree = "<group>"; };
 		NRTM00000001 /* TabManager+UITestHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabManager+UITestHarness.swift"; sourceTree = "<group>"; };
 			A5001014 /* GhosttyConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyConfig.swift; sourceTree = "<group>"; };
@@ -750,6 +759,7 @@
 				BEEF50200000000000000003 /* WorkspaceFixSweepWKSPRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceFixSweepWKSPRegressionTests.swift; sourceTree = "<group>"; };
 				BEEF5050000000000000A004 /* EscrowFDPassingRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EscrowFDPassingRegressionTests.swift; sourceTree = "<group>"; };
 				WTST000102 /* WorktreeStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorktreeStorageTests.swift; sourceTree = "<group>"; };
+				SCCH000102 /* StorageCategoriesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageCategoriesTests.swift; sourceTree = "<group>"; };
 				BEEF5040A1B2C3D4E5F60002 /* ConfigFixSweepCONFTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigFixSweepCONFTests.swift; sourceTree = "<group>"; };
 				BEEF5050000000000000A002 /* EscrowFixSweepSESSTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EscrowFixSweepSESSTests.swift; sourceTree = "<group>"; };
 				BEEF50200000000000000001 /* WorkspaceFixSweepWKSPTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceFixSweepWKSPTests.swift; sourceTree = "<group>"; };
@@ -1033,6 +1043,10 @@
 					WTMG000002 /* GitWorktreeManager.swift */,
 					WTST000002 /* WorktreeStorage.swift */,
 					STCT000002 /* StorageCategories.swift */,
+					SCCH000002 /* StorageCacheSupport.swift */,
+					SCCH000004 /* StorageXcodeCaches.swift */,
+					SCCH000006 /* StorageAndroidCaches.swift */,
+					SCCH000008 /* StoragePackageCaches.swift */,
 					WTMG000006 /* ProgramaLayoutStore.swift */,
 					A5001511 /* UITestRecorder.swift */,
 					A5001416 /* Workspace.swift */,
@@ -1295,6 +1309,7 @@
 					BEEF50200000000000000003 /* WorkspaceFixSweepWKSPRegressionTests.swift */,
 					BEEF5050000000000000A004 /* EscrowFDPassingRegressionTests.swift */,
 					WTST000102 /* WorktreeStorageTests.swift */,
+					SCCH000102 /* StorageCategoriesTests.swift */,
 					BEEF5040A1B2C3D4E5F60002 /* ConfigFixSweepCONFTests.swift */,
 					BEEF5050000000000000A002 /* EscrowFixSweepSESSTests.swift */,
 					BEEF50200000000000000001 /* WorkspaceFixSweepWKSPTests.swift */,
@@ -1611,6 +1626,10 @@
 						WTMG000001 /* GitWorktreeManager.swift in Sources */,
 						WTST000001 /* WorktreeStorage.swift in Sources */,
 						STCT000001 /* StorageCategories.swift in Sources */,
+						SCCH000001 /* StorageCacheSupport.swift in Sources */,
+						SCCH000003 /* StorageXcodeCaches.swift in Sources */,
+						SCCH000005 /* StorageAndroidCaches.swift in Sources */,
+						SCCH000007 /* StoragePackageCaches.swift in Sources */,
 						WTMG000005 /* ProgramaLayoutStore.swift in Sources */,
 						A5001501 /* UITestRecorder.swift in Sources */,
 						A5001406 /* Workspace.swift in Sources */,
@@ -1770,6 +1789,7 @@
 					BEEF50200000000000000004 /* WorkspaceFixSweepWKSPRegressionTests.swift in Sources */,
 					BEEF5050000000000000A003 /* EscrowFDPassingRegressionTests.swift in Sources */,
 					WTST000101 /* WorktreeStorageTests.swift in Sources */,
+					SCCH000101 /* StorageCategoriesTests.swift in Sources */,
 					BEEF5040A1B2C3D4E5F60001 /* ConfigFixSweepCONFTests.swift in Sources */,
 					BEEF5050000000000000A001 /* EscrowFixSweepSESSTests.swift in Sources */,
 					BEEF50200000000000000002 /* WorkspaceFixSweepWKSPTests.swift in Sources */,

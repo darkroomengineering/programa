@@ -86,6 +86,7 @@ extension ProgramaCLI {
         command: String,
         valueFlags: Set<String>,
         booleanFlags: Set<String> = [],
+        repeatableValueFlags: Set<String> = [],
         shortFlags: Set<String> = [],
         rejectOptionLikePositionals: Bool = true
     ) throws -> (positional: [String], options: [String: String]) {
@@ -123,7 +124,7 @@ extension ProgramaCLI {
             guard valueFlags.contains(name) || booleanFlags.contains(name) else {
                 throw CLIError(message: "\(command): unknown option --\(name)")
             }
-            guard options[name] == nil else {
+            guard options[name] == nil || (valueFlags.contains(name) && repeatableValueFlags.contains(name)) else {
                 throw CLIError(message: "\(command): duplicate option --\(name)")
             }
 
