@@ -54,6 +54,7 @@ test_surface_move_reorder_api.py
 test_surface_send_if_unchanged.py
 test_surface_send_paste.py
 test_suspended_subscriber_does_not_block_server.py
+test_tab_tear_off_new_window.py
 test_tab_workspace_action_naming.py
 test_terminal_focus_routing.py
 test_tmux_compat_geometry.py

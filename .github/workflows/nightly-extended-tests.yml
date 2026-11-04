@@ -304,6 +304,8 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 20
     continue-on-error: true
+    outputs:
+      measure: ${{ steps.measure.outcome }}
     env:
       PROGRAMA_DERIVED_DATA_DIR: ${{ github.workspace }}/.ci-derived-data-idle-cpu
       # Lets the app honor the socket path the runner script hands it in any build.
@@ -337,6 +339,7 @@ jobs:
           kill -0 "$VDISPLAY_PID"
 
       - name: Measure idle CPU
+        id: measure
         env:
           PROGRAMA_TESTS_V2_SUBSET_FILE: ${{ runner.temp }}/idle-cpu-subset.txt
           PROGRAMA_TESTS_V2_ATTEMPTS: "1"
@@ -553,7 +556,8 @@ jobs:
           rm -f /tmp/create-virtual-display
 
   # Scheduled runs only: a dispatch on a branch is triage and must not touch the issue.
-  # idle-cpu is informational (continue-on-error above), so its failure does not count.
+  # idle-cpu keeps the run green (continue-on-error above), so its failure is read from
+  # its measure output rather than the job list and is flagged as informational.
   report:
     needs: [build-app, tests-v2, idle-cpu, ui-tests]
     if: always() && !cancelled() && github.event_name == 'schedule'
@@ -567,12 +571,16 @@ jobs:
       GH_REPO: ${{ github.repository }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       ISSUE_TITLE: Nightly failing
+      IDLE_CPU_MEASURE: ${{ needs.idle-cpu.outputs.measure }}
     steps:
       - name: Open, comment on or close the "Nightly failing" issue
         run: |
           set -euo pipefail
           failed="$(gh api "repos/$GH_REPO/actions/runs/$GITHUB_RUN_ID/jobs?filter=latest&per_page=100" \
             --jq '.jobs[] | select(.conclusion != null and .conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral") | select(.name != "idle-cpu" and .name != "report") | "- \(.name)"')"
+          if [ -n "$IDLE_CPU_MEASURE" ] && [ "$IDLE_CPU_MEASURE" != "success" ]; then
+            failed="$(printf '%s\n- idle-cpu (informational, %s)' "$failed" "$IDLE_CPU_MEASURE" | sed '/^$/d')"
+          fi
           issue="$(gh issue list --state open --limit 100 --json number,title \
             --jq "[.[] | select(.title == \"$ISSUE_TITLE\")][0].number // empty")"
           if [ -n "$failed" ]; then
