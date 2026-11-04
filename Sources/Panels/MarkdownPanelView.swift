@@ -11,6 +11,7 @@ struct MarkdownPanelView: View {
     let onRequestPanelFocus: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
@@ -24,14 +25,15 @@ struct MarkdownPanelView: View {
         .background(backgroundColor)
         .overlay {
             // One transaction keeps SwiftUI from coalescing or interrupting the sequence.
-            PhaseAnimator(FocusFlashPattern.values.indices, trigger: panel.focusFlashToken) { phaseIndex in
+            let flash = FocusFlashPattern.timeline(reduceMotion: reduceMotion)
+            PhaseAnimator(flash.values.indices, trigger: panel.focusFlashToken) { phaseIndex in
                 RoundedRectangle(cornerRadius: FocusFlashPattern.ringCornerRadius)
-                    .stroke(programaAccentColor().opacity(FocusFlashPattern.values[phaseIndex]), lineWidth: 3)
-                    .shadow(color: programaAccentColor().opacity(FocusFlashPattern.values[phaseIndex] * 0.35), radius: 10)
+                    .stroke(programaAccentColor().opacity(flash.opacity(atPhase: phaseIndex)), lineWidth: 3)
+                    .shadow(color: programaAccentColor().opacity(flash.opacity(atPhase: phaseIndex) * 0.35), radius: 10)
                     .padding(FocusFlashPattern.ringInset)
                     .allowsHitTesting(false)
             } animation: { phaseIndex in
-                FocusFlashPattern.phaseAnimation(at: phaseIndex)
+                flash.phaseAnimation(at: phaseIndex)
             }
         }
         .overlay {

@@ -63,7 +63,7 @@ private struct PaneDropPlaceholderOverlay: View {
             .frame(width: frame.width, height: frame.height)
             .offset(x: frame.minX, y: frame.minY)
             .opacity(zone != nil ? 1 : 0)
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: zone)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: zone)
     }
 
     private func overlayFrame(for zone: DropZone?, in size: CGSize) -> CGRect {

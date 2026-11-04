@@ -1496,7 +1496,7 @@ final class GhosttySurfaceScrollView: NSView {
             }
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.18
-                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
                 if needsFrameUpdate && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
                     dropZoneOverlayView.animator().frame = targetFrame
                 }
@@ -1580,13 +1580,23 @@ final class GhosttySurfaceScrollView: NSView {
 #endif
             self.updateFlashPath(style: style)
             self.updateFlashAppearance(style: style)
+            let flash = FocusFlashPattern.timeline(
+                reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            )
+            var values = flash.values
+            // A retrigger mid-flash starts from the ring's visible opacity instead of cutting to 0.
+            if !values.isEmpty,
+               self.flashLayer.animation(forKey: "programa.flash") != nil,
+               let liveOpacity = self.flashLayer.presentation()?.opacity {
+                values[0] = Double(liveOpacity)
+            }
             self.flashLayer.removeAllAnimations()
             self.flashLayer.opacity = 0
             let animation = CAKeyframeAnimation(keyPath: "opacity")
-            animation.values = FocusFlashPattern.values.map { NSNumber(value: $0) }
-            animation.keyTimes = FocusFlashPattern.keyTimes.map { NSNumber(value: $0) }
-            animation.duration = FocusFlashPattern.duration
-            animation.timingFunctions = FocusFlashPattern.curves.map { curve in
+            animation.values = values.map { NSNumber(value: $0) }
+            animation.keyTimes = flash.keyTimes.map { NSNumber(value: $0) }
+            animation.duration = flash.duration
+            animation.timingFunctions = flash.curves.map { curve in
                 switch curve {
                 case .easeIn:
                     return CAMediaTimingFunction(name: .easeIn)
@@ -2584,6 +2594,14 @@ final class GhosttySurfaceScrollView: NSView {
             bounds: flashOverlayView.bounds,
             inset: inset,
             radius: radius
+        )
+        // The fill is clear, so the glow follows the stroke ring; an explicit stroked path keeps
+        // Core Animation from deriving the shadow from the layer's alpha offscreen every frame.
+        flashLayer.shadowPath = flashLayer.path?.copy(
+            strokingWithWidth: flashLayer.lineWidth,
+            lineCap: .round,
+            lineJoin: .round,
+            miterLimit: flashLayer.miterLimit
         )
     }
 

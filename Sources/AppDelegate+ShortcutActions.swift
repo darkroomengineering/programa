@@ -49,7 +49,7 @@ extension AppDelegate {
             targetWindow.toggleFullScreen(nil)
             return true
         }),
-        (.toggleSidebar, consume { app, _, _ in _ = app.toggleSidebarInActiveMainWindow() }),
+        (.toggleSidebar, consume { app, _, _ in _ = app.toggleSidebarInActiveMainWindow(animated: false) }),
         (.newTab, consume { app, event, _ in app.performNewWorkspaceShortcut(event: event) }),
         // New Claude Code Workspace: Cmd+Shift+C. Instantly creates a new workspace in the current
         // workspace's working directory and boots Claude Code into it.

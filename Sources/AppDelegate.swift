@@ -2849,7 +2849,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     @discardableResult
-    func toggleSidebarInActiveMainWindow() -> Bool {
+    func toggleSidebarInActiveMainWindow(animated: Bool = true) -> Bool {
         let activeContext = tabManager.flatMap { activeManager in
             mainWindowContexts.values.first(where: { $0.tabManager === activeManager })
         }
@@ -2860,11 +2860,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             if let window = context.window ?? windowForMainWindowId(context.windowId) {
                 setActiveMainWindow(window)
             }
-            context.sidebarState.toggle()
+            context.sidebarState.toggle(animated: animated)
             return true
         }
         if let sidebarState {
-            sidebarState.toggle()
+            sidebarState.toggle(animated: animated)
             return true
         }
         return false

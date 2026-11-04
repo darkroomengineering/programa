@@ -320,7 +320,8 @@ class UpdateController {
             guard self.viewModel.overrideState == nil,
                   case .notFound = self.viewModel.state else { return }
 
-            withAnimation(.easeInOut(duration: 0.25)) {
+            let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
                 self.recordUITestTimestamp(key: "noUpdateHiddenAt")
                 self.viewModel.state = .idle
             }
