@@ -221,6 +221,17 @@
           "type": "string",
           "default": "~/.programa/worktrees",
           "description": "Base directory for new git worktrees created via 'programa worktree create' (or the 'worktree.create' socket method) when no explicit --path is given. Worktrees are created under <directory>/<repo-name>/<branch-slug>."
+        },
+        "autoRemoveMerged": {
+          "type": "boolean",
+          "default": true,
+          "description": "Every 6 hours, remove git worktrees under 'directory' whose branch is merged into the remote default branch (or whose upstream branch was deleted), that have no uncommitted or untracked changes, hold no ignored .env* files outside node_modules, are not open in a workspace, have no process running inside, and were not used for 'autoRemoveAfterHours'. Uses 'git worktree remove' without --force and never deletes branches."
+        },
+        "autoRemoveAfterHours": {
+          "type": "number",
+          "minimum": 1,
+          "default": 24,
+          "description": "Hours a merged worktree must go unused before 'autoRemoveMerged' removes it. Values below 1 are treated as 1."
         }
       }
     },

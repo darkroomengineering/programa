@@ -1838,6 +1838,12 @@ class TerminalController {
         case "worktree.list":
             return v2Result(id: id, self.v2WorktreeList(params: params))
 
+        // Storage
+        case "storage.scan":
+            return v2Result(id: id, self.v2StorageScan(params: params))
+        case "storage.clean":
+            return v2Result(id: id, self.v2StorageClean(params: params))
+
         // Layouts
         case "layout.save":
             return v2Result(id: id, self.v2LayoutSave(params: params))

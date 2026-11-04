@@ -108,6 +108,7 @@
 		A5FF0071 /* TabManager+GitMetadataPolling.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0061 /* TabManager+GitMetadataPolling.swift */; };
 		NRTM00000004 /* GitMetadataProber.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTM00000003 /* GitMetadataProber.swift */; };
 		WTMG000001 /* GitWorktreeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTMG000002 /* GitWorktreeManager.swift */; };
+		WTST000001 /* WorktreeStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTST000002 /* WorktreeStorage.swift */; };
 		WTMG000005 /* ProgramaLayoutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTMG000006 /* ProgramaLayoutStore.swift */; };
 		NRTM00000002 /* TabManager+UITestHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTM00000001 /* TabManager+UITestHarness.swift */; };
 			A5001004 /* GhosttyConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001014 /* GhosttyConfig.swift */; };
@@ -139,6 +140,7 @@
 		NRTC0013 /* TerminalController+Window.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0003 /* TerminalController+Window.swift */; };
 		NRTC0014 /* TerminalController+Workspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0004 /* TerminalController+Workspace.swift */; };
 		WTMG000003 /* TerminalController+Worktree.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTMG000004 /* TerminalController+Worktree.swift */; };
+		WTST000003 /* TerminalController+Storage.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTST000004 /* TerminalController+Storage.swift */; };
 		WTMG000007 /* TerminalController+Layout.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTMG000008 /* TerminalController+Layout.swift */; };
 		ACED00000000000000000003 /* TerminalController+SocketContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACED00000000000000000004 /* TerminalController+SocketContext.swift */; };
 			SNAP000001 /* TerminalController+Snapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = SNAP000002 /* TerminalController+Snapshot.swift */; };
@@ -273,6 +275,7 @@
 		B9000037A1B2C3D4E5F60719 /* CLI+Themes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000036A1B2C3D4E5F60719 /* CLI+Themes.swift */; };
 		B9000039A1B2C3D4E5F60719 /* CLI+Tree.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000038A1B2C3D4E5F60719 /* CLI+Tree.swift */; };
 		7B3F9A10C2D4E5F6A7B8000A /* CLI+Ports.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3F9A10C2D4E5F6A7B80009 /* CLI+Ports.swift */; };
+		WTST000005 /* CLI+Storage.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTST000006 /* CLI+Storage.swift */; };
 		A2E500000000000000000007 /* CLI+AgentResume.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2E500000000000000000006 /* CLI+AgentResume.swift */; };
 		F1D600000000000000000002 /* CLI+Usage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1D600000000000000000001 /* CLI+Usage.swift */; };
 		B900003BA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */; };
@@ -312,6 +315,7 @@
 				BEEF5040A1B2C3D4E5F60003 /* ConfigFixSweepRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF5040A1B2C3D4E5F60004 /* ConfigFixSweepRegressionTests.swift */; };
 					BEEF50200000000000000004 /* WorkspaceFixSweepWKSPRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF50200000000000000003 /* WorkspaceFixSweepWKSPRegressionTests.swift */; };
 					BEEF5050000000000000A003 /* EscrowFDPassingRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF5050000000000000A004 /* EscrowFDPassingRegressionTests.swift */; };
+				WTST000101 /* WorktreeStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTST000102 /* WorktreeStorageTests.swift */; };
 				BEEF5040A1B2C3D4E5F60001 /* ConfigFixSweepCONFTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF5040A1B2C3D4E5F60002 /* ConfigFixSweepCONFTests.swift */; };
 					BEEF5050000000000000A001 /* EscrowFixSweepSESSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF5050000000000000A002 /* EscrowFixSweepSESSTests.swift */; };
 					BEEF50200000000000000002 /* WorkspaceFixSweepWKSPTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF50200000000000000001 /* WorkspaceFixSweepWKSPTests.swift */; };
@@ -542,6 +546,7 @@
 		A5FF0061 /* TabManager+GitMetadataPolling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabManager+GitMetadataPolling.swift"; sourceTree = "<group>"; };
 		NRTM00000003 /* GitMetadataProber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitMetadataProber.swift; sourceTree = "<group>"; };
 		WTMG000002 /* GitWorktreeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitWorktreeManager.swift; sourceTree = "<group>"; };
+		WTST000002 /* WorktreeStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorktreeStorage.swift; sourceTree = "<group>"; };
 		WTMG000006 /* ProgramaLayoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaLayoutStore.swift; sourceTree = "<group>"; };
 		NRTM00000001 /* TabManager+UITestHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabManager+UITestHarness.swift"; sourceTree = "<group>"; };
 			A5001014 /* GhosttyConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyConfig.swift; sourceTree = "<group>"; };
@@ -577,6 +582,7 @@
 		NRTC0003 /* TerminalController+Window.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Window.swift"; sourceTree = "<group>"; };
 		NRTC0004 /* TerminalController+Workspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Workspace.swift"; sourceTree = "<group>"; };
 		WTMG000004 /* TerminalController+Worktree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Worktree.swift"; sourceTree = "<group>"; };
+		WTST000004 /* TerminalController+Storage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Storage.swift"; sourceTree = "<group>"; };
 		WTMG000008 /* TerminalController+Layout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Layout.swift"; sourceTree = "<group>"; };
 		ACED00000000000000000004 /* TerminalController+SocketContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+SocketContext.swift"; sourceTree = "<group>"; };
 			SNAP000002 /* TerminalController+Snapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Snapshot.swift"; sourceTree = "<group>"; };
@@ -708,6 +714,7 @@
 		B9000036A1B2C3D4E5F60719 /* CLI+Themes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Themes.swift"; sourceTree = "<group>"; };
 		B9000038A1B2C3D4E5F60719 /* CLI+Tree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Tree.swift"; sourceTree = "<group>"; };
 		7B3F9A10C2D4E5F6A7B80009 /* CLI+Ports.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Ports.swift"; sourceTree = "<group>"; };
+		WTST000006 /* CLI+Storage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Storage.swift"; sourceTree = "<group>"; };
 		A2E500000000000000000006 /* CLI+AgentResume.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+AgentResume.swift"; sourceTree = "<group>"; };
 		F1D600000000000000000001 /* CLI+Usage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Usage.swift"; sourceTree = "<group>"; };
 		B900003AA1B2C3D4E5F60719 /* CLI+TmuxCompat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+TmuxCompat.swift"; sourceTree = "<group>"; };
@@ -740,6 +747,7 @@
 				BEEF5040A1B2C3D4E5F60004 /* ConfigFixSweepRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigFixSweepRegressionTests.swift; sourceTree = "<group>"; };
 				BEEF50200000000000000003 /* WorkspaceFixSweepWKSPRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceFixSweepWKSPRegressionTests.swift; sourceTree = "<group>"; };
 				BEEF5050000000000000A004 /* EscrowFDPassingRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EscrowFDPassingRegressionTests.swift; sourceTree = "<group>"; };
+				WTST000102 /* WorktreeStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorktreeStorageTests.swift; sourceTree = "<group>"; };
 				BEEF5040A1B2C3D4E5F60002 /* ConfigFixSweepCONFTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigFixSweepCONFTests.swift; sourceTree = "<group>"; };
 				BEEF5050000000000000A002 /* EscrowFixSweepSESSTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EscrowFixSweepSESSTests.swift; sourceTree = "<group>"; };
 				BEEF50200000000000000001 /* WorkspaceFixSweepWKSPTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceFixSweepWKSPTests.swift; sourceTree = "<group>"; };
@@ -1021,6 +1029,7 @@
 					NRTM00000001 /* TabManager+UITestHarness.swift */,
 					NRTM00000003 /* GitMetadataProber.swift */,
 					WTMG000002 /* GitWorktreeManager.swift */,
+					WTST000002 /* WorktreeStorage.swift */,
 					WTMG000006 /* ProgramaLayoutStore.swift */,
 					A5001511 /* UITestRecorder.swift */,
 					A5001416 /* Workspace.swift */,
@@ -1048,6 +1057,7 @@
 				AGSV0004A1B2C3D4E5F60719 /* TerminalController+AgentSupervision.swift */,
 				AGRP0002A1B2C3D4E5F60719 /* AgentRPCDispatcher.swift */,
 				WTMG000004 /* TerminalController+Worktree.swift */,
+				WTST000004 /* TerminalController+Storage.swift */,
 				WTMG000008 /* TerminalController+Layout.swift */,
 				ACED00000000000000000004 /* TerminalController+SocketContext.swift */,
 					SNAP000002 /* TerminalController+Snapshot.swift */,
@@ -1150,6 +1160,7 @@
 				B9000036A1B2C3D4E5F60719 /* CLI+Themes.swift */,
 				B9000038A1B2C3D4E5F60719 /* CLI+Tree.swift */,
 				7B3F9A10C2D4E5F6A7B80009 /* CLI+Ports.swift */,
+				WTST000006 /* CLI+Storage.swift */,
 				A1D000000000000000000006 /* CLI+Handoff.swift */,
 				A2E500000000000000000006 /* CLI+AgentResume.swift */,
 				F1D600000000000000000001 /* CLI+Usage.swift */,
@@ -1280,6 +1291,7 @@
 					BEEF5040A1B2C3D4E5F60004 /* ConfigFixSweepRegressionTests.swift */,
 					BEEF50200000000000000003 /* WorkspaceFixSweepWKSPRegressionTests.swift */,
 					BEEF5050000000000000A004 /* EscrowFDPassingRegressionTests.swift */,
+					WTST000102 /* WorktreeStorageTests.swift */,
 					BEEF5040A1B2C3D4E5F60002 /* ConfigFixSweepCONFTests.swift */,
 					BEEF5050000000000000A002 /* EscrowFixSweepSESSTests.swift */,
 					BEEF50200000000000000001 /* WorkspaceFixSweepWKSPTests.swift */,
@@ -1594,6 +1606,7 @@
 						NRTM00000002 /* TabManager+UITestHarness.swift in Sources */,
 						NRTM00000004 /* GitMetadataProber.swift in Sources */,
 						WTMG000001 /* GitWorktreeManager.swift in Sources */,
+						WTST000001 /* WorktreeStorage.swift in Sources */,
 						WTMG000005 /* ProgramaLayoutStore.swift in Sources */,
 						A5001501 /* UITestRecorder.swift in Sources */,
 						A5001406 /* Workspace.swift in Sources */,
@@ -1624,6 +1637,7 @@
 				AGSV0003A1B2C3D4E5F60719 /* TerminalController+AgentSupervision.swift in Sources */,
 				AGRP0001A1B2C3D4E5F60719 /* AgentRPCDispatcher.swift in Sources */,
 				WTMG000003 /* TerminalController+Worktree.swift in Sources */,
+				WTST000003 /* TerminalController+Storage.swift in Sources */,
 				WTMG000007 /* TerminalController+Layout.swift in Sources */,
 				ACED00000000000000000003 /* TerminalController+SocketContext.swift in Sources */,
 					SNAP000001 /* TerminalController+Snapshot.swift in Sources */,
@@ -1751,6 +1765,7 @@
 					BEEF5040A1B2C3D4E5F60003 /* ConfigFixSweepRegressionTests.swift in Sources */,
 					BEEF50200000000000000004 /* WorkspaceFixSweepWKSPRegressionTests.swift in Sources */,
 					BEEF5050000000000000A003 /* EscrowFDPassingRegressionTests.swift in Sources */,
+					WTST000101 /* WorktreeStorageTests.swift in Sources */,
 					BEEF5040A1B2C3D4E5F60001 /* ConfigFixSweepCONFTests.swift in Sources */,
 					BEEF5050000000000000A001 /* EscrowFixSweepSESSTests.swift in Sources */,
 					BEEF50200000000000000002 /* WorkspaceFixSweepWKSPTests.swift in Sources */,
@@ -1828,6 +1843,7 @@
 					A1D000000000000000000005 /* PaneHandoffFormatter.swift in Sources */,
 				B9000039A1B2C3D4E5F60719 /* CLI+Tree.swift in Sources */,
 				7B3F9A10C2D4E5F6A7B8000A /* CLI+Ports.swift in Sources */,
+				WTST000005 /* CLI+Storage.swift in Sources */,
 				A1D000000000000000000007 /* CLI+Handoff.swift in Sources */,
 				A2E500000000000000000007 /* CLI+AgentResume.swift in Sources */,
 				F1D600000000000000000002 /* CLI+Usage.swift in Sources */,
