@@ -1554,7 +1554,7 @@ class TerminalController {
         // access_denied_unverified; logging those rotated real incidents out within a day.
         defer {
             let durationMs = Int(Date().timeIntervalSince(connectionStart) * 1000)
-            if closeReason != "eof", closeReason != "access_denied_unverified" {
+            if durationMs >= 1000 || (closeReason != "eof" && closeReason != "access_denied_unverified") {
                 dilog("socket.conn", "close pid=\(peerPidDescription) reason=\(closeReason) durationMs=\(durationMs)")
             }
         }

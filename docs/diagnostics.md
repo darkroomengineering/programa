@@ -41,10 +41,11 @@ tail -f ~/Library/Logs/Programa/diagnostics.log
 Currently: the Unix socket/control-protocol subsystem (`Sources/TerminalController.swift`,
 `Sources/TerminalController+Subscriptions.swift`) — listener start/stop, accept-loop errors
 and rearm/resume events, connections that close abnormally (`read_error`, `access_denied`,
-`listener_stopped`, `policy_revoked`, `payload_too_large`, ...), and event-subscription
-teardown. Normal `eof` closes and the CLI's connect-and-hang-up liveness probe
-(`access_denied_unverified`) happen on every hook call, so they are not logged; otherwise
-they fill the 4 MB in about a day and push out the session lines below. Session escrow,
+`listener_stopped`, `policy_revoked`, `payload_too_large`, `invalid_utf8`,
+`auth_failed_limit`), connections that lasted a second or more, and event-subscription
+teardown. Short `eof` closes and the CLI's connect-and-hang-up liveness probe
+(`access_denied_unverified`) come with almost every CLI call, so they are not logged;
+otherwise they fill the 4 MB in a day or two and push out the session lines below. Session escrow,
 agent exit and leftover-process reaper events are logged too (`escrow.*`, `agent`,
 `reaper`, `surface`). Log lines look like:
 
