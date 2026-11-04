@@ -1550,10 +1550,13 @@ class TerminalController {
         let peerPidDescription = peerPid.map { String($0) } ?? "unknown"
         let connectionStart = Date()
         var closeReason = "unknown"
-        dilog("socket.conn", "open pid=\(peerPidDescription)")
+        // Every hook call ends in eof, and the CLI's connect-and-hang-up probe ends in
+        // access_denied_unverified; logging those rotated real incidents out within a day.
         defer {
             let durationMs = Int(Date().timeIntervalSince(connectionStart) * 1000)
-            dilog("socket.conn", "close pid=\(peerPidDescription) reason=\(closeReason) durationMs=\(durationMs)")
+            if durationMs >= 1000 || (closeReason != "eof" && closeReason != "access_denied_unverified") {
+                dilog("socket.conn", "close pid=\(peerPidDescription) reason=\(closeReason) durationMs=\(durationMs)")
+            }
         }
 
         let requestPolicy: SocketRequestPolicy
