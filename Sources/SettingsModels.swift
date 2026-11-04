@@ -104,6 +104,16 @@ enum AgentAutoResumeSettings {
     }
 }
 
+enum LeftoverProcessReaperSettings {
+    static let reapLeftoverAgentProcessesKey = "agentReapLeftoverProcesses"
+    static let defaultReapLeftoverAgentProcesses = true
+    private static let flag = UserDefaultsFlag(key: reapLeftoverAgentProcessesKey, defaultValue: defaultReapLeftoverAgentProcesses)
+
+    static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
+        flag.isEnabled(defaults: defaults)
+    }
+}
+
 enum ScrollbackPersistenceSettings {
     static let persistScrollbackKey = "sessionPersistScrollback"
     static let defaultPersistScrollback = true

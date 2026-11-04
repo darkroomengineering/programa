@@ -49,6 +49,8 @@ struct SettingsView: View {
     @AppStorage(ScrollbackPersistenceSettings.persistScrollbackKey) private var sessionPersistScrollback = ScrollbackPersistenceSettings.defaultPersistScrollback
     @AppStorage(ScrollbackPersistenceSettings.failureKey) private var scrollbackPersistenceFailure: String?
     @AppStorage(AgentAutoResumeSettings.autoResumeAgentsKey) private var sessionAutoResumeAgents = AgentAutoResumeSettings.defaultAutoResumeAgents
+    @AppStorage(LeftoverProcessReaperSettings.reapLeftoverAgentProcessesKey)
+    private var reapLeftoverAgentProcesses = LeftoverProcessReaperSettings.defaultReapLeftoverAgentProcesses
     @AppStorage(CommandPaletteSwitcherSearchSettings.searchAllSurfacesKey)
     private var commandPaletteSearchAllSurfaces = CommandPaletteSwitcherSearchSettings.defaultSearchAllSurfaces
     @AppStorage(ShortcutHintDebugSettings.alwaysShowHintsKey)
@@ -520,6 +522,23 @@ struct SettingsView: View {
             SettingsCardDivider()
 
             SettingsCardRow(
+                String(localized: "settings.app.reapLeftoverAgentProcesses", defaultValue: "Stop Leftover Agent Processes"),
+                subtitle: reapLeftoverAgentProcesses
+                    ? String(localized: "settings.app.reapLeftoverAgentProcesses.subtitleOn", defaultValue: "When Claude Code exits, processes it started and left running are stopped. Processes started with nohup are kept.")
+                    : String(localized: "settings.app.reapLeftoverAgentProcesses.subtitleOff", defaultValue: "Processes Claude Code started keep running after it exits.")
+            ) {
+                Toggle("", isOn: $reapLeftoverAgentProcesses)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .accessibilityLabel(
+                        String(localized: "settings.app.reapLeftoverAgentProcesses", defaultValue: "Stop Leftover Agent Processes")
+                    )
+            }
+            .managedBySettingsFile(settingsFileStatus.isManaged(LeftoverProcessReaperSettings.reapLeftoverAgentProcessesKey))
+
+            SettingsCardDivider()
+
+            SettingsCardRow(
                 String(localized: "settings.app.commandPaletteSearchAllSurfaces", defaultValue: "Command Palette Searches All Surfaces"),
                 subtitle: commandPaletteSearchAllSurfaces
                     ? String(localized: "settings.app.commandPaletteSearchAllSurfaces.subtitleOn", defaultValue: "Cmd+P also matches terminal and markdown surfaces across workspaces.")
@@ -978,6 +997,7 @@ struct SettingsView: View {
         warnBeforeQuitShortcut = QuitWarningSettings.defaultWarnBeforeQuit
         ScrollbackPersistenceSettings.setEnabled(ScrollbackPersistenceSettings.defaultPersistScrollback)
         sessionAutoResumeAgents = AgentAutoResumeSettings.defaultAutoResumeAgents
+        reapLeftoverAgentProcesses = LeftoverProcessReaperSettings.defaultReapLeftoverAgentProcesses
         commandPaletteSearchAllSurfaces = CommandPaletteSwitcherSearchSettings.defaultSearchAllSurfaces
         ShortcutHintDebugSettings.resetVisibilityDefaults()
         alwaysShowShortcutHints = ShortcutHintDebugSettings.defaultAlwaysShowHints

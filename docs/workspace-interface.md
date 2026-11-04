@@ -259,3 +259,24 @@ recorded.
 After a restart, each terminal pane remembers the last agent session it ran. Focus the pane and
 run **Resume Agent Session** from the command palette (`⌘ ⇧ P`). The action appears only for a
 terminal that has a resumable session and no running agent.
+
+## Processes an agent leaves behind
+
+Claude Code often starts processes that outlive it: MCP servers, dev servers, debug builds it ran
+to test something. macOS counts each of them as belonging to the `claude` process, so they pile up
+in the Dock, and force-quitting one of them from the Dock also kills the agent. When a Claude Code
+session exits, Programa sends `SIGTERM` to every process that session started and left running,
+then `SIGKILL` to any that are still alive 3 seconds later. While a session runs, Programa checks
+every 10 seconds which processes it started.
+
+Only processes that run as your user and that the exiting session started are stopped. Processes
+started with `nohup` (or anything else that ignores `SIGHUP`) are kept, and so is anything you
+start yourself from a shell, such as `colima` or `docker`. A process started in the last few
+seconds before the session exits can be missed and keep running. Each exit is logged to the
+[diagnostics log](diagnostics.md) under `reaper`, with how many processes were stopped and their
+names.
+
+To keep everything a session started, turn off **Settings > App > Stop Leftover Agent Processes**,
+or set `app.reapLeftoverAgentProcesses` to `false` in
+[settings.json](settings-json.md#app). With it off, Programa stops checking which processes a
+session started.
