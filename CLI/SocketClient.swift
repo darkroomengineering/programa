@@ -43,8 +43,25 @@ final class SocketClient {
         return defaultResponseTimeoutSeconds
     }()
 
+    /// The global `--window` target. Window-scoped requests that name no window,
+    /// workspace, surface or tab are routed to it, so `--window` never focuses the window.
+    var routingWindowId: String?
+
     init(path: String) {
         self.path = path
+    }
+
+    /// Adds `window_id` to a window-scoped request that carries none of the selectors the
+    /// server resolves a target window from (`v2ResolveTabManager`). A request that already
+    /// names its target keeps it: an explicit workspace in another window must not be
+    /// overridden by the routing window.
+    static func routedParams(_ params: [String: Any], method: String, windowId: String?) -> [String: Any] {
+        guard let windowId, V2MethodNames.windowScoped.contains(method) else { return params }
+        let selectors = ["window_id", "workspace_id", "surface_id", "tab_id"]
+        guard !selectors.contains(where: { params[$0] != nil && !(params[$0] is NSNull) }) else { return params }
+        var routed = params
+        routed["window_id"] = windowId
+        return routed
     }
 
     var socketPath: String {
@@ -413,7 +430,10 @@ final class SocketClient {
     }
 
     func sendV2(method: String, params: [String: Any] = [:], minimumReceiveTimeout: TimeInterval? = nil) throws -> [String: Any] {
-        let requestLine = try Self.encodeV2RequestLine(method: method, params: params)
+        let requestLine = try Self.encodeV2RequestLine(
+            method: method,
+            params: Self.routedParams(params, method: method, windowId: routingWindowId)
+        )
         let raw = try send(command: requestLine, minimumReceiveTimeout: minimumReceiveTimeout)
 
         // The server may return plain-text errors (e.g., "ERROR: Access denied ...")
@@ -449,7 +469,10 @@ final class SocketClient {
     /// frames for a connection that keeps receiving events indefinitely.
     func sendV2RequestOnly(method: String, params: [String: Any] = [:]) throws {
         guard socketFD >= 0 else { throw CLIError(message: "Not connected") }
-        let requestLine = try Self.encodeV2RequestLine(method: method, params: params)
+        let requestLine = try Self.encodeV2RequestLine(
+            method: method,
+            params: Self.routedParams(params, method: method, windowId: routingWindowId)
+        )
         try writeAll(
             Data((requestLine + "\n").utf8),
             timeoutMessage: "Command timed out",
