@@ -66,7 +66,7 @@ The `claude-hook` and `codex-hook` commands keep one record per live session in
 `session_id`, with `workspaceId`, `surfaceId`, `cwd` and `transcriptPath`. Records expire 7 days
 after their last update. `session-end` removes the live record and adds the session to
 `~/.programa/agent-last-sessions.json`, which keeps at most one ended session per pane and per
-directory, 50 entries, for 7 days. Ended sessions that a newer one replaced are no longer known.
+agent, 50 entries, for 7 days. Ended sessions that a newer one replaced are no longer known.
 OpenCode hooks pass no transcript, so OpenCode sessions have no token counts.
 
 ## `programa usage`

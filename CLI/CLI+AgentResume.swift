@@ -18,7 +18,7 @@ private struct AgentLastSessionsFile: Codable, Equatable {
 }
 
 /// `~/.programa/agent-last-sessions.json`: newest first, at most one entry per surface and
-/// per cwd, entries older than 7 days dropped. Shared by every agent provider's hook.
+/// provider, entries older than 7 days dropped. Shared by every agent provider's hook.
 final class AgentLastSessionStore {
     private static let defaultPath = "~/.programa/agent-last-sessions.json"
     private static let maxAgeSeconds: TimeInterval = 60 * 60 * 24 * 7
@@ -50,10 +50,10 @@ final class AgentLastSessionStore {
         defer { _ = flock(fd, LOCK_UN) }
 
         // An unreadable file is rebuilt: it only caches ids for `programa resume`.
+        // Not keyed by cwd: two panes in one directory must keep each other's sessions.
         let others = (load()?.sessions ?? []).filter { existing in
             existing.sessionId != entry.sessionId
-                && (entry.surfaceId == nil || existing.surfaceId != entry.surfaceId)
-                && (entry.cwd == nil || existing.cwd != entry.cwd)
+                && (entry.surfaceId == nil || existing.surfaceId != entry.surfaceId || existing.provider != entry.provider)
         }
         let file = AgentLastSessionsFile(sessions: Array(pruned([entry] + others).prefix(Self.maxEntries)))
         let encoder = JSONEncoder()
