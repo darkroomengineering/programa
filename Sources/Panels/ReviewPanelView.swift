@@ -170,6 +170,7 @@ struct ReviewPanelView: View {
     @State private var isConfirmingCheckpointRevert = false
     @FocusState private var isComposerFocused: Bool
     @AppStorage(ReviewDiffWebView.debugToggleKey) private var renderDiffsWithPierre = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private struct InlineComposerState {
         let filePath: String
@@ -249,14 +250,15 @@ struct ReviewPanelView: View {
             }
         }
         .overlay {
-            PhaseAnimator(FocusFlashPattern.values.indices, trigger: panel.focusFlashToken) { phaseIndex in
+            let flash = FocusFlashPattern.timeline(reduceMotion: reduceMotion)
+            PhaseAnimator(flash.values.indices, trigger: panel.focusFlashToken) { phaseIndex in
                 RoundedRectangle(cornerRadius: FocusFlashPattern.ringCornerRadius)
-                    .stroke(programaAccentColor().opacity(FocusFlashPattern.values[phaseIndex]), lineWidth: 3)
-                    .shadow(color: programaAccentColor().opacity(FocusFlashPattern.values[phaseIndex] * 0.35), radius: 10)
+                    .stroke(programaAccentColor().opacity(flash.opacity(atPhase: phaseIndex)), lineWidth: 3)
+                    .shadow(color: programaAccentColor().opacity(flash.opacity(atPhase: phaseIndex) * 0.35), radius: 10)
                     .padding(FocusFlashPattern.ringInset)
                     .allowsHitTesting(false)
             } animation: { phaseIndex in
-                FocusFlashPattern.phaseAnimation(at: phaseIndex)
+                flash.phaseAnimation(at: phaseIndex)
             }
         }
     }

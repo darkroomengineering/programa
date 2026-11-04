@@ -186,15 +186,15 @@ struct FocusFlashSegment: Equatable {
     let curve: FocusFlashCurve
 }
 
-enum FocusFlashPattern {
-    static let values: [Double] = [0, 1, 0, 1, 0]
-    static let keyTimes: [Double] = [0, 0.25, 0.5, 0.75, 1]
-    static let duration: TimeInterval = 0.9
-    static let curves: [FocusFlashCurve] = [.easeOut, .easeIn, .easeOut, .easeIn]
-    static let ringInset: Double = Double(PanelOverlayRingMetrics.inset)
-    static let ringCornerRadius: Double = Double(PanelOverlayRingMetrics.cornerRadius)
+/// One flash timeline, shared by the terminal `CAKeyframeAnimation` and the SwiftUI
+/// `PhaseAnimator` overlays so both render the same pulse.
+struct FocusFlashTimeline {
+    let values: [Double]
+    let keyTimes: [Double]
+    let duration: TimeInterval
+    let curves: [FocusFlashCurve]
 
-    static var segments: [FocusFlashSegment] {
+    var segments: [FocusFlashSegment] {
         let stepCount = min(curves.count, values.count - 1, keyTimes.count - 1)
         return (0..<stepCount).map { index in
             let startTime = keyTimes[index]
@@ -208,7 +208,13 @@ enum FocusFlashPattern {
         }
     }
 
-    static func opacity(at elapsed: TimeInterval) -> Double {
+    /// Bounds-checked so a `PhaseAnimator` still holding a phase from a longer timeline
+    /// (Reduce Motion toggled mid-flash) cannot index past the end.
+    func opacity(atPhase index: Int) -> Double {
+        values.indices.contains(index) ? values[index] : 0
+    }
+
+    func opacity(at elapsed: TimeInterval) -> Double {
         guard elapsed >= 0, elapsed <= duration else { return 0 }
 
         for index in 0..<segments.count {
@@ -220,7 +226,7 @@ enum FocusFlashPattern {
 
             let segmentDuration = max(endTime - startTime, 0.0001)
             let rawProgress = max(0, min(1, (elapsed - startTime) / segmentDuration))
-            let curvedProgress = interpolatedProgress(rawProgress, curve: curves[index])
+            let curvedProgress = Self.interpolatedProgress(rawProgress, curve: curves[index])
             let startOpacity = values[index]
             let endOpacity = values[index + 1]
             return startOpacity + ((endOpacity - startOpacity) * curvedProgress)
@@ -240,11 +246,11 @@ enum FocusFlashPattern {
     }
 
     /// SwiftUI `Animation` to use when a `PhaseAnimator` transitions *into* `values[index]`
-    /// from `values[index - 1]`. Drives the single-transaction double-flash used by
-    /// `MarkdownPanelView` so the whole [0,1,0,1,0] sequence plays as one
-    /// atomic animator run per `focusFlashToken` change, instead of four chained
-    /// `asyncAfter` + `withAnimation` steps that SwiftUI can coalesce/interrupt.
-    static func phaseAnimation(at index: Int) -> Animation? {
+    /// from `values[index - 1]`. Plays the whole sequence as one atomic animator run per
+    /// `focusFlashToken` change, instead of chained `asyncAfter` + `withAnimation` steps
+    /// that SwiftUI can coalesce/interrupt.
+    func phaseAnimation(at index: Int) -> Animation? {
+        let segments = segments
         guard index > 0, index - 1 < segments.count else { return nil }
         let segment = segments[index - 1]
         switch segment.curve {
@@ -253,6 +259,34 @@ enum FocusFlashPattern {
         case .easeOut:
             return .easeOut(duration: segment.duration)
         }
+    }
+}
+
+enum FocusFlashPattern {
+    static let standard = FocusFlashTimeline(
+        values: [0, 1, 0, 1, 0],
+        keyTimes: [0, 0.25, 0.5, 0.75, 1],
+        duration: 0.9,
+        curves: [.easeOut, .easeOut, .easeOut, .easeOut]
+    )
+    /// Reduce Motion: a single shorter pulse instead of the double flash.
+    static let reduced = FocusFlashTimeline(
+        values: [0, 1, 0],
+        keyTimes: [0, 0.3, 1],
+        duration: 0.5,
+        curves: [.easeOut, .easeOut]
+    )
+    static let ringInset: Double = Double(PanelOverlayRingMetrics.inset)
+    static let ringCornerRadius: Double = Double(PanelOverlayRingMetrics.cornerRadius)
+
+    static var values: [Double] { standard.values }
+    static var keyTimes: [Double] { standard.keyTimes }
+    static var duration: TimeInterval { standard.duration }
+    static var curves: [FocusFlashCurve] { standard.curves }
+    static var segments: [FocusFlashSegment] { standard.segments }
+
+    static func timeline(reduceMotion: Bool) -> FocusFlashTimeline {
+        reduceMotion ? reduced : standard
     }
 }
 

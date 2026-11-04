@@ -2167,7 +2167,7 @@ private struct SidebarMetadataRows: View {
             if shouldShowToggle {
                 Button(isExpanded ? String(localized: "sidebar.metadata.showLess", defaultValue: "Show less") : String(localized: "sidebar.metadata.showMore", defaultValue: "Show more")) {
                     onFocus()
-                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) {
+                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) {
                         isExpanded.toggle()
                     }
                 }
@@ -2321,7 +2321,7 @@ private struct SidebarMetadataMarkdownBlocks: View {
             if shouldShowToggle {
                 Button(isExpanded ? String(localized: "sidebar.metadata.showLessDetails", defaultValue: "Show less details") : String(localized: "sidebar.metadata.showMoreDetails", defaultValue: "Show more details")) {
                     onFocus()
-                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) {
+                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) {
                         isExpanded.toggle()
                     }
                 }

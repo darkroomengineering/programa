@@ -37,18 +37,25 @@ final class SidebarState: ObservableObject {
         self.persistedWidth = CGFloat(sanitized)
     }
 
-    @MainActor func toggle() {
-        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    /// `animated: false` is for the keyboard shortcut, which toggles without a slide; Reduce
+    /// Motion makes every toggle instant.
+    @MainActor func toggle(animated: Bool = true) {
+        guard animated, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                isVisible.toggle()
+            }
+            NotificationCenter.default.post(name: .programaSidebarToggleDidSettle, object: self)
+            return
+        }
         // The terminal is an AppKit portal; marking the toggle as an interactive resize makes
         // it follow the animated SwiftUI frame every tick, as it does for a sidebar drag.
         TerminalWindowPortalRegistry.beginInteractiveGeometryResize()
         pendingSlides += 1
         // `.removed` waits for the visual end: the default (logically complete) fires as soon as
         // another toggle retargets the slide, which ended the portal resize mid-motion.
-        withAnimation(
-            reduceMotion ? .easeOut(duration: 0.15) : .snappy(duration: 0.24),
-            completionCriteria: .removed
-        ) {
+        withAnimation(.snappy(duration: 0.24), completionCriteria: .removed) {
             isVisible.toggle()
         } completion: { [weak self] in
             guard let self else { return }
@@ -469,7 +476,7 @@ struct VerticalTabsSidebar: View {
         DispatchQueue.main.async {
             guard let selectedId = tabManager.selectedTabId else { return }
             if animated, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-                withAnimation(.easeOut(duration: 0.15)) {
+                withAnimation(.snappy(duration: 0.2)) {
                     scrollProxy.scrollTo(selectedId)
                 }
             } else {
