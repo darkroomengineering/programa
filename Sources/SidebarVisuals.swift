@@ -49,6 +49,7 @@ private struct SidebarFooterButtons: View {
         HStack(spacing: 0) {
             SidebarHelpMenuButton(onSendFeedback: onSendFeedback)
             SidebarPortsButton()
+            SidebarStorageButton()
             if showProviderUsage {
                 SidebarUsageButton()
             }

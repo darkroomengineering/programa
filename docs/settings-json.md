@@ -70,11 +70,12 @@ Settings for links that open in other apps.
 
 ## `storage`
 
-Developer cache cleanup settings.
+Developer cache cleanup and low disk space warning settings.
 
 | Key | Type | Default | What it does |
 |---|---|---|---|
 | `autoCleanCaches` | boolean | `true` | Every 6 hours, clean eligible developer caches when their tools are idle. Manual-only caches are kept. This runs independently of worktree cleanup. |
+| `lowDiskWarningGB` | number | `20` | Warn when available home-volume space falls below this many GB. `0` disables warnings. Another warning is allowed only after space rises above the threshold plus 5 GB. |
 
 ## `worktrees`
 

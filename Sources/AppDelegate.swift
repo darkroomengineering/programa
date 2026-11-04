@@ -432,6 +432,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         RendererRealizationController.shared.start()
         if !isRunningUnderXCTest {
             WorktreeStorageMonitor.shared.start()
+            StorageLowDiskMonitor.shared.start { capacity in
+                DispatchQueue.main.async {
+                    let free = ByteCountFormatter.string(fromByteCount: capacity.availableBytes, countStyle: .file)
+                    var body = String(localized: "storage.warning.free", defaultValue: "\(free) free on your home volume.")
+                    if let bytes = StorageHubModel.shared.cachedReclaimableBytes {
+                        let reclaimable = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+                        body += " " + String(localized: "storage.warning.reclaimable", defaultValue: "Worktrees and caches could free \(reclaimable).")
+                    }
+                    TerminalNotificationStore.shared.postAppNotification(
+                        title: String(localized: "storage.warning.title", defaultValue: "Low disk space"),
+                        body: body,
+                        userInfo: [StorageLowDiskMonitor.notificationDestinationKey: StorageLowDiskMonitor.notificationDestination]
+                    )
+                }
+            }
         }
         NSApp.servicesProvider = self
         if !isRunningUnderXCTest {
@@ -4938,6 +4953,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     private func handleNotificationResponse(_ response: UNNotificationResponse) {
         let request = response.notification.request
+        if request.content.userInfo[StorageLowDiskMonitor.notificationDestinationKey] as? String == StorageLowDiskMonitor.notificationDestination {
+            guard response.actionIdentifier == UNNotificationDefaultActionIdentifier
+                || response.actionIdentifier == TerminalNotificationStore.actionShowIdentifier else { return }
+            NSApp.activate(ignoringOtherApps: true)
+            if mainWindowContexts.isEmpty { _ = createMainWindow() }
+            if let context = contextForMainWindow(NSApp.keyWindow)
+                ?? contextForMainWindow(NSApp.mainWindow) ?? mainWindowContexts.values.first,
+               let window = context.window ?? windowForMainWindowId(context.windowId) {
+                context.sidebarState.isVisible = true
+                window.makeKeyAndOrderFront(nil)
+                StorageHubModel.shared.requestOpen(window: window)
+            }
+            return
+        }
         switch AppNotificationRouter.route(
             actionIdentifier: response.actionIdentifier,
             requestIdentifier: request.identifier,

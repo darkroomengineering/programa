@@ -213,7 +213,7 @@
     },
     "storage": {
       "title": "storage",
-      "description": "Developer cache cleanup settings.",
+      "description": "Developer cache cleanup and low disk space warning settings.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -221,6 +221,12 @@
           "type": "boolean",
           "default": true,
           "description": "Every 6 hours, clean eligible developer caches when their tools are idle. Manual-only caches are kept."
+        },
+        "lowDiskWarningGB": {
+          "type": "number",
+          "minimum": 0,
+          "default": 20,
+          "description": "Warn when available home-volume space falls below this many GB. Zero disables warnings. Another warning is allowed only after space rises above the threshold plus 5 GB."
         }
       }
     },

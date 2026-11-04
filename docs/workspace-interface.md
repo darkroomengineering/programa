@@ -71,6 +71,23 @@ programa stop-port --pid 4242
 one with `--pid`. Only processes that `list-ports` shows can be stopped. The socket methods are
 `ports.list` and `ports.stop`; see [socket-api.md](socket-api.md).
 
+## Storage
+
+The Storage drive icon in the sidebar footer shows available and total space on your home
+volume, removable worktrees, and any developer cache categories found by Programa. Scans run
+in the background when you open the panel; results stay cached for five minutes.
+
+Each **Clean** button previews the items and total size before asking for confirmation.
+Worktree cleaning ignores the automatic cleanup grace period but keeps dirty, unmerged,
+open, or busy worktrees. Cache rows list blocked items with the reason they are kept.
+After cleaning, the panel reports the removed items and reclaimed space.
+
+Programa checks available space 60 seconds after launch and every 15 minutes. When it falls
+below 20 GB, a notification opens Storage when clicked, revealing the sidebar if needed.
+Warnings re-arm after space rises above the threshold plus 5 GB. Set
+`storage.lowDiskWarningGB` in [settings.json](settings-json.md#storage) to change the threshold
+or use `0` to disable warnings.
+
 ## Helpers popover and checkpoints
 
 ### Helpers popover
