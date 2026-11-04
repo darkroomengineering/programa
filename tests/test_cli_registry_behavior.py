@@ -115,6 +115,8 @@ class SocketRecorder:
     def _result_for(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         if method == "system.ping":
             return {"pong": True}
+        if method == "window.list":
+            return {"windows": [{"id": WINDOW_ID.upper(), "ref": "window:1", "key": False}]}
         if method == "workspace.list":
             return {"workspaces": self.workspace_items}
         if method == "agent.spawn":
@@ -604,14 +606,82 @@ def main() -> int:
         f"Claude Teams helper lifecycle order changed: {recorder.frames!r}",
     )
 
-    # Global window targeting stays ordered and shares one lazy connection.
+    # Global window targeting validates the window read-only, never focuses it,
+    # and shares one lazy connection.
     with tempfile.TemporaryDirectory(prefix="pcli-", dir="/tmp") as directory:
         with SocketRecorder(directory) as recorder:
             ping = run_cli(recorder.path, ["--window", WINDOW_ID, "ping"])
         check(ping.returncode == 0, f"window-targeted ping failed: {merged_output(ping)!r}")
         check(recorder.accept_count == 1, f"window-targeted ping accepted {recorder.accept_count} connections, want 1")
         methods = [frame.get("method") for frame in recorder.frames]
-        check(methods == ["window.focus", "system.ping"], f"window focus/ping order changed: {methods!r}")
+        check(methods == ["window.list", "system.ping"], f"window-targeted ping frames changed: {methods!r}")
+        check("window_id" not in recorder.frames[-1].get("params", {}),
+              f"system.ping takes no window_id: {recorder.frames!r}")
+
+    # A non-focus command scoped by --window routes window_id into its requests
+    # instead of sending window.focus, which raises the window and activates the app.
+    for args, method in [
+        (["list-workspaces"], "workspace.list"),
+        (["current-workspace"], "workspace.current"),
+        (["new-workspace"], "workspace.create"),
+    ]:
+        for handle in (WINDOW_ID, "window:1"):
+            with tempfile.TemporaryDirectory(prefix="pcli-window-", dir="/tmp") as directory:
+                with SocketRecorder(directory) as recorder:
+                    process = run_cli(recorder.path, ["--window", handle, *args], env_overrides={
+                        "PROGRAMA_WORKSPACE_ID": WORKSPACE_ID, "PROGRAMA_SURFACE_ID": SURFACE_ID,
+                    })
+            name = f"--window {handle} {' '.join(args)}"
+            check(process.returncode == 0, f"{name} failed: {merged_output(process)!r}")
+            check(not recorder.errors, f"{name}: recorder errors: {recorder.errors}")
+            check(not any(frame.get("method") == "window.focus" for frame in recorder.frames),
+                  f"{name} focused the window: {recorder.frames!r}")
+            requests = [frame for frame in recorder.frames if frame.get("method") == method]
+            check(len(requests) == 1 and requests[0].get("params", {}).get("window_id") == handle,
+                  f"{name} did not route {method} to the window: {recorder.frames!r}")
+
+    # An explicit target in the request wins over the --window routing default.
+    with tempfile.TemporaryDirectory(prefix="pcli-window-", dir="/tmp") as directory:
+        with SocketRecorder(directory) as recorder:
+            process = run_cli(recorder.path, ["--window", WINDOW_ID, "send", "--surface", SURFACE_ID, "hi"])
+        sends = [frame for frame in recorder.frames if frame.get("method") == "surface.send_text"]
+        check(process.returncode == 0, f"--window send failed: {merged_output(process)!r}")
+        check(len(sends) == 1 and sends[0].get("params", {}).get("surface_id") == SURFACE_ID
+              and "window_id" not in sends[0].get("params", {}),
+              f"--window overrode an explicit surface target: {recorder.frames!r}")
+        check(not any(frame.get("method") == "window.focus" for frame in recorder.frames),
+              f"--window send focused the window: {recorder.frames!r}")
+
+    # An unknown --window still fails loudly before the command runs.
+    with tempfile.TemporaryDirectory(prefix="pcli-window-", dir="/tmp") as directory:
+        with SocketRecorder(directory) as recorder:
+            process = run_cli(recorder.path, ["--window", "window:9", "list-workspaces"])
+        methods = [frame.get("method") for frame in recorder.frames]
+        check(process.returncode != 0 and "not found" in merged_output(process).lower(),
+              f"unknown --window did not fail: {merged_output(process)!r}")
+        check(methods == ["window.list"], f"unknown --window ran the command or focused: {methods!r}")
+
+    # --password-stdin authenticates with the first stdin line and keeps the
+    # secret out of argv; it cannot be combined with --password.
+    with tempfile.TemporaryDirectory(prefix="pcli-password-stdin-") as home:
+        stdin_env = {"HOME": home, "CFFIXED_USER_HOME": home}
+        with tempfile.TemporaryDirectory(prefix="pcli-", dir="/tmp") as directory:
+            with SocketRecorder(directory) as recorder:
+                process = run_cli(recorder.path, ["--password-stdin", "ping"],
+                                  env_overrides=stdin_env, input_text="stdin-secret\nleftover\n")
+            logins = [frame for frame in recorder.frames if frame.get("method") == "auth.login"]
+            check(process.returncode == 0, f"--password-stdin ping failed: {merged_output(process)!r}")
+            check(len(logins) == 1 and logins[0].get("params", {}).get("password") == "stdin-secret",
+                  f"--password-stdin did not authenticate with the first stdin line: {recorder.frames!r}")
+        for name, args, stdin in [
+            ("--password-stdin empty", ["--password-stdin", "ping"], ""),
+            ("--password with --password-stdin", ["--password", "argv-secret", "--password-stdin", "ping"], "stdin-secret\n"),
+        ]:
+            with tempfile.TemporaryDirectory(prefix="pcli-", dir="/tmp") as directory:
+                with SocketRecorder(directory) as recorder:
+                    process = run_cli(recorder.path, args, env_overrides=stdin_env, input_text=stdin)
+            check(process.returncode != 0, f"{name}: unexpectedly exited 0; output={merged_output(process)!r}")
+            check(recorder.accept_count == 0, f"{name}: connected before rejecting: {recorder.frames!r}")
 
     # Claude's native subagent hooks automatically create and finish one stable
     # virtual helper record in the sidebar helpers popover.

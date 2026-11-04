@@ -5958,8 +5958,9 @@ struct ProgramaCLI {
           --socket <path>                  Socket to connect to (default: see PROGRAMA_SOCKET_PATH below)
           --json                           JSON output; errors print {"ok":false,"error":{...}} on stdout
           --id-format <refs|uuids|both>    Handle format in output (default: refs)
-          --window <id|ref>                Target this window (focuses it first)
-          --password <value>               Socket password
+          --window <id|ref>                Run the command in this window without focusing it
+          --password <value>               Socket password (visible in ps; prefer --password-stdin or PROGRAMA_SOCKET_PASSWORD)
+          --password-stdin                 Read the socket password from the first line of stdin
           -v, --version                    Print the version and exit
           -h, --help                       Print this help and exit
 
@@ -5969,7 +5970,7 @@ struct ProgramaCLI {
           Output defaults to refs; pass --id-format uuids or --id-format both to include UUIDs.
 
         Socket Auth:
-          --password takes precedence, then PROGRAMA_SOCKET_PASSWORD env var, then password saved in Settings.
+          --password or --password-stdin takes precedence, then PROGRAMA_SOCKET_PASSWORD env var, then password saved in Settings.
 
         Commands:
         \(commandsHelpBlock())

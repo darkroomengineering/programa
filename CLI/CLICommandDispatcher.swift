@@ -28,6 +28,7 @@ struct CLICommandDispatcher {
     var idFormatArg: String? = nil
     var windowId: String? = nil
     var socketPasswordArg: String? = nil
+    var passwordFromStdin = false
 
     var index = 1
     while index < args.count {
@@ -58,6 +59,11 @@ struct CLICommandDispatcher {
             index += width
             continue
         }
+        if arg == "--password-stdin" {
+            passwordFromStdin = true
+            index += 1
+            continue
+        }
         if arg == "-v" || arg == "--version" {
             cli.printVersion(jsonOutput: jsonOutput)
             return
@@ -75,6 +81,11 @@ struct CLICommandDispatcher {
     guard index < args.count else {
         print(cli.usage())
         throw CLIError(message: "Missing command")
+    }
+
+    if passwordFromStdin {
+        guard socketPasswordArg == nil else { throw CLIError(message: "--password and --password-stdin cannot be used together") }
+        socketPasswordArg = try readPasswordLine()
     }
 
     let command = args[index]
@@ -200,10 +211,11 @@ struct CLICommandDispatcher {
         return
     }
 
-    // If the user explicitly targets a window, focus it first so commands route correctly.
+    // `--window` scopes requests to that window without focusing it (socket focus policy).
     if let windowId {
         let normalizedWindow = try cli.normalizeWindowHandle(windowId, client: client) ?? windowId
-        _ = try client.sendV2(method: V2MethodNames.windowFocus, params: ["window_id": normalizedWindow])
+        try requireWindowExists(normalizedWindow, client: client)
+        client.routingWindowId = normalizedWindow
     }
 
     let ctx = CommandContext(
@@ -219,4 +231,20 @@ struct CLICommandDispatcher {
     try execute(ctx)
 }
 
+    /// Rejects an unknown `--window` through a read-only query; methods without `window_id` ignore it.
+    private func requireWindowExists(_ handle: String, client: SocketClient) throws {
+        let windows = (try client.sendV2(method: V2MethodNames.windowList)["windows"] as? [[String: Any]]) ?? []
+        guard windows.contains(where: { ($0["ref"] as? String) == handle
+            || ($0["id"] as? String)?.caseInsensitiveCompare(handle) == .orderedSame }) else {
+            throw CLIError(message: "not_found: Window not found")
+        }
+    }
+
+    /// Reads one stdin line byte by byte, so later input stays unread for commands that read stdin.
+    private func readPasswordLine() throws -> String {
+        var bytes: [UInt8] = [], byte: UInt8 = 0
+        while Darwin.read(STDIN_FILENO, &byte, 1) == 1, byte != UInt8(ascii: "\n") { bytes.append(byte) }
+        guard !bytes.isEmpty else { throw CLIError(message: "--password-stdin read an empty password") }
+        return String(decoding: bytes, as: UTF8.self)
+    }
 }

@@ -46,8 +46,9 @@ Common symptoms:
 - `Access denied — only processes started inside Programa can connect`: the socket is in the
   default `programaOnly` mode and the caller was not started from a Programa terminal. Change
   `automation.socketControlMode` or run the command from inside Programa.
-- `auth_required` or `auth_failed`: the socket is in `password` mode. Pass `--password`, or set
-  `PROGRAMA_SOCKET_PASSWORD`.
+- `auth_required` or `auth_failed`: the socket is in `password` mode. Set
+  `PROGRAMA_SOCKET_PASSWORD`, or pipe the password to `--password-stdin`. `--password <value>`
+  also works but leaves the password visible in `ps`.
 - Connection refused or no such file: Programa is not running, or the socket mode is `off`.
 
 ## High memory use

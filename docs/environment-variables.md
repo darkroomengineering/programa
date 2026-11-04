@@ -45,7 +45,7 @@ Read by the app, the CLI and `programa-mcp`. Modes and discovery are described i
 |---|---|---|
 | `PROGRAMA_SOCKET_PATH` | CLI, MCP, app | Socket path to use. The app honors it for Debug and Staging builds, or when `PROGRAMA_ALLOW_SOCKET_OVERRIDE` is truthy. |
 | `PROGRAMA_SOCKET` | CLI, MCP | Second choice for the socket path. `PROGRAMA_SOCKET_PATH` wins when both are set. The app never reads it. |
-| `PROGRAMA_SOCKET_PASSWORD` | CLI, MCP, app | Socket password for `password` mode. The CLI checks `--password` first. The app checks it before the saved password file. |
+| `PROGRAMA_SOCKET_PASSWORD` | CLI, MCP, app | Socket password for `password` mode. The CLI checks `--password` and `--password-stdin` first. The app checks it before the saved password file. |
 | `PROGRAMA_SOCKET_MODE` | app | Socket mode for this launch: `off`, `programaOnly`, `automation`, `password` or `allowAll`. Overrides the setting. |
 | `PROGRAMA_SOCKET_ENABLE` | app | `1`/`true`/`yes`/`on` or `0`/`false`/`no`/`off`. `0` turns the socket off regardless of the mode. |
 | `PROGRAMA_ALLOW_SOCKET_OVERRIDE` | app | Truthy value lets `PROGRAMA_SOCKET_PATH` move the socket in a Release build or a tagged Debug build. |

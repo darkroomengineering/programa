@@ -3,7 +3,8 @@
 
 Outputs (all overwritten in place, each carrying a "GENERATED, do not edit" header):
   - Sources/V2CommandCatalog.swift   (base/debug method-name arrays)
-  - CLI/V2MethodNames.swift          (one named constant per v2 method)
+  - CLI/V2MethodNames.swift          (one named constant per v2 method, plus the set of
+                                      methods whose params accept `window_id`)
 
 Handlers change only after the contract does (see docs/socket-api.md "Contract").
 Run scripts/check-v2-contract.sh to verify the checked-in files match this contract.
@@ -110,6 +111,17 @@ def gen_v2_method_names(contract) -> str:
             continue
         seen.add(name)
         body += f'    static let {name} = "{m}"\n'
+    scoped = [
+        m for m in methods
+        if "window_id" in contract["methods"][m].get("params", {}).get("properties", {})
+    ]
+    body += "\n"
+    body += "    /// Methods whose params accept `window_id`. The global `--window` option routes\n"
+    body += "    /// these to its window instead of focusing that window first.\n"
+    body += "    static let windowScoped: Set<String> = [\n"
+    for m in scoped:
+        body += f'        "{m}",\n'
+    body += "    ]\n"
     body += "}\n"
     return body
 
