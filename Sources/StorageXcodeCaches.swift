@@ -48,7 +48,7 @@ enum StorageXcodeCaches {
             items.append(StorageCacheSupport.item(
                 id: "xcode.simulator_caches", category: .xcode,
                 title: String(localized: "storage.cache.simulatorCaches", defaultValue: "Simulator caches"),
-                path: caches, automatic: true, blocker: simulatorBlocker, timeout: timeout
+                path: caches, automatic: true, blocker: simulatorBlocker, timeout: timeout, removal: .simulatorCaches
             ))
         }
         if let unavailable = devices(context, unavailable: true) {
@@ -61,7 +61,8 @@ enum StorageXcodeCaches {
                     id: "xcode.unavailable_simulators", category: .xcode,
                     title: String(localized: "storage.cache.unavailableSimulators", defaultValue: "Unavailable simulators"),
                     path: nil, sizeBytes: sizes.reduce(0) { $0 + $1.bytes }, sizePartial: sizes.contains { $0.partial },
-                    lastUsed: paths.compactMap(StorageCacheSupport.modified).max(), autoCleanable: true, blocker: simulatorBlocker
+                    lastUsed: paths.compactMap(StorageCacheSupport.modified).max(), autoCleanable: true, blocker: simulatorBlocker,
+                    removal: .unavailableSimulators
                 ))
             }
         }
@@ -81,10 +82,10 @@ enum StorageXcodeCaches {
 
     static func remove(_ item: StorageCacheItem, context: StorageCacheContext) -> Bool {
         guard !running(context) else { return false }
-        if item.id == "xcode.unavailable_simulators" || item.id == "xcode.simulator_caches" {
+        if item.removal == .simulatorCaches || item.removal == .unavailableSimulators {
             guard let all = devices(context, unavailable: false), !all.contains(where: { $0.state == "Booted" }) else { return false }
         }
-        if item.id == "xcode.unavailable_simulators" {
+        if item.removal == .unavailableSimulators {
             // simctl always targets the real user device set; injected homes must never invoke it.
             guard context.home == WorktreeStorage.resolvedPath(FileManager.default.homeDirectoryForCurrentUser.path) else { return false }
             return context.execute("xcrun", ["simctl", "delete", "unavailable"], timeout: 120) != nil

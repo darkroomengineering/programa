@@ -33,7 +33,7 @@ enum StorageAndroidCaches {
                 id: "android.gradle_cache/rest", category: .android,
                 title: String(localized: "storage.cache.gradleOther", defaultValue: "Other Gradle caches"),
                 path: caches, sizeBytes: size.bytes, sizePartial: size.partial,
-                lastUsed: StorageCacheSupport.modified(caches), autoCleanable: false, blocker: blocked
+                lastUsed: StorageCacheSupport.modified(caches), autoCleanable: false, blocker: blocked, removal: .gradleRest
             ))
         }
         let distributions = StorageCacheSupport.children((gradle as NSString).appendingPathComponent("wrapper/dists"))
@@ -71,7 +71,7 @@ enum StorageAndroidCaches {
                 items.append(StorageCacheSupport.item(
                     id: "android.project_build/" + path, category: .android,
                     title: String(localized: "storage.cache.androidBuild", defaultValue: "Android build output") + ": " + url.deletingLastPathComponent().lastPathComponent,
-                    path: path, automatic: false, blocker: blocker, timeout: timeout
+                    path: path, automatic: false, blocker: blocker, timeout: timeout, removal: .untrackedBuild
                 ))
             }
         }
@@ -137,16 +137,19 @@ enum StorageAndroidCaches {
                 StorageCacheSupport.item(
                     id: "android.system_image/" + path, category: .android,
                     title: String(localized: "storage.cache.androidImage", defaultValue: "Android system image") + ": " + path.replacingOccurrences(of: root + "/", with: ""),
-                    path: path, automatic: false, blocker: blocker, timeout: timeout
+                    path: path, automatic: false, blocker: blocker, timeout: timeout, removal: .unreferencedSystemImage
                 )
             }
     }
 
     static func remove(_ item: StorageCacheItem, context: StorageCacheContext) -> Bool {
         guard blocker(context) == nil else { return false }
-        if item.id.hasPrefix("android.project_build/"), let path = item.path, !safeBuild(path, context: context) { return false }
-        if item.id.hasPrefix("android.system_image/"), !systemImages(context, timeout: 0, blocker: nil).contains(where: { $0.id == item.id && $0.path == item.path }) { return false }
-        if item.id == "android.gradle_cache/rest" {
+        switch item.removal {
+        case .untrackedBuild:
+            if let path = item.path, !safeBuild(path, context: context) { return false }
+        case .unreferencedSystemImage:
+            if !systemImages(context, timeout: 0, blocker: nil).contains(where: { $0.id == item.id && $0.path == item.path }) { return false }
+        case .gradleRest:
             guard let path = item.path, StorageCacheSupport.directory(path),
                   let names = try? FileManager.default.contentsOfDirectory(atPath: path) else { return false }
             do {
@@ -155,6 +158,7 @@ enum StorageAndroidCaches {
                 }
                 return true
             } catch { return false }
+        default: break
         }
         return StorageCacheSupport.remove(item.path)
     }

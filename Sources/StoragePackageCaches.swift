@@ -80,22 +80,26 @@ enum StoragePackageCaches {
                 id: "packages." + cache.id, category: .packages,
                 title: cache.id.hasPrefix("yarn_berry") ? "Yarn Berry" : cache.manager,
                 path: cache.path, automatic: cache.manager == "pnpm" && context.tool("pnpm") != nil || StorageCacheSupport.idle(date, now: context.now),
-                blocker: blocker(manager: cache.manager, context: context), timeout: timeout, lastUsed: date
+                blocker: blocker(manager: cache.manager, context: context), timeout: timeout, lastUsed: date,
+                removal: .packageTool(cleanArguments(cache))
             )
         }
     }
 
+    private static func cleanArguments(_ cache: Cache) -> [String] {
+        switch cache.manager {
+        case "bun": ["pm", "cache", "rm"]
+        case "npm": ["cache", "clean", "--force"]
+        case "pnpm": ["store", "prune"]
+        default: cache.id == "yarn_berry" ? ["cache", "clean", "--mirror"] : ["cache", "clean"]
+        }
+    }
+
     static func remove(_ item: StorageCacheItem, context: StorageCacheContext) -> Bool {
-        guard let cache = caches(context).first(where: { "packages." + $0.id == item.id && $0.path == item.path }),
+        guard case .packageTool(let arguments) = item.removal,
+              let cache = caches(context).first(where: { "packages." + $0.id == item.id && $0.path == item.path }),
               blocker(manager: cache.manager, context: context) == nil else { return false }
         guard context.tool(cache.manager) != nil else { return StorageCacheSupport.clearContents(cache.path) }
-        let arguments: [String]
-        switch cache.manager {
-        case "bun": arguments = ["pm", "cache", "rm"]
-        case "npm": arguments = ["cache", "clean", "--force"]
-        case "pnpm": arguments = ["store", "prune"]
-        default: arguments = item.id == "packages.yarn_berry" ? ["cache", "clean", "--mirror"] : ["cache", "clean"]
-        }
         return context.execute(cache.manager, arguments, timeout: 120) != nil
     }
 }
