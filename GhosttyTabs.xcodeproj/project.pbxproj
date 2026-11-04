@@ -109,6 +109,7 @@
 		NRTM00000004 /* GitMetadataProber.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTM00000003 /* GitMetadataProber.swift */; };
 		WTMG000001 /* GitWorktreeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTMG000002 /* GitWorktreeManager.swift */; };
 		WTST000001 /* WorktreeStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTST000002 /* WorktreeStorage.swift */; };
+		STCT000001 /* StorageCategories.swift in Sources */ = {isa = PBXBuildFile; fileRef = STCT000002 /* StorageCategories.swift */; };
 		WTMG000005 /* ProgramaLayoutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTMG000006 /* ProgramaLayoutStore.swift */; };
 		NRTM00000002 /* TabManager+UITestHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTM00000001 /* TabManager+UITestHarness.swift */; };
 			A5001004 /* GhosttyConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001014 /* GhosttyConfig.swift */; };
@@ -547,6 +548,7 @@
 		NRTM00000003 /* GitMetadataProber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitMetadataProber.swift; sourceTree = "<group>"; };
 		WTMG000002 /* GitWorktreeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitWorktreeManager.swift; sourceTree = "<group>"; };
 		WTST000002 /* WorktreeStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorktreeStorage.swift; sourceTree = "<group>"; };
+		STCT000002 /* StorageCategories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageCategories.swift; sourceTree = "<group>"; };
 		WTMG000006 /* ProgramaLayoutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaLayoutStore.swift; sourceTree = "<group>"; };
 		NRTM00000001 /* TabManager+UITestHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabManager+UITestHarness.swift"; sourceTree = "<group>"; };
 			A5001014 /* GhosttyConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyConfig.swift; sourceTree = "<group>"; };
@@ -1030,6 +1032,7 @@
 					NRTM00000003 /* GitMetadataProber.swift */,
 					WTMG000002 /* GitWorktreeManager.swift */,
 					WTST000002 /* WorktreeStorage.swift */,
+					STCT000002 /* StorageCategories.swift */,
 					WTMG000006 /* ProgramaLayoutStore.swift */,
 					A5001511 /* UITestRecorder.swift */,
 					A5001416 /* Workspace.swift */,
@@ -1607,6 +1610,7 @@
 						NRTM00000004 /* GitMetadataProber.swift in Sources */,
 						WTMG000001 /* GitWorktreeManager.swift in Sources */,
 						WTST000001 /* WorktreeStorage.swift in Sources */,
+						STCT000001 /* StorageCategories.swift in Sources */,
 						WTMG000005 /* ProgramaLayoutStore.swift in Sources */,
 						A5001501 /* UITestRecorder.swift in Sources */,
 						A5001406 /* Workspace.swift in Sources */,
