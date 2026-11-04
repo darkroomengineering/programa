@@ -255,6 +255,10 @@ Worktrees (new in v2, no v1 predecessor -- see "worktree.* / layout.*" below):
 - (no v1 equivalent) -> `worktree.remove`
 - (no v1 equivalent) -> `worktree.list`
 
+Storage (new in v2, no v1 predecessor -- see "storage.*" below):
+- (no v1 equivalent) -> `storage.scan`
+- (no v1 equivalent) -> `storage.clean`
+
 Layouts (new in v2, no v1 predecessor -- see "worktree.* / layout.*" below):
 - (no v1 equivalent) -> `layout.save`
 - (no v1 equivalent) -> `layout.apply`
@@ -822,6 +826,60 @@ against the new workspace's root. Errors: `not_found`.
 ### `layout.list`
 
 `{}` -> `{"layouts": [{"name", "saved_at"}]}`.
+
+## `storage.*`
+
+Disk usage of linked git worktrees, and cleanup of the merged, idle ones. Backs `programa storage
+scan|clean`. Both methods run off-main: git and the size walk run on the socket thread, and
+`v2MainSync` only snapshots the directories open in workspaces. Neither fetches from the network
+or calls `gh`.
+
+Repos are found from every workspace's current directory and panel directories, plus the
+worktrees under the `worktrees.directory` setting (`<dir>/<repo>/<branch-slug>`). For each repo
+the main worktree is skipped. A worktree counts as merged when its HEAD is an ancestor of the
+remote default branch (`origin/HEAD`, else `origin/main`, else `origin/master`, as last fetched)
+or, when it is clean, when its branch's upstream is `[gone]` (a squash-merged, deleted remote
+branch). Sizes are allocated bytes, not following symlinks; a walk stops after 30 seconds per
+worktree and reports `size_partial: true`.
+
+A worktree is removable only when all of these hold, checked in this order; the first that fails
+is its `blocker`:
+
+| `blocker` | Meaning |
+|---|---|
+| `external` | Not under `worktrees.directory`. Only `storage.clean` with `include_external: true` waives this. |
+| `status_unknown` | git could not report the dirty, ignored-file or merged state. |
+| `dirty` | Modified or untracked (not ignored) files. |
+| `env_files` | Ignored `.env*` files outside `node_modules/`, including ones inside an ignored folder such as `build/`. `git worktree remove` deletes ignored files, and these are often the only copy of local secrets. No flag overrides this. |
+| `not_merged` | Not merged by the rule above. |
+| `open_in_workspace` | A workspace or panel directory is the worktree or inside it. |
+| `process_running` | A process's current directory is the worktree or inside it. |
+| `recently_used` | Its git `index`, `HEAD` or `logs/HEAD` changed within `worktrees.autoRemoveAfterHours` (default 24), or could not be read. |
+
+Removal is `git worktree remove` without `--force`; branches are never deleted. The background
+monitor applies the same rules every 6 hours when `worktrees.autoRemoveMerged` is on (default),
+never to external worktrees.
+
+### `storage.scan`
+
+`{}` -> `{"worktrees": [{"repo_root", "path", "branch", "size_bytes", "size_partial",
+"last_modified", "programa_created", "dirty", "ignored_env_files", "merged", "open_in_workspace", "process_running",
+"removable", "blocker"}], "total_bytes", "reclaimable_bytes"}`. `removable`/`blocker` use the
+automatic rules (external worktrees excluded, grace period applied). `last_modified` is ISO 8601
+or `null`; `branch`, `dirty`, `ignored_env_files`, `merged` and `blocker` may be `null`.
+
+### `storage.clean`
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `dry_run` | bool | no | Default `true`: report what would be removed without removing it. |
+| `include_external` | bool | no | Default `false`. Also remove worktrees outside `worktrees.directory` that meet every other rule. |
+| `ignore_grace_period` | bool | no | Default `false`. Skip the `recently_used` check, e.g. right after merging. |
+
+Result: `{"removed": [path], "kept": [{"path", "blocker", "message"?}], "reclaimed_bytes",
+"dry_run"}`. With `dry_run`, `removed` and `reclaimed_bytes` describe what would be removed.
+Before removing, the open-workspace and process checks run again; a worktree git refuses to
+remove is kept with `blocker: "git_refused"` and git's `message`.
 
 ## `agent.detection.*` (docs/plans/screen-manifest-detection.md)
 

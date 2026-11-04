@@ -59,6 +59,8 @@ enum V2CommandCatalog {
         "settings.open",
         "snapshot.list",
         "snapshot.restore",
+        "storage.clean",
+        "storage.scan",
         "subscribe",
         "surface.action",
         "surface.clear_agent_state",

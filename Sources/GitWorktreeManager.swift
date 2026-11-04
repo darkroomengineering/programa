@@ -260,6 +260,93 @@ struct GitWorktreeManager {
             || lowered.contains("use --force")
     }
 
+    // MARK: - Storage queries (WorktreeStorage)
+    //
+    // Local-only: none of these fetch. A nil return means git could not answer, which callers
+    // must treat as "unknown" and keep the worktree.
+
+    /// The remote default branch ref: `refs/remotes/origin/HEAD`'s target, else `origin/main`,
+    /// else `origin/master`. nil when the repo has none of them.
+    nonisolated static func defaultRemoteBranch(repoRoot: String) -> String? {
+        if let result = runGitCommand(
+            directory: repoRoot,
+            arguments: ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"]
+        ), result.exitStatus == 0, !result.timedOut,
+           let ref = result.stdout?.trimmingCharacters(in: .whitespacesAndNewlines), !ref.isEmpty {
+            return ref
+        }
+        for candidate in ["refs/remotes/origin/main", "refs/remotes/origin/master"] {
+            let result = runGitCommand(directory: repoRoot, arguments: ["show-ref", "--verify", "--quiet", candidate])
+            if result?.exitStatus == 0, result?.timedOut == false {
+                return candidate
+            }
+        }
+        return nil
+    }
+
+    /// Whether `commit` is reachable from `ref` (`git merge-base --is-ancestor`). nil when git
+    /// fails for any reason other than a plain "no".
+    nonisolated static func isAncestor(_ commit: String, of ref: String, repoRoot: String) -> Bool? {
+        guard let result = runGitCommand(
+            directory: repoRoot,
+            arguments: ["merge-base", "--is-ancestor", commit, ref]
+        ), !result.timedOut else { return nil }
+        switch result.exitStatus {
+        case 0: return true
+        case 1: return false
+        default: return nil
+        }
+    }
+
+    /// Whether local `branch` has an upstream configured that no longer exists (`[gone]`),
+    /// which is what a squash-merged and deleted remote branch looks like after a prune.
+    nonisolated static func upstreamIsGone(branch: String, repoRoot: String) -> Bool? {
+        guard let result = runGitCommand(
+            directory: repoRoot,
+            arguments: ["for-each-ref", "--format=%(upstream:track)", "refs/heads/\(branch)"]
+        ), result.exitStatus == 0, !result.timedOut, let stdout = result.stdout else { return nil }
+        return stdout.contains("[gone]")
+    }
+
+    /// Whether `commit` has commits that no remote-tracking ref contains. nil when git fails.
+    nonisolated static func hasCommitsMissingFromRemotes(_ commit: String, repoRoot: String) -> Bool? {
+        guard let result = runGitCommand(
+            directory: repoRoot,
+            arguments: ["rev-list", "--count", commit, "--not", "--remotes"]
+        ), result.exitStatus == 0, !result.timedOut,
+              let count = Int(result.stdout?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") else {
+            return nil
+        }
+        return count > 0
+    }
+
+    /// Whether the worktree at `path` has modified or untracked (not ignored) files. nil when
+    /// git could not answer; output over the stdout limit counts as dirty.
+    nonisolated static func workingTreeIsDirty(path: String) -> Bool? {
+        guard let result = runGitCommand(
+            directory: path,
+            arguments: ["status", "--porcelain", "--untracked-files=normal"]
+        ) else { return nil }
+        if result.outcome == .stdoutLimitExceeded { return true }
+        guard result.outcome == .exited, result.exitStatus == 0, let stdout = result.stdout else { return nil }
+        return !stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Whether the worktree at `path` holds ignored `.env*` files outside `node_modules/`.
+    /// `git worktree remove` deletes ignored files, and these are often the only copy of local
+    /// secrets. Lists files one by one, so a `.env` inside a fully ignored folder (`build/.env`)
+    /// counts. nil when git could not answer.
+    nonisolated static func ignoredEnvFiles(path: String) -> Bool? {
+        guard let result = runGitCommand(
+            directory: path,
+            arguments: [
+                "ls-files", "--others", "--ignored", "--exclude-standard", "-z", "--",
+                ":(glob)**/.env*", ":(exclude,glob)**/node_modules/**",
+            ]
+        ), result.outcome == .exited, result.exitStatus == 0, let stdout = result.stdout else { return nil }
+        return !stdout.isEmpty
+    }
+
     // MARK: - Process plumbing
 
     private nonisolated static func runGitCommand(
@@ -313,6 +400,27 @@ enum ProgramaWorktreeSettings {
             return trimmed == "~" ? home : (home as NSString).appendingPathComponent(String(trimmed.dropFirst(2)))
         }
         return trimmed
+    }
+
+    static let defaultAutoRemoveMerged = true
+    static let defaultAutoRemoveAfterHours: Double = 24
+    static let minimumAutoRemoveAfterHours: Double = 1
+
+    /// `worktrees.autoRemoveMerged`: whether the background monitor removes merged, idle
+    /// Programa-created worktrees.
+    static func autoRemoveMerged() -> Bool {
+        (readSettingsRoot()?["worktrees"] as? [String: Any])?["autoRemoveMerged"] as? Bool ?? defaultAutoRemoveMerged
+    }
+
+    /// `worktrees.autoRemoveAfterHours`, clamped to at least one hour.
+    static func autoRemoveAfterHours() -> Double {
+        guard let section = readSettingsRoot()?["worktrees"] as? [String: Any],
+              let number = section["autoRemoveAfterHours"] as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID(),
+              number.doubleValue.isFinite else {
+            return defaultAutoRemoveAfterHours
+        }
+        return max(minimumAutoRemoveAfterHours, number.doubleValue)
     }
 
     private static func readSettingsRoot() -> [String: Any]? {

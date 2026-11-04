@@ -143,6 +143,8 @@ programa worktree remove fix-login               # removes the worktree (never t
 
 `programa worktree create --from-issue <number>` reads the GitHub issue with `gh` and names the branch `issue-<number>-<title-slug>` (an explicit `<branch>` still wins); add `--agent <claude|opencode|codex>` to start that agent on the issue in the new workspace.
 
+Worktrees left behind after merging take disk space. `programa storage scan` lists every worktree in the repos open in programa and under `worktrees.directory`, with its size and either `removable` or why it is kept. `programa storage clean` removes the merged ones that are clean, hold no ignored env files, are not open in a workspace, have no process inside, and were not used for `worktrees.autoRemoveAfterHours` (default 24); it never passes `--force` and never deletes branches. Flags: `--dry-run` to only show what would go, `--include-external` to also remove worktrees outside `worktrees.directory`, `--now` to skip the unused-for-hours check right after merging, `--json` for the raw result. programa runs the same cleanup in the background every 6 hours unless `worktrees.autoRemoveMerged` is `false`.
+
 ## Spawning a helper agent and coordinating with it
 
 When the `agent_spawn` tool is available, use it for helper agents. It opens the helper as a nested workspace under the current workspace, keeps the same folder, and does not move the user's focus. Set `needs_isolation` (with `repository_path` and `branch`) when the helper will make conflicting Git changes and needs a separate worktree. Programa then shows the helper's workspace nested under the current one in the sidebar.

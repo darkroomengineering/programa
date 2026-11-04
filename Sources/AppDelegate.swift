@@ -430,6 +430,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         installShortcutMonitor()
         installShortcutDefaultsObserver()
         RendererRealizationController.shared.start()
+        if !isRunningUnderXCTest {
+            WorktreeStorageMonitor.shared.start()
+        }
         NSApp.servicesProvider = self
         if !isRunningUnderXCTest {
             scheduleMissingLaunchWindowFallback()

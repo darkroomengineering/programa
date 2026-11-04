@@ -93,6 +93,8 @@ enum V2MethodNames {
     static let settingsOpen = "settings.open"
     static let snapshotList = "snapshot.list"
     static let snapshotRestore = "snapshot.restore"
+    static let storageClean = "storage.clean"
+    static let storageScan = "storage.scan"
     static let subscribe = "subscribe"
     static let surfaceAction = "surface.action"
     static let surfaceClearAgentState = "surface.clear_agent_state"
