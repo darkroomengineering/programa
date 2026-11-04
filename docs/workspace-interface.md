@@ -75,7 +75,9 @@ one with `--pid`. Only processes that `list-ports` shows can be stopped. The soc
 
 The Storage drive icon in the sidebar footer shows available and total space on your home
 volume, removable worktrees, and any developer cache categories found by Programa. Scans run
-in the background when you open the panel; results stay cached for five minutes.
+in the background when you open the panel; worktree and cache results stay cached for five minutes.
+Live sessions list disk usage by workspace directory, with large build and dependency folders
+shown below each session; these measurements stay cached for two minutes and skip home and root directories.
 
 Each **Clean** button previews the items and total size before asking for confirmation.
 Worktree cleaning ignores the automatic cleanup grace period but keeps dirty, unmerged,

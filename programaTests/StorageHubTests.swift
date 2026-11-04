@@ -118,6 +118,70 @@ final class StorageHubTests: XCTestCase {
         XCTAssertEqual(summary.totalBytes, 75)
     }
 
+    func testLiveSessionsMergeDirectoryAliasesAndExcludeHomeRootAndEmptyPaths() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let home = directory.appendingPathComponent("home", isDirectory: true)
+        let project = home.appendingPathComponent("project", isDirectory: true)
+        let other = directory.appendingPathComponent("other", isDirectory: true)
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let projectAlias = directory.appendingPathComponent("project-alias")
+        let homeAlias = directory.appendingPathComponent("home-alias")
+        try FileManager.default.createSymbolicLink(at: projectAlias, withDestinationURL: project)
+        try FileManager.default.createSymbolicLink(at: homeAlias, withDestinationURL: home)
+
+        let sessions = StorageLiveSessions.sessions(from: [
+            (title: "Editor", path: project.path),
+            (title: "Shell", path: projectAlias.path),
+            (title: "Other", path: other.path),
+            (title: "Home", path: home.path),
+            (title: "Home alias", path: homeAlias.path),
+            (title: "Root", path: "/"),
+            (title: "Empty", path: "")
+        ], homePath: home.path)
+
+        XCTAssertEqual(sessions.count, 2, "Aliases share one disk measurement and broad directories are excluded")
+        let resolvedProject = project.resolvingSymlinksInPath().path
+        let merged = try XCTUnwrap(sessions.first { $0.id == resolvedProject })
+        XCTAssertEqual(merged.path, resolvedProject)
+        XCTAssertEqual(merged.title, "Editor, Shell", "Both workspaces remain identifiable after merging their disk usage")
+        XCTAssertEqual(sessions.first { $0.path == other.resolvingSymlinksInPath().path }?.title, "Other")
+    }
+
+    func testLiveSessionHeavyFoldersFilterDirectDirectoriesAndSortByAllocatedSize() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        for name in ["node_modules", ".build", "build", "unrelated", "nested/target"] {
+            try FileManager.default.createDirectory(
+                at: directory.appendingPathComponent(name, isDirectory: true), withIntermediateDirectories: true
+            )
+        }
+        let largeContents = Data((0..<262_144).map { _ in UInt8.random(in: .min ... .max) })
+        let smallContents = Data(largeContents.prefix(16_384))
+        try largeContents.write(to: directory.appendingPathComponent("node_modules/dependency"))
+        try smallContents.write(to: directory.appendingPathComponent(".build/object"))
+        try largeContents.write(to: directory.appendingPathComponent("unrelated/data"))
+        try largeContents.write(to: directory.appendingPathComponent("nested/target/artifact"))
+        try largeContents.write(to: directory.appendingPathComponent("dist"))
+        try FileManager.default.createSymbolicLink(
+            at: directory.appendingPathComponent("Pods"),
+            withDestinationURL: directory.appendingPathComponent("node_modules")
+        )
+
+        let folders = StorageLiveSessions.heavyFolders(in: directory.path, minimumBytes: 1)
+
+        XCTAssertEqual(folders.map(\.name), ["node_modules", ".build"],
+                       "Only large, direct, recognized directories contribute heavy-folder rows")
+        let largest = try XCTUnwrap(folders.first)
+        let smaller = try XCTUnwrap(folders.last)
+        XCTAssertGreaterThan(largest.bytes, smaller.bytes, "Rows rank actual allocated disk usage")
+        XCTAssertGreaterThanOrEqual(smaller.bytes, 1)
+        XCTAssertTrue(StorageLiveSessions.heavyFolders(in: directory.path, minimumBytes: Int64.max).isEmpty,
+                      "Directories below the display threshold stay out of the list")
+    }
+
     private func worktree(path: String, branch: String?, bytes: Int64) -> WorktreeStorageEntry {
         WorktreeStorageEntry(
             repoRoot: "/fixtures/repository", path: path, branch: branch, headSHA: nil,

@@ -92,6 +92,8 @@ struct StorageHubView: View {
                     if let preview = model.preview {
                         confirmation(preview)
                     } else {
+                        liveSessions
+                        Divider()
                         if let snapshot = model.snapshot { categories(snapshot) }
                         if let result = model.result { outcome(result) }
                     }
@@ -104,6 +106,38 @@ struct StorageHubView: View {
         .padding(12)
         .frame(width: 360, alignment: .leading)
         .accessibilityIdentifier("StorageHubView")
+    }
+
+    @ViewBuilder
+    private var liveSessions: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(String(localized: "storage.liveSessions", defaultValue: "Live sessions"))
+                .fontWeight(.medium)
+            if model.liveSessions.isEmpty {
+                Text(String(localized: "storage.liveSessions.empty", defaultValue: "No open sessions."))
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(model.liveSessions) { session in
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack {
+                        Text(verbatim: session.title)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer()
+                        Text(verbatim: session.isMeasured
+                            ? (session.sizePartial ? "~" : "") + bytes(session.sizeBytes)
+                            : String(localized: "storage.liveSessions.measuring", defaultValue: "Measuring…"))
+                            .foregroundStyle(.secondary)
+                            .fixedSize()
+                    }
+                    if !session.heavyFolders.isEmpty {
+                        Text(verbatim: session.heavyFolders.map { $0.name + " " + bytes($0.bytes) }.joined(separator: " · "))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .help(session.path)
+            }
+        }
     }
 
     @ViewBuilder

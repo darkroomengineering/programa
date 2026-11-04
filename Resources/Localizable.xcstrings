@@ -60,6 +60,57 @@
         }
       }
     },
+    "storage.liveSessions": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live sessions"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開いているセッション"
+          }
+        }
+      }
+    },
+    "storage.liveSessions.measuring": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Measuring…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "計測中…"
+          }
+        }
+      }
+    },
+    "storage.liveSessions.empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No open sessions."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開いているセッションはありません。"
+          }
+        }
+      }
+    },
     "storage.capacity": {
       "extractionState": "manual",
       "localizations": {
