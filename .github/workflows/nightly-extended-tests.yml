@@ -137,7 +137,6 @@ jobs:
           key: deriveddata-build-app-macos26-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-${{ hashFiles('GhosttyTabs.xcodeproj/project.pbxproj') }}
           restore-keys: |
             deriveddata-build-app-macos26-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}-
-            deriveddata-build-app-macos26-
 
       - name: Cache Swift packages
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
