@@ -1,3 +1,4 @@
+import Bonsplit
 import Combine
 import CryptoKit
 import Foundation
@@ -303,7 +304,7 @@ final class AgentSupervisionRegistry: ObservableObject {
         let ids = recordsById.values.compactMap { record in
             record.host == host && record.session == session && !record.state.isFinished ? record.id : nil
         }
-        return ids.compactMap { try? finish(id: $0, state: state, now: now) }
+        return ids.compactMap { id in logFailure("finish", id: id) { try finish(id: id, state: state, now: now) } }
     }
 
     func finishActiveSurface(
@@ -316,7 +317,7 @@ final class AgentSupervisionRegistry: ObservableObject {
             throw AgentSupervisionRegistryError.finishStateRequired
         }
         let ids = activeSurfaceRecordIds(workspaceId: workspaceId, surfaceId: surfaceId)
-        return ids.compactMap { try? finish(id: $0, state: state, now: now) }
+        return ids.compactMap { id in logFailure("finish", id: id) { try finish(id: id, state: state, now: now) } }
     }
 
     func updateActiveSurface(
@@ -329,7 +330,7 @@ final class AgentSupervisionRegistry: ObservableObject {
             throw AgentSupervisionRegistryError.finishStateRequired
         }
         let ids = activeSurfaceRecordIds(workspaceId: workspaceId, surfaceId: surfaceId)
-        return ids.compactMap { try? update(id: $0, state: state, now: now) }
+        return ids.compactMap { id in logFailure("update", id: id) { try update(id: id, state: state, now: now) } }
     }
 
     /// Finishes the workspace's in-process helpers whose parent agent exited without a
@@ -349,7 +350,24 @@ final class AgentSupervisionRegistry: ObservableObject {
                 ? record.id
                 : nil
         }
-        return ids.compactMap { try? finish(id: $0, state: state, now: now) }
+        return ids.compactMap { id in logFailure("finish", id: id) { try finish(id: id, state: state, now: now) } }
+    }
+
+    /// Runs one step of a multi-record loop: a failure is logged and skipped so the rest still run.
+    private func logFailure(
+        _ operation: String,
+        id: UUID,
+        _ body: () throws -> AgentTaskRecord
+    ) -> AgentTaskRecord? {
+        do {
+            return try body()
+        } catch {
+#if DEBUG
+            dlog("agent.supervision \(operation) id=\(id.uuidString.prefix(8)) error=\(error)")
+#endif
+            dilog("agent", "supervision \(operation) id=\(id.uuidString.prefix(8)) error=\(error)")
+            return nil
+        }
     }
 
     func removeAll() {

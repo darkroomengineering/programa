@@ -104,6 +104,11 @@
           "default": true,
           "description": "Resume Claude Code, Codex and OpenCode sessions that were running at quit when their pane is restored."
         },
+        "reapLeftoverAgentProcesses": {
+          "type": "boolean",
+          "default": true,
+          "description": "When a Claude Code session exits, stop the processes it started and left running (MCP servers, dev servers, debug binaries). Processes started with nohup are kept."
+        },
         "commandPaletteSearchesAllSurfaces": {
           "type": "boolean",
           "default": false,

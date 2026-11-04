@@ -10090,6 +10090,57 @@
         }
       }
     },
+    "settings.app.reapLeftoverAgentProcesses": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop Leftover Agent Processes"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "残ったエージェントのプロセスを停止"
+          }
+        }
+      }
+    },
+    "settings.app.reapLeftoverAgentProcesses.subtitleOff": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Processes Claude Code started keep running after it exits."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Code が起動したプロセスは、終了後も実行され続けます。"
+          }
+        }
+      }
+    },
+    "settings.app.reapLeftoverAgentProcesses.subtitleOn": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When Claude Code exits, processes it started and left running are stopped. Processes started with nohup are kept."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Code の終了時に、起動したまま残っているプロセスを停止します。nohup で起動したプロセスは残ります。"
+          }
+        }
+      }
+    },
     "settings.app.settingsFile.openButton": {
       "extractionState": "manual",
       "localizations": {
