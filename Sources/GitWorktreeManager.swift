@@ -423,7 +423,7 @@ enum ProgramaWorktreeSettings {
         return max(minimumAutoRemoveAfterHours, number.doubleValue)
     }
 
-    private static func readSettingsRoot() -> [String: Any]? {
+    static func readSettingsRoot() -> [String: Any]? {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let path = (home as NSString).appendingPathComponent(".config/programa/settings.json")
         guard let data = FileManager.default.contents(atPath: path), !data.isEmpty else { return nil }
@@ -432,5 +432,11 @@ enum ProgramaWorktreeSettings {
             return nil
         }
         return object as? [String: Any]
+    }
+}
+
+enum ProgramaStorageSettings {
+    static func autoCleanCaches() -> Bool {
+        (ProgramaWorktreeSettings.readSettingsRoot()?["storage"] as? [String: Any])?["autoCleanCaches"] as? Bool ?? true
     }
 }

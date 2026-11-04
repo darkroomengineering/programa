@@ -1,6 +1,48 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "storage.cache.derivedData": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Derived Data" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "派生データ" } }
+      }
+    },
+    "storage.cache.simulatorCaches": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Simulator caches" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "シミュレータキャッシュ" } }
+      }
+    },
+    "storage.cache.unavailableSimulators": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Unavailable simulators" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "利用できないシミュレータ" } }
+      }
+    },
+    "storage.cache.androidBuild": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Android build output" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "Androidビルド出力" } }
+      }
+    },
+    "storage.cache.androidImage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Android system image" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "Androidシステムイメージ" } }
+      }
+    },
+    "storage.cache.gradleOther": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Other Gradle caches" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "その他のGradleキャッシュ" } }
+      }
+    },
     "notification.programStatus.blocked": {
       "extractionState": "manual",
       "localizations": {

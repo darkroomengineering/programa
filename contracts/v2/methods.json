@@ -2620,13 +2620,17 @@
     "storage.clean": {
       "auth_required": true,
       "debug_only": false,
-      "description": "Remove merged, clean, idle git worktrees that hold no ignored env files, with git worktree remove (never --force, never deletes branches). dry_run defaults to true; include_external and ignore_grace_period default to false. (clean).",
-      "errors": [],
+      "description": "Remove merged, clean, idle git worktrees and explicitly selected developer cache categories/items. paths restricts worktrees only. dry_run defaults to true; categories defaults to none. (clean).",
+      "errors": ["invalid_params"],
       "focus_intent": false,
       "handler": "v2StorageClean",
       "params": {
         "additionalProperties": false,
         "properties": {
+          "categories": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["xcode", "android", "packages"] }
+          },
           "dry_run": {
             "type": "boolean"
           },
@@ -2635,6 +2639,14 @@
           },
           "include_external": {
             "type": "boolean"
+          },
+          "items": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "paths": {
+            "type": "array",
+            "items": { "type": "string" }
           }
         },
         "required": [],
@@ -2648,7 +2660,7 @@
     "storage.scan": {
       "auth_required": true,
       "debug_only": false,
-      "description": "Git worktree disk usage across repos open in workspaces and under worktrees.directory: size, merged/dirty/ignored_env_files/open/process state, and whether automatic cleanup may remove each one. (scan).",
+      "description": "Git worktree and developer cache disk usage, safety blockers, automatic cleanup eligibility, and per-category cache totals. (scan).",
       "errors": [],
       "focus_intent": false,
       "handler": "v2StorageScan",

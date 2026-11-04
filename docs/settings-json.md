@@ -68,6 +68,14 @@ Settings for links that open in other apps.
 |---|---|---|---|
 | `externalAppOpenAllowlist` | array | `[]` | Entries for which you chose Always allow in the external app open prompt, each written as `bundleId\|scheme`, for example `com.tinyspeck.slackmacgap\|slack`. Links with that scheme that open that app skip the prompt. Bare bundle identifiers are ignored. |
 
+## `storage`
+
+Developer cache cleanup settings.
+
+| Key | Type | Default | What it does |
+|---|---|---|---|
+| `autoCleanCaches` | boolean | `true` | Every 6 hours, clean eligible developer caches when their tools are idle. Manual-only caches are kept. This runs independently of worktree cleanup. |
+
 ## `worktrees`
 
 Native git worktree workflow settings.

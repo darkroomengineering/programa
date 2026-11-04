@@ -829,7 +829,7 @@ against the new workspace's root. Errors: `not_found`.
 
 ## `storage.*`
 
-Disk usage of linked git worktrees, and cleanup of the merged, idle ones. Backs `programa storage
+Disk usage of linked git worktrees and developer caches, with guarded cleanup. Backs `programa storage
 scan|clean`. Both methods run off-main: git and the size walk run on the socket thread, and
 `v2MainSync` only snapshots the directories open in workspaces. Neither fetches from the network
 or calls `gh`.
@@ -868,6 +868,26 @@ never to external worktrees.
 automatic rules (external worktrees excluded, grace period applied). `last_modified` is ISO 8601
 or `null`; `branch`, `dirty`, `ignored_env_files`, `merged` and `blocker` may be `null`.
 
+The result also includes `caches`, an array of `{"id", "category", "title", "path", "size_bytes",
+"size_partial", "last_used", "auto_cleanable", "blocker"}`. Categories are `xcode`, `android`
+and `packages`; `path`, ISO 8601 `last_used`, and `blocker` may be `null`. `cache_totals` maps each
+category to `{"total_bytes", "reclaimable_bytes", "size_partial"}`. Reclaimable cache bytes count
+only automatic items without blockers. Worktree totals retain their worktree-only meaning.
+
+Xcode includes DerivedData, unavailable simulators, CoreSimulator caches and older DeviceSupport
+versions. Android includes Gradle caches, older wrapper distributions, safe project build output
+and system images unused by AVDs. Packages includes Bun, npm, pnpm and Yarn caches. Node modules,
+AVDs, available simulators, Xcode archives, Products and UserData are excluded. The newest
+DeviceSupport folder per platform and newest Gradle distribution are excluded. Running tools
+block their cache cleanup (`xcode_running`, `gradle_running`, `install_running`); booted simulators
+block simulator cleanup. Unknown safety state keeps the item.
+
+Package cache paths must have a recognizable cache or store component and cannot be a broad
+shared cache root or lie inside a repository. Uncertain custom locations and failed tool path
+queries are omitted. Yarn Berry is offered with an installed Yarn only when its version and
+global cache location can be verified; a Classic or unrecognized Yarn installation leaves it
+untouched. Without the manager executable, known cache locations use filesystem cleanup.
+
 ### `storage.clean`
 
 | Field | Type | Required | Notes |
@@ -875,11 +895,23 @@ or `null`; `branch`, `dirty`, `ignored_env_files`, `merged` and `blocker` may be
 | `dry_run` | bool | no | Default `true`: report what would be removed without removing it. |
 | `include_external` | bool | no | Default `false`. Also remove worktrees outside `worktrees.directory` that meet every other rule. |
 | `ignore_grace_period` | bool | no | Default `false`. Skip the `recently_used` check, e.g. right after merging. |
+| `categories` | string[] | no | Cache categories to include: `xcode`, `android`, `packages`. Default none. |
+| `items` | string[] | no | Cache item ids. Restricts selected categories to these ids; without categories, selects matching ids across categories. |
+| `paths` | string[] | no | Absolute directories. Restrict worktree removal to worktrees equal to or inside any directory. Does not restrict caches. Default unrestricted. |
 
 Result: `{"removed": [path], "kept": [{"path", "blocker", "message"?}], "reclaimed_bytes",
 "dry_run"}`. With `dry_run`, `removed` and `reclaimed_bytes` describe what would be removed.
 Before removing, the open-workspace and process checks run again; a worktree git refuses to
 remove is kept with `blocker: "git_refused"` and git's `message`.
+
+The result also includes `caches_removed` (cache item objects), `caches_kept` (cache item objects
+with the keeping reason in `blocker`) and `caches_reclaimed_bytes`. Dry runs report candidates
+without deleting. Cache cleanup revalidates each candidate and running-tool blockers before
+removing it; package managers use their own cleanup command when available. Explicit category
+or item selection includes manual-only caches. The background pass, controlled independently by
+`storage.autoCleanCaches` (default `true`), removes only unblocked automatic items every 6 hours.
+DerivedData, Gradle build/transforms caches and package caches require 14 idle days for automatic
+cleanup; pnpm prune, unavailable simulators and CoreSimulator caches are always automatic.
 
 ## `agent.detection.*` (docs/plans/screen-manifest-detection.md)
 

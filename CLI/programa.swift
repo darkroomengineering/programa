@@ -238,6 +238,7 @@ enum CLICommandArgumentContract {
 struct CLIArgumentGrammar {
     /// Flags that take a value, e.g. `--name <value>`.
     var valueOptions: Set<String> = []
+    var repeatableValueOptions: Set<String> = []
     /// Flags with no value, e.g. `--force`.
     var booleanOptions: Set<String> = []
     /// Subset of `valueOptions` that must be present. Checked in this order,
@@ -4817,7 +4818,7 @@ struct ProgramaCLI {
             booleans: Set<String> = [],
             shortFlags: Set<String> = [],
             minPositionals: Int = 0,
-            maxPositionals: Int? = 0
+            maxPositionals: Int? = 0, repeatableValues: Set<String> = []
         ) throws -> (positional: [String], options: [String: String]) {
             // Unbounded positionals are free text (`send`, `log`), where `-x` is a word.
             let parsed = try preflightFlagArguments(
@@ -4825,6 +4826,7 @@ struct ProgramaCLI {
                 command: command,
                 valueFlags: values,
                 booleanFlags: booleans,
+                repeatableValueFlags: repeatableValues,
                 shortFlags: shortFlags,
                 rejectOptionLikePositionals: maxPositionals != nil
             )
@@ -4843,17 +4845,13 @@ struct ProgramaCLI {
             }
         }
 
-        // Commands that declare a typed grammar on their descriptor validate
-        // from it directly, through the exact same `parse`/`require` helpers
-        // the switch below uses -- so migrating a command off the switch
-        // cannot change its error messages. Commands without a grammar fall
-        // through to the switch unchanged.
+        // Descriptor grammars and the switch share validation and error messages.
         if let grammar = commandDescriptor(named: command)?.grammar {
             let parsed = try parse(
                 values: grammar.valueOptions,
                 booleans: grammar.booleanOptions,
                 minPositionals: grammar.minPositionals,
-                maxPositionals: grammar.maxPositionals
+                maxPositionals: grammar.maxPositionals, repeatableValues: grammar.repeatableValueOptions
             )
             try require(grammar.requiredOptions, in: parsed.options)
             return

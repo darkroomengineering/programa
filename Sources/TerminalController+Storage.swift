@@ -1,4 +1,4 @@
-// v2 socket handlers for `storage.scan` / `storage.clean` (git worktree disk usage). Git and
+// v2 socket handlers for `storage.scan` / `storage.clean`. Git and
 // filesystem work runs on the socket thread through WorktreeStorage; v2MainSync is used only to
 // snapshot the directories open in workspaces.
 import Foundation
@@ -37,14 +37,37 @@ extension TerminalController {
                 "blocker": v2OrNull(blocker?.rawValue),
             ])
         }
+        let caches = StorageCategories.scan()
+        var cacheTotals: [String: Any] = [:]
+        for category in StorageCategoryID.allCases {
+            let items = caches.filter { $0.category == category }
+            cacheTotals[category.rawValue] = [
+                "total_bytes": items.reduce(Int64(0)) { $0 + $1.sizeBytes },
+                "reclaimable_bytes": items.filter { $0.autoCleanable && $0.blocker == nil }.reduce(Int64(0)) { $0 + $1.sizeBytes },
+                "size_partial": items.contains { $0.sizePartial },
+            ]
+        }
         return .ok([
             "worktrees": payloads,
             "total_bytes": totalBytes,
             "reclaimable_bytes": reclaimableBytes,
+            "caches": caches.map(v2StorageCachePayload),
+            "cache_totals": cacheTotals,
         ])
     }
 
     nonisolated func v2StorageClean(params: [String: Any]) -> V2CallResult {
+        for key in ["categories", "items", "paths"] {
+            if let value = params[key], !(value is [String]) { return v2InvalidParam(key) }
+        }
+        let categoryNames = params["categories"] as? [String] ?? []
+        let categories = categoryNames.compactMap(StorageCategoryID.init(rawValue:))
+        guard categories.count == categoryNames.count else { return v2InvalidParam("categories") }
+        let itemIDs = params["items"] as? [String] ?? []
+        guard itemIDs.allSatisfy({ !$0.isEmpty && !$0.contains("\0") }) else { return v2InvalidParam("items") }
+        let rawPaths = params["paths"] as? [String] ?? []
+        guard rawPaths.allSatisfy({ $0.hasPrefix("/") && !$0.contains("\0") }) else { return v2InvalidParam("paths") }
+        let paths = rawPaths.map(WorktreeStorage.resolvedPath)
         let dryRun = v2Bool(params, "dry_run") ?? true
         let includeExternal = v2Bool(params, "include_external") ?? false
         let ignoreGracePeriod = v2Bool(params, "ignore_grace_period") ?? false
@@ -57,7 +80,9 @@ extension TerminalController {
         defer { WorktreeStorage.passLock.unlock() }
         let entries = WorktreeStorage.scanAll(
             openDirectories: v2MainSync { WorktreeStorage.openWorkspaceDirectories() }
-        )
+        ).filter { entry in
+            paths.isEmpty || paths.contains { WorktreeStorage.isPath(WorktreeStorage.resolvedPath(entry.path), equalToOrInside: $0, caseInsensitive: false) }
+        }
         let outcome = WorktreeStorage.clean(
             entries: entries,
             policy: policy,
@@ -74,11 +99,37 @@ extension TerminalController {
             }
             return payload
         }
+        let cacheCategories = categories.isEmpty && !itemIDs.isEmpty ? StorageCategoryID.allCases : categories
+        let cacheItems = StorageCategories.scan(categories: cacheCategories).filter {
+            itemIDs.isEmpty || itemIDs.contains($0.id)
+        }
+        let cacheOutcome = StorageCategories.clean(items: cacheItems, automaticOnly: false, dryRun: dryRun)
         return .ok([
             "removed": outcome.removed.map(\.path),
             "kept": kept,
             "reclaimed_bytes": outcome.reclaimedBytes,
             "dry_run": dryRun,
+            "caches_removed": cacheOutcome.removed.map(v2StorageCachePayload),
+            "caches_kept": cacheOutcome.kept.map { kept -> [String: Any] in
+                var payload = v2StorageCachePayload(kept.item)
+                payload["blocker"] = kept.reason
+                return payload
+            },
+            "caches_reclaimed_bytes": cacheOutcome.reclaimedBytes,
         ])
+    }
+
+    private nonisolated func v2StorageCachePayload(_ item: StorageCacheItem) -> [String: Any] {
+        [
+            "id": item.id,
+            "category": item.category.rawValue,
+            "title": item.title,
+            "path": v2OrNull(item.path),
+            "size_bytes": item.sizeBytes,
+            "size_partial": item.sizePartial,
+            "last_used": v2OrNull(item.lastUsed.map { ISO8601DateFormatter().string(from: $0) }),
+            "auto_cleanable": item.autoCleanable,
+            "blocker": v2OrNull(item.blocker),
+        ]
     }
 }
