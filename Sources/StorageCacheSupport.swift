@@ -36,19 +36,39 @@ struct StorageCacheContext {
         let projects = WorktreeStorage.discoverRepositories(candidateDirectories: candidates)
             .flatMap { $0.worktrees.filter { !$0.isBare }.map(\.path) }
         var environment = ProcessInfo.processInfo.environment
-        let shell = environment["SHELL"] ?? "/bin/zsh"
-        if let path = run(shell, ["-l", "-c", "printf '%s' \"$PATH\""], "/", 5), !path.isEmpty, !path.contains("\n") {
-            environment["PATH"] = path
+        if let loginShellPATH { environment["PATH"] = loginShellPATH }
+        return Self(environment: environment, command: liveCommand(environment: environment), projectDirectories: projects)
+    }
+
+    /// Resolved once per app run: a login shell runs the user's rc files, which can take seconds.
+    private static let loginShellPATH: String? = {
+        let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+        guard let path = run(shell, ["-l", "-c", "printf '%s' \"$PATH\""], "/", 5), !path.isEmpty, !path.contains("\n") else {
+            return nil
         }
-        let commandEnvironment = environment
-        return Self(environment: environment, command: { executable, arguments, directory, timeout in
-            let result = CanonicalSubprocessRunner.run(
-                executable: executable, arguments: arguments, currentDirectory: directory,
-                timeout: timeout, stdoutLimit: 4 * 1024 * 1024, stderrLimit: 128 * 1024,
-                environmentOverrides: commandEnvironment
-            )
+        return path
+    }()
+
+    /// Project directories come from terminal-reported paths, so git runs with the automatic
+    /// hardening (`CanonicalSubprocessRunner.runAutomaticGit`). Git gets no environment
+    /// overrides: they would be layered over, and could undo, its hardening environment.
+    static func liveCommand(environment: [String: String]) -> (String, [String], String, TimeInterval) -> String? {
+        { executable, arguments, directory, timeout in
+            let stdoutLimit = 4 * 1024 * 1024
+            let stderrLimit = 128 * 1024
+            let result = (executable as NSString).lastPathComponent == "git"
+                ? CanonicalSubprocessRunner.runAutomaticGit(
+                    arguments: arguments, currentDirectory: directory, timeout: timeout,
+                    stdoutLimit: stdoutLimit, stderrLimit: stderrLimit,
+                    executableURL: executable.contains("/") ? URL(fileURLWithPath: executable) : nil
+                )
+                : CanonicalSubprocessRunner.run(
+                    executable: executable, arguments: arguments, currentDirectory: directory,
+                    timeout: timeout, stdoutLimit: stdoutLimit, stderrLimit: stderrLimit,
+                    environmentOverrides: environment
+                )
             return result.outcome == .exited && result.exitStatus == 0 ? result.stdout : nil
-        }, projectDirectories: projects)
+        }
     }
 
     func at(_ date: Date) -> Self { var copy = self; copy.now = date; return copy }
@@ -124,12 +144,14 @@ enum StorageCacheSupport {
     }
     static func item(
         id: String, category: StorageCategoryID, title: String, path: String,
-        automatic: Bool, blocker: String?, timeout: TimeInterval, lastUsed: Date? = nil
+        automatic: Bool, blocker: String?, timeout: TimeInterval, lastUsed: Date? = nil,
+        removal: StorageCacheRemoval = .directory
     ) -> StorageCacheItem {
         let size = timeout > 0 ? WorktreeStorage.directorySize(atPath: path, timeout: timeout) : (bytes: Int64(0), partial: true)
         return StorageCacheItem(id: id, category: category, title: title, path: path,
                                 sizeBytes: size.bytes, sizePartial: size.partial,
-                                lastUsed: lastUsed ?? modified(path), autoCleanable: automatic, blocker: blocker)
+                                lastUsed: lastUsed ?? modified(path), autoCleanable: automatic, blocker: blocker,
+                                removal: removal)
     }
     static func remove(_ path: String?) -> Bool {
         guard let path, directory(path) else { return false }

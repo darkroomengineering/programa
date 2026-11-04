@@ -3,13 +3,17 @@
 // snapshot the directories open in workspaces.
 import Foundation
 
+private enum StorageTimestamp {
+    /// ISO8601DateFormatter is thread-safe; the handlers run on the socket thread.
+    static let formatter = ISO8601DateFormatter()
+}
+
 extension TerminalController {
     nonisolated func v2StorageScan(params: [String: Any]) -> V2CallResult {
         let openDirectories = v2MainSync { WorktreeStorage.openWorkspaceDirectories() }
         let entries = WorktreeStorage.scanAll(openDirectories: openDirectories)
         let policy = WorktreeRemovalPolicy.automatic(gracePeriodHours: ProgramaWorktreeSettings.autoRemoveAfterHours())
         let now = Date()
-        let formatter = ISO8601DateFormatter()
 
         var payloads: [[String: Any]] = []
         var totalBytes: Int64 = 0
@@ -26,7 +30,7 @@ extension TerminalController {
                 "branch": v2OrNull(entry.branch),
                 "size_bytes": entry.sizeBytes,
                 "size_partial": entry.sizePartial,
-                "last_modified": v2OrNull(entry.lastModified.map { formatter.string(from: $0) }),
+                "last_modified": v2OrNull(entry.lastModified.map(StorageTimestamp.formatter.string(from:))),
                 "programa_created": entry.isProgramaCreated,
                 "dirty": v2OrNull(entry.isDirty),
                 "ignored_env_files": v2OrNull(entry.hasIgnoredEnvFiles),
@@ -127,7 +131,7 @@ extension TerminalController {
             "path": v2OrNull(item.path),
             "size_bytes": item.sizeBytes,
             "size_partial": item.sizePartial,
-            "last_used": v2OrNull(item.lastUsed.map { ISO8601DateFormatter().string(from: $0) }),
+            "last_used": v2OrNull(item.lastUsed.map(StorageTimestamp.formatter.string(from:))),
             "auto_cleanable": item.autoCleanable,
             "blocker": v2OrNull(item.blocker),
         ]

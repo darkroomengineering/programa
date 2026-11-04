@@ -72,7 +72,10 @@ fn owned_fd_from_raw_checked(raw: RawFd) -> io::Result<OwnedFd> {
         ));
     }
     use nix::fcntl::{fcntl, FcntlArg, FdFlag};
-    if let Err(error) = fcntl(raw, FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC)) {
+    // SAFETY: `raw` was just produced by the kernel via `SCM_RIGHTS` and stays
+    // open until it is closed or taken into ownership below.
+    let borrowed = unsafe { std::os::fd::BorrowedFd::borrow_raw(raw) };
+    if let Err(error) = fcntl(borrowed, FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC)) {
         // SAFETY: `raw` was just produced by the kernel via `SCM_RIGHTS`, and
         // this branch transfers it directly to `close` exactly once.
         unsafe { libc::close(raw) };
@@ -448,7 +451,7 @@ mod tests {
         );
         let received = stream.take_fd().await.unwrap();
         assert!(received.as_raw_fd() >= 0);
-        let flags = nix::fcntl::fcntl(received.as_raw_fd(), nix::fcntl::FcntlArg::F_GETFD).unwrap();
+        let flags = nix::fcntl::fcntl(&received, nix::fcntl::FcntlArg::F_GETFD).unwrap();
         assert!(
             nix::fcntl::FdFlag::from_bits_truncate(flags).contains(nix::fcntl::FdFlag::FD_CLOEXEC)
         );

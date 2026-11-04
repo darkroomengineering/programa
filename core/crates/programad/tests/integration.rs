@@ -11,7 +11,7 @@
 //! `src/main.rs`).
 #![cfg(unix)]
 
-use std::os::fd::{AsRawFd, OwnedFd};
+use std::os::fd::OwnedFd;
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -180,7 +180,7 @@ async fn full_session_lifecycle_survives_client_disconnect() {
     // through session.read/WAL, so the daemon remains the sole PTY reader.
     let mut byte = [0u8; 1];
     assert_eq!(
-        nix::unistd::read(master_fd.as_raw_fd(), &mut byte).unwrap_err(),
+        nix::unistd::read(&master_fd, &mut byte).unwrap_err(),
         nix::errno::Errno::EBADF
     );
 
@@ -271,13 +271,9 @@ async fn full_session_lifecycle_survives_client_disconnect() {
     // master and drains into the WAL regardless.
     {
         use std::io::Write;
-        // SAFETY: dup returns a new descriptor owned by this File; dropping
-        // it leaves the separately owned handed-off descriptor open.
-        let mut file = unsafe {
-            <std::fs::File as std::os::fd::FromRawFd>::from_raw_fd(
-                nix::unistd::dup(master_fd.as_raw_fd()).unwrap(),
-            )
-        };
+        // dup returns a new descriptor owned by this File; dropping it leaves
+        // the separately owned handed-off descriptor open.
+        let mut file = std::fs::File::from(nix::unistd::dup(&master_fd).unwrap());
         file.write_all(b"hello from client A\n").unwrap();
         file.flush().unwrap();
     }

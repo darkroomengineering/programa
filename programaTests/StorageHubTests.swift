@@ -194,7 +194,7 @@ final class StorageHubTests: XCTestCase {
     private func cache(id: String, title: String, bytes: Int64) -> StorageCacheItem {
         StorageCacheItem(
             id: id, category: .xcode, title: title, path: "/fixtures/\(id)", sizeBytes: bytes,
-            sizePartial: false, lastUsed: nil, autoCleanable: false, blocker: nil
+            sizePartial: false, lastUsed: nil, autoCleanable: false, blocker: nil, removal: .directory
         )
     }
 }

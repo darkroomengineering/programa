@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SPARKLE_VERSION="${SPARKLE_VERSION:-2.9.6}"
+SPARKLE_VERSION="${SPARKLE_VERSION:-2.10.1}"
 # Legacy cmux name: the existing Sparkle signing key lives under this keychain account.
 SPARKLE_KEYCHAIN_ACCOUNT="${SPARKLE_KEYCHAIN_ACCOUNT:-cmux}"
 SPARKLE_ENV_FILE="${SPARKLE_ENV_FILE:-.env}"

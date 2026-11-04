@@ -21,6 +21,26 @@ struct StorageCacheItem: Equatable, Sendable {
     let autoCleanable: Bool
     /// Why it must stay right now (for example "xcode_running"); nil means removable.
     let blocker: String?
+    /// Set by the scan. `clean` uses the strategy of a fresh scan, never a caller-supplied one.
+    let removal: StorageCacheRemoval
+}
+
+/// How `clean` removes an item, decided when the item is scanned.
+enum StorageCacheRemoval: Equatable, Sendable {
+    /// Delete the item's directory.
+    case directory
+    /// Delete the directory once no simulator is booted.
+    case simulatorCaches
+    /// `xcrun simctl delete unavailable`, only for the real user home.
+    case unavailableSimulators
+    /// Delete every child of the Gradle caches directory except build caches and transforms.
+    case gradleRest
+    /// Delete the directory once it still holds no tracked, dotenv or nested `.git` files.
+    case untrackedBuild
+    /// Delete the directory once no AVD references it.
+    case unreferencedSystemImage
+    /// Run the package manager with these arguments; without the tool, clear the cache's contents.
+    case packageTool([String])
 }
 
 struct StorageCacheCleanOutcome: Equatable, Sendable {
@@ -76,17 +96,22 @@ enum StorageCategories {
     ) -> StorageCacheCleanOutcome {
         var outcome = StorageCacheCleanOutcome()
         var seen = Set<String>()
-        for item in items where seen.insert(item.id).inserted {
+        let requested = items.filter { seen.insert($0.id).inserted }
+        let categories = StorageCategoryID.allCases.filter { category in requested.contains { $0.category == category } }
+        let scanned = Dictionary(
+            scan(categories: categories, sizeWalkTimeout: 0, context: context.at(now)).map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        for item in requested {
             // IDs are selectors, never authority to delete a caller-supplied path.
-            let current = scan(categories: [item.category], sizeWalkTimeout: 0, context: context.at(now)).first { $0.id == item.id }
-            guard let current, current.path == item.path else {
+            guard let current = scanned[item.id], current.category == item.category, current.path == item.path else {
                 outcome.kept.append(.init(item: item, reason: "no_longer_eligible"))
                 continue
             }
             let fresh = StorageCacheItem(
                 id: current.id, category: current.category, title: current.title, path: current.path,
                 sizeBytes: item.sizeBytes, sizePartial: item.sizePartial, lastUsed: current.lastUsed,
-                autoCleanable: current.autoCleanable, blocker: current.blocker
+                autoCleanable: current.autoCleanable, blocker: current.blocker, removal: current.removal
             )
             if let blocker = fresh.blocker {
                 outcome.kept.append(.init(item: fresh, reason: blocker))
@@ -124,7 +149,7 @@ enum StorageCategories {
     private static func measuredSize(_ item: StorageCacheItem) -> Int64 {
         guard let path = item.path else { return item.sizeBytes }
         guard StorageCacheSupport.directory(path) else { return 0 }
-        return item.id == "android.gradle_cache/rest"
+        return item.removal == .gradleRest
             ? StorageAndroidCaches.sizeOfRest(path, timeout: 20).bytes
             : WorktreeStorage.directorySize(atPath: path, timeout: 20).bytes
     }

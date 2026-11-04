@@ -4,6 +4,10 @@ import { HIGHLIGHTED_GRAMMAR_MODULES } from "./src/languages.ts";
 
 const grammarModulePattern = /\/@shikijs\/langs\/dist\/([^/]+)\.mjs$/;
 const shikiThemeModulePattern = /\/@shikijs\/themes\/dist\/[^/]+\.mjs$/;
+const workerOnlyModulePattern =
+  /\/@pierre\/diffs\/dist\/worker\/(worker|worker-portable|shiki-[^/]+|highlights-[^/]+|stream-tokenizer-[^/]+)\.js$/;
+const mainThreadHighlightsBackendPattern =
+  /\/@pierre\/diffs\/dist\/highlighter\/(backends\/highlights|highlights-stream|highlights-editor)\.js$/;
 
 export default defineConfig({
   define: {
@@ -74,21 +78,22 @@ export default defineConfig({
             return "preload-helper";
           }
           // The worker entry keeps its own chunk so starting a worker does not
-          // evaluate the main-thread renderer.
-          if (id.endsWith("/@pierre/diffs/dist/worker/worker.js")) {
+          // evaluate the main-thread renderer. Its lazy highlighter backends import
+          // back into `worker.js`; inside `diff-vendor` they would drag the worker
+          // entry in with them.
+          if (workerOnlyModulePattern.test(id)) {
+            return undefined;
+          }
+          // The highlights backend (and its inlined wasm) only loads when it is the
+          // preferred highlighter. The viewer prefers shiki-wasm, so keep it lazy.
+          if (id.includes("/@pierre/highlights/")) {
+            return "pierre-highlights";
+          }
+          if (mainThreadHighlightsBackendPattern.test(id)) {
             return undefined;
           }
           if (!id.includes("node_modules")) {
             return undefined;
-          }
-          if (
-            id.includes("/shiki/") ||
-            id.includes("/@shikijs/") ||
-            id.includes("/oniguruma-parser/") ||
-            id.includes("/oniguruma-to-es/") ||
-            id.includes("/node_modules/diff/")
-          ) {
-            return "shiki-core";
           }
           // Theming is shared by both threads; inside `diff-vendor` it would make
           // every worker evaluate the main-thread renderer.
@@ -98,7 +103,11 @@ export default defineConfig({
           if (id.includes("/@pierre/")) {
             return "diff-vendor";
           }
-          return undefined;
+          // Every other third-party module (shiki, diff, the hast serializer
+          // shiki and Pierre both use) goes to `shiki-core`, which both threads
+          // load. Left unassigned, a module shared with Pierre lands in
+          // `diff-vendor` and `shiki-core` imports it back (a circular chunk).
+          return "shiki-core";
         },
       },
     },

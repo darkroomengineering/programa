@@ -137,8 +137,16 @@ script run there talks to that app. To drive a different instance, such as a tag
 2. the file `~/Library/Application Support/programa/socket-control-password` (mode `0600`,
    written by **Settings > Automation**; `automation.socketPassword` in `settings.json`)
 
-The CLI takes `--password <value>` first, then `PROGRAMA_SOCKET_PASSWORD`, then the saved
-password. `programa-mcp` takes `PROGRAMA_SOCKET_PASSWORD`, then the saved password.
+The CLI takes `--password <value>` or `--password-stdin` first, then `PROGRAMA_SOCKET_PASSWORD`,
+then the saved password. `--password` puts the password in the process arguments, where other
+processes can read it with `ps`. Prefer `PROGRAMA_SOCKET_PASSWORD`, the saved password, or
+`--password-stdin`, which reads the password from the first line of stdin:
+
+```bash
+printf '%s\n' "$SECRET" | programa --password-stdin ping
+```
+
+`programa-mcp` takes `PROGRAMA_SOCKET_PASSWORD`, then the saved password.
 
 A client authenticates once per connection:
 
