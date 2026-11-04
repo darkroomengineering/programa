@@ -472,4 +472,62 @@ final class StorageCategoriesTests: XCTestCase {
         XCTAssertTrue(exists(referenced), "the tool retains packages still in use")
         XCTAssertFalse(exists(orphan))
     }
+
+    func testCleaningSeveralItemsOfOneCategoryScansThatCategoryOnce() throws {
+        let caches = try ["First", "Second", "Third"].map {
+            try directory("Library/Developer/Xcode/DerivedData/\($0)-abcd", age: 30 * day)
+        }
+        var deviceQueries = 0
+        var fixture = context()
+        fixture.command = { executable, arguments, _, _ in
+            if executable == "xcrun", arguments.starts(with: ["simctl", "list"]) { deviceQueries += 1 }
+            return nil
+        }
+        let items = StorageCategories.scan(categories: [.xcode], context: fixture)
+        let queriesPerScan = deviceQueries
+        XCTAssertGreaterThan(queriesPerScan, 0)
+
+        deviceQueries = 0
+        let preview = StorageCategories.clean(items: items, automaticOnly: false, dryRun: true, now: now, context: fixture)
+        XCTAssertEqual(preview.removed.count, caches.count)
+        XCTAssertEqual(deviceQueries, queriesPerScan, "a dry run scans the category once, not once per item")
+
+        deviceQueries = 0
+        let outcome = StorageCategories.clean(items: items, automaticOnly: false, dryRun: false, now: now, context: fixture)
+        XCTAssertEqual(Set(outcome.removed.compactMap(\.path)), Set(caches.map(\.path)))
+        XCTAssertEqual(deviceQueries, queriesPerScan, "removal scans the category once, not once per item")
+        for cache in caches { XCTAssertFalse(exists(cache)) }
+    }
+
+    func testProjectBuildGitCheckRunsWithAutomaticGitHardening() throws {
+        let log = home.appendingPathComponent("git-invocations.log")
+        let git = try directory("bin").appendingPathComponent("git")
+        try """
+        #!/bin/sh
+        { printf '%s\\n' "$@"; env | grep '^GIT_CONFIG_' | sort; echo '@@end'; } >> '\(log.path)'
+        exit 0
+        """.write(to: git, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: git.path)
+        let repo = try directory("repo")
+        try "plugins {}\n".write(to: repo.appendingPathComponent("build.gradle"), atomically: true, encoding: .utf8)
+        let build = try directory("repo/build")
+        var fixture = context(projects: [repo.path])
+        fixture.tools = ["git": git.path]
+        fixture.command = StorageCacheContext.liveCommand(environment: [:])
+
+        let items = StorageCategories.scan(categories: [.android], context: fixture)
+
+        XCTAssertNotNil(try? item(build, in: items), "the fake git reports no tracked files")
+        let invocations = try String(contentsOf: log, encoding: .utf8)
+            .components(separatedBy: "@@end\n").filter { !$0.isEmpty }
+            .map { $0.split(separator: "\n").map(String.init) }
+        let listFiles = try XCTUnwrap(invocations.first { $0.contains("ls-files") })
+        let options = CanonicalSubprocessRunner.automaticGitOptions
+        XCTAssertTrue(options.contains("core.fsmonitor=false"))
+        XCTAssertEqual(Array(listFiles.prefix(options.count + 3)), options + ["ls-files", "-z", "--"])
+        XCTAssertEqual(listFiles.count > options.count + 3 ? WorktreeStorage.resolvedPath(listFiles[options.count + 3]) : nil, build.path)
+        let fsmonitorKey = try XCTUnwrap(listFiles.first { $0.hasPrefix("GIT_CONFIG_KEY_") && $0.hasSuffix("=core.fsmonitor") })
+        let index = fsmonitorKey.dropFirst("GIT_CONFIG_KEY_".count).prefix { $0 != "=" }
+        XCTAssertTrue(listFiles.contains("GIT_CONFIG_VALUE_\(index)=false"))
+    }
 }
