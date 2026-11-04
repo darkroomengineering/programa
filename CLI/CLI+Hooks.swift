@@ -144,11 +144,11 @@ final class ClaudeHookSessionStore {
         let normalizedWorkspace = normalizeOptional(workspaceId)
         let normalizedSurface = normalizeOptional(surfaceId)
         return try withLockedState { state in
-            if let normalizedSessionId,
-               let removed = state.sessions.removeValue(forKey: normalizedSessionId) {
-                return removed
+            // An unrecorded id must not fall back: the surface's newest record may be a newer
+            // live session (Claude /clear ends the old id after the new one started).
+            if let normalizedSessionId {
+                return state.sessions.removeValue(forKey: normalizedSessionId)
             }
-
             guard let fallback = fallbackRecord(
                 sessions: Array(state.sessions.values),
                 workspaceId: normalizedWorkspace,

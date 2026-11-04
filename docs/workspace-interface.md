@@ -234,7 +234,7 @@ and the panel says why.
 ## Resume an agent session
 
 When an agent exits in a pane, its session-end hook keeps the session id in
-`~/.programa/agent-last-sessions.json`, one entry per pane and per directory, for 7 days.
+`~/.programa/agent-last-sessions.json`, one entry per pane and per agent, for 7 days.
 `programa resume` types that agent's resume command into the pane's shell and presses Enter:
 
 ```sh

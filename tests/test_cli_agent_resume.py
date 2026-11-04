@@ -191,6 +191,49 @@ class AgentResumeTests(unittest.TestCase):
         self.assertEqual(printed.stdout.strip(), f"opencode --session '{OPENCODE_SESSION_ID}'")
         self.assertEqual(sent(rec), [], "--print must not type anything")
 
+    def write_hook_sessions(self, *records: tuple[str, str]) -> None:
+        now = time.time()
+        self.box.hook_state.write_text(json.dumps({"version": 1, "sessions": {session_id: {
+            "sessionId": session_id, "workspaceId": WORKSPACE_ID, "surfaceId": surface_id,
+            "cwd": str(self.box.project), "startedAt": now, "updatedAt": now,
+        } for session_id, surface_id in records}}), encoding="utf-8")
+
+    def test_panes_in_the_same_directory_keep_each_others_ended_sessions(self) -> None:
+        # Pane A's session ends, then pane B's in the same directory; A must still resume its own.
+        other_session = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d"
+        self.write_hook_sessions((SESSION_ID, SURFACE_ID), (other_session, OTHER_SURFACE_ID))
+        with self.recorder() as rec:
+            for session_id in (SESSION_ID, other_session):
+                payload = json.dumps({"session_id": session_id, "cwd": str(self.box.project)})
+                ended = self.box.cli(rec, ["claude-hook", "session-end"], input_text=payload)
+                self.assertEqual(ended.returncode, 0, merged_output(ended))
+            printed = self.box.cli(rec, ["resume", "--print", "--surface", SURFACE_ID])
+        kept = json.loads(self.box.last_sessions.read_text(encoding="utf-8"))["sessions"]
+        self.assertEqual(
+            sorted((e["surfaceId"], e["sessionId"]) for e in kept),
+            sorted([(SURFACE_ID, SESSION_ID), (OTHER_SURFACE_ID, other_session)]),
+            kept,
+        )
+        self.assertEqual(printed.returncode, 0, merged_output(printed))
+        self.assertEqual(printed.stdout.strip(), f"claude --resume '{SESSION_ID}'")
+
+    def test_ending_an_unrecorded_session_leaves_the_panes_live_session_alone(self) -> None:
+        # Claude /clear starts a new session in the pane before the old one's SessionEnd runs;
+        # an old id with no live record must not consume the new session's record.
+        live_session = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f"
+        self.write_hook_sessions((live_session, SURFACE_ID))
+        payload = json.dumps({"session_id": SESSION_ID, "cwd": str(self.box.project)})
+        with self.recorder() as rec:
+            ended = self.box.cli(rec, ["claude-hook", "session-end"], input_text=payload)
+        self.assertEqual(ended.returncode, 0, merged_output(ended))
+        live = json.loads(self.box.hook_state.read_text(encoding="utf-8"))["sessions"]
+        self.assertIn(live_session, live, "the newer live session must keep its record")
+        exits = [
+            f for f in rec.frames
+            if f.get("method") == "agent.event" and f.get("params", {}).get("event_type") == "session.exited"
+        ]
+        self.assertEqual(exits, [], "the live session's agent state must not be cleared")
+
     def test_refuses_while_an_agent_runs_in_the_pane(self) -> None:
         self.box.write_last_sessions(self.box.entry())
         for state in ("working", "idle"):

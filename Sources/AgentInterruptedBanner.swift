@@ -87,11 +87,18 @@ extension Workspace {
         return line
     }
 
+    /// Whether a resume line may be typed into the panel: no agent runs there and shell
+    /// integration reports the shell at its prompt, so the line cannot land in vim or ssh.
+    func panelCanTypeAgentResume(panelId: UUID) -> Bool {
+        panelAgentPresence[panelId] == nil && panelShellActivityStates[panelId] == .promptIdle
+    }
+
     func handleInterruptedAgentAction(_ action: AgentInterruptedBannerAction, panelId: UUID) {
         guard let state = interruptedAgentPanels[panelId] else { return }
         switch (action, state) {
         case (.resume, .shellAlive):
             guard let terminalPanel = terminalPanel(for: panelId),
+                  panelCanTypeAgentResume(panelId: panelId),
                   let line = agentResumeLine(panelId: panelId) else {
                 NSSound.beep()
                 return

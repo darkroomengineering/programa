@@ -707,8 +707,7 @@ extension CommandPaletteView {
             // Re-checked here: the agent may have started since the palette opened.
             guard let context = Self.focusedPanelContext(in: tabManager),
                   let terminalPanel = context.panel as? TerminalPanel,
-                  context.workspace.panelAgentPresence[context.panelId] == nil,
-                  context.workspace.panelShellActivityStates[context.panelId] == .promptIdle,
+                  context.workspace.panelCanTypeAgentResume(panelId: context.panelId),
                   let line = context.workspace.agentResumeLine(panelId: context.panelId) else {
                 NSSound.beep()
                 return
