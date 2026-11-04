@@ -18,6 +18,9 @@ struct WorktreeStorageEntry: Equatable, Sendable {
         case dirty
         /// Ignored `.env*` files, which `git worktree remove` would delete.
         case envFiles = "env_files"
+        /// Other ignored files outside rebuildable build and dependency directories. Only
+        /// policies with `keepsIgnoredFiles` (the background monitor) apply it.
+        case ignoredFiles = "ignored_files"
         case notMerged = "not_merged"
         case openInWorkspace = "open_in_workspace"
         case processRunning = "process_running"
@@ -30,37 +33,52 @@ struct WorktreeStorageEntry: Equatable, Sendable {
     let path: String
     let branch: String?
     let headSHA: String?
-    let sizeBytes: Int64
+    var sizeBytes: Int64
     /// The size walk stopped early (time limit or unreadable entries), so `sizeBytes` is a floor.
-    let sizePartial: Bool
+    var sizePartial: Bool
     /// Newest mtime of the worktree's git `index`, `HEAD` and `logs/HEAD`.
     let lastModified: Date?
     let isProgramaCreated: Bool
-    let isDirty: Bool?
+    var isDirty: Bool?
     /// Ignored `.env*` files outside `node_modules/`. Always blocks, with no override.
-    let hasIgnoredEnvFiles: Bool?
+    var hasIgnoredEnvFiles: Bool?
     /// Informational: HEAD holds commits no remote-tracking ref contains. Not a blocker, because
     /// removing a worktree never deletes its branch.
-    let hasUnpushedOrUnmergedCommits: Bool?
-    let isMerged: Bool?
+    var hasUnpushedOrUnmergedCommits: Bool?
+    var isMerged: Bool?
     let isOpenInWorkspace: Bool
     let isProcessRunningInside: Bool
+    /// Ignored files outside `GitWorktreeManager.rebuildableIgnoredDirectoryNames` directories.
+    var hasIgnoredFiles: Bool? = nil
 
     /// The first reason to keep this worktree under `policy`, or nil when it may be removed.
     func removalBlocker(policy: WorktreeRemovalPolicy, now: Date) -> RemovalBlocker? {
         if !isProgramaCreated, !policy.includeExternal { return .external }
-        guard let isDirty, let hasIgnoredEnvFiles, let isMerged else { return .statusUnknown }
+        guard let isDirty, let hasIgnoredEnvFiles, let isMerged,
+              !policy.keepsIgnoredFiles || hasIgnoredFiles != nil else { return .statusUnknown }
         if isDirty { return .dirty }
         if hasIgnoredEnvFiles { return .envFiles }
+        if policy.keepsIgnoredFiles, hasIgnoredFiles == true { return .ignoredFiles }
         if !isMerged { return .notMerged }
         if isOpenInWorkspace { return .openInWorkspace }
         if isProcessRunningInside { return .processRunning }
-        if let gracePeriod = policy.gracePeriod {
-            guard let lastModified, now.timeIntervalSince(lastModified) >= gracePeriod else {
-                return .recentlyUsed
-            }
-        }
+        if isRecentlyUsed(policy: policy, now: now) { return .recentlyUsed }
         return nil
+    }
+
+    /// Whether `removalBlocker` is non-nil whatever the git probes report, so a pass that only
+    /// removes can skip them.
+    func isBlockedWithoutProbes(policy: WorktreeRemovalPolicy, now: Date) -> Bool {
+        (!isProgramaCreated && !policy.includeExternal)
+            || isOpenInWorkspace
+            || isProcessRunningInside
+            || isRecentlyUsed(policy: policy, now: now)
+    }
+
+    private func isRecentlyUsed(policy: WorktreeRemovalPolicy, now: Date) -> Bool {
+        guard let gracePeriod = policy.gracePeriod else { return false }
+        guard let lastModified else { return true }
+        return now.timeIntervalSince(lastModified) < gracePeriod
     }
 }
 
@@ -70,9 +88,12 @@ struct WorktreeRemovalPolicy: Equatable, Sendable {
     /// nil skips the recent-use check.
     var gracePeriod: TimeInterval?
     var includeExternal: Bool
+    /// Keep worktrees holding ignored files outside rebuildable directories. A manual clean
+    /// previews and confirms what it removes, so only the unattended pass applies this.
+    var keepsIgnoredFiles = false
 
     static func automatic(gracePeriodHours: Double) -> WorktreeRemovalPolicy {
-        WorktreeRemovalPolicy(gracePeriod: gracePeriodHours * 3600, includeExternal: false)
+        WorktreeRemovalPolicy(gracePeriod: gracePeriodHours * 3600, includeExternal: false, keepsIgnoredFiles: true)
     }
 }
 
@@ -123,11 +144,19 @@ enum WorktreeStorage {
 
     // MARK: Scan
 
+    /// Which worktrees a removal-only scan may leave out: the ones `policy` blocks at `now`
+    /// before any git probe or size walk runs.
+    struct RemovalFilter: Sendable {
+        let policy: WorktreeRemovalPolicy
+        let now: Date
+    }
+
     /// Scans every repo reachable from `openDirectories` or `worktrees.directory`.
     static func scanAll(
         openDirectories: [String],
         programaDirectory: String = ProgramaWorktreeSettings.resolvedDirectory(),
-        sizeWalkTimeout: TimeInterval = defaultSizeWalkTimeout
+        sizeWalkTimeout: TimeInterval = defaultSizeWalkTimeout,
+        removalFilter: RemovalFilter? = nil
     ) -> [WorktreeStorageEntry] {
         let processCwds = processWorkingDirectories()
         let candidates = openDirectories + programaWorktreeCandidates(in: programaDirectory)
@@ -136,18 +165,21 @@ enum WorktreeStorage {
             programaDirectory: programaDirectory,
             openDirectories: openDirectories,
             processCwds: processCwds,
-            sizeWalkTimeout: sizeWalkTimeout
+            sizeWalkTimeout: sizeWalkTimeout,
+            removalFilter: removalFilter
         )
     }
 
     /// Classifies every linked worktree of `repositories`. The main worktree, bare entries and
-    /// worktrees whose directory is gone are skipped.
+    /// worktrees whose directory is gone are skipped, and so are the ones `removalFilter`
+    /// blocks without probing.
     static func scan(
         repositories: [Repository],
         programaDirectory: String,
         openDirectories: [String],
         processCwds: Set<String>,
-        sizeWalkTimeout: TimeInterval = defaultSizeWalkTimeout
+        sizeWalkTimeout: TimeInterval = defaultSizeWalkTimeout,
+        removalFilter: RemovalFilter? = nil
     ) -> [WorktreeStorageEntry] {
         let programaRoot = resolvedPath(programaDirectory)
         let resolvedOpenDirectories = openDirectories.map(resolvedPath)
@@ -163,15 +195,18 @@ enum WorktreeStorage {
             guard !linked.isEmpty else { continue }
             let defaultBranch = GitWorktreeManager.defaultRemoteBranch(repoRoot: repository.root)
             for worktree in linked {
-                entries.append(classify(
+                if let entry = classify(
                     worktree,
                     repoRoot: repository.root,
                     defaultBranch: defaultBranch,
                     programaRoot: programaRoot,
                     openDirectories: resolvedOpenDirectories,
                     processCwds: resolvedCwds,
-                    sizeWalkTimeout: sizeWalkTimeout
-                ))
+                    sizeWalkTimeout: sizeWalkTimeout,
+                    removalFilter: removalFilter
+                ) {
+                    entries.append(entry)
+                }
             }
         }
         return entries
@@ -184,14 +219,41 @@ enum WorktreeStorage {
         programaRoot: String,
         openDirectories: [String],
         processCwds: Set<String>,
-        sizeWalkTimeout: TimeInterval
-    ) -> WorktreeStorageEntry {
+        sizeWalkTimeout: TimeInterval,
+        removalFilter: RemovalFilter?
+    ) -> WorktreeStorageEntry? {
         let path = worktree.path
         let resolved = resolvedPath(path)
         // Read before any git call in the worktree so our own probes cannot refresh it.
-        let modified = Self.lastModified(worktreePath: path)
+        var entry = WorktreeStorageEntry(
+            repoRoot: repoRoot,
+            path: path,
+            branch: worktree.branch,
+            headSHA: worktree.headSHA,
+            sizeBytes: 0,
+            sizePartial: true,
+            lastModified: Self.lastModified(worktreePath: path),
+            isProgramaCreated: isPath(resolved, equalToOrInside: programaRoot, caseInsensitive: false)
+                && resolved != programaRoot,
+            isDirty: nil,
+            hasIgnoredEnvFiles: nil,
+            hasUnpushedOrUnmergedCommits: nil,
+            isMerged: nil,
+            isOpenInWorkspace: openDirectories.contains {
+                isPath($0, equalToOrInside: resolved, caseInsensitive: true)
+            },
+            isProcessRunningInside: processCwds.contains {
+                isPath($0, equalToOrInside: resolved, caseInsensitive: true)
+            }
+        )
+        if let removalFilter, entry.isBlockedWithoutProbes(policy: removalFilter.policy, now: removalFilter.now) {
+            return nil
+        }
+
         let isDirty = GitWorktreeManager.workingTreeIsDirty(path: path)
-        let hasIgnoredEnvFiles = GitWorktreeManager.ignoredEnvFiles(path: path)
+        entry.isDirty = isDirty
+        entry.hasIgnoredEnvFiles = GitWorktreeManager.ignoredEnvFiles(path: path)
+        entry.hasIgnoredFiles = GitWorktreeManager.ignoredFilesOutsideRebuildableDirectories(path: path)
 
         var isMerged: Bool? = false
         if let head = worktree.headSHA, let defaultBranch {
@@ -201,32 +263,12 @@ enum WorktreeStorage {
            GitWorktreeManager.upstreamIsGone(branch: branch, repoRoot: repoRoot) == true {
             isMerged = true
         }
-        let hasUnpushed = worktree.headSHA.flatMap {
+        entry.isMerged = isMerged
+        entry.hasUnpushedOrUnmergedCommits = worktree.headSHA.flatMap {
             GitWorktreeManager.hasCommitsMissingFromRemotes($0, repoRoot: repoRoot)
         }
-        let size = directorySize(atPath: path, timeout: sizeWalkTimeout)
-
-        return WorktreeStorageEntry(
-            repoRoot: repoRoot,
-            path: path,
-            branch: worktree.branch,
-            headSHA: worktree.headSHA,
-            sizeBytes: size.bytes,
-            sizePartial: size.partial,
-            lastModified: modified,
-            isProgramaCreated: isPath(resolved, equalToOrInside: programaRoot, caseInsensitive: false)
-                && resolved != programaRoot,
-            isDirty: isDirty,
-            hasIgnoredEnvFiles: hasIgnoredEnvFiles,
-            hasUnpushedOrUnmergedCommits: hasUnpushed,
-            isMerged: isMerged,
-            isOpenInWorkspace: openDirectories.contains {
-                isPath($0, equalToOrInside: resolved, caseInsensitive: true)
-            },
-            isProcessRunningInside: processCwds.contains {
-                isPath($0, equalToOrInside: resolved, caseInsensitive: true)
-            }
-        )
+        (entry.sizeBytes, entry.sizePartial) = directorySize(atPath: path, timeout: sizeWalkTimeout)
+        return entry
     }
 
     // MARK: Clean
@@ -275,6 +317,18 @@ enum WorktreeStorage {
             guard GitWorktreeManager.ignoredEnvFiles(path: entry.path) == false else {
                 outcome.kept.append(KeptWorktree(entry: entry, reason: .blocker(.envFiles)))
                 continue
+            }
+            if policy.keepsIgnoredFiles {
+                switch GitWorktreeManager.ignoredFilesOutsideRebuildableDirectories(path: entry.path) {
+                case false?:
+                    break
+                case true?:
+                    outcome.kept.append(KeptWorktree(entry: entry, reason: .blocker(.ignoredFiles)))
+                    continue
+                case nil:
+                    outcome.kept.append(KeptWorktree(entry: entry, reason: .blocker(.statusUnknown)))
+                    continue
+                }
             }
             switch GitWorktreeManager.remove(repoRoot: entry.repoRoot, path: entry.path, force: false) {
             case .success:
@@ -498,11 +552,15 @@ final class WorktreeStorageMonitor: @unchecked Sendable {
         defer { WorktreeStorage.passLock.unlock() }
         if ProgramaWorktreeSettings.autoRemoveMerged() {
             let policy = WorktreeRemovalPolicy.automatic(gracePeriodHours: ProgramaWorktreeSettings.autoRemoveAfterHours())
-            let entries = WorktreeStorage.scanAll(openDirectories: Self.openDirectoriesFromMain())
+            let now = Date()
+            let entries = WorktreeStorage.scanAll(
+                openDirectories: Self.openDirectoriesFromMain(),
+                removalFilter: WorktreeStorage.RemovalFilter(policy: policy, now: now)
+            )
             let outcome = WorktreeStorage.clean(
                 entries: entries,
                 policy: policy,
-                now: Date(),
+                now: now,
                 dryRun: false,
                 openDirectories: Self.openDirectoriesFromMain,
                 processCwds: WorktreeStorage.processWorkingDirectories
@@ -515,7 +573,7 @@ final class WorktreeStorageMonitor: @unchecked Sendable {
                     logger.error("git refused to remove \(kept.entry.path, privacy: .private): \(message, privacy: .private)")
                 }
             }
-            logger.info("Worktree cleanup scanned \(entries.count, privacy: .public), removed \(outcome.removed.count, privacy: .public), reclaimed \(outcome.reclaimedBytes, privacy: .public) bytes")
+            logger.info("Worktree cleanup probed \(entries.count, privacy: .public) unblocked candidates, removed \(outcome.removed.count, privacy: .public), reclaimed \(outcome.reclaimedBytes, privacy: .public) bytes")
         }
         if ProgramaStorageSettings.autoCleanCaches() {
             let items = StorageCategories.scan()

@@ -147,7 +147,10 @@ shown below each session; these measurements stay cached for two minutes and ski
 
 Each **Clean** button previews the items and total size before asking for confirmation.
 Worktree cleaning ignores the automatic cleanup grace period but keeps dirty, unmerged,
-open, or busy worktrees. Cache rows list blocked items with the reason they are kept.
+open, or busy worktrees. The automatic background cleanup also keeps any worktree that holds
+git-ignored files outside build and dependency folders (`node_modules`, `build`, `dist`, `target`,
+`.venv` and similar), such as `.dev.vars`, keys, local databases or a nested clone.
+Cache rows list blocked items with the reason they are kept.
 After cleaning, the panel reports the removed items and reclaimed space.
 
 Programa checks available space 60 seconds after launch and every 15 minutes. When it falls
