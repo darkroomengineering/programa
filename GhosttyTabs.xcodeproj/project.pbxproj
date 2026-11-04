@@ -62,6 +62,12 @@
 			NRSP0054A1B2C3D4E5F60719 /* TerminalSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0053A1B2C3D4E5F60719 /* TerminalSurface.swift */; };
 			WALS000001 /* SessionWALStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = WALS000002 /* SessionWALStore.swift */; };
 			ESCH000001 /* SessionEscrow.swift in Sources */ = {isa = PBXBuildFile; fileRef = ESCH000002 /* SessionEscrow.swift */; };
+			ESCH000003 /* SessionEscrowPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = ESCH000004 /* SessionEscrowPolicy.swift */; };
+			ESCH000005 /* HolderRetrieveDecision.swift in Sources */ = {isa = PBXBuildFile; fileRef = ESCH000006 /* HolderRetrieveDecision.swift */; };
+			ESCH000007 /* EscrowWireFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = ESCH000008 /* EscrowWireFormat.swift */; };
+			ESCH000009 /* UnixDomainFDPassing.swift in Sources */ = {isa = PBXBuildFile; fileRef = ESCH000010 /* UnixDomainFDPassing.swift */; };
+			ESCH000011 /* SessionEscrowClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = ESCH000012 /* SessionEscrowClient.swift */; };
+			ESCH000013 /* SessionEscrowHolder.swift in Sources */ = {isa = PBXBuildFile; fileRef = ESCH000014 /* SessionEscrowHolder.swift */; };
 			C7A2000001 /* ProgramaCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A2000002 /* ProgramaCore.swift */; };
 			SMGT000001 /* SessionMachineryGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = SMGT000002 /* SessionMachineryGate.swift */; };
 			CESH000001 /* session_escrow_shim.c in Sources */ = {isa = PBXBuildFile; fileRef = CESH000002 /* session_escrow_shim.c */; };
@@ -523,6 +529,12 @@
 			NRSP0053A1B2C3D4E5F60719 /* TerminalSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalSurface.swift; sourceTree = "<group>"; };
 			WALS000002 /* SessionWALStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionWALStore.swift; sourceTree = "<group>"; };
 			ESCH000002 /* SessionEscrow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionEscrow.swift; sourceTree = "<group>"; };
+			ESCH000004 /* SessionEscrowPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionEscrowPolicy.swift; sourceTree = "<group>"; };
+			ESCH000006 /* HolderRetrieveDecision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HolderRetrieveDecision.swift; sourceTree = "<group>"; };
+			ESCH000008 /* EscrowWireFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EscrowWireFormat.swift; sourceTree = "<group>"; };
+			ESCH000010 /* UnixDomainFDPassing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnixDomainFDPassing.swift; sourceTree = "<group>"; };
+			ESCH000012 /* SessionEscrowClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionEscrowClient.swift; sourceTree = "<group>"; };
+			ESCH000014 /* SessionEscrowHolder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionEscrowHolder.swift; sourceTree = "<group>"; };
 			C7A2000002 /* ProgramaCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaCore.swift; sourceTree = "<group>"; };
 			SMGT000002 /* SessionMachineryGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMachineryGate.swift; sourceTree = "<group>"; };
 			NRSP0051A1B2C3D4E5F60719 /* TerminalCopyMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalCopyMode.swift; sourceTree = "<group>"; };
@@ -1027,6 +1039,12 @@
 					NRSP0053A1B2C3D4E5F60719 /* TerminalSurface.swift */,
 					WALS000002 /* SessionWALStore.swift */,
 					ESCH000002 /* SessionEscrow.swift */,
+					ESCH000004 /* SessionEscrowPolicy.swift */,
+					ESCH000006 /* HolderRetrieveDecision.swift */,
+					ESCH000008 /* EscrowWireFormat.swift */,
+					ESCH000010 /* UnixDomainFDPassing.swift */,
+					ESCH000012 /* SessionEscrowClient.swift */,
+					ESCH000014 /* SessionEscrowHolder.swift */,
 					C7A2000002 /* ProgramaCore.swift */,
 					SMGT000002 /* SessionMachineryGate.swift */,
 					NRSP0051A1B2C3D4E5F60719 /* TerminalCopyMode.swift */,
@@ -1624,6 +1642,12 @@
 					NRSP0054A1B2C3D4E5F60719 /* TerminalSurface.swift in Sources */,
 					WALS000001 /* SessionWALStore.swift in Sources */,
 					ESCH000001 /* SessionEscrow.swift in Sources */,
+					ESCH000003 /* SessionEscrowPolicy.swift in Sources */,
+					ESCH000005 /* HolderRetrieveDecision.swift in Sources */,
+					ESCH000007 /* EscrowWireFormat.swift in Sources */,
+					ESCH000009 /* UnixDomainFDPassing.swift in Sources */,
+					ESCH000011 /* SessionEscrowClient.swift in Sources */,
+					ESCH000013 /* SessionEscrowHolder.swift in Sources */,
 					C7A2000001 /* ProgramaCore.swift in Sources */,
 					SMGT000001 /* SessionMachineryGate.swift in Sources */,
 					CESH000001 /* session_escrow_shim.c in Sources */,
