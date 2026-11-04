@@ -80,7 +80,18 @@ enum StorageCacheSupport {
         guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
               values.isDirectory == true, values.isSymbolicLink != true else { return false }
         // Ancestor symlinks can redirect otherwise safe-looking cache paths into user data.
-        return url.standardizedFileURL.path == WorktreeStorage.resolvedPath(path)
+        return lexicalPath(path) == WorktreeStorage.resolvedPath(path)
+    }
+    /// Removes "." and ".." without touching symlinks. Foundation's standardizing rewrites
+    /// /private/var to /var, which would never equal the realpath.
+    static func lexicalPath(_ path: String) -> String {
+        var components: [Substring] = []
+        for component in path.split(separator: "/") {
+            if component == "." { continue }
+            if component == ".." { _ = components.popLast(); continue }
+            components.append(component)
+        }
+        return "/" + components.joined(separator: "/")
     }
     static func children(_ path: String) -> [String] {
         guard directory(path) else { return [] }
