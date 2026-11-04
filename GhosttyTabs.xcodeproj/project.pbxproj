@@ -109,6 +109,9 @@
 		NRTM00000004 /* GitMetadataProber.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTM00000003 /* GitMetadataProber.swift */; };
 		WTMG000001 /* GitWorktreeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTMG000002 /* GitWorktreeManager.swift */; };
 		WTST000001 /* WorktreeStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTST000002 /* WorktreeStorage.swift */; };
+		SHUB000011 /* StorageHubModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = SHUB000012 /* StorageHubModel.swift */; };
+		SHUB000021 /* StorageHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SHUB000022 /* StorageHubView.swift */; };
+		SHUB000031 /* StorageLowDiskMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = SHUB000032 /* StorageLowDiskMonitor.swift */; };
 		STCT000001 /* StorageCategories.swift in Sources */ = {isa = PBXBuildFile; fileRef = STCT000002 /* StorageCategories.swift */; };
 		SCCH000001 /* StorageCacheSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = SCCH000002 /* StorageCacheSupport.swift */; };
 		SCCH000003 /* StorageXcodeCaches.swift in Sources */ = {isa = PBXBuildFile; fileRef = SCCH000004 /* StorageXcodeCaches.swift */; };
@@ -322,6 +325,7 @@
 					BEEF5050000000000000A003 /* EscrowFDPassingRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF5050000000000000A004 /* EscrowFDPassingRegressionTests.swift */; };
 				WTST000101 /* WorktreeStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTST000102 /* WorktreeStorageTests.swift */; };
 				SCCH000101 /* StorageCategoriesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SCCH000102 /* StorageCategoriesTests.swift */; };
+				SHUT000011 /* StorageHubTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = SHUT000012 /* StorageHubTests.swift */; };
 				BEEF5040A1B2C3D4E5F60001 /* ConfigFixSweepCONFTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF5040A1B2C3D4E5F60002 /* ConfigFixSweepCONFTests.swift */; };
 					BEEF5050000000000000A001 /* EscrowFixSweepSESSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF5050000000000000A002 /* EscrowFixSweepSESSTests.swift */; };
 					BEEF50200000000000000002 /* WorkspaceFixSweepWKSPTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEEF50200000000000000001 /* WorkspaceFixSweepWKSPTests.swift */; };
@@ -553,6 +557,9 @@
 		NRTM00000003 /* GitMetadataProber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitMetadataProber.swift; sourceTree = "<group>"; };
 		WTMG000002 /* GitWorktreeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitWorktreeManager.swift; sourceTree = "<group>"; };
 		WTST000002 /* WorktreeStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorktreeStorage.swift; sourceTree = "<group>"; };
+		SHUB000012 /* StorageHubModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageHubModel.swift; sourceTree = "<group>"; };
+		SHUB000022 /* StorageHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageHubView.swift; sourceTree = "<group>"; };
+		SHUB000032 /* StorageLowDiskMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageLowDiskMonitor.swift; sourceTree = "<group>"; };
 		STCT000002 /* StorageCategories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageCategories.swift; sourceTree = "<group>"; };
 		SCCH000002 /* StorageCacheSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageCacheSupport.swift; sourceTree = "<group>"; };
 		SCCH000004 /* StorageXcodeCaches.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageXcodeCaches.swift; sourceTree = "<group>"; };
@@ -760,6 +767,7 @@
 				BEEF5050000000000000A004 /* EscrowFDPassingRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EscrowFDPassingRegressionTests.swift; sourceTree = "<group>"; };
 				WTST000102 /* WorktreeStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorktreeStorageTests.swift; sourceTree = "<group>"; };
 				SCCH000102 /* StorageCategoriesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageCategoriesTests.swift; sourceTree = "<group>"; };
+				SHUT000012 /* StorageHubTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageHubTests.swift; sourceTree = "<group>"; };
 				BEEF5040A1B2C3D4E5F60002 /* ConfigFixSweepCONFTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigFixSweepCONFTests.swift; sourceTree = "<group>"; };
 				BEEF5050000000000000A002 /* EscrowFixSweepSESSTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EscrowFixSweepSESSTests.swift; sourceTree = "<group>"; };
 				BEEF50200000000000000001 /* WorkspaceFixSweepWKSPTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceFixSweepWKSPTests.swift; sourceTree = "<group>"; };
@@ -1042,6 +1050,9 @@
 					NRTM00000003 /* GitMetadataProber.swift */,
 					WTMG000002 /* GitWorktreeManager.swift */,
 					WTST000002 /* WorktreeStorage.swift */,
+					SHUB000012 /* StorageHubModel.swift */,
+					SHUB000022 /* StorageHubView.swift */,
+					SHUB000032 /* StorageLowDiskMonitor.swift */,
 					STCT000002 /* StorageCategories.swift */,
 					SCCH000002 /* StorageCacheSupport.swift */,
 					SCCH000004 /* StorageXcodeCaches.swift */,
@@ -1310,6 +1321,7 @@
 					BEEF5050000000000000A004 /* EscrowFDPassingRegressionTests.swift */,
 					WTST000102 /* WorktreeStorageTests.swift */,
 					SCCH000102 /* StorageCategoriesTests.swift */,
+					SHUT000012 /* StorageHubTests.swift */,
 					BEEF5040A1B2C3D4E5F60002 /* ConfigFixSweepCONFTests.swift */,
 					BEEF5050000000000000A002 /* EscrowFixSweepSESSTests.swift */,
 					BEEF50200000000000000001 /* WorkspaceFixSweepWKSPTests.swift */,
@@ -1625,6 +1637,9 @@
 						NRTM00000004 /* GitMetadataProber.swift in Sources */,
 						WTMG000001 /* GitWorktreeManager.swift in Sources */,
 						WTST000001 /* WorktreeStorage.swift in Sources */,
+						SHUB000011 /* StorageHubModel.swift in Sources */,
+						SHUB000021 /* StorageHubView.swift in Sources */,
+						SHUB000031 /* StorageLowDiskMonitor.swift in Sources */,
 						STCT000001 /* StorageCategories.swift in Sources */,
 						SCCH000001 /* StorageCacheSupport.swift in Sources */,
 						SCCH000003 /* StorageXcodeCaches.swift in Sources */,
@@ -1790,6 +1805,7 @@
 					BEEF5050000000000000A003 /* EscrowFDPassingRegressionTests.swift in Sources */,
 					WTST000101 /* WorktreeStorageTests.swift in Sources */,
 					SCCH000101 /* StorageCategoriesTests.swift in Sources */,
+					SHUT000011 /* StorageHubTests.swift in Sources */,
 					BEEF5040A1B2C3D4E5F60001 /* ConfigFixSweepCONFTests.swift in Sources */,
 					BEEF5050000000000000A001 /* EscrowFixSweepSESSTests.swift in Sources */,
 					BEEF50200000000000000002 /* WorkspaceFixSweepWKSPTests.swift in Sources */,

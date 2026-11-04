@@ -439,4 +439,20 @@ enum ProgramaStorageSettings {
     static func autoCleanCaches() -> Bool {
         (ProgramaWorktreeSettings.readSettingsRoot()?["storage"] as? [String: Any])?["autoCleanCaches"] as? Bool ?? true
     }
+
+    static let defaultLowDiskWarningGB: Double = 20
+
+    static func lowDiskWarningGB(settingsURL: URL = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".config/programa/settings.json")) -> Double {
+        guard let data = try? Data(contentsOf: settingsURL),
+              let sanitized = try? JSONCParser.preprocess(data: data),
+              let root = try? JSONSerialization.jsonObject(with: sanitized) as? [String: Any],
+              let storage = root["storage"] as? [String: Any],
+              let number = storage["lowDiskWarningGB"] as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID(),
+              number.doubleValue.isFinite, number.doubleValue >= 0 else {
+            return defaultLowDiskWarningGB
+        }
+        return number.doubleValue
+    }
 }
