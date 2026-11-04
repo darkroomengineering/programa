@@ -5,7 +5,7 @@
 - [keyboard-shortcuts.md](keyboard-shortcuts.md): default shortcuts, action ids and chord syntax for custom bindings.
 - [settings-json.md](settings-json.md): every key in `~/.config/programa/settings.json`.
 - [programa-json.md](programa-json.md): `programa.json` commands and recipes, the layout schema, and saved layouts.
-- [workspace-interface.md](workspace-interface.md): the pane tab bar, agent logos on tabs, edge fades, and the ports panel.
+- [workspace-interface.md](workspace-interface.md): the pane tab bar and header, moving a tab to a new window, sidebar rows, the ports, storage and provider usage popovers, helpers and turn checkpoints, and resuming an agent session.
 - [terminal-themes.md](terminal-themes.md): terminal themes, opacity, blur and font.
 - [notifications.md](notifications.md): notifications, the sidebar agent indicator, and agent hook examples.
 - [program-status.md](program-status.md): the OSC 7501 program status protocol for reporting what a program is doing.

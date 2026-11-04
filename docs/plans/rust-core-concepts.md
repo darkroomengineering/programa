@@ -156,13 +156,12 @@ notify --title <text> [--subtitle][--body][--tab][--panel]`, `list-notifications
 `CLI-MCP/MCPServer+Capabilities.swift`, `CLI-MCP/MCPSocketBridge.swift`,
 `CLI-MCP/ToolCatalog.swift`, `CLI-MCP/ResourceCatalog.swift`, `CLI-MCP/MCPErrorMapping.swift`).
 Separate binary embedded at `Contents/Resources/bin/programa-mcp` inside the app bundle; talks to
-the running app over the same v2 socket. 187 tools, one per exposed socket method with `.` ->
-`_` (`surface.read_text` -> `surface_read_text`, `review.comment.add` -> `review_comment_add`).
-Thirteen tools carry an explicit `focus_` prefix because they are allowed to move macOS focus:
-`focus_window`, `focus_workspace_select`, `focus_workspace_next`, `focus_workspace_previous`,
-`focus_workspace_last`, `focus_surface`, `focus_pane`, `focus_pane_last`, `focus_review_open`,
-`focus_worktree_open`, `focus_browser_webview`, `focus_browser_element`,
-`focus_browser_tab_switch` (`worktree_create` is a deliberate exception: it drops the underlying
+the running app over the same v2 socket. One tool per exposed socket method with `.` -> `_`
+(`surface.read_text` -> `surface_read_text`, `review.comment.add` -> `review_comment_add`); the
+tool definitions live in `CLI-MCP/Tools/`, and `tools/list` on a running server returns them.
+Tools that are allowed to move macOS focus carry an explicit `focus_` prefix instead, such as
+`focus_window`, `focus_surface` and `focus_pane`; `CLI-MCP/Tools/FocusTools.swift` defines them
+(`worktree_create` is a deliberate exception: it drops the underlying
 method's `focus` param entirely). Not exposed: `debug.*` (DEBUG-only, UI-test hooks) and app-chrome
 methods (`auth.login`, `settings.open`, `feedback.*`, `markdown.open`, `app.*`). Resources:
 `programa://tree` (full window/workspace/pane/surface tree) and

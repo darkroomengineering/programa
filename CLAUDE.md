@@ -30,7 +30,7 @@ By default, `reload.sh` builds but does **not** launch the app. The script print
 ./scripts/reload.sh --tag fix-zsh-autosuggestions --launch
 ```
 
-By default, every `--tag` shares one DerivedData directory (`programa-shared`), so switching tags or re-running the same tag is a warm incremental build instead of a cold one. Tags still get their own bundle id, app name, socket, and log — only the build directory is shared. Pass `--isolated` to give a tag its own DerivedData directory again (today's old default), e.g. when you need two tags to build fully independently:
+By default, every `--tag` shares one DerivedData directory (`programa-shared`), so switching tags or re-running the same tag is a warm incremental build instead of a cold one. Tags still get their own bundle id, app name, socket, and log; only the build directory is shared. Pass `--isolated` to give a tag its own DerivedData directory, e.g. when you need two tags to build fully independently:
 
 ```bash
 ./scripts/reload.sh --tag fix-zsh-autosuggestions --isolated
@@ -178,7 +178,7 @@ The app has a **Debug** menu in the macOS menu bar (only in DEBUG builds). Use i
 
 These run in CI; run the relevant one before pushing:
 
-- `python3 scripts/check-structural-budgets.py`: line budgets for lifecycle owner files. `CLI/programa.swift`, `CLI/CLI+Hooks.swift`, `Sources/TerminalController.swift` and `Sources/CommandPaletteController.swift` sit at their cap, so free lines (or move code into a new file) before adding any.
+- `python3 scripts/check-structural-budgets.py`: line budgets for lifecycle owner files such as `CLI/programa.swift` and `Sources/TerminalController.swift`. Run it before adding lines to a file it lists; it prints each file's current count and cap. When a file is near its cap, free lines or move code into a new file first.
 - `scripts/check-v2-contract.sh`: v2 socket methods are contract-first. Edit `contracts/v2/methods.json`, then `python3 scripts/gen-v2-contract.py`; never hand-edit the generated Swift.
 - `python3 scripts/check-settings-docs.py`: every settings key and shortcut action is documented.
 - New Swift files need four `project.pbxproj` entries (PBXBuildFile, PBXFileReference, group child, Sources build phase) or the build fails with "cannot find type in scope".

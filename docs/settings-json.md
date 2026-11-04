@@ -40,7 +40,7 @@ Sidebar settings from Settings > Sidebar.
 | Key | Type | Default | What it does |
 |---|---|---|---|
 | `matchTerminalBackground` | boolean | `false` | Use the terminal background instead of the sidebar tint. |
-| `showClaudeQuota` | boolean | `true` | Show Claude Code rate-limit headroom (5h/7d windows) in the sidebar footer, read from ~/.claude/tmp/rate-limits.json when present. |
+| `showClaudeQuota` | boolean | `true` | Show the Provider Usage button in the sidebar footer, which opens Claude and OpenAI rate limit usage. See [workspace-interface.md](workspace-interface.md#provider-usage). |
 
 ## `automation`
 

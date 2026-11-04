@@ -1,9 +1,11 @@
-# Tabs, agent logos and the ports panel
+# Workspace interface
 
-Four parts of the window show what is running without opening anything: the pane tab bar,
-the agent logo on a tab, the edge fades on an overflowing tab bar, and the ports panel in the
-sidebar footer. None of them has a settings key. The shortcuts that act on tabs are listed in
-[keyboard-shortcuts.md](keyboard-shortcuts.md).
+This page covers the parts of the window you work in: the pane tab bar and pane header, moving
+a tab to a new window, agent logos and edge fades on tabs, the sidebar rows, the ports, storage
+and provider usage popovers in the sidebar footer, the helpers popover and turn checkpoints,
+and resuming an agent session. The shortcuts that act on tabs and panes are listed in
+[keyboard-shortcuts.md](keyboard-shortcuts.md), and the settings named here are in
+[settings-json.md](settings-json.md).
 
 ## Pane tab bar
 
@@ -18,6 +20,40 @@ Every pane has its own tab bar along its top edge. Each tab is a terminal surfac
 - The selected tab scrolls into view when the row is wider than the pane.
 
 On macOS 26 the tab bar is native glass. Earlier macOS versions draw it without glass.
+
+A workspace with one pane and one tab hides the tab bar and leaves an empty strip at the top,
+so you can still drag the window from there. The bar comes back when the pane gets a second
+tab or the workspace is split. In minimal mode with the sidebar hidden, the bar stays, because
+it shares the titlebar row with the traffic lights.
+
+## Pane header
+
+On macOS 26 the trailing end of each pane's tab bar holds a row of quiet controls. They act on
+that pane, not on the focused one, so you can split or close a pane without clicking into it
+first:
+
+- **New Tab**, shown only when the pane has one tab. A pane with more tabs keeps the "+" after
+  its last tab instead.
+- **Split Right** and **Split Down**. They dim, with the tooltip "Split limit reached", when the
+  workspace cannot take another split.
+- **Zoom Pane**, which reads **Exit Zoom** while the pane is zoomed. It dims when the workspace
+  has only one pane.
+- **Close Tab**, which closes the pane's selected tab. It dims when that tab is pinned.
+
+A pane with a single tab shows that tab as a plain header: a small icon and the title, drawn
+without the glass tab shape and with no close button on the tab itself. When a pane is too
+narrow for every control, they drop out in this order: Split Down, Split Right, New Tab, then Zoom Pane. Close Tab always
+stays. The same actions have shortcuts (⌘ D, ⌘ ⇧ D and ⌘ ⇧ ↩ for split and zoom); see
+[keyboard-shortcuts.md](keyboard-shortcuts.md#split-panes). Earlier macOS versions do not have
+the pane header.
+
+## Move a tab to a new window
+
+Drag a tab out past the edge of every Programa window and release it. The tab opens in a new
+window placed under the release point, and its shell keeps running with its scrollback intact,
+because the terminal moves instead of starting over. Press Escape during the drag to cancel and
+keep the tab where it was. The last tab of the last workspace in the last window stays put, so
+no window is left empty.
 
 ## Agent logos on tabs
 
@@ -39,6 +75,36 @@ When a tab row holds more tabs than fit, the edge that hides tabs fades to trans
 about 24 points. A fade on the left edge means tabs are hidden to the left, and a fade on the
 right means tabs are hidden to the right. A row that fits shows no fade. Edge fades belong to
 the native glass tab bar on macOS 26.
+
+## Sidebar rows
+
+Each workspace has one row in the sidebar. From left to right, its first line holds:
+
+- the logo of the agent running in the workspace, or a terminal symbol when no agent reports
+  (a worktree folder row shows a folder and its collapse arrow instead);
+- the workspace title, which fades out at the right edge instead of being cut off;
+- a branch badge for a git worktree workspace, a pin for a pinned workspace, and the unread
+  notification count;
+- how long ago the status line below last changed ("now", "3m", "2h", "4d"), updated once a
+  minute.
+
+Under the title sits one status line. It shows the first of these that applies:
+
+1. The agent's state while it is working or waiting for you, as a colored pill.
+2. The latest notification text.
+3. The agent's resting state (Idle, Done or Error), as a pill.
+4. The latest log line from `programa log`.
+
+The agent states and the "(stale)" label are described in
+[notifications.md](notifications.md#sidebar-agent-indicator). Below the status line come the
+workspace description, the helpers line (see [Helpers popover](#helpers-popover)), status and
+metadata entries, the latest log line when the status line shows something else, a progress
+bar, the branch and directory lines, and pull requests. A directory line is left out when it is
+`~` or repeats the title.
+
+Hovering a row replaces the elapsed time with a ••• button that opens the same menu as a
+right-click. The selected row is a raised white pill with a soft shadow while the window is
+active, and flat gray when it is not. A custom sidebar selection color keeps a flat fill.
 
 ## Ports panel
 
@@ -89,6 +155,29 @@ below 20 GB, a notification opens Storage when clicked, revealing the sidebar if
 Warnings re-arm after space rises above the threshold plus 5 GB. Set
 `storage.lowDiskWarningGB` in [settings.json](settings-json.md#storage) to change the threshold
 or use `0` to disable warnings.
+
+## Provider usage
+
+The gauge button in the sidebar footer, labeled Provider Usage, opens a popover with how much of
+your Claude and OpenAI rate limits is left. It reads the numbers each time you open it and
+shows "Loading usage…" until the first answer arrives.
+
+- **Claude** appears when the `claude` command is installed and signed in, and Claude Code has
+  written `~/.claude/tmp/rate-limits.json` within the last hour. Some Claude Code setups never
+  write that file, and then the Claude section is left out. The rows are **Current session**
+  (the 5 hour window) and **Weekly**, whichever the file has.
+- **OpenAI** appears when the `codex` command (or the Codex app) is installed and signed in.
+  Its header shows your plan and credits, and its rows are the windows Codex reports, such as
+  **Current window** and **Weekly**.
+
+Each row shows the percentage left, a bar of what remains, and when the window resets. The bar
+turns orange once 60% is used and red at 85%. A provider that could not be read shows an error
+line instead of rows. With neither provider available, the popover says "No usage available".
+
+Turn the button off with **Show Provider Usage** in Settings > Sidebar, or
+`sidebarAppearance.showClaudeQuota` in [settings.json](settings-json.md#sidebarappearance).
+Token counts per session are a different feature: see `programa usage` in
+[agent-usage.md](agent-usage.md).
 
 ## Helpers popover and checkpoints
 
