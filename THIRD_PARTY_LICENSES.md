@@ -193,7 +193,7 @@ SOFTWARE.
 - **License:** Apache License 2.0
 - **Copyright:** Copyright 2025 Pierre Computer Company
 - **Source:** https://www.npmjs.com/package/@pierre/diffs
-- **Used for:** the review diff viewer bundle in `Resources/review-diff-viewer`, built from `webviews/review-diff` at version 1.5.2
+- **Used for:** the review diff viewer bundle in `Resources/review-diff-viewer`, built from `webviews/review-diff` at version 1.6.4
 
                                  Apache License
                            Version 2.0, January 2004
@@ -384,6 +384,15 @@ Unless required by applicable law or agreed to in writing, software distributed
 under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
 CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
+
+---
+
+## @pierre/highlights
+
+- **License:** Apache License 2.0 (text above, under @pierre/diffs)
+- **Copyright:** Copyright Pierre Computer Company
+- **Source:** https://www.npmjs.com/package/@pierre/highlights
+- **Used for:** syntax highlighting in the review diff viewer bundle, pulled in by `@pierre/diffs` (`@pierre/highlights` 0.4.0)
 
 ---
 

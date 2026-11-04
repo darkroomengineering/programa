@@ -297,6 +297,16 @@
 		B900003DA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */; };
 		E9C500000000000000000001 /* CLI+WorktreeIssue.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9C500000000000000000002 /* CLI+WorktreeIssue.swift */; };
 		B900003FA1B2C3D4E5F60719 /* CLI+Hooks.swift in Sources */ = {isa = PBXBuildFile; fileRef = B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */; };
+		CC0F00000000000000000003 /* LocalCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0F00000000000000000004 /* LocalCommands.swift */; };
+		CC0F00000000000000000005 /* SystemCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0F00000000000000000006 /* SystemCommands.swift */; };
+		CC0F00000000000000000007 /* WindowCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0F00000000000000000008 /* WindowCommands.swift */; };
+		CC0F00000000000000000009 /* WorkspaceCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0F0000000000000000000A /* WorkspaceCommands.swift */; };
+		CC0F0000000000000000000B /* WorktreeCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0F0000000000000000000C /* WorktreeCommands.swift */; };
+		CC0F0000000000000000000D /* PaneCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0F0000000000000000000E /* PaneCommands.swift */; };
+		CC0F0000000000000000000F /* TerminalIOCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0F00000000000000000010 /* TerminalIOCommands.swift */; };
+		CC0F00000000000000000011 /* NotificationCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0F00000000000000000012 /* NotificationCommands.swift */; };
+		CC0F00000000000000000013 /* SidebarCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0F00000000000000000014 /* SidebarCommands.swift */; };
+		CC0F00000000000000000001 /* CLI+CodexConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0F00000000000000000002 /* CLI+CodexConfig.swift */; };
 		C7A3000005 /* CLI+AgentEventAdapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A3000006 /* CLI+AgentEventAdapters.swift */; };
 		7501C0000000000000000001 /* CLI+ProgramStatusEmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7501C0000000000000000002 /* CLI+ProgramStatusEmitter.swift */; };
 		H1HC0002 /* CLI+HookCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1HC0001 /* CLI+HookCommands.swift */; };
@@ -753,6 +763,16 @@
 		B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+AgentWrappers.swift"; sourceTree = "<group>"; };
 		E9C500000000000000000002 /* CLI+WorktreeIssue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+WorktreeIssue.swift"; sourceTree = "<group>"; };
 		B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Hooks.swift"; sourceTree = "<group>"; };
+		CC0F00000000000000000004 /* LocalCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Commands/LocalCommands.swift"; sourceTree = "<group>"; };
+		CC0F00000000000000000006 /* SystemCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Commands/SystemCommands.swift"; sourceTree = "<group>"; };
+		CC0F00000000000000000008 /* WindowCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Commands/WindowCommands.swift"; sourceTree = "<group>"; };
+		CC0F0000000000000000000A /* WorkspaceCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Commands/WorkspaceCommands.swift"; sourceTree = "<group>"; };
+		CC0F0000000000000000000C /* WorktreeCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Commands/WorktreeCommands.swift"; sourceTree = "<group>"; };
+		CC0F0000000000000000000E /* PaneCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Commands/PaneCommands.swift"; sourceTree = "<group>"; };
+		CC0F00000000000000000010 /* TerminalIOCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Commands/TerminalIOCommands.swift"; sourceTree = "<group>"; };
+		CC0F00000000000000000012 /* NotificationCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Commands/NotificationCommands.swift"; sourceTree = "<group>"; };
+		CC0F00000000000000000014 /* SidebarCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Commands/SidebarCommands.swift"; sourceTree = "<group>"; };
+		CC0F00000000000000000002 /* CLI+CodexConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+CodexConfig.swift"; sourceTree = "<group>"; };
 		C7A3000006 /* CLI+AgentEventAdapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+AgentEventAdapters.swift"; sourceTree = "<group>"; };
 		7501C0000000000000000002 /* CLI+ProgramStatusEmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+ProgramStatusEmitter.swift"; sourceTree = "<group>"; };
 		H1HC0001 /* CLI+HookCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+HookCommands.swift"; sourceTree = "<group>"; };
@@ -1216,6 +1236,16 @@
 				B900003CA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift */,
 				E9C500000000000000000002 /* CLI+WorktreeIssue.swift */,
 				B900003EA1B2C3D4E5F60719 /* CLI+Hooks.swift */,
+				CC0F00000000000000000004 /* LocalCommands.swift */,
+				CC0F00000000000000000006 /* SystemCommands.swift */,
+				CC0F00000000000000000008 /* WindowCommands.swift */,
+				CC0F0000000000000000000A /* WorkspaceCommands.swift */,
+				CC0F0000000000000000000C /* WorktreeCommands.swift */,
+				CC0F0000000000000000000E /* PaneCommands.swift */,
+				CC0F00000000000000000010 /* TerminalIOCommands.swift */,
+				CC0F00000000000000000012 /* NotificationCommands.swift */,
+				CC0F00000000000000000014 /* SidebarCommands.swift */,
+				CC0F00000000000000000002 /* CLI+CodexConfig.swift */,
 				C7A3000006 /* CLI+AgentEventAdapters.swift */,
 				7501C0000000000000000002 /* CLI+ProgramStatusEmitter.swift */,
 				H1HC0001 /* CLI+HookCommands.swift */,
@@ -1920,6 +1950,16 @@
 				B900003DA1B2C3D4E5F60719 /* CLI+AgentWrappers.swift in Sources */,
 				E9C500000000000000000001 /* CLI+WorktreeIssue.swift in Sources */,
 				B900003FA1B2C3D4E5F60719 /* CLI+Hooks.swift in Sources */,
+				CC0F00000000000000000003 /* LocalCommands.swift in Sources */,
+				CC0F00000000000000000005 /* SystemCommands.swift in Sources */,
+				CC0F00000000000000000007 /* WindowCommands.swift in Sources */,
+				CC0F00000000000000000009 /* WorkspaceCommands.swift in Sources */,
+				CC0F0000000000000000000B /* WorktreeCommands.swift in Sources */,
+				CC0F0000000000000000000D /* PaneCommands.swift in Sources */,
+				CC0F0000000000000000000F /* TerminalIOCommands.swift in Sources */,
+				CC0F00000000000000000011 /* NotificationCommands.swift in Sources */,
+				CC0F00000000000000000013 /* SidebarCommands.swift in Sources */,
+				CC0F00000000000000000001 /* CLI+CodexConfig.swift in Sources */,
 				C7A3000005 /* CLI+AgentEventAdapters.swift in Sources */,
 				7501C0000000000000000001 /* CLI+ProgramStatusEmitter.swift in Sources */,
 				H1HC0002 /* CLI+HookCommands.swift in Sources */,
@@ -2346,7 +2386,7 @@
 			repositoryURL = "https://github.com/sparkle-project/Sparkle";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 2.9.6;
+				minimumVersion = 2.10.1;
 			};
 		};
 		A5001292 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
@@ -2374,7 +2414,7 @@
 			repositoryURL = "https://github.com/mattt/swift-toml";
 			requirement = {
 				kind = exactVersion;
-				version = 2.0.0;
+				version = 2.1.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

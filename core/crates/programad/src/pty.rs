@@ -12,7 +12,7 @@
 //! `exec`, which is the supported way to do exactly this dance.
 
 use std::io;
-use std::os::fd::{AsRawFd, OwnedFd, RawFd};
+use std::os::fd::{AsFd, AsRawFd, OwnedFd, RawFd};
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -131,9 +131,9 @@ pub fn spawn(params: SpawnParams) -> io::Result<PtySession> {
     Ok(PtySession { master, child })
 }
 
-pub(crate) fn set_cloexec(fd: &impl AsRawFd) -> io::Result<()> {
+pub(crate) fn set_cloexec(fd: &impl AsFd) -> io::Result<()> {
     use nix::fcntl::{fcntl, FcntlArg, FdFlag};
-    fcntl(fd.as_raw_fd(), FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC))
+    fcntl(fd, FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC))
         .map(|_| ())
         .map_err(io::Error::from)
 }
@@ -156,10 +156,9 @@ pub fn resize(fd: &OwnedFd, cols: u16, rows: u16) -> io::Result<()> {
 
 fn set_nonblocking(fd: &OwnedFd) -> io::Result<()> {
     use nix::fcntl::{fcntl, FcntlArg, OFlag};
-    let raw = fd.as_raw_fd();
-    let flags = fcntl(raw, FcntlArg::F_GETFL).map_err(io::Error::from)?;
+    let flags = fcntl(fd, FcntlArg::F_GETFL).map_err(io::Error::from)?;
     let mut flags = OFlag::from_bits_truncate(flags);
     flags.insert(OFlag::O_NONBLOCK);
-    fcntl(raw, FcntlArg::F_SETFL(flags)).map_err(io::Error::from)?;
+    fcntl(fd, FcntlArg::F_SETFL(flags)).map_err(io::Error::from)?;
     Ok(())
 }

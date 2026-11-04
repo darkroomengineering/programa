@@ -38,8 +38,8 @@ fi
 # This tool runs next to SPARKLE_PRIVATE_KEY, so it is pinned to an exact commit, not
 # just a tag (tags can be moved). Bump both together; the SHA is the tag's commit
 # (git ls-remote https://github.com/sparkle-project/Sparkle refs/tags/<version>).
-SPARKLE_VERSION="2.9.6"
-SPARKLE_COMMIT="ac2def288cbff5cfc7df3ffef6abdf45b72bcb0a"
+SPARKLE_VERSION="2.10.1"
+SPARKLE_COMMIT="ab7d71291238df6e0492143b120c9b696a35f603"
 DOWNLOAD_URL_PREFIX="${DOWNLOAD_URL_PREFIX:-https://github.com/darkroomengineering/programa/releases/download/$TAG/}"
 RELEASE_NOTES_URL="${RELEASE_NOTES_URL:-https://github.com/darkroomengineering/programa/releases/tag/$TAG}"
 

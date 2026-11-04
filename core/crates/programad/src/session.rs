@@ -350,7 +350,7 @@ fn attachment_input_loop(inner: Arc<Inner>, input_r: OwnedFd, stop_r: OwnedFd) {
         {
             continue;
         }
-        match nix::unistd::read(input_raw, &mut buf) {
+        match nix::unistd::read(&input_r, &mut buf) {
             Ok(0) => return,
             Ok(read) => {
                 if write_all_to_master(inner.master.as_raw_fd(), &buf[..read], stop_raw).is_err() {
@@ -491,7 +491,7 @@ fn reader_loop(inner: Arc<Inner>, wake_r: OwnedFd) {
         }
 
         loop {
-            match nix::unistd::read(master_raw, &mut buf) {
+            match nix::unistd::read(&inner.master, &mut buf) {
                 Ok(0) => {
                     finish_on_exit(&inner, wake_raw);
                     return;
