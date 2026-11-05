@@ -344,7 +344,39 @@ struct GitWorktreeManager {
                 ":(glob)**/.env*", ":(exclude,glob)**/node_modules/**",
             ]
         ), result.outcome == .exited, result.exitStatus == 0, let stdout = result.stdout else { return nil }
-        return !stdout.isEmpty
+        // git lists every nested repository as `dir/` whatever the pathspec says, so only
+        // entries that are themselves `.env*` files count.
+        return stdout.split(separator: "\0").contains { entry in
+            guard !entry.hasSuffix("/") else { return false }
+            let components = entry.split(separator: "/")
+            return components.last?.hasPrefix(".env") == true && !components.dropLast().contains("node_modules")
+        }
+    }
+
+    /// Ignored directories whose contents a build or package install recreates. Matched against
+    /// every directory component of an ignored path.
+    nonisolated static let rebuildableIgnoredDirectoryNames: Set<String> = [
+        "node_modules", ".build", "build", "dist", ".next", ".nuxt", ".turbo", ".cache", "target",
+        "Pods", "DerivedData", ".gradle", "coverage", "__pycache__", ".venv", "venv",
+    ]
+
+    /// Whether the worktree at `path` holds ignored files outside the
+    /// `rebuildableIgnoredDirectoryNames` directories (`.dev.vars`, keys, local databases, a
+    /// nested clone), which `git worktree remove` would delete. Output over the stdout limit
+    /// counts as true; nil when git could not answer.
+    nonisolated static func ignoredFilesOutsideRebuildableDirectories(path: String) -> Bool? {
+        // The pathspecs only keep the output small. git still lists a nested repository inside an
+        // excluded directory (as `dir/`), so the component check below decides.
+        let exclusions = rebuildableIgnoredDirectoryNames.sorted().map { ":(exclude,glob)**/\($0)/**" }
+        guard let result = runGitCommand(
+            directory: path,
+            arguments: ["ls-files", "--others", "--ignored", "--exclude-standard", "-z", "--"] + exclusions
+        ) else { return nil }
+        if result.outcome == .stdoutLimitExceeded { return true }
+        guard result.outcome == .exited, result.exitStatus == 0, let stdout = result.stdout else { return nil }
+        return stdout.split(separator: "\0").contains { entry in
+            !entry.split(separator: "/").dropLast().contains { rebuildableIgnoredDirectoryNames.contains(String($0)) }
+        }
     }
 
     // MARK: - Process plumbing
@@ -408,13 +440,14 @@ enum ProgramaWorktreeSettings {
 
     /// `worktrees.autoRemoveMerged`: whether the background monitor removes merged, idle
     /// Programa-created worktrees.
-    static func autoRemoveMerged() -> Bool {
-        (readSettingsRoot()?["worktrees"] as? [String: Any])?["autoRemoveMerged"] as? Bool ?? defaultAutoRemoveMerged
+    static func autoRemoveMerged(settingsURL: URL = settingsFileURL) -> Bool {
+        (readSettingsRoot(settingsURL: settingsURL)?["worktrees"] as? [String: Any])?["autoRemoveMerged"] as? Bool
+            ?? defaultAutoRemoveMerged
     }
 
     /// `worktrees.autoRemoveAfterHours`, clamped to at least one hour.
-    static func autoRemoveAfterHours() -> Double {
-        guard let section = readSettingsRoot()?["worktrees"] as? [String: Any],
+    static func autoRemoveAfterHours(settingsURL: URL = settingsFileURL) -> Double {
+        guard let section = readSettingsRoot(settingsURL: settingsURL)?["worktrees"] as? [String: Any],
               let number = section["autoRemoveAfterHours"] as? NSNumber,
               CFGetTypeID(number) != CFBooleanGetTypeID(),
               number.doubleValue.isFinite else {
@@ -423,10 +456,11 @@ enum ProgramaWorktreeSettings {
         return max(minimumAutoRemoveAfterHours, number.doubleValue)
     }
 
-    static func readSettingsRoot() -> [String: Any]? {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let path = (home as NSString).appendingPathComponent(".config/programa/settings.json")
-        guard let data = FileManager.default.contents(atPath: path), !data.isEmpty else { return nil }
+    static let settingsFileURL = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".config/programa/settings.json")
+
+    static func readSettingsRoot(settingsURL: URL = settingsFileURL) -> [String: Any]? {
+        guard let data = FileManager.default.contents(atPath: settingsURL.path), !data.isEmpty else { return nil }
         guard let sanitized = try? JSONCParser.preprocess(data: data),
               let object = try? JSONSerialization.jsonObject(with: sanitized, options: []) else {
             return nil
@@ -436,8 +470,11 @@ enum ProgramaWorktreeSettings {
 }
 
 enum ProgramaStorageSettings {
-    static func autoCleanCaches() -> Bool {
-        (ProgramaWorktreeSettings.readSettingsRoot()?["storage"] as? [String: Any])?["autoCleanCaches"] as? Bool ?? true
+    static let defaultAutoCleanCaches = true
+
+    static func autoCleanCaches(settingsURL: URL = ProgramaWorktreeSettings.settingsFileURL) -> Bool {
+        (ProgramaWorktreeSettings.readSettingsRoot(settingsURL: settingsURL)?["storage"] as? [String: Any])?["autoCleanCaches"]
+            as? Bool ?? defaultAutoCleanCaches
     }
 
     static let defaultLowDiskWarningGB: Double = 20

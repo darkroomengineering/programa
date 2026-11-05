@@ -40,7 +40,7 @@ final class WorktreeStorageTests: XCTestCase {
         try configFixtureGit(["init", "--bare", "-b", "main", "remote.git"], in: tempRoot)
         let seed = tempRoot.appendingPathComponent("seed", isDirectory: true)
         try configFixtureGit(["init", "-b", "main", "seed"], in: tempRoot)
-        try write(".env*\nbuild/\nnode_modules/\n", to: seed.appendingPathComponent(".gitignore"))
+        try write(".env*\nbuild/\nnode_modules/\n.dev.vars\nscratch/\n", to: seed.appendingPathComponent(".gitignore"))
         try write("hello\n", to: seed.appendingPathComponent("README.md"))
         try configFixtureGit(["add", "."], in: seed)
         try configFixtureGit(["commit", "-m", "initial"], in: seed)
@@ -93,7 +93,8 @@ final class WorktreeStorageTests: XCTestCase {
     /// Discovery plus scan, the way `scanAll` composes them, with injected open state.
     private func scanEntries(
         openDirectories: [String] = [],
-        processCwds: Set<String> = []
+        processCwds: Set<String> = [],
+        removalFilter: WorktreeStorage.RemovalFilter? = nil
     ) -> [WorktreeStorageEntry] {
         let candidates = [repo.path] + WorktreeStorage.programaWorktreeCandidates(in: programaDir.path)
         let repositories = WorktreeStorage.discoverRepositories(candidateDirectories: candidates)
@@ -102,7 +103,24 @@ final class WorktreeStorageTests: XCTestCase {
             repositories: repositories,
             programaDirectory: programaDir.path,
             openDirectories: openDirectories,
-            processCwds: processCwds
+            processCwds: processCwds,
+            removalFilter: removalFilter
+        )
+    }
+
+    /// A clean, merged Programa worktree last used long ago, with every probe answered.
+    private func probedEntry(
+        isDirty: Bool? = false,
+        hasIgnoredEnvFiles: Bool? = false,
+        isMerged: Bool? = true,
+        hasIgnoredFiles: Bool? = false
+    ) -> WorktreeStorageEntry {
+        WorktreeStorageEntry(
+            repoRoot: "/fixtures/repo", path: "/fixtures/worktrees/repo/feature", branch: "feature",
+            headSHA: "abc123", sizeBytes: 10, sizePartial: false, lastModified: Date(timeIntervalSince1970: 0),
+            isProgramaCreated: true, isDirty: isDirty, hasIgnoredEnvFiles: hasIgnoredEnvFiles,
+            hasUnpushedOrUnmergedCommits: false, isMerged: isMerged, isOpenInWorkspace: false,
+            isProcessRunningInside: false, hasIgnoredFiles: hasIgnoredFiles
         )
     }
 
@@ -428,6 +446,146 @@ final class WorktreeStorageTests: XCTestCase {
         XCTAssertTrue(isListed(worktree), "dry run leaves git's worktree list")
     }
 
+    // MARK: - Ignored files outside build directories
+
+    /// Build output and dependency folders are rebuilt on demand, so they never pin a
+    /// worktree, even when a dependency is a git checkout of its own.
+    func testOnlyRebuildableIgnoredDirectoriesDoNotBlockAutomaticRemoval() throws {
+        let worktree = try addWorktree("rebuildable")
+        try write("module.exports = 1\n", to: worktree.appendingPathComponent("node_modules/pkg/index.js"))
+        try write("obj\n", to: worktree.appendingPathComponent("build/out/main.o"))
+        let checkout = worktree.appendingPathComponent("node_modules/git-dep", isDirectory: true)
+        try FileManager.default.createDirectory(at: checkout, withIntermediateDirectories: true)
+        try configFixtureGit(["init", "-q"], in: checkout)
+
+        let entries = scanEntries()
+        let scanned = try entry(worktree, in: entries)
+        XCTAssertEqual(scanned.isDirty, false)
+        XCTAssertEqual(scanned.hasIgnoredFiles, false)
+        XCTAssertNil(scanned.removalBlocker(policy: automatic, now: later))
+
+        let outcome = clean(entries, policy: automatic, now: later)
+        XCTAssertEqual(removedPaths(outcome), [resolved(worktree.path)])
+        XCTAssertFalse(exists(worktree))
+    }
+
+    /// The background pass deletes without asking, so any ignored file a build would not
+    /// recreate (here a Cloudflare `.dev.vars`) keeps the worktree. A manual clean, which
+    /// previews and confirms, is not held back.
+    func testIgnoredLocalFileKeepsWorktreeFromAutomaticRemovalOnly() throws {
+        let worktree = try addWorktree("dev-vars")
+        let secrets = worktree.appendingPathComponent(".dev.vars")
+        try write("API_TOKEN=local\n", to: secrets)
+
+        let entries = scanEntries()
+        let scanned = try entry(worktree, in: entries)
+        XCTAssertEqual(scanned.isDirty, false, "ignored files are not dirt")
+        XCTAssertEqual(scanned.hasIgnoredEnvFiles, false, ".dev.vars is not a .env* file")
+        XCTAssertEqual(scanned.hasIgnoredFiles, true)
+        XCTAssertEqual(scanned.removalBlocker(policy: automatic, now: later), .ignoredFiles)
+        XCTAssertNil(scanned.removalBlocker(policy: noGrace, now: later))
+
+        let outcome = clean(entries, policy: automatic, now: later)
+        XCTAssertTrue(outcome.removed.isEmpty, "removed: \(outcome.removed.map(\.path))")
+        XCTAssertEqual(keptReason(worktree, in: outcome), .blocker(.ignoredFiles))
+        XCTAssertEqual(keptReason(worktree, in: outcome)?.code, "ignored_files")
+        XCTAssertTrue(exists(secrets), ".dev.vars survives the background pass")
+    }
+
+    /// A clone inside an ignored folder can hold commits that exist nowhere else.
+    func testIgnoredNestedRepositoryKeepsWorktree() throws {
+        let worktree = try addWorktree("nested-clone")
+        let clone = worktree.appendingPathComponent("scratch/clone", isDirectory: true)
+        try FileManager.default.createDirectory(at: clone, withIntermediateDirectories: true)
+        try configFixtureGit(["init", "-q", "-b", "main"], in: clone)
+        try write("local work\n", to: clone.appendingPathComponent("notes.txt"))
+        try configFixtureGit(["add", "notes.txt"], in: clone)
+        try configFixtureGit(["commit", "-q", "-m", "unpushed"], in: clone)
+
+        let entries = scanEntries()
+        let scanned = try entry(worktree, in: entries)
+        XCTAssertEqual(scanned.isDirty, false)
+        XCTAssertEqual(scanned.hasIgnoredFiles, true)
+        XCTAssertEqual(scanned.removalBlocker(policy: automatic, now: later), .ignoredFiles)
+
+        let outcome = clean(entries, policy: automatic, now: later)
+        XCTAssertEqual(keptReason(worktree, in: outcome), .blocker(.ignoredFiles))
+        XCTAssertTrue(exists(clone.appendingPathComponent(".git")), "the nested repository survives")
+    }
+
+    /// An ignored file created after the scan must still stop the background removal.
+    func testCleanRechecksIgnoredFilesBeforeAutomaticRemoval() throws {
+        let worktree = try addWorktree("dev-vars-later")
+        let entries = scanEntries()
+        XCTAssertNil(try entry(worktree, in: entries).removalBlocker(policy: automatic, now: later))
+
+        let secrets = worktree.appendingPathComponent(".dev.vars")
+        try write("API_TOKEN=late\n", to: secrets)
+
+        let outcome = clean(entries, policy: automatic, now: later)
+        XCTAssertTrue(outcome.removed.isEmpty, "removed: \(outcome.removed.map(\.path))")
+        XCTAssertEqual(keptReason(worktree, in: outcome), .blocker(.ignoredFiles))
+        XCTAssertTrue(exists(secrets))
+        XCTAssertTrue(isListed(worktree))
+    }
+
+    // MARK: - Unanswered probes
+
+    /// A probe git could not answer must never read as "safe to delete".
+    func testUnansweredProbeBlocksAsStatusUnknown() {
+        XCTAssertNil(probedEntry().removalBlocker(policy: automatic, now: later))
+        for (label, scanned) in [
+            ("dirty", probedEntry(isDirty: nil)),
+            ("env files", probedEntry(hasIgnoredEnvFiles: nil)),
+            ("merged", probedEntry(isMerged: nil)),
+        ] {
+            XCTAssertEqual(scanned.removalBlocker(policy: automatic, now: later), .statusUnknown, label)
+            XCTAssertEqual(scanned.removalBlocker(policy: noGrace, now: later), .statusUnknown, label)
+        }
+
+        let ignoredUnknown = probedEntry(hasIgnoredFiles: nil)
+        XCTAssertEqual(ignoredUnknown.removalBlocker(policy: automatic, now: later), .statusUnknown)
+        XCTAssertNil(
+            ignoredUnknown.removalBlocker(policy: noGrace, now: later),
+            "a manual clean does not apply the ignored-file rule, so its probe does not matter"
+        )
+    }
+
+    // MARK: - Removal-only scan
+
+    /// The background pass skips git and the size walk for worktrees a cheap check already
+    /// keeps, and still removes exactly what a full scan would.
+    func testRemovalFilterSkipsWorktreesBlockedWithoutProbesAndRemovesTheSameSet() throws {
+        let opened = try addWorktree("filter-open")
+        let idle = try addWorktree("filter-idle")
+        let external = try addWorktree("filter-outside", parent: tempRoot.appendingPathComponent("external", isDirectory: true))
+        let dirty = try addWorktree("filter-dirty")
+        try write("draft\n", to: dirty.appendingPathComponent("notes.txt"))
+
+        let full = scanEntries(openDirectories: [opened.path])
+        let filtered = scanEntries(
+            openDirectories: [opened.path],
+            removalFilter: WorktreeStorage.RemovalFilter(policy: automatic, now: later)
+        )
+
+        XCTAssertEqual(
+            Set(filtered.map { resolved($0.path) }),
+            [resolved(idle.path), resolved(dirty.path)],
+            "open and external worktrees are left out; the dirty one needs git to be judged"
+        )
+        XCTAssertEqual(try entry(dirty, in: filtered).removalBlocker(policy: automatic, now: later), .dirty)
+        XCTAssertEqual(try entry(external, in: full).removalBlocker(policy: automatic, now: later), .external)
+        XCTAssertTrue(
+            scanEntries(removalFilter: WorktreeStorage.RemovalFilter(policy: automatic, now: Date())).isEmpty,
+            "every worktree was just created, so none is past the grace period"
+        )
+
+        let preview = clean(full, policy: automatic, now: later, dryRun: true)
+        let outcome = clean(filtered, policy: automatic, now: later, openDirectories: { [opened.path] })
+        XCTAssertEqual(removedPaths(outcome), removedPaths(preview))
+        XCTAssertEqual(removedPaths(outcome), [resolved(idle.path)])
+    }
+
     // MARK: - Path containment
 
     /// Containment decides whether a cwd or open directory protects a worktree. A prefix match
@@ -445,5 +603,70 @@ final class WorktreeStorageTests: XCTestCase {
         XCTAssertFalse(WorktreeStorage.isPath("/A/Foo/bar", equalToOrInside: "/a/foo", caseInsensitive: false))
         XCTAssertTrue(WorktreeStorage.isPath("/A/Foo/bar", equalToOrInside: "/a/foo", caseInsensitive: true))
         XCTAssertFalse(WorktreeStorage.isPath("/A/FooBar", equalToOrInside: "/a/foo", caseInsensitive: true))
+    }
+}
+
+/// The settings that turn on unattended deletion. A flipped default, or a zero or boolean grace
+/// period slipping through, would remove worktrees merged minutes ago.
+final class WorktreeAutoRemoveSettingsTests: XCTestCase {
+    private var settingsURL: URL!
+
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("worktree-settings-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        settingsURL = directory.appendingPathComponent("settings.json")
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: settingsURL.deletingLastPathComponent())
+        settingsURL = nil
+        try super.tearDownWithError()
+    }
+
+    private func writeSettings(_ contents: String) throws {
+        try contents.write(to: settingsURL, atomically: true, encoding: .utf8)
+    }
+
+    func testMissingOrUnusableSettingsFallBackToDefaults() throws {
+        XCTAssertTrue(ProgramaWorktreeSettings.autoRemoveMerged(settingsURL: settingsURL))
+        XCTAssertEqual(ProgramaWorktreeSettings.autoRemoveAfterHours(settingsURL: settingsURL), 24)
+        XCTAssertTrue(ProgramaStorageSettings.autoCleanCaches(settingsURL: settingsURL))
+
+        for contents in [
+            "", "not JSON", "[]", "{}", "{\"worktrees\":{},\"storage\":{}}",
+            "{\"worktrees\":{\"autoRemoveMerged\":\"false\",\"autoRemoveAfterHours\":\"48\"},"
+                + "\"storage\":{\"autoCleanCaches\":\"false\"}}",
+            "{\"worktrees\":{\"autoRemoveMerged\":null,\"autoRemoveAfterHours\":null},\"storage\":{\"autoCleanCaches\":null}}",
+        ] {
+            try writeSettings(contents)
+            XCTAssertTrue(ProgramaWorktreeSettings.autoRemoveMerged(settingsURL: settingsURL), contents)
+            XCTAssertEqual(ProgramaWorktreeSettings.autoRemoveAfterHours(settingsURL: settingsURL), 24, contents)
+            XCTAssertTrue(ProgramaStorageSettings.autoCleanCaches(settingsURL: settingsURL), contents)
+        }
+    }
+
+    func testExplicitFalseTurnsAutomaticCleanupOffInJSONC() throws {
+        try writeSettings("""
+        {
+          // keep everything
+          "worktrees": { "autoRemoveMerged": false, },
+          "storage": { "autoCleanCaches": false },
+        }
+        """)
+        XCTAssertFalse(ProgramaWorktreeSettings.autoRemoveMerged(settingsURL: settingsURL))
+        XCTAssertFalse(ProgramaStorageSettings.autoCleanCaches(settingsURL: settingsURL))
+    }
+
+    func testGracePeriodIsClampedToAtLeastOneHour() throws {
+        let cases: [(json: String, hours: Double)] = [
+            ("0", 1), ("0.5", 1), ("-12", 1), ("1", 1), ("1.5", 1.5), ("48", 48),
+            ("true", 24), ("false", 24), ("1e999", 24),
+        ]
+        for (json, hours) in cases {
+            try writeSettings("{\"worktrees\":{\"autoRemoveAfterHours\":\(json)}}")
+            XCTAssertEqual(ProgramaWorktreeSettings.autoRemoveAfterHours(settingsURL: settingsURL), hours, json)
+        }
     }
 }
