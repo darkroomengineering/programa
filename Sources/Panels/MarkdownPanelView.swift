@@ -309,6 +309,7 @@ struct MarkdownSearchOverlay: View {
                     onNext()
                 }) {
                     Image(systemName: "chevron.up")
+                        .font(.system(size: ChromeScale.controlIconSize, weight: .regular))
                 }
                 .buttonStyle(SearchButtonStyle())
                 .safeHelp(String(localized: "search.nextMatch.help", defaultValue: "Next match (Return)"))
@@ -321,6 +322,7 @@ struct MarkdownSearchOverlay: View {
                     onPrevious()
                 }) {
                     Image(systemName: "chevron.down")
+                        .font(.system(size: ChromeScale.controlIconSize, weight: .regular))
                 }
                 .buttonStyle(SearchButtonStyle())
                 .safeHelp(String(localized: "search.previousMatch.help", defaultValue: "Previous match (Shift+Return)"))
@@ -333,6 +335,7 @@ struct MarkdownSearchOverlay: View {
                     onClose()
                 }) {
                     Image(systemName: "xmark")
+                        .font(.system(size: ChromeScale.closeIconSize, weight: .semibold))
                 }
                 .buttonStyle(SearchButtonStyle())
                 .safeHelp(String(localized: "search.close.help", defaultValue: "Close (Esc)"))
@@ -340,7 +343,7 @@ struct MarkdownSearchOverlay: View {
             }
             .padding(8)
             .background(.background)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: ChromeScale.rowCornerRadius))
             .shadow(radius: 4)
             .onAppear {
 #if DEBUG

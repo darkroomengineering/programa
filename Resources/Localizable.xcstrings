@@ -15445,6 +15445,23 @@
         }
       }
     },
+    "tabBar.showAllTabs": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show All Tabs"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべてのタブを表示"
+          }
+        }
+      }
+    },
     "crash_recovery.notification.title": {
       "extractionState": "manual",
       "localizations": {

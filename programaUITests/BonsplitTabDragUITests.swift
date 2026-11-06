@@ -286,7 +286,7 @@ final class BonsplitTabDragUITests: XCTestCase {
         )
     }
 
-    func testMinimalModeCollapsedSidebarKeepsWorkspaceControlsSuppressed() {
+    func testMinimalModeCollapsedSidebarShowsControlsAfterTrafficLights() {
         let (app, dataPath) = launchConfiguredApp(startWithHiddenSidebar: true)
 
         XCTAssertTrue(
@@ -318,20 +318,19 @@ final class BonsplitTabDragUITests: XCTestCase {
         let newWorkspaceButton = app.descendants(matching: .any).matching(identifier: "titlebarControl.newTab").firstMatch
 
         hover(in: window, at: CGPoint(x: window.frame.maxX - 48, y: window.frame.minY + 18))
+        let controls = [notificationsButton, newWorkspaceButton, toggleSidebarButton]
         XCTAssertTrue(
-            waitForCondition(timeout: 2.0) {
-                (!toggleSidebarButton.exists || !toggleSidebarButton.isHittable) &&
-                    (!notificationsButton.exists || !notificationsButton.isHittable) &&
-                    (!newWorkspaceButton.exists || !newWorkspaceButton.isHittable)
-            },
-            "Expected collapsed-sidebar minimal mode to keep workspace controls suppressed. toggle=\(toggleSidebarButton.debugDescription) notifications=\(notificationsButton.debugDescription) new=\(newWorkspaceButton.debugDescription)"
+            waitForCondition(timeout: 4.0) { controls.allSatisfy { $0.exists && $0.isHittable } },
+            "Expected collapsed-sidebar minimal mode to show the titlebar controls. \(describe(controls))"
         )
 
-        let leadingInset = alphaTab.frame.minX - window.frame.minX
-        XCTAssertLessThan(
-            leadingInset,
-            96,
-            "Expected pane tabs to stay near the leading edge when collapsed-sidebar minimal mode removes the titlebar accessory lane. window=\(window.frame) alphaTab=\(alphaTab.frame) leadingInset=\(leadingInset)"
+        // Stock NavigationSplitView order: bell, "+", then the sidebar toggle.
+        XCTAssertLessThan(notificationsButton.frame.minX, newWorkspaceButton.frame.minX, describe(controls))
+        XCTAssertLessThan(newWorkspaceButton.frame.minX, toggleSidebarButton.frame.minX, describe(controls))
+        XCTAssertGreaterThan(
+            alphaTab.frame.minX,
+            toggleSidebarButton.frame.maxX,
+            "Expected the first pane's tabs to start after the titlebar controls. alphaTab=\(alphaTab.frame) \(describe(controls))"
         )
     }
 

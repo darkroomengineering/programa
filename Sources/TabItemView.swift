@@ -339,10 +339,10 @@ struct TabItemView: View, Equatable {
         let tint = agentIndicatorTintColor(indicator)
         return HStack(spacing: 3) {
             Image(systemName: indicator.systemImage)
-                .font(.system(size: 9, weight: .semibold))
+                .font(.system(size: ChromeScale.captionFontSize, weight: .medium))
                 .accessibilityHidden(true)
             Text(indicator.label)
-                .font(.system(size: 10))
+                .font(.system(size: ChromeScale.captionFontSize))
                 .lineLimit(1)
         }
         .foregroundColor(tint)
@@ -463,9 +463,10 @@ struct TabItemView: View, Equatable {
                 } label: {
                     HStack(spacing: 3) {
                         Image(systemName: isWorktreeFolderCollapsed ? "chevron.right" : "chevron.down")
+                            .font(.system(size: ChromeScale.captionFontSize, weight: .semibold))
                         Image(systemName: "folder.fill")
+                            .font(.system(size: ChromeScale.leadingIconSize, weight: .medium))
                     }
-                    .font(.system(size: 9, weight: .semibold))
                     .foregroundColor(activeSecondaryColor(0.78))
                     .frame(height: 20)
                 }
@@ -478,7 +479,7 @@ struct TabItemView: View, Equatable {
                 .accessibilityLabel(Text(worktreeFolderTooltip))
             } else {
                 Image(systemName: "folder")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: ChromeScale.leadingIconSize, weight: .medium))
                     .foregroundColor(activeSecondaryColor(0.78))
                     .safeHelp(worktreeFolderTooltip)
                     .accessibilityLabel(Text(worktreeFolderTooltip))
@@ -491,7 +492,7 @@ struct TabItemView: View, Equatable {
                 .accessibilityHidden(true)
         } else {
             Image(systemName: "terminal")
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(size: ChromeScale.leadingIconSize, weight: .medium))
                 .foregroundColor(activeSecondaryColor(0.75))
                 .accessibilityHidden(true)
         }
@@ -550,7 +551,7 @@ struct TabItemView: View, Equatable {
 
                         if showsWorktreeBadge && !isWorktreeFolder {
                             Image(systemName: "arrow.triangle.branch")
-                                .font(.system(size: 9, weight: .semibold))
+                                .font(.system(size: ChromeScale.secondaryFontSize, weight: .medium))
                                 .foregroundColor(activeSecondaryColor(0.7))
                                 .safeHelp(worktreeBadgeTooltip)
                                 .accessibilityLabel(Text(worktreeBadgeAccessibilityLabel))
@@ -558,7 +559,7 @@ struct TabItemView: View, Equatable {
 
                         if tab.isPinned {
                             Image(systemName: "pin.fill")
-                                .font(.system(size: 9, weight: .semibold))
+                                .font(.system(size: ChromeScale.secondaryFontSize, weight: .medium))
                                 .foregroundColor(activeSecondaryColor(0.8))
                                 .safeHelp(protectedWorkspaceTooltip)
                         }
@@ -568,7 +569,8 @@ struct TabItemView: View, Equatable {
                                 Circle()
                                     .fill(activeUnreadBadgeFillColor)
                                 Text("\(unreadCount)")
-                                    .font(.system(size: 9, weight: .semibold))
+                                    .font(.system(size: ChromeScale.badgeFontSize, weight: .semibold, design: .rounded))
+                                    .monospacedDigit()
                                     .foregroundColor(.white)
                             }
                             .frame(width: 16, height: 16)
@@ -585,12 +587,13 @@ struct TabItemView: View, Equatable {
                             HStack(spacing: 4) {
                                 Button(action: { showRowMenu() }) {
                                     Image(systemName: "ellipsis")
-                                        .font(.system(size: 11, weight: .semibold))
+                                        .font(.system(size: ChromeScale.controlIconSize, weight: .regular))
                                         .foregroundColor(activeSecondaryColor(0.8))
-                                        .frame(width: 18, height: 16)
+                                        .frame(width: ChromeScale.minimumHitTarget, height: ChromeScale.minimumHitTarget)
                                         .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
+                                .frame(width: ChromeScale.minimumHitTarget, height: 16)
                                 .safeHelp(moreActionsLabel)
                                 .accessibilityLabel(Text(moreActionsLabel))
                                 .opacity(isHovering ? 1 : 0)
@@ -609,11 +612,14 @@ struct TabItemView: View, Equatable {
                                             tabManager.closeWorkspaceWithConfirmation(tab)
                                         }) {
                                             Image(systemName: "xmark")
-                                                .font(.system(size: 9, weight: .medium))
+                                                .font(.system(size: ChromeScale.closeIconSize, weight: .semibold))
                                                 .foregroundColor(activeSecondaryColor(0.7))
+                                                .frame(width: ChromeScale.minimumHitTarget, height: ChromeScale.minimumHitTarget)
+                                                .contentShape(Rectangle())
                                         }
                                         .buttonStyle(.plain)
                                         .safeHelp(closeButtonTooltip)
+                                        .accessibilityLabel(Text(closeWorkspaceTooltip))
                                         .frame(width: SidebarTrailingAccessoryWidthPolicy.closeButtonWidth, height: 16, alignment: .center)
                                         .opacity(showCloseButton && !showsWorkspaceShortcutHint ? 1 : 0)
                                         .allowsHitTesting(showCloseButton && !showsWorkspaceShortcutHint)
@@ -649,7 +655,7 @@ struct TabItemView: View, Equatable {
                         agentStatusPill(statusIndicator)
                     } else if let status {
                         Text(status.text)
-                            .font(.system(size: 11))
+                            .font(.system(size: ChromeScale.secondaryFontSize))
                             .foregroundColor(activeSecondaryColor(0.8))
                             .modifier(SidebarTrailingFade())
                             .safeHelp(status.text)
@@ -670,16 +676,16 @@ struct TabItemView: View, Equatable {
                     }) {
                         HStack(spacing: 4) {
                             Image(systemName: "person.2")
-                                .font(.system(size: 8))
+                                .font(.system(size: ChromeScale.captionFontSize))
                                 .accessibilityHidden(true)
                             Text(helperLineLabel)
                                 .lineLimit(1)
                             Image(systemName: "chevron.down")
-                                .font(.system(size: 7, weight: .semibold))
+                                .font(.system(size: ChromeScale.captionFontSize, weight: .semibold))
                                 .accessibilityHidden(true)
                             Spacer(minLength: 0)
                         }
-                        .font(.system(size: 10))
+                        .font(.system(size: ChromeScale.captionFontSize))
                         .foregroundColor(activeSecondaryColor(0.8))
                         .contentShape(Rectangle())
                     }
@@ -717,10 +723,10 @@ struct TabItemView: View, Equatable {
                 if status?.source != .log, let latestLog = tab.logEntries.last {
                     HStack(spacing: 4) {
                         Image(systemName: logLevelIcon(latestLog.level))
-                            .font(.system(size: 8))
+                            .font(.system(size: ChromeScale.captionFontSize))
                             .foregroundColor(logLevelColor(latestLog.level, isActive: usesInvertedActiveForeground))
                         Text(latestLog.message)
-                            .font(.system(size: 10))
+                            .font(.system(size: ChromeScale.captionFontSize))
                             .foregroundColor(activeSecondaryColor(0.8))
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -743,7 +749,7 @@ struct TabItemView: View, Equatable {
 
                         if let label = progress.label {
                             Text(label)
-                                .font(.system(size: 9))
+                                .font(.system(size: ChromeScale.captionFontSize))
                                 .foregroundColor(activeSecondaryColor(0.6))
                                 .lineLimit(1)
                         }
@@ -755,7 +761,7 @@ struct TabItemView: View, Equatable {
                     HStack(alignment: .top, spacing: 3) {
                         if sidebarShowGitBranchIcon, branchLinesContainBranch {
                             Image(systemName: "arrow.triangle.branch")
-                                .font(.system(size: 9))
+                                .font(.system(size: ChromeScale.captionFontSize))
                                 .foregroundColor(activeSecondaryColor(0.6))
                         }
                         VStack(alignment: .leading, spacing: 1) {
@@ -763,7 +769,7 @@ struct TabItemView: View, Equatable {
                                 HStack(spacing: 3) {
                                     if let branch = line.branch {
                                         Text(branch)
-                                            .font(.system(size: 10, design: .monospaced))
+                                            .font(.system(size: ChromeScale.captionFontSize, design: .monospaced))
                                             .foregroundColor(activeSecondaryColor(0.75))
                                             .lineLimit(1)
                                             .truncationMode(.tail)
@@ -776,7 +782,7 @@ struct TabItemView: View, Equatable {
                                     }
                                     if let directory = line.directory {
                                         Text(directory)
-                                            .font(.system(size: 10, design: .monospaced))
+                                            .font(.system(size: ChromeScale.captionFontSize, design: .monospaced))
                                             .foregroundColor(activeSecondaryColor(0.75))
                                             .lineLimit(1)
                                             .truncationMode(.tail)
@@ -806,7 +812,7 @@ struct TabItemView: View, Equatable {
                                         .lineLimit(1)
                                     Spacer(minLength: 0)
                                 }
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(.system(size: ChromeScale.captionFontSize, weight: .semibold))
                                 .foregroundColor(pullRequestForegroundColor)
                             }
                             .buttonStyle(.plain)
@@ -822,7 +828,7 @@ struct TabItemView: View, Equatable {
                     }) {
                         HStack(spacing: 4) {
                             Image(systemName: "plus.forwardslash.minus")
-                                .font(.system(size: 9, weight: .semibold))
+                                .font(.system(size: ChromeScale.captionFontSize, weight: .semibold))
                                 .accessibilityHidden(true)
                             Text(reviewNudgeFileCountLabel(reviewNudge.fileCount))
                                 .lineLimit(1)
@@ -833,7 +839,7 @@ struct TabItemView: View, Equatable {
                                 .lineLimit(1)
                             Spacer(minLength: 0)
                         }
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: ChromeScale.captionFontSize, weight: .semibold))
                         .foregroundColor(pullRequestForegroundColor)
                     }
                     .buttonStyle(.plain)
@@ -854,7 +860,7 @@ struct TabItemView: View, Equatable {
                         }
                         Spacer(minLength: 0)
                     }
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(.system(size: ChromeScale.captionFontSize, design: .monospaced))
                     .foregroundColor(activeSecondaryColor(0.75))
                     .lineLimit(1)
                 }
@@ -879,12 +885,13 @@ struct TabItemView: View, Equatable {
                 }
                 .overlay(alignment: .leading) {
                     if showsLeadingRail {
+                        // The vertical inset keeps the rail on the straight part of the
+                        // row edge, clear of the continuous corner curve.
                         Capsule(style: .continuous)
                             .fill(railColor)
                             .frame(width: 3)
-                            .padding(.leading, 4)
-                            .padding(.vertical, 5)
-                            .offset(x: -1)
+                            .padding(.leading, 3)
+                            .padding(.vertical, 6)
                     }
                 }
         )
@@ -1699,7 +1706,7 @@ struct TabItemView: View, Equatable {
                 PullRequestMergedIcon(color: color)
             case .closed:
                 Image(systemName: "xmark.circle")
-                    .font(.system(size: 7, weight: .regular))
+                    .font(.system(size: ChromeScale.captionFontSize, weight: .regular))
                     .foregroundColor(color)
                     .frame(width: Self.frameSize, height: Self.frameSize)
             }
@@ -2093,7 +2100,7 @@ private struct SidebarWorkspaceDescriptionText: View {
                 Text(markdown)
             }
         }
-        .font(.system(size: 10.5))
+        .font(.system(size: ChromeScale.secondaryFontSize))
         .foregroundColor(foregroundColor)
         .multilineTextAlignment(.leading)
         .fixedSize(horizontal: false, vertical: true)
@@ -2262,12 +2269,12 @@ private struct SidebarMetadataEntryRow: View {
         if iconRaw.hasPrefix("emoji:") {
             let value = String(iconRaw.dropFirst("emoji:".count))
             guard !value.isEmpty else { return nil }
-            return AnyView(Text(value).font(.system(size: 9)))
+            return AnyView(Text(value).font(.system(size: ChromeScale.captionFontSize)))
         }
         if iconRaw.hasPrefix("text:") {
             let value = String(iconRaw.dropFirst("text:".count))
             guard !value.isEmpty else { return nil }
-            return AnyView(Text(value).font(.system(size: 8, weight: .semibold)))
+            return AnyView(Text(value).font(.system(size: ChromeScale.captionFontSize, weight: .semibold)))
         }
         let symbolName: String
         if iconRaw.hasPrefix("sf:") {
@@ -2276,7 +2283,7 @@ private struct SidebarMetadataEntryRow: View {
             symbolName = iconRaw
         }
         guard !symbolName.isEmpty else { return nil }
-        return AnyView(Image(systemName: symbolName).symbolRasterSize(8, weight: .medium))
+        return AnyView(Image(systemName: symbolName).symbolRasterSize(ChromeScale.captionFontSize, weight: .medium))
     }
 
     @ViewBuilder

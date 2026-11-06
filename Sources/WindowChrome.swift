@@ -22,13 +22,13 @@ enum ChromeDensity {
     static let sidebarRowHorizontalPaddingDefault: CGFloat = 8
     static var sidebarRowHorizontalPadding: CGFloat { resolved("sidebarRowHorizontalPadding", default: sidebarRowHorizontalPaddingDefault) }
 
-    static let sidebarRowCornerRadiusDefault: CGFloat = 10
+    static let sidebarRowCornerRadiusDefault: CGFloat = ChromeScale.rowCornerRadius
     static var sidebarRowCornerRadius: CGFloat { resolved("sidebarRowCornerRadius", default: sidebarRowCornerRadiusDefault) }
 
     static let sidebarRowSpacingDefault: CGFloat = 1
     static var sidebarRowSpacing: CGFloat { resolved("sidebarRowSpacing", default: sidebarRowSpacingDefault) }
 
-    static let sidebarTitleFontSizeDefault: CGFloat = 13
+    static let sidebarTitleFontSizeDefault: CGFloat = ChromeScale.primaryFontSize
     static var sidebarTitleFontSize: CGFloat { resolved("sidebarTitleFontSize", default: sidebarTitleFontSizeDefault) }
 
     // MARK: - Window card / insets / radii
@@ -53,7 +53,7 @@ enum ChromeDensity {
     static let contentCardShadowOpacityDefault: CGFloat = 22
     static var contentCardShadowOpacity: CGFloat { resolved("contentCardShadowOpacity", default: contentCardShadowOpacityDefault) }
 
-    static let controlCornerRadiusDefault: CGFloat = 6
+    static let controlCornerRadiusDefault: CGFloat = ChromeScale.controlCornerRadius
     static var controlCornerRadius: CGFloat { resolved("controlCornerRadius", default: controlCornerRadiusDefault) }
 
     // MARK: - Tab strip (mirrored by Bonsplit's TabBarMetrics via the same UserDefaults keys)
@@ -67,13 +67,13 @@ enum ChromeDensity {
     static let tabIconSizeDefault: CGFloat = 13
     static var tabIconSize: CGFloat { resolved("tabIconSize", default: tabIconSizeDefault) }
 
-    static let tabTitleFontSizeDefault: CGFloat = 12
+    static let tabTitleFontSizeDefault: CGFloat = ChromeScale.primaryFontSize
     static var tabTitleFontSize: CGFloat { resolved("tabTitleFontSize", default: tabTitleFontSizeDefault) }
 
     static let tabCloseButtonSizeDefault: CGFloat = 14
     static var tabCloseButtonSize: CGFloat { resolved("tabCloseButtonSize", default: tabCloseButtonSizeDefault) }
 
-    static let tabCloseIconSizeDefault: CGFloat = 8
+    static let tabCloseIconSizeDefault: CGFloat = ChromeScale.closeIconSize
     static var tabCloseIconSize: CGFloat { resolved("tabCloseIconSize", default: tabCloseIconSizeDefault) }
 
     static let tabContentSpacingDefault: CGFloat = 5
@@ -91,6 +91,46 @@ enum ChromeDensity {
         defaultValue
     }
     #endif
+}
+
+/// Type, icon, hit-target and radius scale for the main window chrome. Plain
+/// constants (no UserDefaults lookup) so hot SwiftUI bodies such as the sidebar
+/// row can read them freely. Bonsplit cannot import this type; its
+/// `TabBarMetrics` mirrors the tab-strip values.
+enum ChromeScale {
+    // MARK: Type
+
+    /// Row, tab and pane-header titles.
+    static let primaryFontSize: CGFloat = 13
+    static let secondaryFontSize: CGFloat = 11
+    static let captionFontSize: CGFloat = 10
+    /// Count and unread badges: semibold, rounded design.
+    static let badgeFontSize: CGFloat = 10
+
+    // MARK: Icons (SF Symbol point sizes)
+
+    /// Titlebar buttons and the sidebar footer buttons below them (regular weight).
+    static let toolbarIconSize: CGFloat = 15
+    /// Pane-header and tab-strip action buttons (regular weight).
+    static let controlIconSize: CGFloat = 13
+    /// Leading icon of a sidebar row or tab (medium weight).
+    static let leadingIconSize: CGFloat = 13
+    /// The `xmark` close glyph everywhere in the main window (semibold weight).
+    static let closeIconSize: CGFloat = 10
+
+    // MARK: Hit targets
+
+    /// Minimum clickable area for an icon-only button; the glyph and hover fill may be smaller.
+    static let minimumHitTarget: CGFloat = 24
+
+    // MARK: Radii
+
+    /// Small chips and key hints.
+    static let chipCornerRadius: CGFloat = 4
+    /// Buttons and controls.
+    static let controlCornerRadius: CGFloat = 6
+    /// Rows, cards and popover rows.
+    static let rowCornerRadius: CGFloat = 10
 }
 
 #if DEBUG

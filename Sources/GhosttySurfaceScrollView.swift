@@ -406,7 +406,7 @@ final class GhosttySurfaceScrollView: NSView {
         dropZoneOverlayView.layer?.backgroundColor = programaAccentNSColor().withAlphaComponent(0.25).cgColor
         dropZoneOverlayView.layer?.borderColor = programaAccentNSColor().cgColor
         dropZoneOverlayView.layer?.borderWidth = 2
-        dropZoneOverlayView.layer?.cornerRadius = 8
+        dropZoneOverlayView.layer?.cornerRadius = ChromeScale.rowCornerRadius
         dropZoneOverlayView.isHidden = true
         notificationRingOverlayView.wantsLayer = true
         notificationRingOverlayView.layer?.backgroundColor = NSColor.clear.cgColor
