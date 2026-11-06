@@ -342,10 +342,77 @@ struct MainSidebarSplitRepresentable: NSViewControllerRepresentable {
 }
 
 #if DEBUG
-/// Read by `debug.sidebar.visible` to measure how often the column hosts are re-rooted.
+/// Read by `debug.sidebar.set` to measure how often the column hosts are re-rooted.
 enum MainSidebarSplitDebugCounters {
     static var updateCalls = 0
     static var sidebarRootUpdates = 0
     static var contentRootUpdates = 0
+}
+#endif
+
+#if DEBUG
+extension AppDelegate {
+    /// Backs the `debug.sidebar.set` socket method: applies the requested state through
+    /// `SidebarState` and reports the split view geometry and toolbar it produced.
+    func debugSetSidebar(windowId: UUID, visible: Bool?, width: CGFloat?, animated: Bool) -> [String: Any]? {
+        guard let context = mainWindowContexts.values.first(where: { $0.windowId == windowId }) else { return nil }
+        let state = context.sidebarState
+        if let width {
+            state.persistedWidth = width
+        }
+        if let visible, visible != state.isVisible {
+            state.toggle(animated: animated)
+        }
+        var snapshot: [String: Any] = [
+            "window_id": windowId.uuidString,
+            "visible": state.isVisible,
+            "persisted_width": Double(state.persistedWidth),
+            "update_calls": MainSidebarSplitDebugCounters.updateCalls,
+            "sidebar_root_updates": MainSidebarSplitDebugCounters.sidebarRootUpdates,
+            "content_root_updates": MainSidebarSplitDebugCounters.contentRootUpdates,
+        ]
+        guard let window = context.window ?? windowForMainWindowId(windowId) else { return snapshot }
+        snapshot["window_number"] = window.windowNumber
+        snapshot["window_width"] = Double(window.frame.width)
+        snapshot["titlebar_height"] = Double(window.frame.height - window.contentLayoutRect.height)
+        if let controller = Self.debugSidebarSplitController(in: window.contentView) {
+            controller.view.layoutSubtreeIfNeeded()
+            snapshot["collapsed"] = controller.isSidebarCollapsed
+            snapshot["sidebar_width"] = Double(controller.sidebarWidth)
+            snapshot["max_width"] = Double(controller.currentMaximumWidth)
+        }
+        if let toolbar = window.toolbar {
+            snapshot["toolbar_id"] = toolbar.identifier
+            snapshot["toolbar_visible"] = toolbar.isVisible
+            snapshot["toolbar_items"] = toolbar.items.map(\.itemIdentifier.rawValue)
+        }
+        if let titlebarView = window.standardWindowButton(.closeButton)?.superview {
+            var viewers: [String] = []
+            func collect(_ view: NSView) {
+                if String(describing: type(of: view)).contains("ItemViewer"), !view.isHiddenOrHasHiddenAncestor {
+                    let frame = view.convert(view.bounds, to: nil)
+                    viewers.append(String(format: "%.0f,%.0f,%.0f,%.0f", frame.minX, frame.minY, frame.width, frame.height))
+                }
+                view.subviews.forEach(collect)
+            }
+            collect(titlebarView.superview ?? titlebarView)
+            snapshot["toolbar_viewers"] = viewers
+            if let zoom = window.standardWindowButton(.zoomButton) {
+                snapshot["zoom_max_x"] = Double(zoom.convert(zoom.bounds, to: nil).maxX)
+            }
+        }
+        return snapshot
+    }
+
+    private static func debugSidebarSplitController(in view: NSView?) -> MainSidebarSplitViewController? {
+        guard let view else { return nil }
+        if view is MainSidebarSplitViewMarker, let controller = (view as? NSSplitView)?.delegate as? MainSidebarSplitViewController {
+            return controller
+        }
+        for subview in view.subviews {
+            if let found = debugSidebarSplitController(in: subview) { return found }
+        }
+        return nil
+    }
 }
 #endif
