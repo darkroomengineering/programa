@@ -98,16 +98,12 @@ enum ShortcutHintModifierPolicy {
 enum ShortcutHintDebugSettings {
     static let sidebarHintXKey = "shortcutHintSidebarXOffset"
     static let sidebarHintYKey = "shortcutHintSidebarYOffset"
-    static let titlebarHintXKey = "shortcutHintTitlebarXOffset"
-    static let titlebarHintYKey = "shortcutHintTitlebarYOffset"
     static let paneHintXKey = "shortcutHintPaneTabXOffset"
     static let paneHintYKey = "shortcutHintPaneTabYOffset"
     static let alwaysShowHintsKey = "shortcutHintAlwaysShow"
 
     static let defaultSidebarHintX = 0.0
     static let defaultSidebarHintY = 0.0
-    static let defaultTitlebarHintX = 4.0
-    static let defaultTitlebarHintY = 0.0
     static let defaultPaneHintX = 0.0
     static let defaultPaneHintY = 0.0
     static let defaultAlwaysShowHints = false

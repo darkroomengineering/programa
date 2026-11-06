@@ -9,7 +9,7 @@ WorkspaceDescriptionUITests
 SidebarHelpMenuUITests
 CommandPaletteAllSurfacesUITests
 BonsplitTabDragUITests
-TitlebarShortcutHintsUITests
+ToolbarShortcutHintsUITests
 TerminalCmdClickUITests
 # Raw CGEvent drags need the Accessibility (Events) grant that CI runners do not have; the recording shows the prompt and no drag.
 !BonsplitTabDragUITests/testMinimalModeKeepsTabReorderWorking

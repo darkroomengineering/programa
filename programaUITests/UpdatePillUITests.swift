@@ -298,81 +298,27 @@ final class UpdatePillUITests: XCTestCase {
     }
 }
 
-final class TitlebarShortcutHintsUITests: XCTestCase {
+final class ToolbarShortcutHintsUITests: XCTestCase {
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
     }
 
-    func testTitlebarShortcutHintsAlignWithoutShiftingControls() {
-        let baselineApp = launchApp(alwaysShowHints: false)
-        XCTAssertTrue(waitForWindowCount(atLeast: 1, app: baselineApp, timeout: 8.0))
+    func testToolbarControlsShowNoShortcutHintBadges() {
+        // Always-show forces every shortcut hint on. The toolbar controls name their
+        // shortcut in their tooltip instead, so no titlebar badge may appear.
+        let app = launchApp(alwaysShowHints: true)
+        XCTAssertTrue(waitForWindowCount(atLeast: 1, app: app, timeout: 8.0))
 
-        let baselineToggle = baselineApp.buttons["titlebarControl.toggleSidebar"]
-        let baselineNotifications = baselineApp.buttons["titlebarControl.showNotifications"]
-        let baselineNewTab = baselineApp.buttons["titlebarControl.newTab"]
-
-        XCTAssertTrue(waitForElementVisible(baselineToggle, timeout: 6.0))
-        XCTAssertTrue(waitForElementVisible(baselineNotifications, timeout: 6.0))
-        XCTAssertTrue(waitForElementVisible(baselineNewTab, timeout: 6.0))
-
-        let baselineToggleFrame = baselineToggle.frame
-        let baselineNotificationsFrame = baselineNotifications.frame
-        let baselineNewTabFrame = baselineNewTab.frame
-
-        baselineApp.terminate()
-
-        let hintedApp = launchApp(alwaysShowHints: true)
-        XCTAssertTrue(waitForWindowCount(atLeast: 1, app: hintedApp, timeout: 8.0))
-
-        let hintedToggle = hintedApp.buttons["titlebarControl.toggleSidebar"]
-        let hintedNotifications = hintedApp.buttons["titlebarControl.showNotifications"]
-        let hintedNewTab = hintedApp.buttons["titlebarControl.newTab"]
-
-        XCTAssertTrue(waitForElementVisible(hintedToggle, timeout: 6.0))
-        XCTAssertTrue(waitForElementVisible(hintedNotifications, timeout: 6.0))
-        XCTAssertTrue(waitForElementVisible(hintedNewTab, timeout: 6.0))
-
-        let sidebarHint = hintedApp.staticTexts["titlebarShortcutHint.toggleSidebar"]
-        let notificationsHint = hintedApp.staticTexts["titlebarShortcutHint.showNotifications"]
-        let newTabHint = hintedApp.staticTexts["titlebarShortcutHint.newTab"]
-
-        let hintsVisible = [sidebarHint, notificationsHint, newTabHint].map {
-            waitForElementVisible($0, timeout: 6.0)
+        for identifier in ["titlebarControl.toggleSidebar", "titlebarControl.showNotifications", "titlebarControl.newTab"] {
+            let control = app.windows.firstMatch.descendants(matching: .any).matching(identifier: identifier).firstMatch
+            XCTAssertTrue(waitForElementVisible(control, timeout: 6.0), "Expected \(identifier) in the toolbar")
         }
-        if hintsVisible.contains(false) {
-            let hierarchy = XCTAttachment(string: hintedApp.debugDescription)
-            hierarchy.name = "hinted app hierarchy"
-            hierarchy.lifetime = .keepAlways
-            add(hierarchy)
-        }
-        XCTAssertTrue(hintsVisible[0], "Expected the toggle sidebar shortcut hint to be visible")
-        XCTAssertTrue(hintsVisible[1], "Expected the notifications shortcut hint to be visible")
-        XCTAssertTrue(hintsVisible[2], "Expected the new workspace shortcut hint to be visible")
-
-        let hintedToggleFrame = hintedToggle.frame
-        let hintedNotificationsFrame = hintedNotifications.frame
-        let hintedNewTabFrame = hintedNewTab.frame
-
-        XCTAssertEqual(hintedToggleFrame.minY, baselineToggleFrame.minY, accuracy: 1.0)
-        XCTAssertEqual(hintedNotificationsFrame.minY, baselineNotificationsFrame.minY, accuracy: 1.0)
-        XCTAssertEqual(hintedNewTabFrame.minY, baselineNewTabFrame.minY, accuracy: 1.0)
-
-        let sidebarHintFrame = sidebarHint.frame
-        let notificationsHintFrame = notificationsHint.frame
-        let newTabHintFrame = newTabHint.frame
-
-        XCTAssertEqual(sidebarHintFrame.minY, notificationsHintFrame.minY, accuracy: 1.0)
-        XCTAssertEqual(notificationsHintFrame.minY, newTabHintFrame.minY, accuracy: 1.0)
-        // Keep the sidebar hint lane to the right of the sidebar icon so it cannot clip into the traffic-light backdrop.
-        XCTAssertGreaterThanOrEqual(sidebarHintFrame.minX, hintedToggleFrame.minX - 4.0)
-
-        let sortedHintFrames = [sidebarHintFrame, notificationsHintFrame, newTabHintFrame]
-            .sorted { $0.minX < $1.minX }
-        for index in 1..<sortedHintFrames.count {
-            let previousFrame = sortedHintFrames[index - 1]
-            let currentFrame = sortedHintFrames[index]
-            XCTAssertGreaterThanOrEqual(currentFrame.minX - previousFrame.maxX, 2.0)
+        for action in ["toggleSidebar", "showNotifications", "newTab"] {
+            XCTAssertFalse(
+                app.staticTexts["titlebarShortcutHint.\(action)"].exists,
+                "The \(action) toolbar control must not draw a shortcut hint badge"
+            )
         }
     }
 
@@ -380,8 +326,6 @@ final class TitlebarShortcutHintsUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
         app.launchArguments += ["-shortcutHintAlwaysShow", alwaysShowHints ? "YES" : "NO"]
-        app.launchArguments += ["-shortcutHintTitlebarXOffset", "4"]
-        app.launchArguments += ["-shortcutHintTitlebarYOffset", "0"]
         app.launch()
 
         _ = pollUntil(timeout: 2.0) {
