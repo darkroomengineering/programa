@@ -76,7 +76,6 @@ struct programaApp: App {
     @StateObject private var keyboardShortcutSettingsObserver = KeyboardShortcutSettingsObserver.shared
     private let primaryWindowId = UUID()
     @AppStorage(AppearanceSettings.appearanceModeKey) private var appearanceMode = AppearanceSettings.defaultMode.rawValue
-    @AppStorage("titlebarControlsStyle") private var titlebarControlsStyle = TitlebarControlsStyle.classic.rawValue
     @AppStorage(ShortcutHintDebugSettings.alwaysShowHintsKey) private var alwaysShowShortcutHints = ShortcutHintDebugSettings.defaultAlwaysShowHints
     @AppStorage(ReviewDiffWebView.debugToggleKey) private var debugReviewPierreDiffs = false
     @AppStorage(DevBuildBannerDebugSettings.sidebarBannerVisibleKey)
@@ -437,14 +436,6 @@ struct programaApp: App {
                     String(localized: "debug.devBuildBanner.show", defaultValue: "Show Dev Build Banner"),
                     isOn: $showSidebarDevBuildBanner
                 )
-
-                Divider()
-
-                Picker(String(localized: "debug.titlebarControls.style", defaultValue: "Titlebar Controls Style"), selection: $titlebarControlsStyle) {
-                    ForEach(TitlebarControlsStyle.allCases) { style in
-                        Text(style.menuTitle).tag(style.rawValue)
-                    }
-                }
 
                 Divider()
 

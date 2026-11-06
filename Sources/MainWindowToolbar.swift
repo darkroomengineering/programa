@@ -16,6 +16,8 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
     static let newTabID = NSToolbarItem.Identifier("titlebarControl.newTab")
     static let toggleID = NSToolbarItem.Identifier("titlebarControl.toggleSidebar")
     static let trackingID = NSToolbarItem.Identifier("titlebarControl.sidebarTracking")
+    /// Gap between the collapsed-sidebar controls and the content after them.
+    static let controlsTrailingGap: CGFloat = 12
     private nonisolated static let identifierPrefix = "programa.main.titlebar."
     private static var associationKey: UInt8 = 0
 

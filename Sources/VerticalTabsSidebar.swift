@@ -154,10 +154,6 @@ struct VerticalTabsSidebar: View {
     private var usesBackdropSidebar: Bool {
         WindowGlassEffect.isAvailable && !accessibilityReduceTransparency
     }
-    /// The inset panel (macOS 14/15, Reduce Transparency) already starts below the column top.
-    private var toolbarClearance: CGFloat {
-        max(0, titlebarHeight - (usesBackdropSidebar ? 0 : WindowGlassEffect.sidebarPanelInset))
-    }
     /// Resolved from `ChromeDensity.sidebarRowSpacing` (see `WindowChrome.swift`).
     private var tabRowSpacing: CGFloat { ChromeDensity.sidebarRowSpacing }
     #if DEBUG
@@ -205,7 +201,7 @@ struct VerticalTabsSidebar: View {
             // The traffic lights and toolbar controls sit above the list; the strip is
             // the toolbar's, so it drags and double-click zooms like any titlebar.
             Color.clear
-                .frame(height: toolbarClearance)
+                .frame(height: titlebarHeight)
                 .allowsHitTesting(false)
 
             GeometryReader { proxy in
@@ -327,13 +323,12 @@ struct VerticalTabsSidebar: View {
 
         ZStack {
             if usesBackdropSidebar {
-                // The system sidebar split item draws the glass; no base plane, no panel inset.
+                // The system sidebar split item draws the glass; no base plane.
                 SidebarSurface(content: sidebarContent)
             } else {
                 SidebarTerminalBasePlane()
                     .ignoresSafeArea()
                 SidebarSurface(content: sidebarContent)
-                    .padding(WindowGlassEffect.sidebarPanelInset)
             }
         }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

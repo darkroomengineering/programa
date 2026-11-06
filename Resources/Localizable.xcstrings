@@ -7370,23 +7370,6 @@
         }
       }
     },
-    "debug.titlebarControls.style": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Titlebar Controls Style"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "タイトルバーコントロールのスタイル"
-          }
-        }
-      }
-    },
     "debug.updatePill.automatic": {
       "extractionState": "manual",
       "localizations": {
@@ -9960,13 +9943,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Hide the workspace title bar and move workspace controls into the sidebar."
+            "value": "Hide the workspace title bar so pane tab bars sit at the top of the window."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ワークスペースのタイトルバーを非表示にし、ワークスペースのコントロールをサイドバーに移動します。"
+            "value": "ワークスペースのタイトルバーを非表示にし、ペインのタブバーをウィンドウの上端に表示します。"
           }
         }
       }
