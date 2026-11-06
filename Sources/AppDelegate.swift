@@ -5298,10 +5298,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         // NSGlassEffectView path vs the older NSVisualEffectView fallback is chosen
         // inside WindowGlassEffect.apply.
         let currentThemeBackground = GhosttyBackgroundTheme.currentColor()
-        let shouldApplyWindowGlass = programaShouldApplyWindowGlass(
-            bgGlassEnabled: bgGlassEnabled,
-            glassEffectAvailable: WindowGlassEffect.isAvailable
-        )
+        let shouldApplyWindowGlass = programaShouldApplyWindowGlass(bgGlassEnabled: bgGlassEnabled)
         let shouldForceTransparentHosting =
             shouldApplyWindowGlass || currentThemeBackground.alphaComponent < 0.999
 

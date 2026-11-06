@@ -780,56 +780,26 @@ final class WindowTransparencyDecisionTests: XCTestCase {
     private let sidebarBlendModeKey = "sidebarBlendMode"
     private let bgGlassEnabledKey = "bgGlassEnabled"
 
-    func testWindowTransparencyFollowsGlassAvailabilityAndTerminalOpacity() {
+    func testWindowTransparencyFollowsGlassOptInAndTerminalOpacity() {
         withTemporaryWindowBackgroundDefaults {
             let defaults = UserDefaults.standard
             defaults.set("withinWindow", forKey: sidebarBlendModeKey)
             defaults.set(false, forKey: bgGlassEnabledKey)
 
-            if WindowGlassEffect.isAvailable {
-                // Inverted layout: the glass backdrop is stock, and it samples
-                // behind the window — transparency is on regardless of opacity.
-                XCTAssertTrue(programaShouldUseTransparentBackgroundWindow())
-                XCTAssertTrue(programaShouldUseClearWindowBackground(for: 1.0))
-            } else {
-                // Pre-26: opt-in off means only a translucent terminal clears it.
-                XCTAssertFalse(programaShouldUseTransparentBackgroundWindow())
-                XCTAssertFalse(programaShouldUseClearWindowBackground(for: 1.0))
-            }
+            // The window backdrop is opt-in on every OS: with it off, only a
+            // translucent terminal clears the window.
+            XCTAssertFalse(programaShouldUseTransparentBackgroundWindow())
+            XCTAssertFalse(programaShouldUseClearWindowBackground(for: 1.0))
             XCTAssertTrue(programaShouldUseClearWindowBackground(for: 0.80))
         }
     }
 
-    func testGlassIsStockWhenAvailableAndOptInOtherwise() {
-        // Legacy opt-in still decides when the native glass is unavailable.
-        XCTAssertTrue(
-            programaShouldApplyWindowGlass(bgGlassEnabled: true, glassEffectAvailable: false)
-        )
-        XCTAssertFalse(
-            programaShouldApplyWindowGlass(bgGlassEnabled: false, glassEffectAvailable: false)
-        )
-        // Inverted layout: glass is the stock treatment whenever available.
-        XCTAssertTrue(
-            programaShouldApplyWindowGlass(bgGlassEnabled: false, glassEffectAvailable: true)
-        )
-        XCTAssertTrue(
-            programaShouldApplyWindowGlass(bgGlassEnabled: true, glassEffectAvailable: true)
-        )
+    func testWindowGlassIsOptInEverywhere() {
+        XCTAssertTrue(programaShouldApplyWindowGlass(bgGlassEnabled: true))
+        XCTAssertFalse(programaShouldApplyWindowGlass(bgGlassEnabled: false))
         // The startup performance override wins in both directions.
-        XCTAssertTrue(
-            programaShouldApplyWindowGlass(
-                bgGlassEnabled: false,
-                glassEffectAvailable: false,
-                performanceOverride: true
-            )
-        )
-        XCTAssertFalse(
-            programaShouldApplyWindowGlass(
-                bgGlassEnabled: true,
-                glassEffectAvailable: true,
-                performanceOverride: false
-            )
-        )
+        XCTAssertTrue(programaShouldApplyWindowGlass(bgGlassEnabled: false, performanceOverride: true))
+        XCTAssertFalse(programaShouldApplyWindowGlass(bgGlassEnabled: true, performanceOverride: false))
     }
 
     func testGlassPerformanceOverrideParserAcceptsExplicitBooleanValuesOnly() {
@@ -929,8 +899,9 @@ final class WindowTransparencyDecisionTests: XCTestCase {
         let nativeDefaults = ProgramaGlassSettings.platformDefaults(nativeGlassAvailable: true)
         let fallbackDefaults = ProgramaGlassSettings.platformDefaults(nativeGlassAvailable: false)
 
-        XCTAssertEqual(nativeDefaults[ProgramaGlassSettings.windowEnabledKey] as? Bool, true)
-        XCTAssertEqual(fallbackDefaults[ProgramaGlassSettings.windowEnabledKey] as? Bool, false)
+        // The window backdrop is never enabled by a platform default.
+        XCTAssertNil(nativeDefaults[ProgramaGlassSettings.windowEnabledKey])
+        XCTAssertNil(fallbackDefaults[ProgramaGlassSettings.windowEnabledKey])
         XCTAssertEqual(nativeDefaults[ProgramaGlassSettings.tabBarEnabledKey] as? Bool, true)
         XCTAssertEqual(fallbackDefaults[ProgramaGlassSettings.tabBarEnabledKey] as? Bool, false)
         XCTAssertEqual(nativeDefaults[ProgramaGlassSettings.overlaysEnabledKey] as? Bool, true)
