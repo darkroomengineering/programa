@@ -19,17 +19,10 @@ final class SidebarState: ObservableObject {
         }
     }
     @Published var persistedWidth: CGFloat
-    /// Slides whose completion has not run; released in deinit so a window closed
-    /// mid-slide cannot leave the global portal resize counter raised.
-    private var pendingSlides = 0
-
-    deinit {
-        let pending = pendingSlides
-        guard pending > 0 else { return }
-        Task { @MainActor in
-            for _ in 0..<pending { TerminalWindowPortalRegistry.endInteractiveGeometryResize() }
-        }
-    }
+    /// Read and cleared by `MainSidebarSplitViewController` for the next visibility change.
+    /// Only `toggle(animated:)` sets it, so direct writes (session restore, notifications)
+    /// apply without animation.
+    var nextVisibilityChangeAnimates = false
 
     init(isVisible: Bool = true, persistedWidth: CGFloat = CGFloat(SessionPersistencePolicy.defaultSidebarWidth)) {
         self.isVisible = isVisible
@@ -40,63 +33,8 @@ final class SidebarState: ObservableObject {
     /// `animated: false` is for the keyboard shortcut, which toggles without a slide; Reduce
     /// Motion makes every toggle instant.
     @MainActor func toggle(animated: Bool = true) {
-        guard animated, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                isVisible.toggle()
-            }
-            NotificationCenter.default.post(name: .programaSidebarToggleDidSettle, object: self)
-            return
-        }
-        // The terminal is an AppKit portal; marking the toggle as an interactive resize makes
-        // it follow the animated SwiftUI frame every tick, as it does for a sidebar drag.
-        TerminalWindowPortalRegistry.beginInteractiveGeometryResize()
-        pendingSlides += 1
-        // `.removed` waits for the visual end: the default (logically complete) fires as soon as
-        // another toggle retargets the slide, which ended the portal resize mid-motion.
-        withAnimation(.snappy(duration: 0.24), completionCriteria: .removed) {
-            isVisible.toggle()
-        } completion: { [weak self] in
-            guard let self else { return }
-            self.pendingSlides -= 1
-            TerminalWindowPortalRegistry.endInteractiveGeometryResize()
-            NotificationCenter.default.post(name: .programaSidebarToggleDidSettle, object: self)
-        }
-    }
-}
-
-enum SidebarResizeInteraction {
-    // Keep a generous drag target inside the sidebar itself, but make the
-    // terminal-side overlap very small so column-0 text selection still wins.
-    static let sidebarSideHitWidth: CGFloat = 6
-    // 4 pt matches the 4 pt padding used in GhosttySurfaceScrollView drop zone overlays
-    // (dropZoneOverlayFrame). This prevents column-0 text near the leading edge from
-    // accidentally triggering the sidebar resize when interacting with leftmost content.
-    static let contentSideHitWidth: CGFloat = 4
-
-    static var totalHitWidth: CGFloat {
-        sidebarSideHitWidth + contentSideHitWidth
-    }
-
-    /// Window numbers whose pointer is over the resizer band. The band is a SwiftUI
-    /// gesture with no NSView, so a press there hits the bare content host, which the
-    /// chrome-drag fallback in `NSWindow.programa_sendEvent` would turn into a window
-    /// move. ContentView's local event monitor updates this before the window
-    /// dispatches the press. Main thread only.
-    static var windowNumbersInBand: Set<Int> = []
-}
-
-struct SidebarResizerAccessibilityModifier: ViewModifier {
-    let accessibilityIdentifier: String?
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if let accessibilityIdentifier {
-            content.accessibilityIdentifier(accessibilityIdentifier)
-        } else {
-            content
-        }
+        nextVisibilityChangeAnimates = animated
+        isVisible.toggle()
     }
 }
 

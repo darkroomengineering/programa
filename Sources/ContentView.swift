@@ -11,10 +11,6 @@ struct ContentView: View {
     @EnvironmentObject var tabManager: TabManager
     @EnvironmentObject var sidebarState: SidebarState
     @EnvironmentObject var sidebarSelectionState: SidebarSelectionState
-    @State var sidebarWidth: CGFloat = 200
-    @State var hoveredResizerHandles: Set<SidebarResizerHandle> = []
-    @State var isResizerDragging = false
-    @State var sidebarDragStartWidth: CGFloat?
     @State var selectedTabIds: Set<UUID> = []
     @State private var mountedWorkspaceIds: [UUID] = []
     @State var lastSidebarSelectionIndex: Int? = nil
@@ -75,16 +71,6 @@ struct ContentView: View {
     @State private var titlebarThemeGeneration: UInt64 = 0
     @State var sidebarDraggedTabId: UUID?
     @State private var titlebarTextUpdateCoalescer = NotificationBurstCoalescer(delay: 1.0 / 30.0)
-    @State var sidebarResizerCursorReleaseWorkItem: DispatchWorkItem?
-    @State var sidebarResizerPointerMonitor: Any?
-    @State var isResizerBandActive = false
-    #if DEBUG
-    // Makes the content card's inset/radius re-render live when the Density
-    // Debug window's sliders change (see WindowChrome.swift ChromeDensity).
-    @ObservedObject private var densityStore = ChromeDensityStore.shared
-    #endif
-    @State var isSidebarResizerCursorActive = false
-    @State var sidebarResizerCursorStabilizer: DispatchSourceTimer?
     @StateObject private var commandPaletteController = CommandPaletteController()
 
     private var sidebarView: some View {
@@ -95,8 +81,7 @@ struct ContentView: View {
             selectedTabIds: $selectedTabIds,
             lastSidebarSelectionIndex: $lastSidebarSelectionIndex
         )
-        .frame(width: sidebarWidth)
-        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     /// Space at top of content area for the titlebar. This must be at least the actual titlebar
@@ -110,10 +95,6 @@ struct ContentView: View {
     }
 
     private var effectiveTitlebarPadding: CGFloat {
-        // Inverted card layout with the sidebar visible: the strip owns the
-        // card's top — the legacy 32pt titlebar band is dead space there. With
-        // the sidebar hidden the titlebar accessory controls still need it.
-        if cardInsetAmount > 0 && sidebarState.isVisible { return 0 }
         // Minimal mode keeps pane chrome at the window's top edge. The main
         // window's hosting view reports a zero safe area (MainWindowHostingView),
         // so SwiftUI content already starts at the window top; pulling it up by
@@ -180,9 +161,7 @@ struct ContentView: View {
         }
         .padding(.top, effectiveTitlebarPadding)
         .overlay(alignment: .top) {
-            // Card layout with the sidebar visible has no titlebar band (see
-            // effectiveTitlebarPadding) — the overlay would float over pills.
-            if !isMinimalMode && !(cardInsetAmount > 0 && sidebarState.isVisible) {
+            if !isMinimalMode {
                 // Titlebar overlay is only over terminal content, not the sidebar.
                 customTitlebar
             }
@@ -370,88 +349,75 @@ struct ContentView: View {
         return dir.isEmpty ? nil : dir
     }
 
-    @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
+    @EnvironmentObject var programaConfigStore: ProgramaConfigStore
 
-    /// Inverted glass layout: the terminal region floats as a rounded card over
-    /// the window's glass backdrop, inset from the edges and the sidebar.
-    private var cardInsetAmount: CGFloat {
-        WindowGlassEffect.isAvailable && !accessibilityReduceTransparency
-            ? WindowGlassEffect.contentCardInset : 0
+    private func splitColumn(_ view: some View) -> AnyView {
+        AnyView(
+            view
+                .environmentObject(tabManager)
+                .environmentObject(TerminalNotificationStore.shared)
+                .environmentObject(sidebarState)
+                .environmentObject(sidebarSelectionState)
+                .environmentObject(programaConfigStore)
+        )
     }
 
-    /// Shadow under the content card, masked to outside the card so a
-    /// translucent terminal background never shows it through.
-    @ViewBuilder private var contentCardShadow: some View {
-        let opacity = ChromeDensity.contentCardShadowOpacity / 100
-        if cardInsetAmount > 0, opacity > 0 {
-            let card = RoundedRectangle(
-                cornerRadius: WindowGlassEffect.contentCardCornerRadius,
-                style: .continuous
-            )
-            let radius = ChromeDensity.contentCardShadowRadius
-            card
-                .fill(Color.black)
-                .shadow(color: .black.opacity(opacity), radius: radius, x: 0, y: 1)
-                .mask {
-                    Rectangle()
-                        .padding(-radius * 2)
-                        .overlay(card.blendMode(.destinationOut))
-                        .compositingGroup()
-                }
-                .allowsHitTesting(false)
-        }
+    /// `ContentView` values the content column reads outside its own observed objects; see
+    /// `MainSidebarSplitRepresentable`. A value read by `terminalContentWithSidebarDropOverlay`
+    /// that is missing here leaves the column stale.
+    private struct ContentColumnInputs: Hashable {
+        let mountedWorkspaceIds: [UUID]
+        let tabIds: [UUID]
+        let selectedTabId: UUID?
+        let retiringWorkspaceId: UUID?
+        let pendingBackgroundWorkspaceLoadIds: Set<UUID>
+        let selection: SidebarSelection
+        let isFullScreen: Bool
+        let isMinimalMode: Bool
+        let isSidebarVisible: Bool
+        let titlebarPadding: CGFloat
+        let titlebarLeadingInset: CGFloat
+        let debugTitlebarLeadingExtra: Double
+        let titlebarText: String
+        let titlebarThemeGeneration: UInt64
+        let focusedDirectory: String?
+        let sidebarDraggedTabId: UUID?
     }
 
-    private var sidebarTransition: AnyTransition {
-        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? .opacity : .move(edge: .leading)
+    private struct SidebarColumnInputs: Hashable {
+        let selection: SidebarSelection
+        let selectedTabIds: Set<UUID>
+        let lastSidebarSelectionIndex: Int?
     }
 
-    private var contentAndSidebarLayout: AnyView {
-        let layout: AnyView
-        let useWithinWindow = sidebarBlendMode == SidebarBlendModeOption.withinWindow.rawValue
-            && !sidebarMatchTerminalBackground
-        if useWithinWindow {
-            // Overlay mode: terminal extends full width, sidebar on top
-            // This allows withinWindow blur to see the terminal content
-            layout = AnyView(
-                ZStack(alignment: .leading) {
-                    terminalContentWithSidebarDropOverlay
-                        .background { contentCardShadow }
-                        .padding(cardInsetAmount)
-                        // Empty inset chrome drags without covering the tab controls.
-                        .background(WindowDragHandleView())
-                        .padding(.leading, sidebarState.isVisible ? sidebarWidth : 0)
-                    if sidebarState.isVisible {
-                        sidebarView
-                            .transition(sidebarTransition)
-                    }
-                }
-            )
-        } else {
-            // HStack mode for behindWindow blur, and when matching the terminal background so
-            // both sidebar and terminal sit directly on the window background.
-            layout = AnyView(
-                HStack(spacing: 0) {
-                    if sidebarState.isVisible {
-                        sidebarView
-                            .transition(sidebarTransition)
-                    }
-                    terminalContentWithSidebarDropOverlay
-                        .background { contentCardShadow }
-                        .padding(cardInsetAmount)
-                        .background(WindowDragHandleView())
-                }
-            )
-        }
-
-        return AnyView(
-            layout
-                .overlay(alignment: .leading) {
-                    if sidebarState.isVisible {
-                        sidebarResizerOverlay
-                            .zIndex(1000)
-                    }
-                }
+    private var contentAndSidebarLayout: some View {
+        MainSidebarSplitRepresentable(
+            sidebar: splitColumn(sidebarView),
+            sidebarInputs: SidebarColumnInputs(
+                selection: sidebarSelectionState.selection,
+                selectedTabIds: selectedTabIds,
+                lastSidebarSelectionIndex: lastSidebarSelectionIndex
+            ),
+            content: splitColumn(terminalContentWithSidebarDropOverlay),
+            contentInputs: ContentColumnInputs(
+                mountedWorkspaceIds: mountedWorkspaceIds,
+                tabIds: tabManager.tabs.map(\.id),
+                selectedTabId: tabManager.selectedTabId,
+                retiringWorkspaceId: retiringWorkspaceId,
+                pendingBackgroundWorkspaceLoadIds: tabManager.pendingBackgroundWorkspaceLoadIds,
+                selection: sidebarSelectionState.selection,
+                isFullScreen: isFullScreen,
+                isMinimalMode: isMinimalMode,
+                isSidebarVisible: sidebarState.isVisible,
+                titlebarPadding: titlebarPadding,
+                titlebarLeadingInset: titlebarLeadingInset,
+                debugTitlebarLeadingExtra: debugTitlebarLeadingExtra,
+                titlebarText: titlebarText,
+                titlebarThemeGeneration: titlebarThemeGeneration,
+                focusedDirectory: focusedDirectory,
+                sidebarDraggedTabId: sidebarDraggedTabId
+            ),
+            sidebarState: sidebarState
         )
     }
 
@@ -489,14 +455,6 @@ struct ContentView: View {
                 tabManager.applyWindowBackgroundForSelectedTab()
                 reconcileMountedWorkspaceIds()
                 previousSelectedWorkspaceId = tabManager.selectedTabId
-                installSidebarResizerPointerMonitorIfNeeded()
-                let restoredWidth = normalizedSidebarWidth(sidebarState.persistedWidth)
-                if abs(sidebarWidth - restoredWidth) > 0.5 {
-                    sidebarWidth = restoredWidth
-                }
-                if abs(sidebarState.persistedWidth - restoredWidth) > 0.5 {
-                    sidebarState.persistedWidth = restoredWidth
-                }
                 if selectedTabIds.isEmpty, let selectedId = tabManager.selectedTabId {
                     selectedTabIds = [selectedId]
                     lastSidebarSelectionIndex = tabManager.tabs.firstIndex { $0.id == selectedId }
@@ -738,45 +696,20 @@ struct ContentView: View {
                 AppDelegate.shared?.fullscreenControlsViewModel = nil
                 syncTrafficLightInset()
             }
-            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResizeNotification)) { notification in
-                guard let window = notification.object as? NSWindow,
-                      window === observedWindow else { return }
-                clampSidebarWidthIfNeeded(availableWidth: window.contentView?.bounds.width ?? window.contentLayoutRect.width)
-                updateSidebarResizerBandState()
-            }
     }
 
     @ViewBuilder
     private func attachSidebarSyncHandlers(to view: some View) -> some View {
         view
-            .onChange(of: sidebarWidth) {
-                let sanitized = normalizedSidebarWidth(sidebarWidth)
-                if abs(sidebarWidth - sanitized) > 0.5 {
-                    sidebarWidth = sanitized
-                    return
-                }
-                if abs(sidebarState.persistedWidth - sanitized) > 0.5 {
-                    sidebarState.persistedWidth = sanitized
-                }
-                // Sidebar width changes are pure SwiftUI layout updates, so portal-hosted
-                // terminals need an explicit post-layout geometry resync.
-                if let observedWindow {
-                    TerminalWindowPortalRegistry.scheduleExternalGeometrySynchronize(for: observedWindow)
-                } else {
-                    TerminalWindowPortalRegistry.scheduleExternalGeometrySynchronizeForAllWindows()
-                }
-                updateSidebarResizerBandState()
-            }
             .onChange(of: sidebarState.isVisible) {
                 if let observedWindow {
                     TerminalWindowPortalRegistry.scheduleExternalGeometrySynchronize(for: observedWindow)
                 } else {
                     TerminalWindowPortalRegistry.scheduleExternalGeometrySynchronizeForAllWindows()
                 }
-                updateSidebarResizerBandState()
                 syncTrafficLightInset()
             }
-            // The portal stops following SwiftUI frames when the slide ends; sync it to the final one.
+            // The portal stops following the column frame when the collapse animation ends; sync it to the final one.
             .onReceive(NotificationCenter.default.publisher(for: .programaSidebarToggleDidSettle, object: sidebarState)) { _ in
                 guard let observedWindow else { return }
                 TerminalWindowPortalRegistry.scheduleExternalGeometrySynchronize(for: observedWindow)
@@ -793,38 +726,12 @@ struct ContentView: View {
             .onChange(of: isMinimalMode) { _, _ in
                 syncTrafficLightInset()
             }
-            .onChange(of: sidebarState.persistedWidth) { _, newValue in
-                let sanitized = normalizedSidebarWidth(newValue)
-                if abs(newValue - sanitized) > 0.5 {
-                    sidebarState.persistedWidth = sanitized
-                    return
-                }
-                guard !isResizerDragging else { return }
-                if abs(sidebarWidth - sanitized) > 0.5 {
-                    sidebarWidth = sanitized
-                }
-            }
     }
 
     @ViewBuilder
     private func attachFinalLifecycleHandlers(to view: some View) -> some View {
         view
             .ignoresSafeArea()
-            .onDisappear {
-                if isResizerDragging {
-                    TerminalWindowPortalRegistry.endInteractiveGeometryResize()
-                    isResizerDragging = false
-                    sidebarDragStartWidth = nil
-                }
-                removeSidebarResizerPointerMonitor()
-            }
-            // The monitor's closure captures this view (and so the window's TabManager);
-            // a closed window's hosting view is not guaranteed an onDisappear, so the
-            // window close itself removes it.
-            .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
-                guard let closing = note.object as? NSWindow, closing === observedWindow else { return }
-                removeSidebarResizerPointerMonitor()
-            }
     }
 
     @ViewBuilder
@@ -851,10 +758,7 @@ struct ContentView: View {
                     DispatchQueue.main.async {
                         observedWindow = window
                         isFullScreen = window.styleMask.contains(.fullScreen)
-                        clampSidebarWidthIfNeeded(availableWidth: window.contentView?.bounds.width ?? window.contentLayoutRect.width)
                         commandPaletteController.syncDebugState(observedWindow: window)
-                        installSidebarResizerPointerMonitorIfNeeded()
-                        updateSidebarResizerBandState()
                     }
                 }
 
