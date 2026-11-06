@@ -1160,16 +1160,16 @@ struct SettingsAboutTitlebarDebugOptions: Equatable {
             return SettingsAboutTitlebarDebugOptions(
                 overridesEnabled: false,
                 windowTitle: localizedDebugLabel("Settings"),
-                titleVisibility: .hidden,
-                titlebarAppearsTransparent: true,
+                titleVisibility: .visible,
+                titlebarAppearsTransparent: SettingsWindowMetrics.contentScrollsUnderToolbar,
                 movableByWindowBackground: true,
                 titled: true,
                 closable: true,
                 miniaturizable: true,
                 resizable: true,
-                fullSizeContentView: true,
-                showToolbar: false,
-                toolbarStyle: .unifiedCompact
+                fullSizeContentView: SettingsWindowMetrics.contentScrollsUnderToolbar,
+                showToolbar: true,
+                toolbarStyle: .preference
             )
         case .about:
             return SettingsAboutTitlebarDebugOptions(
@@ -1277,17 +1277,25 @@ final class SettingsAboutTitlebarStyleStore: ObservableObject {
 
     private func apply(_ options: SettingsAboutTitlebarDebugOptions, to window: NSWindow, for kind: SettingsAboutWindowKind) {
         let effective = options.overridesEnabled ? options : SettingsAboutTitlebarDebugOptions.defaults(for: kind)
+        // The Settings window owns its tab toolbar, its title (the selected tab's name) and
+        // its size limits (SettingsWindowHeightFitter, SettingsView.swift); this store must not
+        // replace them.
+        let ownsWindowChrome = kind == .settings
         let resolvedTitle = effective.windowTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        window.title = resolvedTitle.isEmpty ? kind.fallbackTitle : resolvedTitle
+        if !ownsWindowChrome || options.overridesEnabled {
+            window.title = resolvedTitle.isEmpty ? kind.fallbackTitle : resolvedTitle
+        }
         window.titleVisibility = effective.titleVisibility.windowValue
         window.titlebarAppearsTransparent = effective.titlebarAppearsTransparent
         window.isMovableByWindowBackground = effective.movableByWindowBackground
         window.toolbarStyle = effective.toolbarStyle.windowValue
 
-        if effective.showToolbar {
-            ensureToolbar(on: window, kind: kind)
-        } else if window.toolbar != nil {
-            window.toolbar = nil
+        if !ownsWindowChrome {
+            if effective.showToolbar {
+                ensureToolbar(on: window, kind: kind)
+            } else if window.toolbar != nil {
+                window.toolbar = nil
+            }
         }
 
         var styleMask = window.styleMask
@@ -1298,6 +1306,10 @@ final class SettingsAboutTitlebarStyleStore: ObservableObject {
         setStyleMaskBit(&styleMask, .fullSizeContentView, enabled: effective.fullSizeContentView)
         window.styleMask = styleMask
 
+        guard !ownsWindowChrome else {
+            window.invalidateShadow()
+            return
+        }
         let maxSize = effective.resizable ? NSSize(width: 8192, height: 8192) : kind.minimumSize
         window.minSize = kind.minimumSize
         window.maxSize = maxSize
@@ -1425,18 +1437,16 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
                 width: SettingsWindowMetrics.contentWidth,
                 height: SettingsWindowMetrics.defaultContentHeight
             ),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.isReleasedWhenClosed = false
-        // A provisional floor; the view replaces it with the width the tab labels
-        // actually need once the strip has measured itself.
-        window.minSize = NSSize(
-            width: SettingsWindowMetrics.contentWidth,
+        window.contentMinSize = NSSize(
+            width: SettingsWindowMetrics.minContentWidth,
             height: SettingsWindowMetrics.minContentHeight
         )
-        window.maxSize = NSSize(
+        window.contentMaxSize = NSSize(
             width: SettingsWindowMetrics.maxContentWidth,
             height: SettingsWindowMetrics.maxContentHeight
         )

@@ -2,15 +2,48 @@ import AppKit
 import SwiftUI
 import Darwin
 
+/// Card rows inset their text by this much; headers, footers and dividers align to it.
+enum SettingsCardMetrics {
+    static let textInset: CGFloat = 14
+    static let cornerRadius: CGFloat = 10
+}
+
 struct SettingsSectionHeader: View {
     let title: String
 
     var body: some View {
         Text(title)
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundColor(.secondary)
-            .padding(.leading, 2)
+            .font(.headline)
+            .foregroundStyle(.primary)
+            .padding(.leading, SettingsCardMetrics.textInset)
+            .padding(.top, 10)
             .padding(.bottom, -2)
+    }
+}
+
+struct SettingsSectionFooter: View {
+    let paragraphs: [String]
+    /// Lands on each paragraph's `Text`, so UI tests find it as a static text.
+    let accessibilityIdentifier: String?
+
+    init(_ paragraphs: String..., accessibilityIdentifier: String? = nil) {
+        self.paragraphs = paragraphs
+        self.accessibilityIdentifier = accessibilityIdentifier
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(paragraphs, id: \.self) { paragraph in
+                Text(paragraph)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .applyIf(accessibilityIdentifier != nil) { $0.accessibilityIdentifier(accessibilityIdentifier!) }
+            }
+        }
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, SettingsCardMetrics.textInset)
+        .padding(.top, -4)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -26,42 +59,9 @@ struct SettingsCard<Content: View>: View {
             content
         }
         .background(
-            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .fill(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.76))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .stroke(Color(nsColor: NSColor.separatorColor).opacity(0.5), lineWidth: 1)
-                )
+            RoundedRectangle(cornerRadius: SettingsCardMetrics.cornerRadius, style: .continuous)
+                .fill(Color(nsColor: .quaternarySystemFill))
         )
-    }
-}
-
-struct SettingsHeaderActionButton: View {
-    let title: String
-    let helpText: String
-    let accessibilityIdentifier: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 9)
-                .padding(.vertical, 4)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(Color(nsColor: NSColor.controlBackgroundColor).opacity(0.34))
-                )
-                .overlay(
-                    Capsule(style: .continuous)
-                        .stroke(Color(nsColor: NSColor.separatorColor).opacity(0.22), lineWidth: 1)
-                )
-        }
-        .buttonStyle(.plain)
-        .controlSize(.small)
-        .help(helpText)
-        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
 
@@ -85,13 +85,13 @@ struct SettingsCardRow<Trailing: View>: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: subtitle == nil ? 0 : 3) {
+            VStack(alignment: .leading, spacing: subtitle == nil ? 0 : 2) {
                 Text(title)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.body)
                 if let subtitle {
                     Text(subtitle)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
             }
@@ -107,7 +107,7 @@ struct SettingsCardRow<Trailing: View>: View {
             }
                 .layoutPriority(1)
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, SettingsCardMetrics.textInset)
         .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -183,9 +183,8 @@ private extension View {
 
 struct SettingsCardDivider: View {
     var body: some View {
-        Rectangle()
-            .fill(Color(nsColor: NSColor.separatorColor).opacity(0.5))
-            .frame(height: 1)
+        Divider()
+            .padding(.horizontal, SettingsCardMetrics.textInset)
     }
 }
 
@@ -198,9 +197,9 @@ struct SettingsCardNote: View {
 
     var body: some View {
         Text(text)
-            .font(.caption)
-            .foregroundColor(.secondary)
-            .padding(.horizontal, 14)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, SettingsCardMetrics.textInset)
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
     }

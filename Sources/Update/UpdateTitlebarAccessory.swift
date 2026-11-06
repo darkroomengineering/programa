@@ -1816,10 +1816,7 @@ final class UpdateTitlebarAccessoryController {
     }
 
     private func isSettingsWindow(_ window: NSWindow) -> Bool {
-        if window.identifier?.rawValue == "programa.settings" {
-            return true
-        }
-        return window.title == "Settings"
+        window.identifier?.rawValue == "programa.settings"
     }
 
     private func isMainTerminalWindow(_ window: NSWindow) -> Bool {

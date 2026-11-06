@@ -3,10 +3,10 @@ import SwiftUI
 import Darwin
 import Bonsplit
 
-/// Height tracks the selected tab's content; width is free above a floor derived from
-/// the tab labels, so the six segments never truncate.
+/// Content-area sizes (below the toolbar). Height tracks the selected tab's content.
 enum SettingsWindowMetrics {
     static let contentWidth: CGFloat = 640
+    static let minContentWidth: CGFloat = 520
     static let maxContentWidth: CGFloat = 1_100
     /// Low enough that a one-row tab fits snugly instead of padding out dead space.
     static let minContentHeight: CGFloat = 180
@@ -15,22 +15,45 @@ enum SettingsWindowMetrics {
     /// Opening straight onto an over-long tab (a deep link to Shortcuts) never
     /// triggers a fit, so the window has to start at a height that already reads well.
     static let defaultContentHeight: CGFloat = 520
+
+    /// From macOS 26 the content view runs under a transparent titlebar, so the toolbar
+    /// sits on the same background as the content (`SettingsToolbarBackdrop` keeps
+    /// scrolled rows from showing through it). Earlier releases keep the opaque titlebar.
+    static var contentScrollsUnderToolbar: Bool {
+        if #available(macOS 26.0, *) {
+            return true
+        }
+        return false
+    }
+}
+
+/// Covers the toolbar's safe-area band with the window background and a separator, so
+/// rows scrolled under a transparent titlebar never read through the toolbar. SwiftUI's
+/// `scrollEdgeEffectStyle` does not treat an AppKit toolbar as a bar, so it draws nothing
+/// here. Draws nothing when the titlebar is opaque (no top safe-area inset).
+private struct SettingsToolbarBackdrop: View {
+    var body: some View {
+        GeometryReader { proxy in
+            let height = proxy.safeAreaInsets.top
+            if height > 0 {
+                Color(nsColor: .windowBackgroundColor)
+                    .overlay(alignment: .bottom) { Divider() }
+                    .frame(height: height)
+                    .offset(y: -height)
+            }
+        }
+        .allowsHitTesting(false)
+    }
 }
 
 struct SettingsView: View {
-    // The header is a traffic-light band plus the tab strip. It is a safe-area inset,
-    // so the scroll view positions content below it without a hand-tuned top inset.
-    private let headerHeight: CGFloat = 80
-    private let contentVerticalPadding: CGFloat = 20
-    /// Clears the traffic lights so the header action sits level with them.
-    private let titlebarBandHeight: CGFloat = 28
-    /// Shared by the tab strip and the scrolling rows so they line up on both edges.
+    private let contentTopPadding: CGFloat = 12
+    private let contentBottomPadding: CGFloat = 20
     private let contentHorizontalInset: CGFloat = 20
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var selectedTab: SettingsTab = .general
+    @ObservedObject var tabToolbar: SettingsTabToolbarController
     @State private var measuredContentHeight: CGFloat = 0
-    @State private var minimumWindowWidth: CGFloat = SettingsWindowMetrics.contentWidth
     private let pickerColumnWidth: CGFloat = 196
     private let notificationSoundControlWidth: CGFloat = 280
     private let shortcutChordsDocsURL = URL(string: "https://github.com/darkroomengineering/programa/tree/main/docs")!
@@ -73,14 +96,17 @@ struct SettingsView: View {
     @StateObject private var settingsFileStatus = SettingsFileStatusModel()
     @FocusState private var trustedDirectoriesEditorFocused: Bool
     @State private var shortcutResetToken = UUID()
-    @State private var topBlurOpacity: Double = 0
-    @State private var topBlurBaselineOffset: CGFloat?
     @State private var showOpenAccessConfirmation = false
     @State private var pendingOpenAccessMode: SocketControlMode?
     @State private var socketPasswordDraft = ""
     @State private var socketPasswordStatusMessage: String?
     @State private var socketPasswordStatusIsError = false
     @State private var trustedDirectoriesDraft: String = ProgramaDirectoryTrust.shared.allTrustedPaths.joined(separator: "\n")
+
+    private var selectedTab: SettingsTab {
+        get { tabToolbar.selectedTab }
+        nonmutating set { tabToolbar.selectedTab = newValue }
+    }
 
     private var selectedWorkspacePlacement: NewWorkspacePlacement {
         NewWorkspacePlacement(rawValue: newWorkspacePlacement) ?? WorkspacePlacementSettings.defaultPlacement
@@ -218,12 +244,6 @@ struct SettingsView: View {
         }
     }
 
-    private func blurOpacity(forContentOffset offset: CGFloat) -> Double {
-        guard let baseline = topBlurBaselineOffset else { return 0 }
-        let reveal = (baseline - offset) / 24
-        return Double(min(max(reveal, 0), 1))
-    }
-
     private func previewNotificationSound() {
         NotificationSoundSettings.previewSound(value: notificationSound)
     }
@@ -276,7 +296,7 @@ struct SettingsView: View {
         let _ = keyboardShortcutSettingsObserver.revision
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 10) {
                     if let parseError = settingsFileStatus.parseError {
                         SettingsCard {
                             SettingsCardNote(String(
@@ -291,6 +311,7 @@ struct SettingsView: View {
                     }
                     switch selectedTab {
                     case .general:
+                        settingsFileSection
                         appSection
                         notificationsSection
                         resetSection
@@ -307,97 +328,26 @@ struct SettingsView: View {
                     }
                 }
                 .padding(.horizontal, contentHorizontalInset)
-                .padding(.vertical, contentVerticalPadding)
+                .padding(.top, contentTopPadding)
+                .padding(.bottom, contentBottomPadding)
                 .background(
                     GeometryReader { proxy in
-                        Color.clear
-                            .preference(
-                                key: SettingsTopOffsetPreferenceKey.self,
-                                value: proxy.frame(in: .named("SettingsScrollArea")).minY
-                            )
-                            .preference(
-                                key: SettingsContentHeightPreferenceKey.self,
-                                value: proxy.size.height
-                            )
+                        Color.clear.preference(
+                            key: SettingsContentHeightPreferenceKey.self,
+                            value: proxy.size.height
+                        )
                     }
                 )
-            }
-            .coordinateSpace(name: "SettingsScrollArea")
-            .onPreferenceChange(SettingsTopOffsetPreferenceKey.self) { value in
-                if topBlurBaselineOffset == nil {
-                    topBlurBaselineOffset = value
-                }
-                topBlurOpacity = blurOpacity(forContentOffset: value)
+                .background(OverlayScrollers(target: .enclosingScrollView))
             }
             .onPreferenceChange(SettingsContentHeightPreferenceKey.self) { value in
                 measuredContentHeight = value
             }
-            .onChange(of: selectedTab) { _, _ in
-                // Each tab starts at the top, so the old baseline would leave the
-                // hairline showing over content that is no longer scrolled.
-                topBlurBaselineOffset = nil
-                topBlurOpacity = 0
-            }
-            // A safe-area inset rather than an overlay: the scroll view then knows the
-            // header is there, so its scroller starts below the header instead of
-            // running the full height and disappearing behind it.
-            .safeAreaInset(edge: .top, spacing: 0) {
-            ZStack(alignment: .top) {
-                // A gradient that fades to clear never fully hides what scrolls behind
-                // it, so rows read straight through the tab strip. A solid
-                // header material plus a hairline on scroll is what AppKit does.
-                AboutVisualEffectBackground(material: .headerView, blendingMode: .withinWindow)
-
-                VStack(alignment: .leading, spacing: 10) {
-                    // No in-window title: the window is already the Settings window, so
-                    // this row is just the traffic lights on the left and the one action
-                    // on the right, the way System Settings uses its titlebar band.
-                    HStack {
-                        Spacer(minLength: 0)
-                        SettingsHeaderActionButton(
-                            title: String(localized: "settings.app.settingsFile.openButton", defaultValue: "Open settings.json"),
-                            helpText: KeyboardShortcutSettings.settingsFileStore.settingsFileDisplayPath(),
-                            accessibilityIdentifier: "SettingsFileOpenButton",
-                            action: openProgramaSettingsFileInTextEdit
-                        )
-                    }
-                    .frame(height: titlebarBandHeight)
-
-                    // Lives in the header rather than the scroll content so it stays
-                    // put while a tab's rows scroll underneath it.
-                    SettingsTabStrip(selection: $selectedTab) { natural in
-                        let floor = natural + (contentHorizontalInset * 2)
-                        if abs(floor - minimumWindowWidth) > 0.5 {
-                            minimumWindowWidth = floor
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .padding(.horizontal, contentHorizontalInset)
-                .padding(.top, 6)
-                .padding(.bottom, 12)
-            }
-                .frame(height: headerHeight)
-                .overlay(
-                    Rectangle()
-                        .fill(Color(nsColor: .separatorColor))
-                        .frame(height: 1)
-                        // Only once something is actually tucked under the header.
-                        .opacity(topBlurOpacity),
-                    alignment: .bottom
-                )
-            }
-            // The window draws under the titlebar, so the header has to start at the
-            // very top of the frame for its action to sit level with the traffic lights.
-            .ignoresSafeArea(.container, edges: .top)
+        .overlay(alignment: .top) { SettingsToolbarBackdrop() }
         .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea())
         .background(
-            SettingsWindowHeightFitter(
-                contentHeight: measuredContentHeight,
-                headerHeight: headerHeight,
-                minimumWidth: minimumWindowWidth
-            )
-            .frame(width: 0, height: 0)
+            SettingsWindowHeightFitter(contentHeight: measuredContentHeight)
+                .frame(width: 0, height: 0)
         )
         .toggleStyle(.switch)
         .onAppear {
@@ -429,6 +379,24 @@ struct SettingsView: View {
         } message: {
             Text(String(localized: "settings.automation.openAccess.dialog.message", defaultValue: "This disables ancestry and password checks and opens the socket to all local users. Only enable when you understand the risk."))
         }
+        }
+    }
+
+    @ViewBuilder
+    private var settingsFileSection: some View {
+        SettingsCard {
+            SettingsCardRow(
+                String(localized: "settings.app.settingsFile.title", defaultValue: "Settings File"),
+                subtitle: KeyboardShortcutSettings.settingsFileStore.settingsFileDisplayPath()
+            ) {
+                Button(String(localized: "settings.app.settingsFile.open", defaultValue: "Open")) {
+                    openProgramaSettingsFileInTextEdit()
+                }
+                .accessibilityLabel(
+                    String(localized: "settings.app.settingsFile.openButton", defaultValue: "Open settings.json")
+                )
+                .accessibilityIdentifier("SettingsFileOpenButton")
+            }
         }
     }
 
@@ -568,14 +536,13 @@ struct SettingsView: View {
             ) {
                 HStack(spacing: 6) {
                     Text(notificationPermissionStatusText)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(notificationPermissionStatusColor)
                         .frame(width: 98, alignment: .trailing)
 
                     Button(notificationPermissionActionTitle) {
                         handleNotificationPermissionAction()
                     }
-                    .controlSize(.small)
                 }
             }
 
@@ -596,12 +563,15 @@ struct SettingsView: View {
                     Button {
                         previewNotificationSound()
                     } label: {
-                        Image(systemName: "play.fill")
-                            .symbolRasterSize(9)
+                        // A Text label keeps the push-button bezel at the popup's height;
+                        // an Image-only label gets a shorter bezel.
+                        Text(Image(systemName: "play.fill"))
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
                     .disabled(!canPreviewNotificationSound)
+                    .help(String(localized: "settings.notifications.sound.preview", defaultValue: "Play Sound"))
+                    .accessibilityLabel(
+                        String(localized: "settings.notifications.sound.preview", defaultValue: "Play Sound")
+                    )
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
@@ -682,17 +652,18 @@ struct SettingsView: View {
                         .frame(width: 140)
                     TextField(
                         "",
-                        value: Binding(
-                            get: { terminalThemeSettings.fontSize },
-                            set: { terminalThemeSettings.setFontSize($0) }
+                        value: Binding<Double?>(
+                            get: { terminalThemeSettings.fontSize > 0 ? terminalThemeSettings.fontSize : nil },
+                            set: { terminalThemeSettings.setFontSize($0 ?? 0) }
                         ),
-                        format: .number
+                        format: .number,
+                        prompt: Text(TerminalThemeSettingsModel.ghosttyDefaultFontSize.formatted())
                     )
                         .textFieldStyle(.roundedBorder)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 44)
                         .accessibilityLabel(
-                            String(localized: "settings.terminalFont.title", defaultValue: "Font")
+                            String(localized: "settings.terminalFont.size", defaultValue: "Font Size")
                         )
                 }
             }
@@ -747,7 +718,6 @@ struct SettingsView: View {
             ) {
                 Toggle("", isOn: $showClaudeQuota)
                     .labelsHidden()
-                    .toggleStyle(.switch)
                     .controlSize(.small)
                     .accessibilityLabel(
                         String(localized: "settings.sidebarAppearance.showClaudeQuota", defaultValue: "Show Provider Usage")
@@ -777,9 +747,6 @@ struct SettingsView: View {
             }
             .managedBySettingsFile(settingsFileStatus.isManaged(SocketControlSettings.appStorageKey))
 
-            SettingsCardDivider()
-
-            SettingsCardNote(String(localized: "settings.automation.socketMode.note", defaultValue: "Controls access to the local Unix socket for programmatic control. Choose a mode that matches your threat model."))
             if selectedSocketControlMode == .password {
                 SettingsCardDivider()
                 SettingsCardRow(
@@ -795,22 +762,18 @@ struct SettingsView: View {
                         Button(hasSocketPasswordConfigured ? String(localized: "settings.automation.socketPassword.change", defaultValue: "Change") : String(localized: "settings.automation.socketPassword.set", defaultValue: "Set")) {
                             saveSocketPassword()
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
                         .disabled(socketPasswordDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         if hasSocketPasswordConfigured {
                             Button(String(localized: "settings.automation.socketPassword.clear", defaultValue: "Clear")) {
                                 clearSocketPassword()
                             }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
                         }
                     }
                 }
                 .managedBySettingsFile(settingsFileStatus.socketPasswordManaged)
                 if let message = socketPasswordStatusMessage {
                     Text(message)
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundStyle(socketPasswordStatusIsError ? Color.red : Color.secondary)
                         .padding(.horizontal, 14)
                         .padding(.bottom, 8)
@@ -819,14 +782,16 @@ struct SettingsView: View {
             if selectedSocketControlMode == .allowAll {
                 SettingsCardDivider()
                 Text(String(localized: "settings.automation.openAccessWarning", defaultValue: "Warning: Full open access makes the control socket world-readable/writable on this Mac and disables auth checks. Use only for local debugging."))
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundStyle(.red)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
             }
-            SettingsCardNote(String(localized: "settings.automation.socketOverrides.note", defaultValue: "Overrides: PROGRAMA_SOCKET_ENABLE, PROGRAMA_SOCKET_MODE, and PROGRAMA_SOCKET_PATH (set PROGRAMA_ALLOW_SOCKET_OVERRIDE=1 for release builds)."))
         }
-
+        SettingsSectionFooter(
+            String(localized: "settings.automation.socketMode.note", defaultValue: "Controls access to the local Unix socket for programmatic control. Choose a mode that matches your threat model."),
+            String(localized: "settings.automation.socketOverrides.note", defaultValue: "Overrides: PROGRAMA_SOCKET_ENABLE, PROGRAMA_SOCKET_MODE, and PROGRAMA_SOCKET_PATH (set PROGRAMA_ALLOW_SOCKET_OVERRIDE=1 for release builds).")
+        )
     }
 
     @ViewBuilder
@@ -848,11 +813,6 @@ struct SettingsView: View {
 
             SettingsCardDivider()
 
-            SettingsCardNote(String(localized: "settings.automation.claudeCode.note", defaultValue: "When enabled, Programa wraps the claude command to inject session tracking and notification hooks. Disable if you prefer to manage Claude Code hooks yourself."))
-
-        }
-
-        SettingsCard {
             SettingsCardRow(
                 String(localized: "settings.automation.agentScreenDetection", defaultValue: "Screen-Based Agent Detection"),
                 subtitle: agentScreenDetectionEnabled
@@ -864,18 +824,18 @@ struct SettingsView: View {
                     .controlSize(.small)
                     .accessibilityIdentifier("SettingsAgentScreenDetectionToggle")
             }
-
-            SettingsCardDivider()
-
-            SettingsCardNote(String(localized: "settings.automation.agentScreenDetection.note", defaultValue: "Applies to agents such as Gemini CLI and GitHub Copilot CLI that have no installed hooks. A hooks-managed session (Claude Code, Codex, OpenCode) always takes priority over this."))
         }
+        SettingsSectionFooter(
+            String(localized: "settings.automation.claudeCode.note", defaultValue: "When enabled, Programa wraps the claude command to inject session tracking and notification hooks. Disable if you prefer to manage Claude Code hooks yourself."),
+            String(localized: "settings.automation.agentScreenDetection.note", defaultValue: "Applies to agents such as Gemini CLI and GitHub Copilot CLI that have no installed hooks. A hooks-managed session (Claude Code, Codex, OpenCode) always takes priority over this.")
+        )
     }
 
     @ViewBuilder
     private var customCommandsSection: some View {
         SettingsSectionHeader(title: String(localized: "settings.section.customCommands", defaultValue: "Custom Commands"))
         SettingsCard {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 0) {
                 SettingsCardRow(
                     String(localized: "settings.customCommands.trustedDirectories", defaultValue: "Trusted Directories"),
                     subtitle: String(localized: "settings.customCommands.trustedDirectories.subtitle", defaultValue: "Commands from programa.json in these directories run without confirmation. One path per line.")
@@ -887,6 +847,7 @@ struct SettingsView: View {
                     .font(.system(.body, design: .monospaced))
                     .frame(minHeight: 60, maxHeight: 120)
                     .scrollContentBackground(.hidden)
+                    .overlay(OverlayScrollers(target: .overlaidTextEditor))
                     .padding(6)
                     .background(Color(nsColor: .controlBackgroundColor))
                     .cornerRadius(6)
@@ -894,7 +855,7 @@ struct SettingsView: View {
                         RoundedRectangle(cornerRadius: 6)
                             .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
                     )
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, 14)
                     .padding(.bottom, 12)
                     .focused($trustedDirectoriesEditorFocused)
                     .onChange(of: trustedDirectoriesEditorFocused) { _, isFocused in
@@ -916,11 +877,10 @@ struct SettingsView: View {
                     }
             }
             .managedBySettingsFile(settingsFileStatus.trustedDirectoriesManaged)
-
-            SettingsCardDivider()
-            SettingsCardNote(String(localized: "settings.customCommands.trustedDirectories.note", defaultValue: "Place a programa.json in your project root to define custom commands. Trust a directory from the confirmation dialog, or add paths here. For git repos, trusting the root covers all subdirectories."))
         }
-
+        SettingsSectionFooter(
+            String(localized: "settings.customCommands.trustedDirectories.note", defaultValue: "Place a programa.json in your project root to define custom commands. Trust a directory from the confirmation dialog, or add paths here. For git repos, trusting the root covers all subdirectories.")
+        )
     }
 
     @ViewBuilder
@@ -933,18 +893,8 @@ struct SettingsView: View {
                 String(localized: "settings.shortcuts.chords", defaultValue: "Shortcut Chords"),
                 subtitle: String(localized: "settings.shortcuts.chords.subtitle", defaultValue: "Add tmux-style multi-step shortcuts in settings.json, for example [\"ctrl+b\", \"c\"].")
             ) {
-                HStack(spacing: 8) {
-                    Link(String(localized: "settings.shortcuts.chords.docsButton", defaultValue: "Chord docs"), destination: shortcutChordsDocsURL)
-                        .font(.caption)
-                        .accessibilityIdentifier("SettingsKeyboardShortcutsChordDocsLink")
-
-                    Button(String(localized: "settings.app.settingsFile.openButton", defaultValue: "Open settings.json")) {
-                        openProgramaSettingsFileInTextEdit()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .accessibilityIdentifier("SettingsKeyboardShortcutsOpenSettingsFileButton")
-                }
+                Link(String(localized: "settings.shortcuts.chords.docsButton", defaultValue: "Chord docs"), destination: shortcutChordsDocsURL)
+                    .accessibilityIdentifier("SettingsKeyboardShortcutsChordDocsLink")
             }
 
             SettingsCardDivider()
@@ -961,30 +911,21 @@ struct SettingsView: View {
         }
         .id(shortcutResetToken)
 
-        Text(String(localized: "settings.shortcuts.recordHint", defaultValue: "Click a shortcut value to record a new shortcut."))
-            .font(.caption)
-            .foregroundColor(.secondary)
-            .padding(.leading, 2)
-            .accessibilityIdentifier("ShortcutRecordingHint")
-
+        SettingsSectionFooter(
+            String(localized: "settings.shortcuts.recordHint", defaultValue: "Click a shortcut value to record a new shortcut."),
+            accessibilityIdentifier: "ShortcutRecordingHint"
+        )
     }
 
     @ViewBuilder
     private var resetSection: some View {
-        SettingsSectionHeader(title: String(localized: "settings.section.reset", defaultValue: "Reset"))
-        SettingsCard {
-            HStack {
-                Spacer(minLength: 0)
-                Button(String(localized: "settings.reset.resetAll", defaultValue: "Reset All Settings")) {
-                    resetAllSettings()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-                Spacer(minLength: 0)
+        HStack {
+            Spacer(minLength: 0)
+            Button(String(localized: "settings.reset.resetAll", defaultValue: "Reset All Settings")) {
+                resetAllSettings()
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
         }
+        .padding(.top, 4)
     }
 
     private func resetAllSettings() {
@@ -1094,7 +1035,11 @@ private final class TerminalThemeSettingsModel: ObservableObject {
     @Published private(set) var lightTheme = ""
     @Published private(set) var darkTheme = ""
     @Published private(set) var fontFamily = ""
+    /// 0 means no size is set anywhere in the config chain.
     @Published private(set) var fontSize: Double = 0
+    /// Ghostty's built-in macOS `font-size`, used when nothing sets one:
+    /// https://github.com/ghostty-org/ghostty/blob/main/src/config/Config.zig (`font-size`).
+    static let ghosttyDefaultFontSize: Double = 13
     @Published private(set) var isManagedBySettingsFile = false
     @Published private(set) var isFontManagedBySettingsFile = false
     @Published private(set) var errorMessage: String?
@@ -1249,14 +1194,6 @@ private final class TerminalThemeSettingsModel: ObservableObject {
     }
 }
 
-private struct SettingsTopOffsetPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
 private struct SettingsContentHeightPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
 
@@ -1270,11 +1207,9 @@ private struct SettingsContentHeightPreferenceKey: PreferenceKey {
 
 /// Grows and shrinks the window to whatever the selected tab actually needs, the way
 /// System Settings does, so short tabs stop showing a half-empty pane and a scroller
-/// they never needed. Also owns the width floor the tab labels require.
+/// they never needed.
 private struct SettingsWindowHeightFitter: NSViewRepresentable {
     let contentHeight: CGFloat
-    let headerHeight: CGFloat
-    let minimumWidth: CGFloat
 
     func makeNSView(context: Context) -> NSView {
         NSView(frame: .zero)
@@ -1282,32 +1217,27 @@ private struct SettingsWindowHeightFitter: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSView, context: Context) {
         let measured = contentHeight
-        let header = headerHeight
-        let floorWidth = minimumWidth
         guard measured > 0 else { return }
         DispatchQueue.main.async {
-            guard let window = nsView.window, let container = window.contentView else { return }
-            // The floor is whatever the tab labels need, so the strip can never be
-            // dragged narrow enough for AppKit to start ellipsising them.
-            window.minSize = NSSize(width: floorWidth, height: SettingsWindowMetrics.minContentHeight)
-            window.maxSize = NSSize(
-                width: SettingsWindowMetrics.maxContentWidth,
-                height: SettingsWindowMetrics.maxContentHeight
+            guard let window = nsView.window else { return }
+            // The layout rect excludes the titlebar and toolbar whether or not the content
+            // view extends under them.
+            let contentHeight = window.contentLayoutRect.height
+            let chromeHeight = window.frame.height - contentHeight
+            let visibleHeight = (window.screen ?? NSScreen.main)?.visibleFrame.height ?? (measured + chromeHeight)
+            let ceiling = min(SettingsWindowMetrics.maxContentHeight, visibleHeight - chromeHeight - 40)
+            // Tabs taller than the ceiling settle at the ceiling and scroll.
+            let desired = min(max(measured, SettingsWindowMetrics.minContentHeight), ceiling)
+            let obscuredHeight = (window.contentView?.bounds.height ?? contentHeight) - contentHeight
+            window.contentMinSize = NSSize(
+                width: SettingsWindowMetrics.minContentWidth,
+                height: SettingsWindowMetrics.minContentHeight + obscuredHeight
             )
-            if window.frame.width < floorWidth {
-                var widened = window.frame
-                widened.size.width = floorWidth
-                window.setFrame(widened, display: true)
-            }
-            // The header is a safe-area inset above the scroll view, so the window needs
-            // to carry both it and the content the scroll view actually holds.
-            let target = measured + header
-            let screenCeiling = ((window.screen ?? NSScreen.main)?.visibleFrame.height ?? target) - 40
-            let ceiling = min(SettingsWindowMetrics.maxContentHeight, screenCeiling)
-            // Tabs taller than the ceiling settle at the ceiling and scroll, rather than
-            // growing the window past the bottom of the screen.
-            let desired = min(max(target, SettingsWindowMetrics.minContentHeight), ceiling)
-            let delta = desired - container.bounds.height
+            window.contentMaxSize = NSSize(
+                width: SettingsWindowMetrics.maxContentWidth,
+                height: ceiling + obscuredHeight
+            )
+            let delta = desired - contentHeight
             // Without a deadband the resize retriggers the measurement that caused it.
             guard abs(delta) > 0.5 else { return }
             var frame = window.frame
@@ -1318,75 +1248,171 @@ private struct SettingsWindowHeightFitter: NSViewRepresentable {
     }
 }
 
-/// SwiftUI's segmented `Picker` sizes itself to its labels and centres the result,
-/// which leaves the strip floating with wider gaps than the rows below it. Wrapping
-/// `NSSegmentedControl` lets us ask for `.fillEqually`, so the segments genuinely
-/// share the full width and both edges line up with the content inset.
-private struct SettingsTabStrip: NSViewRepresentable {
-    @Binding var selection: SettingsTab
-    /// The width the six labels need before AppKit starts truncating them. Reported
-    /// from the control itself so translated labels raise the floor automatically.
-    let onNaturalWidthChange: (CGFloat) -> Void
-
-    func makeNSView(context: Context) -> NSSegmentedControl {
-        let control = NSSegmentedControl(
-            labels: SettingsTab.allCases.map(\.title),
-            trackingMode: .selectOne,
-            target: context.coordinator,
-            action: #selector(Coordinator.segmentChanged(_:))
-        )
-        control.segmentDistribution = .fillEqually
-        control.controlSize = .regular
-        control.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        control.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        control.setAccessibilityIdentifier("SettingsTabPicker")
-        control.selectedSegment = Self.index(of: selection)
-        return control
+/// The Settings window's tab toolbar and the selected tab it drives. The toolbar holds
+/// its delegate weakly, so `SettingsRootView` keeps this object alive as a `@StateObject`.
+@MainActor
+final class SettingsTabToolbarController: NSObject, ObservableObject, NSToolbarDelegate {
+    @Published var selectedTab: SettingsTab = .general {
+        didSet { syncWindow() }
     }
 
-    func updateNSView(_ nsView: NSSegmentedControl, context: Context) {
-        context.coordinator.selection = $selection
-        for (index, tab) in SettingsTab.allCases.enumerated() where nsView.label(forSegment: index) != tab.title {
-            nsView.setLabel(tab.title, forSegment: index)
+    private weak var window: NSWindow?
+    private lazy var toolbar: NSToolbar = {
+        let toolbar = NSToolbar(identifier: NSToolbar.Identifier("programa.settings.tabs"))
+        toolbar.delegate = self
+        toolbar.allowsUserCustomization = false
+        toolbar.autosavesConfiguration = false
+        toolbar.displayMode = .iconAndLabel
+        return toolbar
+    }()
+
+    func install(on window: NSWindow) {
+        self.window = window
+        if window.toolbar !== toolbar {
+            window.toolbar = toolbar
         }
-        let index = Self.index(of: selection)
-        if nsView.selectedSegment != index {
-            nsView.selectedSegment = index
+        syncWindow()
+    }
+
+    private func syncWindow() {
+        toolbar.selectedItemIdentifier = Self.itemIdentifier(for: selectedTab)
+        for item in toolbar.items {
+            guard let tab = Self.tab(for: item.itemIdentifier), item.label != tab.title else { continue }
+            item.label = tab.title
         }
-        let natural = nsView.intrinsicContentSize.width
-        DispatchQueue.main.async {
-            onNaturalWidthChange(natural)
+        window?.title = selectedTab.title
+    }
+
+    @objc private func selectTab(_ sender: NSToolbarItem) {
+        guard let tab = Self.tab(for: sender.itemIdentifier), tab != selectedTab else { return }
+        selectedTab = tab
+    }
+
+    private static func itemIdentifier(for tab: SettingsTab) -> NSToolbarItem.Identifier {
+        NSToolbarItem.Identifier("SettingsTab.\(tab.rawValue)")
+    }
+
+    private static func tab(for identifier: NSToolbarItem.Identifier) -> SettingsTab? {
+        SettingsTab.allCases.first { itemIdentifier(for: $0) == identifier }
+    }
+
+    private var tabIdentifiers: [NSToolbarItem.Identifier] {
+        SettingsTab.allCases.map(Self.itemIdentifier(for:))
+    }
+
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        tabIdentifiers
+    }
+
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        tabIdentifiers
+    }
+
+    func toolbarSelectableItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        tabIdentifiers
+    }
+
+    func toolbar(
+        _ toolbar: NSToolbar,
+        itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
+        willBeInsertedIntoToolbar flag: Bool
+    ) -> NSToolbarItem? {
+        guard let tab = Self.tab(for: itemIdentifier) else { return nil }
+        let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+        item.label = tab.title
+        item.image = NSImage(systemSymbolName: tab.symbolName, accessibilityDescription: tab.title)
+        item.target = self
+        item.action = #selector(selectTab(_:))
+        return item
+    }
+}
+
+/// Forces overlay scrollers on a SwiftUI scroll view, so a tab that scrolls keeps the same
+/// content width as one that doesn't, even when the system shows legacy scrollers.
+private struct OverlayScrollers: NSViewRepresentable {
+    enum Target {
+        /// The scroll view this view's content scrolls inside.
+        case enclosingScrollView
+        /// The `TextEditor` this view is overlaid on (a sibling, not an ancestor).
+        case overlaidTextEditor
+    }
+
+    let target: Target
+
+    func makeNSView(context: Context) -> OverlayScrollersView {
+        OverlayScrollersView(target: target)
+    }
+
+    func updateNSView(_ nsView: OverlayScrollersView, context: Context) {
+        nsView.scheduleApply()
+    }
+}
+
+private final class OverlayScrollersView: NSView {
+    private let target: OverlayScrollers.Target
+    private var styleObserver: NSObjectProtocol?
+
+    init(target: OverlayScrollers.Target) {
+        self.target = target
+        super.init(frame: .zero)
+        styleObserver = NotificationCenter.default.addObserver(
+            forName: NSScroller.preferredScrollerStyleDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.scheduleApply()
         }
     }
 
-    /// Without this the representable falls back to the control's intrinsic width,
-    /// which is the hugging behaviour we are trying to get away from.
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSSegmentedControl, context: Context) -> CGSize? {
-        CGSize(
-            width: proposal.width ?? nsView.intrinsicContentSize.width,
-            height: nsView.intrinsicContentSize.height
-        )
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
     }
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(selection: $selection)
-    }
-
-    private static func index(of tab: SettingsTab) -> Int {
-        SettingsTab.allCases.firstIndex(of: tab) ?? 0
-    }
-
-    final class Coordinator: NSObject {
-        var selection: Binding<SettingsTab>
-
-        init(selection: Binding<SettingsTab>) {
-            self.selection = selection
+    deinit {
+        if let styleObserver {
+            NotificationCenter.default.removeObserver(styleObserver)
         }
+    }
 
-        @objc func segmentChanged(_ sender: NSSegmentedControl) {
-            let tabs = SettingsTab.allCases
-            guard tabs.indices.contains(sender.selectedSegment) else { return }
-            selection.wrappedValue = tabs[sender.selectedSegment]
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        scheduleApply()
+    }
+
+    /// Deferred: the system re-applies its preferred style after the change notification,
+    /// and a sibling `TextEditor` may not be in the hierarchy yet when this view arrives.
+    func scheduleApply() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let scrollView = self.resolveScrollView() else { return }
+            if scrollView.scrollerStyle != .overlay {
+                scrollView.scrollerStyle = .overlay
+            }
+            scrollView.autohidesScrollers = true
+        }
+    }
+
+    private func resolveScrollView() -> NSScrollView? {
+        switch target {
+        case .enclosingScrollView:
+            return enclosingScrollView
+        case .overlaidTextEditor:
+            guard let container = window?.contentView else { return nil }
+            let ownFrame = convert(bounds, to: nil)
+            return Self.textScrollViews(in: container).first {
+                $0.convert($0.bounds, to: nil).intersects(ownFrame)
+            }
+        }
+    }
+
+    private static func textScrollViews(in view: NSView) -> [NSScrollView] {
+        view.subviews.flatMap { subview -> [NSScrollView] in
+            if let scrollView = subview as? NSScrollView, scrollView.documentView is NSTextView {
+                return [scrollView]
+            }
+            return textScrollViews(in: subview)
         }
     }
 }
@@ -1434,6 +1460,7 @@ private struct ThemeWindowThumbnail: View {
                     HStack {
                         Image(systemName: "applelogo")
                             .symbolRasterSize(max(height * 0.08, 6))
+                            .accessibilityHidden(true)
                             .foregroundColor(isDark ? .white : .black)
                             .opacity(0.8)
                         Spacer()
@@ -1486,10 +1513,10 @@ private struct ThemeWindowThumbnail: View {
                 .offset(x: width * 0.12, y: height * 0.2)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: ThemePickerRow.thumbnailCornerRadius, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+            RoundedRectangle(cornerRadius: ThemePickerRow.thumbnailCornerRadius, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
         )
     }
 }
@@ -1498,75 +1525,45 @@ private struct ThemePickerRow: View {
     let selectedMode: String
     let onSelect: (AppearanceMode) -> Void
 
-    private let thumbWidth: CGFloat = 76
-    private let thumbHeight: CGFloat = 50
+    static let thumbnailCornerRadius: CGFloat = 6
+    private let thumbWidth: CGFloat = 68
+    private let thumbHeight: CGFloat = 44
+    private let ringWidth: CGFloat = 3
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Text(String(localized: "settings.app.theme", defaultValue: "Theme"))
-                .font(.system(size: 13, weight: .medium))
+                .font(.body)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack(spacing: 8) {
+            HStack(alignment: .top, spacing: 12) {
                 ForEach(AppearanceMode.visibleCases) { mode in
                     let isSelected = selectedMode == mode.rawValue
                     Button {
                         onSelect(mode)
                     } label: {
                         VStack(spacing: 4) {
-                            Group {
-                                if mode == .system {
-                                    ZStack {
-                                        ThemeWindowThumbnail(isDark: false)
-                                            .mask(
-                                                GeometryReader { geo in
-                                                    Rectangle()
-                                                        .frame(width: geo.size.width / 2, height: geo.size.height)
-                                                        .position(x: geo.size.width / 4, y: geo.size.height / 2)
-                                                }
-                                            )
-                                        ThemeWindowThumbnail(isDark: true)
-                                            .mask(
-                                                GeometryReader { geo in
-                                                    Rectangle()
-                                                        .frame(width: geo.size.width / 2, height: geo.size.height)
-                                                        .position(x: geo.size.width * 0.75, y: geo.size.height / 2)
-                                                }
-                                            )
-                                        GeometryReader { geo in
-                                            Rectangle()
-                                                .fill(Color.primary.opacity(0.15))
-                                                .frame(width: 1, height: geo.size.height)
-                                                .position(x: geo.size.width / 2, y: geo.size.height / 2)
-                                        }
-                                    }
-                                } else {
-                                    ThemeWindowThumbnail(isDark: mode == .dark)
-                                }
-                            }
-                            .frame(width: thumbWidth, height: thumbHeight)
+                            thumbnail(for: mode)
+                                .frame(width: thumbWidth, height: thumbHeight)
+                                .padding(ringWidth)
+                                .overlay(
+                                    RoundedRectangle(
+                                        cornerRadius: Self.thumbnailCornerRadius + ringWidth,
+                                        style: .continuous
+                                    )
+                                    .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: ringWidth)
+                                )
 
                             Text(mode.displayName)
-                                .font(.system(size: 10))
+                                .font(.subheadline)
                                 .fontWeight(isSelected ? .semibold : .regular)
-                                .foregroundColor(isSelected ? .primary : .secondary)
+                                .foregroundStyle(isSelected ? .primary : .secondary)
                         }
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 10)
                         .contentShape(Rectangle())
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(isSelected
-                                    ? Color.accentColor.opacity(0.12)
-                                    : Color.clear)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
-                        )
                     }
                     .buttonStyle(.plain)
                     .focusable(false)
+                    .accessibilityLabel(mode.displayName)
                     .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
             }
@@ -1575,6 +1572,38 @@ private struct ThemePickerRow: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func thumbnail(for mode: AppearanceMode) -> some View {
+        if mode == .system {
+            ZStack {
+                ThemeWindowThumbnail(isDark: false)
+                    .mask(
+                        GeometryReader { geo in
+                            Rectangle()
+                                .frame(width: geo.size.width / 2, height: geo.size.height)
+                                .position(x: geo.size.width / 4, y: geo.size.height / 2)
+                        }
+                    )
+                ThemeWindowThumbnail(isDark: true)
+                    .mask(
+                        GeometryReader { geo in
+                            Rectangle()
+                                .frame(width: geo.size.width / 2, height: geo.size.height)
+                                .position(x: geo.size.width * 0.75, y: geo.size.height / 2)
+                        }
+                    )
+                GeometryReader { geo in
+                    Rectangle()
+                        .fill(Color.primary.opacity(0.15))
+                        .frame(width: 1, height: geo.size.height)
+                        .position(x: geo.size.width / 2, y: geo.size.height / 2)
+                }
+            }
+        } else {
+            ThemeWindowThumbnail(isDark: mode == .dark)
+        }
     }
 }
 
@@ -1609,8 +1638,10 @@ private struct ShortcutSettingRow: View {
 }
 
 struct SettingsRootView: View {
+    @StateObject private var tabToolbar = SettingsTabToolbarController()
+
     var body: some View {
-        SettingsView()
+        SettingsView(tabToolbar: tabToolbar)
             .background(WindowAccessor { window in
                 configureSettingsWindow(window)
             })
@@ -1619,6 +1650,7 @@ struct SettingsRootView: View {
     private func configureSettingsWindow(_ window: NSWindow) {
         window.identifier = NSUserInterfaceItemIdentifier("programa.settings")
         applyCurrentSettingsWindowStyle(to: window)
+        tabToolbar.install(on: window)
 
         let accessories = window.titlebarAccessoryViewControllers
         for index in accessories.indices.reversed() {

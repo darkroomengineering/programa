@@ -224,7 +224,7 @@ enum PreferredEditorSettings {
 /// question a user is answering, and each tab is further split into its own
 /// named sections so a tab is never just one undivided pile of rows: General
 /// covers how the app behaves day to day (App), what it notifies you about
-/// (Notifications), and how to start over (Reset); Appearance covers how the
+/// (Notifications), and how to start over (Reset All Settings); Appearance covers how the
 /// app looks (theme, window chrome) and how the sidebar looks and behaves
 /// (Sidebar); Automation covers the socket used for scripting it (Socket
 /// Control), the coding agents it integrates with (Agents), and per-project
@@ -247,6 +247,15 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .appearance: String(localized: "settings.tab.appearance", defaultValue: "Appearance")
         case .automation: String(localized: "settings.tab.automation", defaultValue: "Automation")
         case .shortcuts: String(localized: "settings.tab.shortcuts", defaultValue: "Shortcuts")
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .general: "gearshape"
+        case .appearance: "paintbrush"
+        case .automation: "bolt"
+        case .shortcuts: "keyboard"
         }
     }
 
