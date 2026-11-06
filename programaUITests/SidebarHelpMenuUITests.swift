@@ -23,7 +23,7 @@ final class SidebarHelpMenuUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    func testVisibleSidebarHeaderToggleHidesItsOwningSidebar() {
+    func testToolbarSidebarToggleHidesItsOwningSidebar() {
         let app = XCUIApplication()
         app.launchEnvironment["PROGRAMA_UI_TEST_MODE"] = "1"
         launchAndActivate(app)
@@ -33,13 +33,14 @@ final class SidebarHelpMenuUITests: XCTestCase {
         let sidebar = app.descendants(matching: .any).matching(identifier: "Sidebar").firstMatch
         XCTAssertTrue(sidebar.waitForExistence(timeout: 6.0), "Expected the main window sidebar to start visible")
 
-        let toggle = sidebar.descendants(matching: .button)
+        // The toggle is a toolbar item in the window's titlebar, not a sidebar descendant.
+        let toggle = app.windows.firstMatch.descendants(matching: .any)
             .matching(identifier: "titlebarControl.toggleSidebar")
             .firstMatch
-        // Right after launch the header can take longer than 3 seconds on CI to become hittable.
+        // Right after launch the toolbar can take longer than 3 seconds on CI to become hittable.
         XCTAssertTrue(
             sidebarHelpPollUntil(timeout: 10.0) { toggle.exists && toggle.isHittable },
-            "Expected the visible sidebar header to expose its own sidebar toggle. toggle=\(toggle.debugDescription) exists=\(toggle.exists) hittable=\(toggle.isHittable) frame=\(toggle.frame) sidebar=\(sidebar.frame)"
+            "Expected the window toolbar to expose the sidebar toggle. toggle=\(toggle.debugDescription) exists=\(toggle.exists) hittable=\(toggle.isHittable) frame=\(toggle.frame) sidebar=\(sidebar.frame)"
         )
 
         toggle.click()
@@ -59,7 +60,7 @@ final class SidebarHelpMenuUITests: XCTestCase {
         }
         XCTAssertTrue(
             sidebarHidden,
-            "The sidebar header toggle must hide the SidebarState that rendered it. sidebar.exists=\(sidebar.exists) sidebar.frame=\(sidebar.frame) toggle.exists=\(toggle.exists)"
+            "The toolbar sidebar toggle must hide its own window's sidebar. sidebar.exists=\(sidebar.exists) sidebar.frame=\(sidebar.frame) toggle.exists=\(toggle.exists)"
         )
     }
 
