@@ -149,7 +149,8 @@ enum TitlebarControlsMetrics {
         groupPadding: EdgeInsets(),
         buttonBackground: false,
         buttonCornerRadius: glassHeight / 2,
-        hoverBackground: false
+        hoverBackground: false,
+        primaryGlyphAtRest: true
     )
 
     /// Leading inset of the first pane's tab strip while the hidden-sidebar cluster
@@ -188,6 +189,8 @@ struct TitlebarControlsStyleConfig {
     let buttonBackground: Bool
     let buttonCornerRadius: CGFloat
     let hoverBackground: Bool
+    /// Glass toolbar buttons draw full-strength glyphs at rest, like Finder and Mail.
+    var primaryGlyphAtRest = false
 }
 
 final class TitlebarControlsViewModel: ObservableObject {
@@ -693,7 +696,7 @@ struct TitlebarControlsView: View {
     private func iconLabel(systemName: String, config: TitlebarControlsStyleConfig, isHovering: Bool) -> some View {
         let icon = Image(systemName: systemName)
             .font(.system(size: titlebarIconRenderSize(for: systemName, config: config), weight: .regular))
-            .foregroundColor(isHovering ? Color(nsColor: .labelColor) : Color(nsColor: .secondaryLabelColor))
+            .foregroundColor(isHovering || config.primaryGlyphAtRest ? Color(nsColor: .labelColor) : Color(nsColor: .secondaryLabelColor))
             .frame(width: config.buttonSize, height: config.buttonSize)
 
         if config.buttonBackground {

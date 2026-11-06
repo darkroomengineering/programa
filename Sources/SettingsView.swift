@@ -16,33 +16,13 @@ enum SettingsWindowMetrics {
     /// triggers a fit, so the window has to start at a height that already reads well.
     static let defaultContentHeight: CGFloat = 520
 
-    /// From macOS 26 the content view runs under a transparent titlebar, so the toolbar
-    /// sits on the same background as the content (`SettingsToolbarBackdrop` keeps
-    /// scrolled rows from showing through it). Earlier releases keep the opaque titlebar.
+    /// From macOS 26 the content runs under the toolbar, which then shares the content
+    /// background and blurs rows scrolled beneath it. Earlier releases keep the opaque titlebar.
     static var contentScrollsUnderToolbar: Bool {
         if #available(macOS 26.0, *) {
             return true
         }
         return false
-    }
-}
-
-/// Covers the toolbar's safe-area band with the window background and a separator, so
-/// rows scrolled under a transparent titlebar never read through the toolbar. SwiftUI's
-/// `scrollEdgeEffectStyle` does not treat an AppKit toolbar as a bar, so it draws nothing
-/// here. Draws nothing when the titlebar is opaque (no top safe-area inset).
-private struct SettingsToolbarBackdrop: View {
-    var body: some View {
-        GeometryReader { proxy in
-            let height = proxy.safeAreaInsets.top
-            if height > 0 {
-                Color(nsColor: .windowBackgroundColor)
-                    .overlay(alignment: .bottom) { Divider() }
-                    .frame(height: height)
-                    .offset(y: -height)
-            }
-        }
-        .allowsHitTesting(false)
     }
 }
 
@@ -343,7 +323,6 @@ struct SettingsView: View {
             .onPreferenceChange(SettingsContentHeightPreferenceKey.self) { value in
                 measuredContentHeight = value
             }
-        .overlay(alignment: .top) { SettingsToolbarBackdrop() }
         .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea())
         .background(
             SettingsWindowHeightFitter(contentHeight: measuredContentHeight)

@@ -1161,7 +1161,9 @@ struct SettingsAboutTitlebarDebugOptions: Equatable {
                 overridesEnabled: false,
                 windowTitle: localizedDebugLabel("Settings"),
                 titleVisibility: .visible,
-                titlebarAppearsTransparent: SettingsWindowMetrics.contentScrollsUnderToolbar,
+                // Must stay false: a transparent titlebar turns off AppKit's soft scroll
+                // edge blur under the toolbar.
+                titlebarAppearsTransparent: false,
                 movableByWindowBackground: true,
                 titled: true,
                 closable: true,
