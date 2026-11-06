@@ -22,8 +22,16 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
     private weak var window: NSWindow?
     private weak var splitView: NSSplitView?
     private weak var notificationsItem: NSToolbarItem?
+    private var buttonItems: [NSToolbarItem.Identifier: NSToolbarItem] = [:]
     private var unreadCancellable: AnyCancellable?
+    private var shortcutObserver: NSObjectProtocol?
     private var showsUnreadImage: Bool?
+
+    deinit {
+        if let shortcutObserver {
+            NotificationCenter.default.removeObserver(shortcutObserver)
+        }
+    }
 
     /// Toolbars that share an identifier sync item removals across windows, so every main
     /// window gets its own.
@@ -208,18 +216,12 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
                 Self.notificationsID,
                 symbol: "bell",
                 label: String(localized: "titlebar.notifications.accessibilityLabel", defaultValue: "Notifications"),
-                toolTip: KeyboardShortcutSettings.Action.showNotifications.tooltip(
-                    String(localized: "titlebar.notifications.tooltip", defaultValue: "Show notifications")
-                ),
                 action: #selector(showNotifications(_:))
             )
             let newTab = makeItem(
                 Self.newTabID,
                 symbol: "plus",
                 label: String(localized: "titlebar.newWorkspace.accessibilityLabel", defaultValue: "New Workspace"),
-                toolTip: KeyboardShortcutSettings.Action.newTab.tooltip(
-                    String(localized: "titlebar.newWorkspace.tooltip", defaultValue: "New workspace")
-                ),
                 action: #selector(newTab(_:))
             )
             let group = NSToolbarItemGroup(itemIdentifier: itemIdentifier)
@@ -232,9 +234,6 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
                 Self.toggleID,
                 symbol: "sidebar.left",
                 label: String(localized: "titlebar.sidebar.accessibilityLabel", defaultValue: "Toggle Sidebar"),
-                toolTip: KeyboardShortcutSettings.Action.toggleSidebar.tooltip(
-                    String(localized: "titlebar.sidebar.tooltip", defaultValue: "Show or hide the sidebar")
-                ),
                 action: #selector(toggleSidebar(_:))
             )
         default:
@@ -246,20 +245,62 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
         _ identifier: NSToolbarItem.Identifier,
         symbol: String,
         label: String,
-        toolTip: String,
         action: Selector
     ) -> NSToolbarItem {
         let item = NSToolbarItem(itemIdentifier: identifier)
         item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
         item.label = label
         item.paletteLabel = label
-        item.toolTip = toolTip
+        item.toolTip = Self.toolTip(for: identifier)
         item.isBordered = true
         // Explicit target: the focused terminal lives in a portal outside the split view
         // controller's responder chain, so a nil-targeted action could miss.
         item.target = self
         item.action = action
+        buttonItems[identifier] = item
+        observeShortcutChanges()
         return item
+    }
+
+    /// The tooltip names the item's current shortcut, so it is rebuilt on every rebinding.
+    private static func toolTip(for identifier: NSToolbarItem.Identifier) -> String? {
+        switch identifier {
+        case notificationsID:
+            return KeyboardShortcutSettings.Action.showNotifications.tooltip(
+                String(localized: "titlebar.notifications.tooltip", defaultValue: "Show notifications")
+            )
+        case newTabID:
+            return KeyboardShortcutSettings.Action.newTab.tooltip(
+                String(localized: "titlebar.newWorkspace.tooltip", defaultValue: "New workspace")
+            )
+        case toggleID:
+            return KeyboardShortcutSettings.Action.toggleSidebar.tooltip(
+                String(localized: "titlebar.sidebar.tooltip", defaultValue: "Show or hide the sidebar")
+            )
+        default:
+            return nil
+        }
+    }
+
+    private func observeShortcutChanges() {
+        guard shortcutObserver == nil else { return }
+        shortcutObserver = NotificationCenter.default.addObserver(
+            forName: KeyboardShortcutSettings.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                for (identifier, item) in self.buttonItems {
+                    item.toolTip = Self.toolTip(for: identifier)
+                }
+            }
+        }
+    }
+
+    /// Tooltip of `window`'s toolbar item, for the debug socket.
+    static func toolTip(of identifier: NSToolbarItem.Identifier, in window: NSWindow) -> String? {
+        (window.toolbar?.delegate as? MainWindowToolbar)?.buttonItems[identifier]?.toolTip
     }
 
     /// Unread notifications swap the bell for a filled bell in the accent color.

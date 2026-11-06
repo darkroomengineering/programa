@@ -48,62 +48,6 @@ final class UpdateReleaseNotesDestinationTests: XCTestCase {
     }
 }
 
-final class TitlebarControlsSizingPolicyTests: XCTestCase {
-    func testSchedulePolicyRequiresMeaningfulViewSizeChange() {
-        XCTAssertFalse(titlebarControlsShouldScheduleForViewSizeChange(previous: .zero, current: .zero))
-        XCTAssertTrue(
-            titlebarControlsShouldScheduleForViewSizeChange(
-                previous: .zero,
-                current: NSSize(width: 240, height: 38)
-            )
-        )
-        XCTAssertFalse(
-            titlebarControlsShouldScheduleForViewSizeChange(
-                previous: NSSize(width: 240, height: 38),
-                current: NSSize(width: 240.2, height: 38.1)
-            )
-        )
-        XCTAssertTrue(
-            titlebarControlsShouldScheduleForViewSizeChange(
-                previous: NSSize(width: 240, height: 38),
-                current: NSSize(width: 247, height: 38)
-            )
-        )
-    }
-
-    func testLayoutApplyPolicySkipsEquivalentSnapshots() {
-        let baseline = TitlebarControlsLayoutSnapshot(
-            contentSize: NSSize(width: 128, height: 22),
-            containerHeight: 28,
-            yOffset: 3
-        )
-        XCTAssertTrue(titlebarControlsShouldApplyLayout(previous: nil, next: baseline))
-        XCTAssertFalse(titlebarControlsShouldApplyLayout(previous: baseline, next: baseline))
-
-        let changed = TitlebarControlsLayoutSnapshot(
-            contentSize: NSSize(width: 132, height: 22),
-            containerHeight: 28,
-            yOffset: 3
-        )
-        XCTAssertTrue(titlebarControlsShouldApplyLayout(previous: baseline, next: changed))
-    }
-
-    func testShortcutHintVerticalOffsetKeepsPillInsideButtonLane() {
-        for style in TitlebarControlsStyle.allCases {
-            let config = style.config
-            let hintHeight = titlebarShortcutHintHeight(for: config)
-            let verticalOffset = titlebarShortcutHintVerticalOffset(for: config)
-
-            XCTAssertGreaterThanOrEqual(verticalOffset, 0, "Expected non-negative hint offset for style \(style)")
-            XCTAssertLessThanOrEqual(
-                verticalOffset + hintHeight,
-                config.buttonSize,
-                "Expected hint pill to fit within the titlebar button lane for style \(style)"
-            )
-        }
-    }
-}
-
 /// Tests for the predicate that suppresses the Sparkle updater in non-release builds.
 ///
 /// Tagged DEV builds and staging builds must never start the public update feed

@@ -209,8 +209,6 @@ private enum DebugWindowConfigSnapshot {
         sidebarDevBuildBannerVisible=\(boolValue(defaults, key: DevBuildBannerDebugSettings.sidebarBannerVisibleKey, fallback: DevBuildBannerDebugSettings.defaultShowSidebarBanner))
         shortcutHintSidebarXOffset=\(String(format: "%.1f", doubleValue(defaults, key: ShortcutHintDebugSettings.sidebarHintXKey, fallback: ShortcutHintDebugSettings.defaultSidebarHintX)))
         shortcutHintSidebarYOffset=\(String(format: "%.1f", doubleValue(defaults, key: ShortcutHintDebugSettings.sidebarHintYKey, fallback: ShortcutHintDebugSettings.defaultSidebarHintY)))
-        shortcutHintTitlebarXOffset=\(String(format: "%.1f", doubleValue(defaults, key: ShortcutHintDebugSettings.titlebarHintXKey, fallback: ShortcutHintDebugSettings.defaultTitlebarHintX)))
-        shortcutHintTitlebarYOffset=\(String(format: "%.1f", doubleValue(defaults, key: ShortcutHintDebugSettings.titlebarHintYKey, fallback: ShortcutHintDebugSettings.defaultTitlebarHintY)))
         shortcutHintPaneTabXOffset=\(String(format: "%.1f", doubleValue(defaults, key: ShortcutHintDebugSettings.paneHintXKey, fallback: ShortcutHintDebugSettings.defaultPaneHintX)))
         shortcutHintPaneTabYOffset=\(String(format: "%.1f", doubleValue(defaults, key: ShortcutHintDebugSettings.paneHintYKey, fallback: ShortcutHintDebugSettings.defaultPaneHintY)))
         shortcutHintAlwaysShow=\(boolValue(defaults, key: ShortcutHintDebugSettings.alwaysShowHintsKey, fallback: ShortcutHintDebugSettings.defaultAlwaysShowHints))
@@ -273,8 +271,6 @@ final class DebugWindowControlsWindowController: DebugPanelWindowController {
 private struct DebugWindowControlsView: View {
     @AppStorage(ShortcutHintDebugSettings.sidebarHintXKey) private var sidebarShortcutHintXOffset = ShortcutHintDebugSettings.defaultSidebarHintX
     @AppStorage(ShortcutHintDebugSettings.sidebarHintYKey) private var sidebarShortcutHintYOffset = ShortcutHintDebugSettings.defaultSidebarHintY
-    @AppStorage(ShortcutHintDebugSettings.titlebarHintXKey) private var titlebarShortcutHintXOffset = ShortcutHintDebugSettings.defaultTitlebarHintX
-    @AppStorage(ShortcutHintDebugSettings.titlebarHintYKey) private var titlebarShortcutHintYOffset = ShortcutHintDebugSettings.defaultTitlebarHintY
     @AppStorage(ShortcutHintDebugSettings.paneHintXKey) private var paneShortcutHintXOffset = ShortcutHintDebugSettings.defaultPaneHintX
     @AppStorage(ShortcutHintDebugSettings.paneHintYKey) private var paneShortcutHintYOffset = ShortcutHintDebugSettings.defaultPaneHintY
     @AppStorage(ShortcutHintDebugSettings.alwaysShowHintsKey) private var alwaysShowShortcutHints = ShortcutHintDebugSettings.defaultAlwaysShowHints
@@ -336,12 +332,6 @@ private struct DebugWindowControlsView: View {
                             localizedDebugLabel("Sidebar Cmd+1…9"),
                             x: $sidebarShortcutHintXOffset,
                             y: $sidebarShortcutHintYOffset
-                        )
-
-                        hintOffsetSection(
-                            localizedDebugLabel("Titlebar Buttons"),
-                            x: $titlebarShortcutHintXOffset,
-                            y: $titlebarShortcutHintYOffset
                         )
 
                         hintOffsetSection(
@@ -440,8 +430,6 @@ private struct DebugWindowControlsView: View {
     private func resetShortcutHintOffsets() {
         sidebarShortcutHintXOffset = ShortcutHintDebugSettings.defaultSidebarHintX
         sidebarShortcutHintYOffset = ShortcutHintDebugSettings.defaultSidebarHintY
-        titlebarShortcutHintXOffset = ShortcutHintDebugSettings.defaultTitlebarHintX
-        titlebarShortcutHintYOffset = ShortcutHintDebugSettings.defaultTitlebarHintY
         paneShortcutHintXOffset = ShortcutHintDebugSettings.defaultPaneHintX
         paneShortcutHintYOffset = ShortcutHintDebugSettings.defaultPaneHintY
         alwaysShowShortcutHints = ShortcutHintDebugSettings.defaultAlwaysShowHints
@@ -451,8 +439,6 @@ private struct DebugWindowControlsView: View {
         let payload = """
         shortcutHintSidebarXOffset=\(String(format: "%.1f", ShortcutHintDebugSettings.clamped(sidebarShortcutHintXOffset)))
         shortcutHintSidebarYOffset=\(String(format: "%.1f", ShortcutHintDebugSettings.clamped(sidebarShortcutHintYOffset)))
-        shortcutHintTitlebarXOffset=\(String(format: "%.1f", ShortcutHintDebugSettings.clamped(titlebarShortcutHintXOffset)))
-        shortcutHintTitlebarYOffset=\(String(format: "%.1f", ShortcutHintDebugSettings.clamped(titlebarShortcutHintYOffset)))
         shortcutHintPaneTabXOffset=\(String(format: "%.1f", ShortcutHintDebugSettings.clamped(paneShortcutHintXOffset)))
         shortcutHintPaneTabYOffset=\(String(format: "%.1f", ShortcutHintDebugSettings.clamped(paneShortcutHintYOffset)))
         shortcutHintAlwaysShow=\(alwaysShowShortcutHints)
@@ -491,8 +477,6 @@ private struct SidebarDebugView: View {
     @AppStorage("sidebarBlurOpacity") private var sidebarBlurOpacity = 1.0
     @AppStorage(ShortcutHintDebugSettings.sidebarHintXKey) private var sidebarShortcutHintXOffset = ShortcutHintDebugSettings.defaultSidebarHintX
     @AppStorage(ShortcutHintDebugSettings.sidebarHintYKey) private var sidebarShortcutHintYOffset = ShortcutHintDebugSettings.defaultSidebarHintY
-    @AppStorage(ShortcutHintDebugSettings.titlebarHintXKey) private var titlebarShortcutHintXOffset = ShortcutHintDebugSettings.defaultTitlebarHintX
-    @AppStorage(ShortcutHintDebugSettings.titlebarHintYKey) private var titlebarShortcutHintYOffset = ShortcutHintDebugSettings.defaultTitlebarHintY
     @AppStorage(ShortcutHintDebugSettings.paneHintXKey) private var paneShortcutHintXOffset = ShortcutHintDebugSettings.defaultPaneHintX
     @AppStorage(ShortcutHintDebugSettings.paneHintYKey) private var paneShortcutHintYOffset = ShortcutHintDebugSettings.defaultPaneHintY
     @AppStorage(ShortcutHintDebugSettings.alwaysShowHintsKey) private var alwaysShowShortcutHints = ShortcutHintDebugSettings.defaultAlwaysShowHints
@@ -616,12 +600,6 @@ private struct SidebarDebugView: View {
                         )
 
                         hintOffsetSection(
-                            localizedDebugLabel("Titlebar Buttons"),
-                            x: $titlebarShortcutHintXOffset,
-                            y: $titlebarShortcutHintYOffset
-                        )
-
-                        hintOffsetSection(
                             localizedDebugLabel("Pane Ctrl/Cmd+1…9"),
                             x: $paneShortcutHintXOffset,
                             y: $paneShortcutHintYOffset
@@ -722,8 +700,6 @@ private struct SidebarDebugView: View {
     private func resetShortcutHintOffsets() {
         sidebarShortcutHintXOffset = ShortcutHintDebugSettings.defaultSidebarHintX
         sidebarShortcutHintYOffset = ShortcutHintDebugSettings.defaultSidebarHintY
-        titlebarShortcutHintXOffset = ShortcutHintDebugSettings.defaultTitlebarHintX
-        titlebarShortcutHintYOffset = ShortcutHintDebugSettings.defaultTitlebarHintY
         paneShortcutHintXOffset = ShortcutHintDebugSettings.defaultPaneHintX
         paneShortcutHintYOffset = ShortcutHintDebugSettings.defaultPaneHintY
         alwaysShowShortcutHints = ShortcutHintDebugSettings.defaultAlwaysShowHints
@@ -745,8 +721,6 @@ private struct SidebarDebugView: View {
         sidebarDevBuildBannerVisible=\(showSidebarDevBuildBanner)
         shortcutHintSidebarXOffset=\(String(format: "%.1f", ShortcutHintDebugSettings.clamped(sidebarShortcutHintXOffset)))
         shortcutHintSidebarYOffset=\(String(format: "%.1f", ShortcutHintDebugSettings.clamped(sidebarShortcutHintYOffset)))
-        shortcutHintTitlebarXOffset=\(String(format: "%.1f", ShortcutHintDebugSettings.clamped(titlebarShortcutHintXOffset)))
-        shortcutHintTitlebarYOffset=\(String(format: "%.1f", ShortcutHintDebugSettings.clamped(titlebarShortcutHintYOffset)))
         shortcutHintPaneTabXOffset=\(String(format: "%.1f", ShortcutHintDebugSettings.clamped(paneShortcutHintXOffset)))
         shortcutHintPaneTabYOffset=\(String(format: "%.1f", ShortcutHintDebugSettings.clamped(paneShortcutHintYOffset)))
         shortcutHintAlwaysShow=\(alwaysShowShortcutHints)
