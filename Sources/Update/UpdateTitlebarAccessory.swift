@@ -3,220 +3,6 @@ import Bonsplit
 import Combine
 import SwiftUI
 
-final class NonDraggableHostingView<Content: View>: NSHostingView<Content> {
-    override var mouseDownCanMoveWindow: Bool { false }
-
-    required init(rootView: Content) {
-        super.init(rootView: rootView)
-        // Titlebar accessory content must not observe safe-area changes: SwiftUI's
-        // observation recurses through invalidateSafeAreaInsets on ambient display
-        // events until AppKit's layout-loop guard kills the app (issue #307; same
-        // fix as MainWindowHostingView, #308 — it does not cascade to sibling hosts).
-        safeAreaRegions = []
-    }
-
-    @MainActor required dynamic init?(coder aDecoder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-}
-
-/// macOS traffic lights are 12pt circles laid out on a 20pt pitch — an 8pt visual gap
-/// between adjacent lights. The bare-glyph presets (macOS 14/15) derive their inter-icon
-/// spacing from that same 8pt gap, so the row reads as one rhythm with the lights. Do not
-/// "tidy" this into a rounder-looking magic number — 8 is the traffic-light gap.
-private enum TitlebarControlsRhythm {
-    static let trafficLightGap: CGFloat = 8
-
-    /// Per-preset spacing as multiples of the traffic-light gap, so every preset derives
-    /// from the same rule instead of its own magic number.
-    enum ScaleFactor {
-        static let classic: CGFloat = 1.0
-        static let compact: CGFloat = 0.625
-        static let roomy: CGFloat = 1.375
-        static let pillGroup: CGFloat = 0.75
-        static let softButtons: CGFloat = 0.75
-    }
-
-    static func spacing(_ scale: CGFloat) -> CGFloat {
-        trafficLightGap * scale
-    }
-}
-
-enum TitlebarControlsStyle: Int, CaseIterable, Identifiable {
-    case classic
-    case compact
-    case roomy
-    case pillGroup
-    case softButtons
-
-    var id: Int { rawValue }
-
-    var menuTitle: String {
-        switch self {
-        case .classic:
-            return "Classic"
-        case .compact:
-            return "Compact"
-        case .roomy:
-            return "Roomy"
-        case .pillGroup:
-            return "Pill Group"
-        case .softButtons:
-            return "Soft Buttons"
-        }
-    }
-
-    var config: TitlebarControlsStyleConfig {
-        switch self {
-        case .classic:
-            return TitlebarControlsStyleConfig(
-                spacing: TitlebarControlsRhythm.spacing(TitlebarControlsRhythm.ScaleFactor.classic),
-                iconSize: 15,
-                buttonSize: 24,
-                groupBackground: false,
-                groupPadding: EdgeInsets(),
-                buttonBackground: false,
-                buttonCornerRadius: 8,
-                hoverBackground: true
-            )
-        case .compact:
-            return TitlebarControlsStyleConfig(
-                spacing: TitlebarControlsRhythm.spacing(TitlebarControlsRhythm.ScaleFactor.compact),
-                iconSize: 13,
-                buttonSize: 20,
-                groupBackground: false,
-                groupPadding: EdgeInsets(),
-                buttonBackground: false,
-                buttonCornerRadius: 6,
-                hoverBackground: true
-            )
-        case .roomy:
-            return TitlebarControlsStyleConfig(
-                spacing: TitlebarControlsRhythm.spacing(TitlebarControlsRhythm.ScaleFactor.roomy),
-                iconSize: 16,
-                buttonSize: 28,
-                groupBackground: false,
-                groupPadding: EdgeInsets(),
-                buttonBackground: false,
-                buttonCornerRadius: 10,
-                hoverBackground: true
-            )
-        case .pillGroup:
-            return TitlebarControlsStyleConfig(
-                spacing: TitlebarControlsRhythm.spacing(TitlebarControlsRhythm.ScaleFactor.pillGroup),
-                iconSize: 14,
-                buttonSize: 24,
-                groupBackground: false,
-                groupPadding: EdgeInsets(top: 1, leading: 4, bottom: 1, trailing: 4),
-                buttonBackground: false,
-                buttonCornerRadius: 8,
-                hoverBackground: true
-            )
-        case .softButtons:
-            return TitlebarControlsStyleConfig(
-                spacing: TitlebarControlsRhythm.spacing(TitlebarControlsRhythm.ScaleFactor.softButtons),
-                iconSize: 15,
-                buttonSize: 26,
-                groupBackground: false,
-                groupPadding: EdgeInsets(),
-                buttonBackground: true,
-                buttonCornerRadius: 8,
-                hoverBackground: true
-            )
-        }
-    }
-}
-
-/// Titlebar cluster geometry. On macOS 26+ it matches a stock NavigationSplitView
-/// toolbar (measured on macOS 27.2): bell and "+" share one glass capsule, the
-/// sidebar toggle is its own glass circle, both 37pt tall with a 7pt gap.
-enum TitlebarControlsMetrics {
-    static let glassHeight: CGFloat = 37
-    static let glassGap: CGFloat = 7
-    /// Gap between the toggle's glass edge and the sidebar's trailing edge.
-    static let sidebarTrailingInset: CGFloat = 8
-
-    static let glassConfig = TitlebarControlsStyleConfig(
-        spacing: 0,
-        iconSize: ChromeScale.toolbarIconSize,
-        buttonSize: glassHeight,
-        groupBackground: false,
-        groupPadding: EdgeInsets(),
-        buttonBackground: false,
-        buttonCornerRadius: glassHeight / 2,
-        hoverBackground: false,
-        primaryGlyphAtRest: true
-    )
-
-    /// Gap between the collapsed-sidebar toolbar controls and the content after them.
-    static let gapAfterToolbarControls: CGFloat = 12
-}
-
-/// Where a titlebar controls cluster sits; decides its outer insets.
-enum TitlebarControlsPlacement: Equatable {
-    /// Trailing edge of the sidebar header row.
-    case sidebarHeader
-    /// Leading edge of its host: past the traffic lights, or the window edge in fullscreen.
-    case leading(inset: CGFloat)
-}
-
-struct TitlebarControlsStyleConfig {
-    let spacing: CGFloat
-    let iconSize: CGFloat
-    let buttonSize: CGFloat
-    let groupBackground: Bool
-    let groupPadding: EdgeInsets
-    let buttonBackground: Bool
-    let buttonCornerRadius: CGFloat
-    let hoverBackground: Bool
-    /// Glass toolbar buttons draw full-strength glyphs at rest, like Finder and Mail.
-    var primaryGlyphAtRest = false
-}
-
-final class TitlebarControlsViewModel: ObservableObject {
-    weak var notificationsAnchorView: NSView?
-}
-
-extension Notification.Name {
-    static let programaNotificationsPopoverVisibilityDidChange = Notification.Name("programa.notificationsPopoverVisibilityDidChange")
-}
-
-private enum NotificationsPopoverVisibilityUserInfoKey {
-    static let isShown = "isShown"
-}
-
-private func postNotificationsPopoverVisibilityDidChange(isShown: Bool) {
-    NotificationCenter.default.post(
-        name: .programaNotificationsPopoverVisibilityDidChange,
-        object: nil,
-        userInfo: [NotificationsPopoverVisibilityUserInfoKey.isShown: isShown]
-    )
-}
-
-struct NotificationsAnchorView: NSViewRepresentable {
-    let onResolve: (NSView) -> Void
-
-    func makeNSView(context: Context) -> NSView {
-        let view = AnchorNSView()
-        view.onLayout = { [weak view] in
-            guard let view else { return }
-            onResolve(view)
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
-}
-
-final class AnchorNSView: NSView {
-    var onLayout: (() -> Void)?
-
-    override func layout() {
-        super.layout()
-        onLayout?()
-    }
-}
-
 /// Owns the app's notifications popover. It anchors to the main window toolbar's bell, in
 /// full screen too, and falls back to the window's top-left corner when the toolbar is hidden.
 @MainActor
@@ -262,14 +48,12 @@ final class NotificationsPopoverController: NSObject, NSPopoverDelegate {
 
         if let bell = MainWindowToolbar.notificationsItem(in: window) {
             popover.show(relativeTo: bell)
-            postNotificationsPopoverVisibilityDidChange(isShown: true)
             return
         }
         contentView.layoutSubtreeIfNeeded()
         let bounds = contentView.bounds
         let anchorRect = NSRect(x: 12, y: bounds.maxY - 8, width: 1, height: 1)
         popover.show(relativeTo: anchorRect, of: contentView, preferredEdge: .maxY)
-        postNotificationsPopoverVisibilityDidChange(isShown: true)
     }
 
     @discardableResult
@@ -290,7 +74,6 @@ final class NotificationsPopoverController: NSObject, NSPopoverDelegate {
     func popoverDidClose(_ notification: Notification) {
         // Clear the content view controller to stop SwiftUI observers when popover is hidden
         popover.contentViewController = nil
-        postNotificationsPopoverVisibilityDidChange(isShown: false)
 #if DEBUG
         // UI-test seam: lets XCUITests check that typing stayed out of the terminal while the
         // popover was open, without the control socket. No-op unless PROGRAMA_UI_TEST_KEYEQUIV_PATH is set.

@@ -19,7 +19,7 @@ General app preferences from Settings > App.
 | `terminalTheme` | object or null | `null` | Terminal themes from Settings > Appearance. Use null, or null for both variants, to remove Programa's managed theme override and inherit Ghostty configuration. |
 | `terminalFont` | object (`family`, `size`) or null | `null` | Terminal font from Settings > Appearance. Use null to remove Programa's managed override and inherit Ghostty configuration. |
 | `newWorkspacePlacement` | string | `"afterCurrent"` | Where new workspaces are inserted in the sidebar. One of: `top`, `afterCurrent`, `end`. |
-| `minimalMode` | boolean | `false` | Hide the workspace title bar and move controls into the sidebar. |
+| `minimalMode` | boolean | `false` | Hide the workspace title bar so each pane's tab bar sits at the top of the window, next to the toolbar. |
 | `warnBeforeQuit` | boolean | `true` | Show a confirmation before quitting Programa. |
 | `confirmCloseLastPane` | boolean | `true` | Ask before closing a workspace's last tab closes the workspace, or the window when it is the last workspace. When off, an idle last tab closes without asking; a running process still asks. Shell `exit` never asks. |
 | `autoResumeAgents` | boolean | `true` | Resume Claude Code, Codex and OpenCode sessions that were running at quit when their pane is restored. |
@@ -41,7 +41,7 @@ Sidebar settings from Settings > Sidebar.
 
 | Key | Type | Default | What it does |
 |---|---|---|---|
-| `matchTerminalBackground` | boolean | `false` | Use the terminal background instead of the sidebar tint. |
+| `matchTerminalBackground` | boolean | `false` | Use the terminal background instead of the sidebar tint. macOS 14 and 15 only: on macOS 26 and later the sidebar uses the system sidebar glass. |
 | `showClaudeQuota` | boolean | `true` | Show the Provider Usage button in the sidebar footer, which opens Claude and OpenAI rate limit usage. See [workspace-interface.md](workspace-interface.md#provider-usage). |
 
 ## `automation`

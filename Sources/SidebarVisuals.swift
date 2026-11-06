@@ -1257,14 +1257,6 @@ struct SidebarSurface<Content: View>: View {
     @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
     @Environment(\.colorScheme) private var colorScheme
     @State private var terminalScheme: ColorScheme = SidebarTerminalAppearance.colorScheme()
-    #if DEBUG
-    // Makes the sidebar panel's corner radius re-render live when the Density
-    // Debug window's sliders change (see WindowChrome.swift ChromeDensity).
-    @ObservedObject private var densityStore = ChromeDensityStore.shared
-    #endif
-
-    private var standaloneCornerRadius: CGFloat { WindowGlassEffect.sidebarPanelCornerRadius }
-
     var body: some View {
         Group {
             if usesLocalNativeGlass {
@@ -1285,7 +1277,6 @@ struct SidebarSurface<Content: View>: View {
                         content
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: standaloneCornerRadius, style: .continuous))
             }
         }
         // Subscribed outside the glass branch so the scheme stays current while
@@ -1377,7 +1368,7 @@ final class TitlebarLeadingInsetPassthroughView: NSView {
     private func measure(controlsEdge: CGFloat?) {
         guard let window else { return }
         if let controlsEdge {
-            onInsetChange?(controlsEdge + TitlebarControlsMetrics.gapAfterToolbarControls)
+            onInsetChange?(controlsEdge + MainWindowToolbar.controlsTrailingGap)
             return
         }
         // No main window toolbar: start past the traffic lights.

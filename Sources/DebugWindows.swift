@@ -1225,11 +1225,6 @@ private struct DensityDebugView: View {
     ]
 
     private static let windowTokens: [Token] = [
-        Token(id: "windowCornerRadius", label: "Window Corner Radius", defaultValue: Double(ChromeDensity.windowCornerRadiusDefault), range: 0...30),
-        Token(id: "sidebarPanelInset", label: "Sidebar Panel Inset", defaultValue: Double(ChromeDensity.sidebarPanelInsetDefault), range: 0...16),
-        Token(id: "contentCardInset", label: "Content Card Inset", defaultValue: Double(ChromeDensity.contentCardInsetDefault), range: 0...16),
-        Token(id: "contentCardShadowRadius", label: "Content Card Shadow Radius", defaultValue: Double(ChromeDensity.contentCardShadowRadiusDefault), range: 0...30),
-        Token(id: "contentCardShadowOpacity", label: "Content Card Shadow Opacity (%)", defaultValue: Double(ChromeDensity.contentCardShadowOpacityDefault), range: 0...80),
         Token(id: "controlCornerRadius", label: "Control Corner Radius", defaultValue: Double(ChromeDensity.controlCornerRadiusDefault), range: 0...30),
     ]
 
@@ -1260,7 +1255,7 @@ private struct DensityDebugView: View {
                     .padding(.top, 2)
                 }
 
-                GroupBox(localizedDebugLabel("Window Card / Insets / Radii")) {
+                GroupBox(localizedDebugLabel("Radii")) {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(Self.windowTokens) { token in
                             DensitySliderRow(token: token)

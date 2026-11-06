@@ -2087,13 +2087,6 @@ final class TitlebarChromeDragTargetTests: XCTestCase {
 // the sibling hosts that live in the same window's safe-area chain stay opted out.
 @MainActor
 final class HostingViewSafeAreaRegionsTests: XCTestCase {
-    func testTitlebarAccessoryHostingViewOptsOutOfSafeAreaObservation() {
-        let view = NonDraggableHostingView(rootView: Text("titlebar controls"))
-        XCTAssertTrue(
-            view.safeAreaRegions.isEmpty,
-            "the titlebar accessory hosting view sits in the titlebar itself and must not observe safe-area changes (#307)"
-        )
-    }
 
     func testNativeGlassContentHostOptsOutOfSafeAreaObservation() {
         let coordinator = ProgramaNativeGlassContentHost<Text>.Coordinator(content: Text("glass"))
