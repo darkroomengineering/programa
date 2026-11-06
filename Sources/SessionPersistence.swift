@@ -8,14 +8,12 @@ enum SessionSnapshotSchema {
 }
 
 enum SessionPersistencePolicy {
-    static let defaultSidebarWidth: Double = 220
-    // Traffic lights end ~79pt from the window edge (first center 24pt, 24pt
-    // pitch, 14pt buttons); the right-aligned header controls occupy the
-    // trailing ~120pt (panel inset 6 + hint clearance 18 + three buttons).
-    // Lowered from 220 to 200 for the tighter chrome-density pass -- this
-    // leaves less than the old ~20pt gap between the two, so re-check the
-    // header row for collisions at the new floor.
-    static let minimumSidebarWidth: Double = 200
+    static let defaultSidebarWidth: Double = 224
+    // The header row needs ~221pt: traffic lights end ~79pt from the window
+    // edge, then a 16pt gap, the bell/+ glass capsule and the sidebar-toggle
+    // circle (~118pt with their 7pt gap), and an 8pt trailing inset. Below
+    // this the capsule overlaps the zoom button.
+    static let minimumSidebarWidth: Double = 224
     static let maximumSidebarWidth: Double = 600
     static let minimumWindowWidth: Double = 300
     static let minimumWindowHeight: Double = 200
