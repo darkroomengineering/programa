@@ -54,6 +54,7 @@ enum V2MethodNames {
     static let debugSettle = "debug.settle"
     static let debugShortcutSet = "debug.shortcut.set"
     static let debugShortcutSimulate = "debug.shortcut.simulate"
+    static let debugSidebarSet = "debug.sidebar.set"
     static let debugSidebarVisible = "debug.sidebar.visible"
     static let debugTabTearOff = "debug.tab.tear_off"
     static let debugTerminalIsFocused = "debug.terminal.is_focused"
@@ -187,6 +188,7 @@ enum V2MethodNames {
         "debug.command_palette.selection",
         "debug.command_palette.toggle",
         "debug.command_palette.visible",
+        "debug.sidebar.set",
         "debug.sidebar.visible",
         "feedback.open",
         "layout.apply",
