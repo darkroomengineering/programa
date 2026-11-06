@@ -203,9 +203,9 @@ private struct PortsHubRowView: View {
     private func iconButton(systemName: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .symbolRasterSize(11, weight: .medium)
+                .symbolRasterSize(ChromeScale.secondaryFontSize, weight: .regular)
                 .foregroundStyle(Color(nsColor: .secondaryLabelColor))
-                .frame(width: 22, height: 22)
+                .frame(width: ChromeScale.minimumHitTarget, height: ChromeScale.minimumHitTarget)
                 .contentShape(Rectangle())
         }
         .buttonStyle(SidebarFooterIconButtonStyle())
@@ -220,7 +220,7 @@ struct SidebarPortsButton: View {
     @State private var isPopoverPresented = false
 
     private let buttonSize = SidebarFooterControlLayout.buttonSize
-    private let iconSize: CGFloat = 11
+    private let iconSize = ChromeScale.toolbarIconSize
 
     var body: some View {
         if store.badgeCount > 0 {
@@ -231,12 +231,12 @@ struct SidebarPortsButton: View {
             } label: {
                 Image(systemName: "network")
                     .symbolRenderingMode(.monochrome)
-                    .symbolRasterSize(iconSize, weight: .medium)
+                    .symbolRasterSize(iconSize, weight: .regular)
                     .foregroundStyle(Color(nsColor: .secondaryLabelColor))
                     .frame(width: buttonSize, height: buttonSize, alignment: .center)
                     .overlay(alignment: .topTrailing) {
                         Text(verbatim: "\(store.badgeCount)")
-                            .font(.system(size: 8, weight: .bold))
+                            .font(.system(size: ChromeScale.badgeFontSize, weight: .semibold, design: .rounded))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 3)
                             .background(Capsule().fill(Color.accentColor))

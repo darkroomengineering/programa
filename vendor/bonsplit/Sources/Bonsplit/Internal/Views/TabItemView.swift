@@ -119,7 +119,7 @@ struct TabItemView: View {
                                 .stroke(iconTint.opacity(0.25), lineWidth: 1)
                         } else {
                             Image(systemName: iconName)
-                                .font(.system(size: glyphSize(for: iconName)))
+                                .font(.system(size: TabBarMetrics.iconSize, weight: .medium))
                                 .foregroundStyle(iconTint)
                         }
                     }
@@ -146,9 +146,10 @@ struct TabItemView: View {
                 }
                 .onChange(of: tab.icon) { _ in updateGlobeFallback() }
 
-                Text(tab.title)
+                Text(BonsplitTabTitle.compact(tab.title))
                     .font(.system(size: TabBarMetrics.titleFontSize))
                     .lineLimit(1)
+                    .truncationMode(.middle)
                     .safeHelp(tab.title)
                     .foregroundStyle(
                         isSelected
@@ -177,8 +178,11 @@ struct TabItemView: View {
                                             : .clear
                                     )
                             )
+                            .frame(width: TabBarMetrics.minimumHitTarget, height: TabBarMetrics.minimumHitTarget)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .frame(width: TabBarMetrics.closeButtonSize, height: TabBarMetrics.closeButtonSize)
                     .onHover { hovering in
                         isZoomHovered = hovering
                     }
@@ -236,15 +240,6 @@ struct TabItemView: View {
         .accessibilityLabel(tab.title)
         .accessibilityValue(accessibilityValue)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-    }
-
-    private func glyphSize(for iconName: String) -> CGFloat {
-        // `terminal.fill` reads visually heavier than most symbols at the same point size.
-        // Hardcode sizes to avoid cross-glyph layout shifts.
-        if iconName == "terminal.fill" || iconName == "terminal" || iconName == "globe" {
-            return max(10, TabBarMetrics.iconSize - 2.5)
-        }
-        return TabBarMetrics.iconSize
     }
 
     private var shortcutHintLabel: String? {
@@ -463,8 +458,11 @@ struct TabItemView: View {
                                         : .clear
                                 )
                         )
+                        .frame(width: TabBarMetrics.minimumHitTarget, height: TabBarMetrics.minimumHitTarget)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .frame(width: TabBarMetrics.closeButtonSize, height: TabBarMetrics.closeButtonSize)
                 .onHover { hovering in
                     isCloseHovered = hovering
                 }

@@ -169,6 +169,7 @@ struct AgentInterruptedBanner: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 12))
                 .foregroundStyle(.yellow)
                 .accessibilityHidden(true)
             Text(message)

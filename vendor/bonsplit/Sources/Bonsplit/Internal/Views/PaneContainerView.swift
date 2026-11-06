@@ -54,10 +54,10 @@ private struct PaneDropPlaceholderOverlay: View {
     var body: some View {
         let frame = overlayFrame(for: zone, in: size)
 
-        RoundedRectangle(cornerRadius: 8)
+        RoundedRectangle(cornerRadius: 10)
             .fill(placeholderColor)
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: 10)
                     .stroke(borderColor, lineWidth: 2)
             )
             .frame(width: frame.width, height: frame.height)

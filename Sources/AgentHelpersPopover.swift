@@ -291,7 +291,7 @@ struct AgentHelpersPopover: View {
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: helper.state.symbolName)
-                        .imageScale(.small)
+                        .font(.system(size: ChromeScale.leadingIconSize, weight: .medium))
                         .foregroundStyle(helper.state.tint)
                         .help(helper.state.label)
                         .accessibilityLabel(helper.state.label)
@@ -330,7 +330,7 @@ struct AgentHelpersPopover: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
         .background(isExpanded ? Color.primary.opacity(0.05) : Color.clear,
-                    in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    in: RoundedRectangle(cornerRadius: ChromeScale.rowCornerRadius, style: .continuous))
     }
 
     @ViewBuilder

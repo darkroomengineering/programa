@@ -11,6 +11,19 @@ public enum BonsplitPaneChromeMenuItem {
     case tabColor(title: String, hex: String, swatch: NSColor)
 }
 
+/// Display form of a tab title for a tab pill: a path-like title ("~/a/b",
+/// "/a/b") shows its last component, the home directory stays "~". Only for
+/// display; tooltips and accessibility labels keep the full title.
+public enum BonsplitTabTitle {
+    public static func compact(_ title: String) -> String {
+        guard title.hasPrefix("~") || title.hasPrefix("/") else { return title }
+        let trimmed = title.count > 1 && title.hasSuffix("/") ? String(title.dropLast()) : title
+        guard trimmed != "~", trimmed != "/" else { return trimmed }
+        let last = (trimmed as NSString).lastPathComponent
+        return last.isEmpty ? title : last
+    }
+}
+
 /// Read-only tab state consumed by the native pane chrome renderer.
 public struct BonsplitPaneChromeTabDescriptor {
     public let id: TabID

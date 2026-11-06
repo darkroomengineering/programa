@@ -212,9 +212,9 @@ final class WindowGlassEffectTests: XCTestCase {
         #if compiler(>=6.2)
         if #available(macOS 26.0, *) {
             _ = NSApplication.shared
-            let root = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 320))
+            let root = NSView(frame: NSRect(x: 0, y: 0, width: 420, height: 320))
             let terminalHost = WindowTerminalHostView(frame: root.bounds)
-            let anchor = NSView(frame: NSRect(x: 20, y: 270, width: 300, height: 40))
+            let anchor = NSView(frame: NSRect(x: 20, y: 270, width: 360, height: 40))
             root.addSubview(anchor)
             root.addSubview(terminalHost, positioned: .above, relativeTo: anchor)
             let window = NSWindow(

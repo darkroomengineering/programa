@@ -187,7 +187,7 @@ struct ShortcutAnnotation: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(
-                RoundedRectangle(cornerRadius: 5)
+                RoundedRectangle(cornerRadius: ChromeScale.chipCornerRadius)
                     .fill(Color(nsColor: .controlBackgroundColor))
             )
     }
@@ -260,7 +260,8 @@ private struct NotificationRow: View {
 
             VStack(alignment: .trailing, spacing: 4) {
                 Button(action: onClear) {
-                    Image(systemName: "xmark.circle.fill")
+                    Image(systemName: "xmark")
+                        .font(.system(size: ChromeScale.closeIconSize, weight: .semibold))
                         .foregroundColor(.secondary)
                         .frame(minWidth: 44, minHeight: 44)
                 }
