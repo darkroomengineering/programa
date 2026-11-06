@@ -1,90 +1,93 @@
 import XCTest
 
 final class SidebarResizeUITests: XCTestCase {
+    private let minimumSidebarWidth: CGFloat = 238
+
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
     }
 
-    func testSidebarResizerTracksCursor() {
+    func testSidebarDividerTracksCursor() {
         let app = launchedApp()
 
-        let elements = app.descendants(matching: .any)
-        let resizer = elements["SidebarResizer"]
-        XCTAssertTrue(resizer.waitForExistence(timeout: 5.0))
-        XCTAssertTrue(waitForElementHittable(resizer, timeout: 5.0), "Expected sidebar resizer to become hittable")
+        let divider = sidebarDivider(in: app)
+        XCTAssertTrue(divider.waitForExistence(timeout: 5.0))
+        XCTAssertTrue(waitForElementHittable(divider, timeout: 5.0), "Expected the sidebar divider to become hittable")
 
-        let initialX = resizer.frame.minX
+        let initialX = divider.frame.midX
 
-        let start = resizer.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let start = divider.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         let end = start.withOffset(CGVector(dx: 80, dy: 0))
         start.press(forDuration: 0.1, thenDragTo: end)
 
-        let afterX = resizer.frame.minX
+        let afterX = divider.frame.midX
         let rightDelta = afterX - initialX
-        XCTAssertGreaterThanOrEqual(rightDelta, 40, "Expected drag-right to move resizer meaningfully")
-        XCTAssertLessThanOrEqual(rightDelta, 82, "Resizer moved farther than requested drag-right offset")
+        XCTAssertGreaterThanOrEqual(rightDelta, 40, "Expected drag-right to move the divider meaningfully")
+        XCTAssertLessThanOrEqual(rightDelta, 82, "Divider moved farther than the requested drag-right offset")
 
-        let startBack = resizer.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        let endBack = startBack.withOffset(CGVector(dx: -120, dy: 0))
+        let startBack = divider.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let endBack = startBack.withOffset(CGVector(dx: -60, dy: 0))
         startBack.press(forDuration: 0.1, thenDragTo: endBack)
 
-        let afterBackX = resizer.frame.minX
+        let afterBackX = divider.frame.midX
         let leftDelta = afterBackX - afterX
-        // Sidebar width is clamped in-product; a large left drag may hit the minimum width.
-        XCTAssertLessThanOrEqual(leftDelta, -40, "Expected drag-left to move resizer left")
-        XCTAssertGreaterThanOrEqual(leftDelta, -122, "Resizer moved farther than requested drag-left offset")
+        XCTAssertLessThanOrEqual(leftDelta, -30, "Expected drag-left to move the divider left")
+        XCTAssertGreaterThanOrEqual(leftDelta, -62, "Divider moved farther than the requested drag-left offset")
     }
 
-    func testSidebarResizerClampsToMinimumWidth() {
+    func testSidebarDividerClampsToMinimumWidth() {
         let app = launchedApp()
 
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 5.0))
 
-        let elements = app.descendants(matching: .any)
-        let resizer = elements["SidebarResizer"]
-        XCTAssertTrue(resizer.waitForExistence(timeout: 5.0))
-        XCTAssertTrue(waitForElementHittable(resizer, timeout: 5.0), "Expected sidebar resizer to become hittable")
+        let divider = sidebarDivider(in: app)
+        XCTAssertTrue(divider.waitForExistence(timeout: 5.0))
+        XCTAssertTrue(waitForElementHittable(divider, timeout: 5.0), "Expected the sidebar divider to become hittable")
 
-        let start = resizer.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        let farLeft = start.withOffset(CGVector(dx: -max(200, window.frame.width), dy: 0))
-        start.press(forDuration: 0.1, thenDragTo: farLeft)
+        // Stop above half the minimum: a drag past that collapses the sidebar instead.
+        let start = divider.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let targetWidth = minimumSidebarWidth - 40
+        let offset = targetWidth - (divider.frame.midX - window.frame.minX)
+        start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: offset, dy: 0)))
 
-        let sidebarWidth = max(0, resizer.frame.midX - window.frame.minX)
+        let sidebarWidth = max(0, divider.frame.midX - window.frame.minX)
         XCTAssertEqual(
             sidebarWidth,
-            200,
+            minimumSidebarWidth,
             accuracy: 6,
-            "Expected a far-left drag to stop at the 200 pt minimum sidebar width. width=\(sidebarWidth)"
+            "Expected a drag below the minimum to stop at \(minimumSidebarWidth) pt. width=\(sidebarWidth)"
         )
     }
 
-    func testSidebarResizerHasMaximumWidthCap() {
+    func testSidebarDividerHasMaximumWidthCap() {
         let app = launchedApp()
 
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 5.0))
 
-        let elements = app.descendants(matching: .any)
-        let resizer = elements["SidebarResizer"]
-        XCTAssertTrue(resizer.waitForExistence(timeout: 5.0))
-        XCTAssertTrue(waitForElementHittable(resizer, timeout: 5.0), "Expected sidebar resizer to become hittable")
+        let divider = sidebarDivider(in: app)
+        XCTAssertTrue(divider.waitForExistence(timeout: 5.0))
+        XCTAssertTrue(waitForElementHittable(divider, timeout: 5.0), "Expected the sidebar divider to become hittable")
 
-        let start = resizer.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let start = divider.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         let farRight = start.withOffset(CGVector(dx: max(1200, window.frame.width * 2.0), dy: 0))
         start.press(forDuration: 0.1, thenDragTo: farRight)
 
         let windowFrame = window.frame
-        let remainingWidth = max(0, windowFrame.maxX - resizer.frame.maxX)
-        let minimumExpectedRemaining = windowFrame.width * 0.45
-
-        XCTAssertGreaterThanOrEqual(
-            remainingWidth,
-            minimumExpectedRemaining,
-            "Expected sidebar max-width clamp to leave substantial terminal width. " +
-            "remaining=\(remainingWidth), window=\(windowFrame.width)"
+        let sidebarWidth = max(0, divider.frame.midX - windowFrame.minX)
+        // The cap is a third of the window, but never below the minimum.
+        let expectedMaximum = max(minimumSidebarWidth, min(600, windowFrame.width / 3))
+        XCTAssertLessThanOrEqual(
+            sidebarWidth,
+            expectedMaximum + 6,
+            "Expected the sidebar to stop at a third of the window. width=\(sidebarWidth), window=\(windowFrame.width)"
         )
+    }
+
+    private func sidebarDivider(in app: XCUIApplication) -> XCUIElement {
+        app.splitGroups["MainSidebarSplit"].splitters.firstMatch
     }
 
     private func launchedApp() -> XCUIApplication {
@@ -100,7 +103,7 @@ final class SidebarResizeUITests: XCTestCase {
             predicate: NSPredicate { _, _ in
                 guard element.exists, element.isHittable else { return false }
                 let frame = element.frame
-                return frame.width > 1 && frame.height > 1
+                return frame.width > 0 && frame.height > 1
             },
             object: NSObject()
         )

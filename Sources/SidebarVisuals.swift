@@ -1244,41 +1244,6 @@ private struct SidebarVisualEffectBackground: NSViewRepresentable {
     }
 }
 
-/// Hosts the complete interactive sidebar directly on the window's glass backdrop
-/// (inverted, Aside-style layout). No inner glass surface: the window contentView
-/// glass provides the material, so this host is a transparent AppKit container
-/// whose only job is zeroing the window safe area — the sidebar owns its own
-/// titlebar-like header row.
-private struct SidebarBackdropContentHost<Content: View>: NSViewRepresentable {
-    let content: Content
-
-    final class Coordinator {
-        let hostingView: NSHostingView<Content>
-
-        init(content: Content) {
-            hostingView = NSHostingView(rootView: content)
-            hostingView.autoresizingMask = [.width, .height]
-            hostingView.wantsLayer = true
-            hostingView.layer?.backgroundColor = NSColor.clear.cgColor
-            // The sidebar owns its own titlebar-like header row; the window safe
-            // area must not add a second inset on top of it.
-            hostingView.safeAreaRegions = []
-        }
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(content: content)
-    }
-
-    func makeNSView(context: Context) -> NSView {
-        context.coordinator.hostingView
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        context.coordinator.hostingView.rootView = content
-    }
-}
-
 /// Owns the sidebar as a distinct native glass surface above the terminal-colored base plane.
 struct SidebarSurface<Content: View>: View {
     let content: Content
@@ -1303,11 +1268,9 @@ struct SidebarSurface<Content: View>: View {
     var body: some View {
         Group {
             if usesLocalNativeGlass {
-                // Inverted layout: the sidebar sits directly on the window's glass
-                // backdrop, which follows the SYSTEM appearance (light sidebar in
-                // light mode) — only the content card and its pills stay
-                // terminal-toned. No inner glass, no clip: window-level material.
-                SidebarBackdropContentHost(content: content)
+                // The system sidebar split item draws the floating glass panel and follows
+                // the system appearance; the content sits on it with no material of its own.
+                content
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 // Fallback path (pre-26 / Reduce Transparency): the backdrop can

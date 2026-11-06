@@ -84,7 +84,6 @@
 			B10A1CE4 /* GhosttyTitleUpdateDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10A1CE3 /* GhosttyTitleUpdateDispatcher.swift */; };
 			7C135SB00000000000000002 /* GhosttyTerminalScrollBoost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C135SB00000000000000001 /* GhosttyTerminalScrollBoost.swift */; };
 			7C135CU00000000000000002 /* ClosedTerminalUndoStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C135CU00000000000000001 /* ClosedTerminalUndoStore.swift */; };
-			NRSP0010A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0009A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift */; };
 			NRSP0008A1B2C3D4E5F60719 /* ColorSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0007A1B2C3D4E5F60719 /* ColorSupport.swift */; };
 			A5FF0005 /* CommandPaletteView+Helpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0015 /* CommandPaletteView+Helpers.swift */; };
 			A2CV0000000000000000000C /* CommandPaletteView+Commands.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2CV0000000000000000000D /* CommandPaletteView+Commands.swift */; };
@@ -204,6 +203,8 @@
 			E3E96C3E34893DE5905D6218 /* SessionAutosaveCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E68FD3C9918B5717603304 /* SessionAutosaveCoordinator.swift */; };
 			5B5711B8348F309563272B9D /* ShortcutRouting.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE5A5F043A04829779CF356 /* ShortcutRouting.swift */; };
 			NRAD1001 /* MainWindowHostingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRAD0001 /* MainWindowHostingView.swift */; };
+			SPLT5851 /* MainSidebarSplitViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPLT5850 /* MainSidebarSplitViewController.swift */; };
+			SPLT5853 /* MainWindowToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPLT5852 /* MainWindowToolbar.swift */; };
 			NRAD1002 /* TypingProfiler.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRAD0002 /* TypingProfiler.swift */; };
 			704EC7ED55706CC3099E0ED9 /* DurationSamples.swift in Sources */ = {isa = PBXBuildFile; fileRef = 974E18832220A6E017B9CA2E /* DurationSamples.swift */; };
 			NRAD1003 /* TerminalDirectoryOpener.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRAD0003 /* TerminalDirectoryOpener.swift */; };
@@ -550,7 +551,6 @@
 			B10A1CE3 /* GhosttyTitleUpdateDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyTitleUpdateDispatcher.swift; sourceTree = "<group>"; };
 			7C135SB00000000000000001 /* GhosttyTerminalScrollBoost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyTerminalScrollBoost.swift; sourceTree = "<group>"; };
 			7C135CU00000000000000001 /* ClosedTerminalUndoStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClosedTerminalUndoStore.swift; sourceTree = "<group>"; };
-			NRSP0009A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+SidebarResizer.swift"; sourceTree = "<group>"; };
 			NRSP0007A1B2C3D4E5F60719 /* ColorSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorSupport.swift; sourceTree = "<group>"; };
 			A5FF0015 /* CommandPaletteView+Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandPaletteView+Helpers.swift"; sourceTree = "<group>"; };
 			A2CV0000000000000000000D /* CommandPaletteView+Commands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandPaletteView+Commands.swift"; sourceTree = "<group>"; };
@@ -671,6 +671,8 @@
 		C5E68FD3C9918B5717603304 /* SessionAutosaveCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionAutosaveCoordinator.swift; sourceTree = "<group>"; };
 		DDE5A5F043A04829779CF356 /* ShortcutRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutRouting.swift; sourceTree = "<group>"; };
 		NRAD0001 /* MainWindowHostingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowHostingView.swift; sourceTree = "<group>"; };
+		SPLT5850 /* MainSidebarSplitViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainSidebarSplitViewController.swift; sourceTree = "<group>"; };
+		SPLT5852 /* MainWindowToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowToolbar.swift; sourceTree = "<group>"; };
 		NRAD0002 /* TypingProfiler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypingProfiler.swift; sourceTree = "<group>"; };
 		974E18832220A6E017B9CA2E /* DurationSamples.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DurationSamples.swift; sourceTree = "<group>"; };
 		NRAD0003 /* TerminalDirectoryOpener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalDirectoryOpener.swift; sourceTree = "<group>"; };
@@ -1059,7 +1061,6 @@
 					B10A1CE3 /* GhosttyTitleUpdateDispatcher.swift */,
 					7C135SB00000000000000001 /* GhosttyTerminalScrollBoost.swift */,
 					7C135CU00000000000000001 /* ClosedTerminalUndoStore.swift */,
-					NRSP0009A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift */,
 					NRSP0007A1B2C3D4E5F60719 /* ColorSupport.swift */,
 					A5FF0015 /* CommandPaletteView+Helpers.swift */,
 					A2CV0000000000000000000D /* CommandPaletteView+Commands.swift */,
@@ -1152,6 +1153,8 @@
 				C5E68FD3C9918B5717603304 /* SessionAutosaveCoordinator.swift */,
 				DDE5A5F043A04829779CF356 /* ShortcutRouting.swift */,
 				NRAD0001 /* MainWindowHostingView.swift */,
+				SPLT5850 /* MainSidebarSplitViewController.swift */,
+				SPLT5852 /* MainWindowToolbar.swift */,
 				NRAD0002 /* TypingProfiler.swift */,
 				974E18832220A6E017B9CA2E /* DurationSamples.swift */,
 				NRAD0003 /* TerminalDirectoryOpener.swift */,
@@ -1663,7 +1666,6 @@
 					B10A1CE4 /* GhosttyTitleUpdateDispatcher.swift in Sources */,
 					7C135SB00000000000000002 /* GhosttyTerminalScrollBoost.swift in Sources */,
 					7C135CU00000000000000002 /* ClosedTerminalUndoStore.swift in Sources */,
-					NRSP0010A1B2C3D4E5F60719 /* ContentView+SidebarResizer.swift in Sources */,
 					NRSP0008A1B2C3D4E5F60719 /* ColorSupport.swift in Sources */,
 					A5FF0005 /* CommandPaletteView+Helpers.swift in Sources */,
 					A2CV0000000000000000000C /* CommandPaletteView+Commands.swift in Sources */,
@@ -1755,6 +1757,8 @@
 				E3E96C3E34893DE5905D6218 /* SessionAutosaveCoordinator.swift in Sources */,
 				5B5711B8348F309563272B9D /* ShortcutRouting.swift in Sources */,
 				NRAD1001 /* MainWindowHostingView.swift in Sources */,
+				SPLT5851 /* MainSidebarSplitViewController.swift in Sources */,
+				SPLT5853 /* MainWindowToolbar.swift in Sources */,
 				NRAD1002 /* TypingProfiler.swift in Sources */,
 				704EC7ED55706CC3099E0ED9 /* DurationSamples.swift in Sources */,
 				NRAD1003 /* TerminalDirectoryOpener.swift in Sources */,

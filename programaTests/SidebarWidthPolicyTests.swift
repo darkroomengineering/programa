@@ -7,17 +7,32 @@ import XCTest
 #endif
 
 final class SidebarWidthPolicyTests: XCTestCase {
-    func testContentViewClampEnforcesHeaderSafeMinimum() {
+    func testClampEnforcesToolbarSafeMinimum() {
         // Below the floor, widths clamp up so the traffic lights and the
-        // header's titlebar controls never collide.
+        // toolbar controls over the sidebar never collide.
         XCTAssertEqual(
-            ContentView.clampedSidebarWidth(184, maximumWidth: 600),
+            SidebarWidthPolicy.clamped(184, maximumWidth: 600),
             CGFloat(SessionPersistencePolicy.minimumSidebarWidth),
             accuracy: 0.001
         )
         XCTAssertEqual(
-            ContentView.clampedSidebarWidth(240, maximumWidth: 600),
+            SidebarWidthPolicy.clamped(240, maximumWidth: 600),
             240,
+            accuracy: 0.001
+        )
+    }
+
+    func testMaximumIsAThirdOfTheWindowWithinTheFloorAndCeiling() {
+        XCTAssertEqual(SidebarWidthPolicy.maximum(forAvailableWidth: 1200), 400, accuracy: 0.001)
+        // Narrow windows keep the floor; wide windows stop at the persisted ceiling.
+        XCTAssertEqual(
+            SidebarWidthPolicy.maximum(forAvailableWidth: 500),
+            CGFloat(SessionPersistencePolicy.minimumSidebarWidth),
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            SidebarWidthPolicy.maximum(forAvailableWidth: 3000),
+            CGFloat(SessionPersistencePolicy.maximumSidebarWidth),
             accuracy: 0.001
         )
     }

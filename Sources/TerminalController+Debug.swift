@@ -221,6 +221,30 @@ extension TerminalController {
         }
     }
 
+    nonisolated func v2DebugSidebarSet(params: [String: Any]) -> V2CallResult {
+        guard let windowId = v2UUID(params, "window_id") else {
+            return v2InvalidParam("window_id")
+        }
+        let visible = v2Bool(params, "visible")
+        let width = v2Double(params, "width")
+        let animated = v2Bool(params, "animated") ?? false
+        return v2MainSync {
+            guard let snapshot = AppDelegate.shared?.debugSetSidebar(
+                windowId: windowId,
+                visible: visible,
+                width: width.map { CGFloat($0) },
+                animated: animated
+            ) else {
+                return .err(
+                    code: "not_found",
+                    message: "Window not found",
+                    data: ["window_id": windowId.uuidString, "window_ref": v2Ref(kind: .window, uuid: windowId)]
+                )
+            }
+            return .ok(snapshot.merging(["window_ref": v2Ref(kind: .window, uuid: windowId)]) { current, _ in current })
+        }
+    }
+
     nonisolated func v2DebugSidebarVisible(params: [String: Any]) -> V2CallResult {
         guard let windowId = v2UUID(params, "window_id") else {
             return v2InvalidParam("window_id")

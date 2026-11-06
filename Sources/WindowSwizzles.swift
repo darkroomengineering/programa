@@ -180,13 +180,16 @@ extension NSWindow {
         }
 
         // The window stays isMovable so AppKit validates the Window menu tiling
-        // items, but no click may start a native window drag: one on the SwiftUI
-        // sidebar resizer band moved the window instead of resizing the sidebar,
-        // and folder-icon drags dragged the window along. Every deliberate drag
+        // items, but no click in the main window's content may start a native window
+        // drag: folder-icon drags dragged the window along. Every deliberate drag
         // surface (WindowDragHandleView, the titlebar background above) re-enables
         // movability around its own performDrag via withTemporaryWindowMovableEnabled.
+        // The toolbar strip is exempt: its empty space drags and double-click-zooms
+        // natively. In the WindowGroup launch window `contentView` is SwiftUI's own
+        // hosting view, so main windows are also recognized by their identifier.
         guard event.type == .leftMouseDown, isMovable,
-              contentView is MainWindowHostingViewMarker else {
+              Self.programaIsMainWindow(self),
+              !Self.programaIsInTitlebarContainer(programaFirstResponderGuardHitViewContext, in: self) else {
 #if DEBUG
             if event.type == .keyDown {
                 folderGuardMs = (ProcessInfo.processInfo.systemUptime - folderGuardStart) * 1000.0
@@ -339,10 +342,22 @@ extension NSWindow {
         return programaTopHitViewForEvent(in: window, event: event)
     }
 
-    /// True when `hitView` is exactly `window.contentView` (its root SwiftUI host) --
-    /// what AppKit's hit-test falls back to when nothing more specific (no SwiftUI
-    /// view, no WindowDragHandleView mount) claims the point, observed for the top
-    /// gap ring where the padding-ring mount's own frame doesn't extend.
+    private static func programaIsMainWindow(_ window: NSWindow) -> Bool {
+        window.contentView is MainWindowHostingViewMarker
+            || window.identifier?.rawValue.hasPrefix("programa.main.") == true
+    }
+
+    private static func programaIsInTitlebarContainer(_ hitView: NSView?, in window: NSWindow) -> Bool {
+        guard let hitView,
+              let titlebarView = window.standardWindowButton(.closeButton)?.superview else { return false }
+        let container = titlebarView.superview ?? titlebarView
+        return hitView.isDescendant(of: container)
+    }
+
+    /// True when `hitView` is a main-window SwiftUI host (`window.contentView` in
+    /// AppKit-created windows, or a sidebar split column host) -- what AppKit's
+    /// hit-test falls back to when nothing more specific (no SwiftUI view, no
+    /// WindowDragHandleView mount) claims the point.
     ///
     /// Deliberately NOT "walk up and see if we ever pass through contentView":
     /// portal-hosted content (GhosttyNSView terminal surfaces)
@@ -356,8 +371,8 @@ extension NSWindow {
     /// contentView — treating that as dead chrome swallows every click in the
     /// update popover (including its Install button), and the accessory check
     /// downstream throws on popover-style windows.
-    private static func programaIsTitlebarChromeHit(_ hitView: NSView, contentView: NSView) -> Bool {
-        hitView === contentView && contentView is MainWindowHostingViewMarker
+    private static func programaIsTitlebarChromeHit(_ hitView: NSView) -> Bool {
+        hitView is MainWindowHostingViewMarker
     }
 
     private static func programaIsControlOrControlDescendant(_ view: NSView) -> Bool {
@@ -390,9 +405,7 @@ extension NSWindow {
     /// controls accessory cluster. Internal (not private) as the unit-test seam
     /// for the popover-click regression in WindowAndDragTests.
     static func programaIsTitlebarBackgroundDragTarget(_ hitView: NSView, in window: NSWindow) -> Bool {
-        guard let contentView = window.contentView else { return false }
-        guard programaIsTitlebarChromeHit(hitView, contentView: contentView) else { return false }
-        if SidebarResizeInteraction.windowNumbersInBand.contains(window.windowNumber) { return false }
+        guard programaIsTitlebarChromeHit(hitView) else { return false }
         if programaIsControlOrControlDescendant(hitView) { return false }
         if programaIsWithinTitlebarControlsAccessory(hitView, in: window) { return false }
         return true
