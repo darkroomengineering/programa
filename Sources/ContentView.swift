@@ -17,7 +17,6 @@ struct ContentView: View {
     @State private var titlebarText: String = ""
     @State private var isFullScreen: Bool = false
     @State var observedWindow: NSWindow?
-    @StateObject private var fullscreenControlsViewModel = TitlebarControlsViewModel()
     private struct WorkspaceHandoffContext {
         let token: UUID
         let retiring: UUID
@@ -99,8 +98,9 @@ struct ContentView: View {
         // Minimal mode keeps pane chrome at the window's top edge. The main
         // window's hosting view reports a zero safe area (MainWindowHostingView),
         // so SwiftUI content already starts at the window top; pulling it up by
-        // the titlebar height would push the tab strip out of the window.
-        if isMinimalMode { return 0 }
+        // the titlebar height would push the tab strip out of the window. In full
+        // screen the toolbar is an opaque strip, so the pane chrome starts below it.
+        if isMinimalMode && !isFullScreen { return 0 }
         return titlebarPadding
     }
 
@@ -200,22 +200,6 @@ struct ContentView: View {
             ? Color.black.opacity(0.78)
             : Color.white.opacity(0.82)
     }
-    private var fullscreenControls: some View {
-        TitlebarControlsView(
-            notificationStore: TerminalNotificationStore.shared,
-            viewModel: fullscreenControlsViewModel,
-            onToggleSidebar: { sidebarState.toggle() },
-            onToggleNotifications: { [fullscreenControlsViewModel] in
-                AppDelegate.shared?.toggleNotificationsPopover(
-                    animated: true,
-                    anchorView: fullscreenControlsViewModel.notificationsAnchorView
-                )
-            },
-            onNewTab: { tabManager.addTab() },
-            visibilityMode: .alwaysVisible
-        )
-    }
-
     private var customTitlebar: some View {
         ZStack {
             // Enable window dragging from the titlebar strip without making the entire content
@@ -223,10 +207,6 @@ struct ContentView: View {
             WindowDragHandleView()
 
             HStack(spacing: 8) {
-                if isFullScreen && !sidebarState.isVisible {
-                    fullscreenControls
-                }
-
                 if let directory = focusedDirectory {
                     DraggableFolderIcon(directory: directory)
                         .padding(.leading, -6)
@@ -243,7 +223,7 @@ struct ContentView: View {
             }
             .frame(height: 28)
             .padding(.top, 2)
-            .padding(.leading, (isFullScreen && !sidebarState.isVisible) ? 8 : (sidebarState.isVisible ? 12 : titlebarLeadingInset + CGFloat(debugTitlebarLeadingExtra)))
+            .padding(.leading, sidebarState.isVisible ? 12 : titlebarLeadingInset + CGFloat(debugTitlebarLeadingExtra))
             .padding(.trailing, 8)
         }
         .frame(height: titlebarPadding)
@@ -431,13 +411,6 @@ struct ContentView: View {
         let baseLayout =
             contentAndSidebarLayout
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .overlay(alignment: .topLeading) {
-                    if isFullScreen && sidebarState.isVisible && !isMinimalMode {
-                        fullscreenControls
-                            .padding(.leading, 10)
-                            .padding(.top, 4)
-                    }
-                }
                 .frame(minWidth: CGFloat(SessionPersistencePolicy.minimumWindowWidth), minHeight: CGFloat(SessionPersistencePolicy.minimumWindowHeight))
                 .background(Color.clear)
 
@@ -690,16 +663,14 @@ struct ContentView: View {
                 guard let window = notification.object as? NSWindow,
                       window === observedWindow else { return }
                 isFullScreen = true
-                setTitlebarControlsHidden(true, in: window)
-                AppDelegate.shared?.fullscreenControlsViewModel = fullscreenControlsViewModel
+                titlebarPadding = AppDelegate.titlebarPadding(for: window)
                 syncTrafficLightInset()
             }
             .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { notification in
                 guard let window = notification.object as? NSWindow,
                       window === observedWindow else { return }
                 isFullScreen = false
-                setTitlebarControlsHidden(false, in: window)
-                AppDelegate.shared?.fullscreenControlsViewModel = nil
+                titlebarPadding = AppDelegate.titlebarPadding(for: window)
                 syncTrafficLightInset()
             }
     }
@@ -1036,16 +1007,6 @@ struct ContentView: View {
         guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == windowIdentifier }) else { return }
         let tintColor = WindowGlassEffect.resolvedWindowTint(hex: bgGlassTintHex, opacity: bgGlassTintOpacity)
         WindowGlassEffect.updateTint(to: window, color: tintColor)
-    }
-
-    private func setTitlebarControlsHidden(_ hidden: Bool, in window: NSWindow) {
-        let controlsId = NSUserInterfaceItemIdentifier("programa.titlebarControls")
-        for accessory in window.titlebarAccessoryViewControllers {
-            if accessory.view.identifier == controlsId {
-                accessory.isHidden = hidden
-                accessory.view.alphaValue = hidden ? 0 : 1
-            }
-        }
     }
 
     private func startWorkspaceHandoffIfNeeded(newSelectedId: UUID?) {

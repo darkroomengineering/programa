@@ -58,7 +58,6 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
             window.titleVisibility = .hidden
         }
         setSidebarCollapsed(controller.isSidebarCollapsed, in: window)
-        AppDelegate.syncMainWindowToolbarVisibility(window, inFullScreen: window.styleMask.contains(.fullScreen))
     }
 
     /// With the sidebar collapsed the group and toggle sit right after the traffic lights.
