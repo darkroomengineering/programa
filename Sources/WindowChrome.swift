@@ -2,8 +2,8 @@ import AppKit
 import ObjectiveC
 import SwiftUI
 
-/// Density tokens for the everyday chrome (sidebar rows, tab strip, window
-/// card/insets/radii). Release builds resolve to the constants below
+/// Density tokens for the everyday chrome (sidebar rows, tab strip, control
+/// radii). Release builds resolve to the constants below
 /// unconditionally. DEBUG builds resolve live overrides from
 /// `UserDefaults.standard` under `"chromeDensity.<name>"` keys so the Density
 /// Debug window (see `DebugWindows.swift`) can tune every value without a
@@ -31,27 +31,7 @@ enum ChromeDensity {
     static let sidebarTitleFontSizeDefault: CGFloat = ChromeScale.primaryFontSize
     static var sidebarTitleFontSize: CGFloat { resolved("sidebarTitleFontSize", default: sidebarTitleFontSizeDefault) }
 
-    // MARK: - Window card / insets / radii
-
-    /// Measured against the system window corner on macOS 26 (circle fit of the
-    /// bottom-right alpha edge: 33px at 2x); the content card and sidebar panel
-    /// derive from it so their curves stay concentric with the window.
-    static let windowCornerRadiusDefault: CGFloat = 16
-    static var windowCornerRadius: CGFloat { resolved("windowCornerRadius", default: windowCornerRadiusDefault) }
-
-    static let sidebarPanelInsetDefault: CGFloat = 6
-    static var sidebarPanelInset: CGFloat { resolved("sidebarPanelInset", default: sidebarPanelInsetDefault) }
-
-    static let contentCardInsetDefault: CGFloat = 4
-    static var contentCardInset: CGFloat { resolved("contentCardInset", default: contentCardInsetDefault) }
-
-    /// Soft shadow the content card casts on the backdrop and sidebar, so the
-    /// terminal reads as lifted. Opacity is a percentage.
-    static let contentCardShadowRadiusDefault: CGFloat = 10
-    static var contentCardShadowRadius: CGFloat { resolved("contentCardShadowRadius", default: contentCardShadowRadiusDefault) }
-
-    static let contentCardShadowOpacityDefault: CGFloat = 22
-    static var contentCardShadowOpacity: CGFloat { resolved("contentCardShadowOpacity", default: contentCardShadowOpacityDefault) }
+    // MARK: - Radii
 
     static let controlCornerRadiusDefault: CGFloat = ChromeScale.controlCornerRadius
     static var controlCornerRadius: CGFloat { resolved("controlCornerRadius", default: controlCornerRadiusDefault) }
@@ -181,21 +161,6 @@ enum WindowGlassEffect {
         #endif
         return nil
     }
-
-    /// The Maps-style large window radius; the sidebar panel derives its own
-    /// radius from this minus its inset so the two curves stay concentric.
-    /// Resolves to `ChromeDensity.windowCornerRadius` -- see that type's doc
-    /// comment for the DEBUG live-override mechanism.
-    static var windowCornerRadius: CGFloat { ChromeDensity.windowCornerRadius }
-    /// Uniform inset of the sidebar glass panel from the window edges.
-    static var sidebarPanelInset: CGFloat { ChromeDensity.sidebarPanelInset }
-    /// Concentric with the window corner at the panel inset.
-    static var sidebarPanelCornerRadius: CGFloat { windowCornerRadius - sidebarPanelInset }
-    /// Height of the sidebar header row shared by the traffic lights and controls.
-    /// On the glass path the main window's toolbar (`MainWindowToolbar`) sets the
-    /// titlebar height and AppKit centers the traffic lights in it. Off the glass path
-    /// no toolbar is installed, so the 38pt height applies.
-    static var sidebarHeaderHeight: CGFloat { isAvailable ? 40 : 38 }
 
     /// Inverted (Aside-style) layout: the window backdrop is the sidebar's
     /// material, sampling the desktop and following the system appearance.

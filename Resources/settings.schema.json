@@ -92,7 +92,7 @@
         "minimalMode": {
           "type": "boolean",
           "default": false,
-          "description": "Hide the workspace title bar and move controls into the sidebar."
+          "description": "Hide the workspace title bar so each pane's tab bar sits at the top of the window, next to the toolbar."
         },
         "warnBeforeQuit": {
           "type": "boolean",
@@ -144,7 +144,7 @@
         "matchTerminalBackground": {
           "type": "boolean",
           "default": false,
-          "description": "Use the terminal background instead of the sidebar tint."
+          "description": "Use the terminal background instead of the sidebar tint. macOS 14 and 15 only: on macOS 26 and later the sidebar uses the system sidebar glass."
         },
         "showClaudeQuota": {
           "type": "boolean",

@@ -100,7 +100,7 @@ struct SettingsView: View {
         if minimalModeEnabled {
             return String(
                 localized: "settings.app.minimalMode.subtitleOn",
-                defaultValue: "Hide the workspace title bar and move workspace controls into the sidebar."
+                defaultValue: "Hide the workspace title bar so pane tab bars sit at the top of the window."
             )
         }
         return String(

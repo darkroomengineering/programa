@@ -514,8 +514,6 @@ final class ShortcutHintDebugSettingsTests: XCTestCase {
     func testDefaultOffsetsMatchCurrentBadgePlacements() {
         XCTAssertEqual(ShortcutHintDebugSettings.defaultSidebarHintX, 0.0)
         XCTAssertEqual(ShortcutHintDebugSettings.defaultSidebarHintY, 0.0)
-        XCTAssertEqual(ShortcutHintDebugSettings.defaultTitlebarHintX, 4.0)
-        XCTAssertEqual(ShortcutHintDebugSettings.defaultTitlebarHintY, 0.0)
         XCTAssertEqual(ShortcutHintDebugSettings.defaultPaneHintX, 0.0)
         XCTAssertEqual(ShortcutHintDebugSettings.defaultPaneHintY, 0.0)
         XCTAssertFalse(ShortcutHintDebugSettings.defaultAlwaysShowHints)
@@ -568,41 +566,6 @@ final class DevBuildBannerDebugSettingsTests: XCTestCase {
 
         defaults.set(true, forKey: DevBuildBannerDebugSettings.sidebarBannerVisibleKey)
         XCTAssertTrue(DevBuildBannerDebugSettings.showSidebarBanner(defaults: defaults))
-    }
-}
-
-final class ShortcutHintLanePlannerTests: XCTestCase {
-    func testAssignLanesKeepsSeparatedIntervalsOnSingleLane() {
-        let intervals: [ClosedRange<CGFloat>] = [0...20, 28...40, 48...64]
-        XCTAssertEqual(ShortcutHintLanePlanner.assignLanes(for: intervals, minSpacing: 4), [0, 0, 0])
-    }
-
-    func testAssignLanesStacksOverlappingIntervalsIntoAdditionalLanes() {
-        let intervals: [ClosedRange<CGFloat>] = [0...20, 18...34, 22...38, 40...56]
-        XCTAssertEqual(ShortcutHintLanePlanner.assignLanes(for: intervals, minSpacing: 4), [0, 1, 2, 0])
-    }
-}
-
-final class ShortcutHintHorizontalPlannerTests: XCTestCase {
-    func testAssignRightEdgesResolvesOverlapWithMinimumSpacing() {
-        let intervals: [ClosedRange<CGFloat>] = [0...20, 18...34, 30...46]
-        let rightEdges = ShortcutHintHorizontalPlanner.assignRightEdges(for: intervals, minSpacing: 6)
-
-        XCTAssertEqual(rightEdges.count, intervals.count)
-
-        let adjustedIntervals = zip(intervals, rightEdges).map { interval, rightEdge in
-            let width = interval.upperBound - interval.lowerBound
-            return (rightEdge - width)...rightEdge
-        }
-
-        XCTAssertGreaterThanOrEqual(adjustedIntervals[1].lowerBound - adjustedIntervals[0].upperBound, 6)
-        XCTAssertGreaterThanOrEqual(adjustedIntervals[2].lowerBound - adjustedIntervals[1].upperBound, 6)
-    }
-
-    func testAssignRightEdgesKeepsAlreadySeparatedIntervalsInPlace() {
-        let intervals: [ClosedRange<CGFloat>] = [0...12, 20...32, 40...52]
-        let rightEdges = ShortcutHintHorizontalPlanner.assignRightEdges(for: intervals, minSpacing: 4)
-        XCTAssertEqual(rightEdges, [12, 32, 52])
     }
 }
 

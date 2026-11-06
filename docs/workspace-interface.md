@@ -1,11 +1,30 @@
 # Workspace interface
 
-This page covers the parts of the window you work in: the pane tab bar and pane header, moving
+This page covers the parts of the window you work in: the window toolbar, the pane tab bar and pane header, moving
 a tab to a new window, agent logos and edge fades on tabs, the sidebar rows, the ports, storage
 and provider usage popovers in the sidebar footer, the helpers popover and turn checkpoints,
 and resuming an agent session. The shortcuts that act on tabs and panes are listed in
 [keyboard-shortcuts.md](keyboard-shortcuts.md), and the settings named here are in
 [settings-json.md](settings-json.md).
+
+## Window toolbar
+
+The window's toolbar holds three controls: Notifications (the bell) and New Workspace (the
+"+"), grouped together, then Toggle Sidebar.
+
+- With the sidebar open, the controls sit at the sidebar's trailing edge and follow it when you
+  drag the divider. With the sidebar hidden, they sit right after the traffic lights.
+- The bell turns into a filled bell in the accent color while there are unread notifications.
+  Clicking it, or pressing ⌘ I, opens the notifications popover under it.
+- Each control's tooltip names its keyboard shortcut and follows a rebinding in Settings or in
+  `settings.json`. The toolbar does not draw shortcut hint badges.
+- The toolbar stays in full screen. Its bell anchors the notifications popover there too, and
+  the pane tab bars start below it.
+- The empty toolbar area drags the window, and a double-click on it zooms the window like any
+  other macOS titlebar.
+
+On macOS 26 the controls are glass, and the sidebar uses the system sidebar glass over the
+window. Earlier macOS versions draw bordered toolbar buttons.
 
 ## Pane tab bar
 
@@ -24,7 +43,7 @@ On macOS 26 the tab bar is native glass. Earlier macOS versions draw it without 
 A workspace with one pane and one tab hides the tab bar and leaves an empty strip at the top,
 so you can still drag the window from there. The bar comes back when the pane gets a second
 tab or the workspace is split. In minimal mode with the sidebar hidden, the bar stays, because
-it shares the titlebar row with the traffic lights.
+it shares the titlebar row with the traffic lights and the toolbar controls.
 
 ## Pane header
 

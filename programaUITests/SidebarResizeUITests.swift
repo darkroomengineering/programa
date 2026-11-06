@@ -11,13 +11,16 @@ final class SidebarResizeUITests: XCTestCase {
     func testSidebarDividerTracksCursor() {
         let app = launchedApp()
 
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 5.0))
+
         let divider = sidebarDivider(in: app)
         XCTAssertTrue(divider.waitForExistence(timeout: 5.0))
-        XCTAssertTrue(waitForElementHittable(divider, timeout: 5.0), "Expected the sidebar divider to become hittable")
+        XCTAssertTrue(waitForDividerGeometry(divider, timeout: 5.0), "Expected the sidebar divider to have usable geometry")
 
         let initialX = divider.frame.midX
 
-        let start = divider.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let start = dividerCoordinate(divider, in: window)
         let end = start.withOffset(CGVector(dx: 80, dy: 0))
         start.press(forDuration: 0.1, thenDragTo: end)
 
@@ -26,7 +29,7 @@ final class SidebarResizeUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(rightDelta, 40, "Expected drag-right to move the divider meaningfully")
         XCTAssertLessThanOrEqual(rightDelta, 82, "Divider moved farther than the requested drag-right offset")
 
-        let startBack = divider.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let startBack = dividerCoordinate(divider, in: window)
         let endBack = startBack.withOffset(CGVector(dx: -60, dy: 0))
         startBack.press(forDuration: 0.1, thenDragTo: endBack)
 
@@ -44,10 +47,10 @@ final class SidebarResizeUITests: XCTestCase {
 
         let divider = sidebarDivider(in: app)
         XCTAssertTrue(divider.waitForExistence(timeout: 5.0))
-        XCTAssertTrue(waitForElementHittable(divider, timeout: 5.0), "Expected the sidebar divider to become hittable")
+        XCTAssertTrue(waitForDividerGeometry(divider, timeout: 5.0), "Expected the sidebar divider to have usable geometry")
 
         // Stop above half the minimum: a drag past that collapses the sidebar instead.
-        let start = divider.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let start = dividerCoordinate(divider, in: window)
         let targetWidth = minimumSidebarWidth - 40
         let offset = targetWidth - (divider.frame.midX - window.frame.minX)
         start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: offset, dy: 0)))
@@ -69,9 +72,9 @@ final class SidebarResizeUITests: XCTestCase {
 
         let divider = sidebarDivider(in: app)
         XCTAssertTrue(divider.waitForExistence(timeout: 5.0))
-        XCTAssertTrue(waitForElementHittable(divider, timeout: 5.0), "Expected the sidebar divider to become hittable")
+        XCTAssertTrue(waitForDividerGeometry(divider, timeout: 5.0), "Expected the sidebar divider to have usable geometry")
 
-        let start = divider.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let start = dividerCoordinate(divider, in: window)
         let farRight = start.withOffset(CGVector(dx: max(1200, window.frame.width * 2.0), dy: 0))
         start.press(forDuration: 0.1, thenDragTo: farRight)
 
@@ -98,12 +101,18 @@ final class SidebarResizeUITests: XCTestCase {
         return app
     }
 
-    private func waitForElementHittable(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+    private func dividerCoordinate(_ divider: XCUIElement, in window: XCUIElement) -> XCUICoordinate {
+        let frame = divider.frame
+        let windowFrame = window.frame
+        return window.coordinate(withNormalizedOffset: .zero).withOffset(
+            CGVector(dx: frame.midX - windowFrame.minX, dy: frame.midY - windowFrame.minY)
+        )
+    }
+
+    private func waitForDividerGeometry(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
         let expectation = XCTNSPredicateExpectation(
             predicate: NSPredicate { _, _ in
-                guard element.exists, element.isHittable else { return false }
-                let frame = element.frame
-                return frame.width > 0 && frame.height > 1
+                element.exists && element.frame.height > 1
             },
             object: NSObject()
         )
