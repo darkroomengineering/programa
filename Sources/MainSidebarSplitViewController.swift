@@ -386,6 +386,9 @@ extension AppDelegate {
             snapshot["toolbar_visible"] = toolbar.isVisible
             snapshot["toolbar_items"] = toolbar.items.map(\.itemIdentifier.rawValue)
         }
+        if let edge = MainWindowToolbar.expectedCollapsedControlsTrailingEdge() {
+            snapshot["expected_collapsed_controls_max_x"] = Double(edge)
+        }
         if let edge = MainWindowToolbar.collapsedControlsTrailingEdge(in: window) {
             snapshot["collapsed_controls_max_x"] = Double(edge)
         }

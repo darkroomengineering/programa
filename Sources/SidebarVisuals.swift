@@ -1332,6 +1332,10 @@ final class TitlebarLeadingInsetPassthroughView: NSView {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.measureWhenSettled() }
         }
+        if !window.styleMask.contains(.fullScreen),
+           let expectedEdge = MainWindowToolbar.expectedCollapsedControlsTrailingEdge() {
+            measure(controlsEdge: expectedEdge)
+        }
         measureWhenSettled()
     }
 
