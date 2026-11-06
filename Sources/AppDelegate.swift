@@ -4953,6 +4953,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
     }
 
+    /// Height of the titlebar and toolbar above the main window's content layout rect.
+    static func titlebarPadding(for window: NSWindow) -> CGFloat {
+        max(28, min(72, window.frame.height - window.contentLayoutRect.height))
+    }
+
     /// Native full screen has no traffic lights, and AppKit renders a visible toolbar
     /// there as an opaque strip that covers the sidebar header and the tab strip. Hide
     /// the toolbar for the duration of full screen and restore it on the way out, so the
@@ -5285,8 +5290,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
         // Keep content below the titlebar so drags on Bonsplit's tab bar don't
         // get interpreted as window drags.
-        let computedTitlebarHeight = window.frame.height - window.contentLayoutRect.height
-        let nextTitlebarPadding = max(28, min(72, computedTitlebarHeight))
+        let nextTitlebarPadding = Self.titlebarPadding(for: window)
 #if DEBUG
         if ProcessInfo.processInfo.environment["PROGRAMA_UI_TEST_MODE"] == "1" {
             UpdateLogStore.shared.append("ui test window accessor: id=\(windowIdentifier) visible=\(window.isVisible)")

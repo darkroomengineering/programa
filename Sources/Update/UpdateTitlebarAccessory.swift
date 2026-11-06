@@ -135,11 +135,6 @@ enum TitlebarControlsMetrics {
     static let glassGap: CGFloat = 7
     /// Gap between the toggle's glass edge and the sidebar's trailing edge.
     static let sidebarTrailingInset: CGFloat = 8
-    /// Gap between the zoom button and the first glass shape when the sidebar is hidden.
-    static let gapAfterTrafficLights: CGFloat = 16
-    /// Leading padding inside the `.left` titlebar accessory. AppKit already places the
-    /// accessory a few points past the zoom button; this tops it up to `gapAfterTrafficLights`.
-    static let accessoryLeadingInset: CGFloat = 8
 
     static let glassConfig = TitlebarControlsStyleConfig(
         spacing: 0,
@@ -153,23 +148,8 @@ enum TitlebarControlsMetrics {
         primaryGlyphAtRest: true
     )
 
-    /// Leading inset of the first pane's tab strip while the hidden-sidebar cluster
-    /// shares its row: past the traffic lights (80), the cluster, and one pill gap.
-    static var collapsedStripLeadingInset: CGFloat {
-        80 + gapAfterTrafficLights + clusterWidth + 8
-    }
-
-    /// Width of the whole cluster for the active style.
-    static var clusterWidth: CGFloat {
-        if WindowGlassEffect.isAvailable {
-            return glassHeight * 3 + glassGap
-        }
-        let style = TitlebarControlsStyle(
-            rawValue: UserDefaults.standard.integer(forKey: "titlebarControlsStyle")
-        ) ?? .classic
-        let config = style.config
-        return config.buttonSize * 3 + config.spacing * 2 + config.groupPadding.leading + config.groupPadding.trailing
-    }
+    /// Gap between the collapsed-sidebar toolbar controls and the content after them.
+    static let gapAfterToolbarControls: CGFloat = 12
 }
 
 /// Where a titlebar controls cluster sits; decides its outer insets.

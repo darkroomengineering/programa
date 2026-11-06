@@ -386,6 +386,12 @@ extension AppDelegate {
             snapshot["toolbar_visible"] = toolbar.isVisible
             snapshot["toolbar_items"] = toolbar.items.map(\.itemIdentifier.rawValue)
         }
+        if let edge = MainWindowToolbar.collapsedControlsTrailingEdge(in: window) {
+            snapshot["collapsed_controls_max_x"] = Double(edge)
+        }
+        if let workspace = context.tabManager.selectedWorkspace {
+            snapshot["tab_bar_leading_inset"] = Double(workspace.bonsplitController.configuration.appearance.tabBarLeadingInset)
+        }
         if let titlebarView = window.standardWindowButton(.closeButton)?.superview {
             var viewers: [String] = []
             func collect(_ view: NSView) {

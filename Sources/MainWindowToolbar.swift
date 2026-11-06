@@ -1,6 +1,11 @@
 import AppKit
 import Combine
 
+extension Notification.Name {
+    /// Posted with the window as the object after the main window toolbar adds or removes items.
+    static let programaMainWindowToolbarDidChange = Notification.Name("programa.mainWindowToolbarDidChange")
+}
+
 /// The main window's system toolbar: `[flexible space, (notifications, new tab), toggle,
 /// tracking separator]`, with the tracking separator pinned to the sidebar split's divider so
 /// the controls sit at the sidebar's trailing edge and follow divider drags.
@@ -66,14 +71,66 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
             where [.flexibleSpace, trackingID].contains(toolbar.items[index].itemIdentifier) {
                 toolbar.removeItem(at: index)
             }
-            return
+        } else {
+            if toolbar.items.first?.itemIdentifier != .flexibleSpace {
+                toolbar.insertItem(withItemIdentifier: .flexibleSpace, at: 0)
+            }
+            if !toolbar.items.contains(where: { $0.itemIdentifier == trackingID }) {
+                toolbar.insertItem(withItemIdentifier: trackingID, at: toolbar.items.count)
+            }
         }
-        if toolbar.items.first?.itemIdentifier != .flexibleSpace {
-            toolbar.insertItem(withItemIdentifier: .flexibleSpace, at: 0)
+        NotificationCenter.default.post(name: .programaMainWindowToolbarDidChange, object: window)
+        DispatchQueue.main.async { [weak window] in
+            guard let window else { return }
+            identifyButtons(in: window)
         }
-        if !toolbar.items.contains(where: { $0.itemIdentifier == trackingID }) {
-            toolbar.insertItem(withItemIdentifier: trackingID, at: toolbar.items.count)
+    }
+
+    /// Toolbar items have no accessibility identifier of their own and AppKit leaves their
+    /// buttons' empty, so UI tests could not find them; tag each button with its item's id.
+    private static func identifyButtons(in window: NSWindow) {
+        guard let titlebarView = window.standardWindowButton(.closeButton)?.superview else { return }
+        let identifiers: [Selector: NSToolbarItem.Identifier] = [
+            #selector(showNotifications(_:)): notificationsID,
+            #selector(newTab(_:)): newTabID,
+            #selector(toggleSidebar(_:)): toggleID,
+        ]
+        func visit(_ view: NSView) {
+            if let button = view as? NSButton {
+                if button.target is MainWindowToolbar, let action = button.action,
+                   let identifier = identifiers[action], button.accessibilityIdentifier() != identifier.rawValue {
+                    button.setAccessibilityIdentifier(identifier.rawValue)
+                }
+                return
+            }
+            view.subviews.forEach(visit)
         }
+        visit(titlebarView.superview ?? titlebarView)
+    }
+
+    /// Window x of the trailing edge of the toolbar buttons while the sidebar is collapsed
+    /// and they sit right after the traffic lights. Toolbar items expose no frame, so this
+    /// reads the titlebar's buttons that target this delegate; nil when the sidebar is
+    /// expanded or no button is laid out. Mid-animation the buttons report in-between frames.
+    static func collapsedControlsTrailingEdge(in window: NSWindow) -> CGFloat? {
+        guard let toolbar = window.toolbar, toolbar.isVisible, toolbar.delegate is MainWindowToolbar,
+              !toolbar.items.contains(where: { $0.itemIdentifier == trackingID }),
+              let titlebarView = window.standardWindowButton(.closeButton)?.superview else { return nil }
+        let container = titlebarView.superview ?? titlebarView
+        container.layoutSubtreeIfNeeded()
+        var trailingEdge: CGFloat?
+        func visit(_ view: NSView) {
+            if let button = view as? NSButton {
+                if button.target is MainWindowToolbar, !button.isHiddenOrHasHiddenAncestor {
+                    let maxX = button.convert(button.bounds, to: nil).maxX
+                    trailingEdge = max(trailingEdge ?? maxX, maxX)
+                }
+                return
+            }
+            view.subviews.forEach(visit)
+        }
+        visit(container)
+        return trailingEdge
     }
 
     /// The bell of `window`'s toolbar while the toolbar is showing; the notifications

@@ -1308,41 +1308,97 @@ struct SidebarSurface<Content: View>: View {
 
 }
 
-/// Reads the leading inset required to clear traffic lights + left titlebar accessories.
+/// Reads the leading inset that clears the traffic lights and, with the sidebar collapsed,
+/// the toolbar controls that sit right after them.
 final class TitlebarLeadingInsetPassthroughView: NSView {
+    var onInsetChange: ((CGFloat) -> Void)?
+    private var toolbarObserver: NSObjectProtocol?
+    private var settleGeneration = 0
+
     override var mouseDownCanMoveWindow: Bool { false }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let toolbarObserver {
+            NotificationCenter.default.removeObserver(toolbarObserver)
+            self.toolbarObserver = nil
+        }
+        guard let window else { return }
+        toolbarObserver = NotificationCenter.default.addObserver(
+            forName: .programaMainWindowToolbarDidChange,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.measureWhenSettled() }
+        }
+        measureWhenSettled()
+    }
+
+    /// AppKit animates toolbar items into place after an insert or removal, and the buttons
+    /// report in-between frames meanwhile, so a reading counts once two in a row agree.
+    // SHORTCUT: polls the toolbar layout every 50ms, at most 20 reads. ceiling: an item
+    // animation longer than 1s publishes nothing. upgrade: observe the item viewers' frames
+    // if AppKit exposes toolbar item geometry.
+    private func measureWhenSettled() {
+        settleGeneration += 1
+        let generation = settleGeneration
+        var previous: CGFloat?
+        func read(remaining: Int) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                guard let self, self.settleGeneration == generation, let window = self.window else { return }
+                let edge = MainWindowToolbar.collapsedControlsTrailingEdge(in: window)
+                if let edge, let previous, abs(edge - previous) < 0.5 {
+                    self.measure(controlsEdge: edge)
+                    return
+                }
+                if edge == nil, !(window.toolbar?.delegate is MainWindowToolbar) {
+                    self.measure(controlsEdge: nil)
+                    return
+                }
+                previous = edge
+                guard remaining > 0, edge != nil else { return }
+                read(remaining: remaining - 1)
+            }
+        }
+        read(remaining: 20)
+    }
+
+    deinit {
+        if let toolbarObserver {
+            NotificationCenter.default.removeObserver(toolbarObserver)
+        }
+    }
+
+    private func measure(controlsEdge: CGFloat?) {
+        guard let window else { return }
+        if let controlsEdge {
+            onInsetChange?(controlsEdge + TitlebarControlsMetrics.gapAfterToolbarControls)
+            return
+        }
+        // No main window toolbar: start past the traffic lights.
+        var leading: CGFloat = 88
+        if let zoom = window.standardWindowButton(.zoomButton), zoom.superview != nil {
+            leading = max(leading, zoom.convert(zoom.bounds, to: nil).maxX + 9)
+        }
+        onInsetChange?(leading)
+    }
 }
 
 struct TitlebarLeadingInsetReader: NSViewRepresentable {
     @Binding var inset: CGFloat
 
-    func makeNSView(context: Context) -> NSView {
+    func makeNSView(context: Context) -> TitlebarLeadingInsetPassthroughView {
         let view = TitlebarLeadingInsetPassthroughView()
         view.setFrameSize(.zero)
         return view
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async {
-            guard let window = nsView.window else { return }
-            // Start past the traffic lights. Prefer the real zoom-button frame --
-            // the unified-toolbar titlebar indents the buttons (zoom right edge
-            // measured 78.75pt), so a fixed 78 would graze it. The 9pt gap after
-            // the button matches the Tahoe traffic-light pitch rhythm.
-            var leading: CGFloat = 88
-            if let zoom = window.standardWindowButton(.zoomButton), zoom.superview != nil {
-                let frameInWindow = zoom.convert(zoom.bounds, to: nil)
-                leading = max(leading, frameInWindow.maxX + 9)
-            }
-            // Add width of all left-aligned titlebar accessories
-            for accessory in window.titlebarAccessoryViewControllers
-                where accessory.layoutAttribute == .leading || accessory.layoutAttribute == .left {
-                leading += accessory.view.frame.width
-            }
-            leading += 0
-            if leading != inset {
-                inset = leading
+    func updateNSView(_ nsView: TitlebarLeadingInsetPassthroughView, context: Context) {
+        let binding = $inset
+        nsView.onInsetChange = { next in
+            if abs(binding.wrappedValue - next) > 0.5 {
+                binding.wrappedValue = next
             }
         }
     }
