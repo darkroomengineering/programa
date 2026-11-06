@@ -184,17 +184,17 @@ final class BonsplitTabDragUITests: XCTestCase {
         let workspaceRow = app.descendants(matching: .any).matching(identifier: workspaceRowIdentifier).firstMatch
         XCTAssertTrue(workspaceRow.waitForExistence(timeout: 5.0), "Expected workspace row to exist")
 
-        // Sidebar panel inset (6) + header strip shared with the traffic lights (40) + list padding (8).
+        // Unified toolbar holding the traffic lights and controls (52) + list padding (8).
         let topInset = distanceToTopEdge(of: workspaceRow, in: window)
         XCTAssertEqual(
             topInset,
-            54,
+            60,
             accuracy: 4,
-            "Expected minimal mode to keep the sidebar workspace row below the header strip that holds the traffic lights. window=\(window.frame) workspaceRow=\(workspaceRow.frame) topInset=\(topInset)"
+            "Expected minimal mode to keep the sidebar workspace row below the toolbar that holds the traffic lights. window=\(window.frame) workspaceRow=\(workspaceRow.frame) topInset=\(topInset)"
         )
     }
 
-    func testStandardModeShowsWorkspaceControlsInSidebarHeader() {
+    func testStandardModeShowsWorkspaceControlsInToolbarOverSidebar() {
         let (app, dataPath) = launchConfiguredApp(presentationMode: .standard)
 
         XCTAssertTrue(
@@ -218,20 +218,15 @@ final class BonsplitTabDragUITests: XCTestCase {
         let sidebar = app.descendants(matching: .any).matching(identifier: "Sidebar").firstMatch
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5.0), "Expected sidebar to exist")
 
-        let controls = sidebarHeaderControls(in: app)
+        let controls = toolbarControls(in: app)
         XCTAssertTrue(
             waitForCondition(timeout: 5.0) { controls.allSatisfy { $0.exists && $0.isHittable } },
-            "Expected standard mode to show the workspace controls in the sidebar header. \(describe(controls))"
+            "Expected standard mode to show the workspace controls in the toolbar. \(describe(controls))"
         )
-        for control in controls {
-            XCTAssertTrue(
-                sidebar.frame.contains(control.frame),
-                "Expected \(control.identifier) inside the sidebar header. sidebar=\(sidebar.frame) control=\(control.frame)"
-            )
-        }
+        assertControlsSitOverSidebar(controls, sidebar: sidebar)
     }
 
-    func testMinimalModeKeepsSidebarControlsVisibleInSidebarHeader() {
+    func testMinimalModeKeepsSidebarControlsVisibleInToolbarOverSidebar() {
         let (app, dataPath) = launchConfiguredApp()
 
         XCTAssertTrue(
@@ -255,7 +250,7 @@ final class BonsplitTabDragUITests: XCTestCase {
         let sidebar = app.descendants(matching: .any).matching(identifier: "Sidebar").firstMatch
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5.0), "Expected sidebar to exist")
 
-        let controls = sidebarHeaderControls(in: app)
+        let controls = toolbarControls(in: app)
 
         let alphaTitle = ready["alphaTitle"] ?? "UITest Alpha"
         let alphaTab = app.buttons[alphaTitle]
@@ -270,14 +265,9 @@ final class BonsplitTabDragUITests: XCTestCase {
 
         XCTAssertTrue(
             waitForCondition(timeout: 5.0) { controls.allSatisfy { $0.exists && $0.isHittable } },
-            "Expected minimal-mode sidebar controls to stay in the sidebar header without hovering. \(describe(controls))"
+            "Expected minimal-mode sidebar controls to stay in the toolbar without hovering. \(describe(controls))"
         )
-        for control in controls {
-            XCTAssertTrue(
-                sidebar.frame.contains(control.frame),
-                "Expected \(control.identifier) inside the sidebar header. sidebar=\(sidebar.frame) control=\(control.frame)"
-            )
-        }
+        assertControlsSitOverSidebar(controls, sidebar: sidebar)
 
         window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8)).hover()
         XCTAssertTrue(
@@ -355,7 +345,7 @@ final class BonsplitTabDragUITests: XCTestCase {
         let window = app.windows.element(boundBy: 0)
         XCTAssertTrue(window.waitForExistence(timeout: 5.0), "Expected main window to exist")
 
-        let controls = sidebarHeaderControls(in: app)
+        let controls = toolbarControls(in: app)
         XCTAssertTrue(
             waitForCondition(timeout: 5.0) { controls.allSatisfy { $0.exists && $0.isHittable } },
             "Expected minimal-mode sidebar controls to start visible. \(describe(controls))"
@@ -520,12 +510,31 @@ final class BonsplitTabDragUITests: XCTestCase {
         return (app, dataPath)
     }
 
-    private func sidebarHeaderControls(in app: XCUIApplication) -> [XCUIElement] {
+    /// The toolbar's notifications/new workspace group and sidebar toggle.
+    private func toolbarControls(in app: XCUIApplication) -> [XCUIElement] {
         [
             "titlebarControl.toggleSidebar",
             "titlebarControl.showNotifications",
             "titlebarControl.newTab",
         ].map { app.descendants(matching: .any).matching(identifier: $0).firstMatch }
+    }
+
+    /// With the sidebar expanded the toolbar tracks the sidebar divider, so the controls sit
+    /// in the titlebar strip above the sidebar's trailing side.
+    private func assertControlsSitOverSidebar(
+        _ controls: [XCUIElement],
+        sidebar: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        for control in controls {
+            XCTAssertTrue(
+                control.frame.minX >= sidebar.frame.minX - 1 && control.frame.maxX <= sidebar.frame.maxX + 1,
+                "Expected \(control.identifier) over the sidebar. sidebar=\(sidebar.frame) control=\(control.frame)",
+                file: file,
+                line: line
+            )
+        }
     }
 
     private func describe(_ controls: [XCUIElement]) -> String {

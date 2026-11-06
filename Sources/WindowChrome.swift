@@ -211,11 +211,6 @@ enum WindowGlassEffect {
         return (NSColor(hex: hex) ?? .black).withAlphaComponent(opacity)
     }
 
-    /// Corner radius of the elevated content card.
-    /// Concentric with the window corner at the card inset, same rule as
-    /// `sidebarPanelCornerRadius` -- a fixed smaller value makes the card's
-    /// curve visibly diverge from the window's inside the corner gap.
-    static var contentCardCornerRadius: CGFloat { windowCornerRadius - contentCardInset }
     /// Radius for floating glass controls: tab pills, icon capsule clusters.
     static var controlCornerRadius: CGFloat { ChromeDensity.controlCornerRadius }
     /// Shared "lit surface" tint for selected pills and control capsules.
@@ -228,8 +223,6 @@ enum WindowGlassEffect {
         }
         return NSColor.white.withAlphaComponent(hover ? 0.3 : 0.55)
     }
-    /// Gap between the content card and the window edges / sidebar.
-    static var contentCardInset: CGFloat { ChromeDensity.contentCardInset }
     /// Inverted (Aside-style) backdrop. The window stays a completely standard
     /// opaque AppKit window — system corner radius, system shadow, system frame.
     /// The sidebar material is an NSVisualEffectView underlay that AppKit rounds
