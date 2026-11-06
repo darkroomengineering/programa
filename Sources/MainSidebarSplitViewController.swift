@@ -196,7 +196,7 @@ final class MainSidebarSplitViewController: NSSplitViewController {
         let target = SidebarWidthPolicy.clamped(width, maximumWidth: sidebarItem.maximumThickness)
         guard abs(sidebarHost.frame.width - target) > 0.5 else { return }
 #if DEBUG
-        dlog("sidebar.split.applyWidth requested=\(Int(width)) target=\(Int(target)) from=\(Int(sidebarHost.frame.width)) split=\(Int(splitView.bounds.width))")
+        dlog("sidebar.split.applyWidth requested=\(String(format: "%.0f", width)) target=\(Int(target)) from=\(Int(sidebarHost.frame.width)) split=\(Int(splitView.bounds.width))")
 #endif
         isApplyingWidth = true
         splitView.setPosition(target, ofDividerAt: 0)
