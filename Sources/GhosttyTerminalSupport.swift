@@ -14,17 +14,13 @@ func ghostty_surface_clear_selection_compat(_ surface: ghostty_surface_t) -> Boo
 func ghostty_surface_select_cursor_cell_compat(_ surface: ghostty_surface_t) -> Bool
 
 #if os(macOS)
+/// The whole-window glass backdrop is opt-in on every macOS version. On macOS 26+ the
+/// system sidebar split item draws its own floating glass over the opaque window.
 func programaShouldApplyWindowGlass(
     bgGlassEnabled: Bool,
-    glassEffectAvailable: Bool,
     performanceOverride: Bool? = nil
 ) -> Bool {
-    if let performanceOverride {
-        return performanceOverride
-    }
-    // Inverted layout: on macOS 26 the glass backdrop is the stock window
-    // treatment, not an opt-in. Pre-26 keeps the legacy opt-in flag.
-    return glassEffectAvailable || bgGlassEnabled
+    performanceOverride ?? bgGlassEnabled
 }
 
 func programaShouldUseTransparentBackgroundWindow() -> Bool {
@@ -32,7 +28,6 @@ func programaShouldUseTransparentBackgroundWindow() -> Bool {
     let bgGlassEnabled = defaults.object(forKey: "bgGlassEnabled") as? Bool ?? false
     return programaShouldApplyWindowGlass(
         bgGlassEnabled: bgGlassEnabled,
-        glassEffectAvailable: WindowGlassEffect.isAvailable,
         performanceOverride: ProgramaGlassSettings.startupOverride(for: .window)
     )
 }
