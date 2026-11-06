@@ -534,19 +534,18 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
     /// Selected tab that still has to be scrolled into view once layout knows its frame.
     private var pendingRevealTabID: TabID?
     private var lastSelectedTabID: TabID?
-    /// Safari-style "+" after the last pill; scrolls with the tabs. Bare glyph,
-    /// no capsule — it's an affordance, not a peer of the tab pills.
-    private let newTabButton: NSButton = {
-        let title = String(localized: "tabBar.newTab", defaultValue: "New Tab")
-        let button = NSButton(frame: .zero)
-        button.image = NSImage(systemSymbolName: "plus", accessibilityDescription: title)
-        button.isBordered = false
-        button.contentTintColor = .secondaryLabelColor
-        button.toolTip = title
-        button.setAccessibilityLabel(title)
-        return button
-    }()
-    private var newTabAction: (() -> Void)?
+    /// Safari-style "+" right after the last pill. It sits outside the scroll
+    /// view so it stays reachable when the tabs overflow.
+    private let newTabButton = PaneHeaderControlButton(
+        symbol: "plus",
+        label: String(localized: "tabBar.newTab", defaultValue: "New Tab")
+    )
+    /// Lists every tab of the pane; shown only while the tabs overflow the strip.
+    private let overflowButton = PaneHeaderControlButton(
+        symbol: "chevron.down",
+        label: String(localized: "tabBar.showAllTabs", defaultValue: "Show All Tabs")
+    )
+    private static let accessoryGap: CGFloat = 4
     /// Quiet per-pane controls at the strip's trailing edge, outside the scroll view.
     private let controls = PaneHeaderControlsView(frame: .zero)
     /// A pane with one tab drops the pill and reads as a plain card header.
@@ -579,15 +578,39 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
         addSubview(scrollView)
         documentView.addSubview(dropIndicator, positioned: .above, relativeTo: nil)
         registerForDraggedTypes([Self.tabTransferPasteboardType])
-        newTabButton.target = self
-        newTabButton.action = #selector(newTabPressed)
-        documentView.addSubview(newTabButton)
+        overflowButton.isHidden = true
+        overflowButton.handler = { [weak self] in self?.showOverflowMenu() }
+        addSubview(newTabButton)
+        addSubview(overflowButton)
         addSubview(controls)
     }
 
     func setCanSplit(_ canSplit: Bool) { controls.setCanSplit(canSplit) }
 
-    @objc private func newTabPressed() { newTabAction?() }
+    private func showOverflowMenu() {
+        guard let descriptor else { return }
+        let menu = NSMenu()
+        for tab in descriptor.tabs {
+            let item = NSMenuItem(title: tab.title, action: #selector(overflowItemSelected(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = tab.id
+            item.state = tab.isSelected ? .on : .off
+            menu.addItem(item)
+        }
+        menu.popUp(
+            positioning: nil,
+            at: NSPoint(
+                x: 0,
+                y: overflowButton.isFlipped ? overflowButton.bounds.maxY + 4 : overflowButton.bounds.minY - 4
+            ),
+            in: overflowButton
+        )
+    }
+
+    @objc private func overflowItemSelected(_ sender: NSMenuItem) {
+        guard let tabID = sender.representedObject as? TabID else { return }
+        descriptor?.onSelect(tabID)
+    }
 
     @objc private func clipBoundsDidChange(_ note: Notification) { updateEdgeFades() }
 
@@ -609,6 +632,7 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
         var scrollFrame = bounds.insetBy(dx: edge, dy: edge)
         let reserved = controlsWidth > 0 ? controlsWidth + edge : 0
         scrollFrame.size.width = max(0, scrollFrame.width - reserved)
+        layoutStripAccessories(in: &scrollFrame)
         scrollView.frame = scrollFrame
         layoutPills()
         // Early zero-sized layout passes can leave the clip view scrolled to a
@@ -646,7 +670,7 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
                 dragState: { [weak descriptor] active in descriptor?.onDragStateChanged(tab.id, active) }
             )
         }
-        newTabAction = descriptor.onNewTab
+        newTabButton.handler = { [weak descriptor] in descriptor?.onNewTab() }
         newTabButton.isHidden = headerMode
         controls.update(descriptor, showsNewTab: headerMode)
         let selectedTabID = descriptor.tabs.first(where: \.isSelected)?.id
@@ -663,22 +687,68 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
         needsLayout = true
     }
 
+    private static let pillGap: CGFloat = 8
+
+    private var orderedPills: [NativeGlassTabPillView] {
+        descriptor?.tabs.compactMap { pillViews[$0.id] } ?? []
+    }
+
+    /// Pills keep a width that fits their title; a row wider than the strip
+    /// scrolls instead of squeezing every title down to a clipped glyph.
+    private func tabPillWidths() -> [CGFloat] {
+        orderedPills.map { min(220, max(78, $0.preferredWidth)) }
+    }
+
+    /// Places the pinned "+" and, when the pills overflow, the tab-list
+    /// chevron after the strip, and narrows `stripFrame` to the room left.
+    /// Overflow is judged once, against the width left after the "+" only,
+    /// so showing the chevron can never flip the decision back.
+    private func layoutStripAccessories(in stripFrame: inout NSRect) {
+        guard let descriptor, !isHeaderMode else {
+            overflowButton.isHidden = true
+            return
+        }
+        let size = PaneHeaderControlsView.buttonSize
+        let gap = Self.accessoryGap
+        let widths = tabPillWidths()
+        let contentWidth = max(0, descriptor.leadingInset)
+            + widths.reduce(0, +)
+            + Self.pillGap * CGFloat(max(0, widths.count - 1))
+        // In a pane too narrow for them, the "+" and then the chevron drop out
+        // rather than spill over the trailing pane controls.
+        let slot = size + gap
+        let showsPlus = stripFrame.width >= slot
+        let roomWithPlus = showsPlus ? stripFrame.width - slot : stripFrame.width
+        let overflows = contentWidth > roomWithPlus + 0.5
+        let showsChevron = overflows && roomWithPlus >= slot
+        newTabButton.isHidden = !showsPlus
+        overflowButton.isHidden = !showsChevron
+        stripFrame.size.width = overflows
+            ? (showsChevron ? roomWithPlus - slot : roomWithPlus)
+            : contentWidth
+        let y = (stripFrame.midY - size / 2).rounded()
+        var x = stripFrame.maxX + gap
+        if showsPlus {
+            newTabButton.frame = NSRect(x: x, y: y, width: size, height: size)
+            x += slot
+        }
+        if showsChevron {
+            overflowButton.frame = NSRect(x: x, y: y, width: size, height: size)
+        }
+    }
+
     private func layoutPills() {
         guard let descriptor else { return }
-        let gap: CGFloat = 8
-        let minPillWidth: CGFloat = 78
+        let gap = Self.pillGap
         let leadingInset = max(0, descriptor.leadingInset)
         let height = max(28, scrollView.contentSize.height)
-        let pills = descriptor.tabs.compactMap { pillViews[$0.id] }
-        let plusWidth: CGFloat = 28
+        let pills = orderedPills
 
-        // Pills keep a width that fits their title; a row wider than the strip
-        // scrolls instead of squeezing every title down to a clipped glyph.
-        // A header title instead truncates at the strip's edge.
+        // A header title truncates at the strip's edge.
         let headerWidth = max(0, scrollView.contentSize.width - leadingInset)
         let widths = isHeaderMode
             ? pills.map { min(headerWidth, $0.preferredWidth) }
-            : pills.map { min(220, max(minPillWidth, $0.preferredWidth)) }
+            : tabPillWidths()
 
         var x = leadingInset
         for (pill, width) in zip(pills, widths) {
@@ -686,11 +756,8 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
             pill.layoutSubtreeIfNeeded()
             x += width + gap
         }
-        if !newTabButton.isHidden {
-            newTabButton.frame = NSRect(x: x, y: 0, width: plusWidth, height: height)
-            x += plusWidth + gap
-        }
-        documentView.frame = NSRect(x: 0, y: 0, width: max(x, scrollView.contentSize.width), height: height)
+        let contentEnd = pills.isEmpty ? x : x - gap
+        documentView.frame = NSRect(x: 0, y: 0, width: max(contentEnd, scrollView.contentSize.width), height: height)
         constrainClipOrigin()
         revealPendingTab()
         updateEdgeFades()
@@ -847,7 +914,7 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
 @MainActor
 @available(macOS 26.0, *)
 private final class PaneHeaderControlsView: NSView {
-    static let buttonSize: CGFloat = 22
+    static let buttonSize: CGFloat = ChromeScale.minimumHitTarget
     private static let spacing: CGFloat = 2
 
     private let newTabButton = PaneHeaderControlButton(
@@ -998,7 +1065,7 @@ private final class PaneHeaderControlButton: NSButton {
 
     func setSymbol(_ symbol: String, label: String) {
         self.label = label
-        let configuration = NSImage.SymbolConfiguration(pointSize: 11, weight: .regular)
+        let configuration = NSImage.SymbolConfiguration(pointSize: ChromeScale.controlIconSize, weight: .regular)
         let base = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
         image = base?.withSymbolConfiguration(configuration) ?? base
         setAccessibilityLabel(label)
@@ -1191,7 +1258,7 @@ private final class NativeTabPillControl: NSControl, NSMenuDelegate, NSDraggingS
     private var dragState: ((Bool) -> Void)?
     var onHoverChanged: ((Bool) -> Void)?
     private var mouseDownPoint: NSPoint?
-    /// Plain card-header styling for a pane's only tab: smaller icon and title,
+    /// Plain card-header styling for a pane's only tab: no glass surface,
     /// no close button (the header's trailing controls own close).
     var isHeader = false {
         didSet {
@@ -1201,13 +1268,16 @@ private final class NativeTabPillControl: NSControl, NSMenuDelegate, NSDraggingS
         }
     }
 
-    private static let headerIconSize: CGFloat = 12
-    private static let headerTitleX: CGFloat = 12 + headerIconSize + 6
+    /// Icon slot shared by pill and header mode, so the title starts at the same x in both.
+    private static let iconSlot: CGFloat = 16
+    private static let headerTitleX: CGFloat = 12 + iconSlot + 6
 
     var preferredWidth: CGFloat {
         if isHeader {
-            // Mirror of layout(): title origin plus a little trailing room.
-            return ceil(titleField.intrinsicContentSize.width) + Self.headerTitleX + 6
+            // Mirror of layout(): title origin plus a little trailing room. The
+            // label's intrinsic width leaves out its cell's 2pt text inset on each
+            // side; without it a title that should fit truncates by a few glyphs.
+            return ceil(titleField.intrinsicContentSize.width) + 4 + Self.headerTitleX + 6
         }
         // Mirror of layout(): icon leading 12 + icon 16 + gap 6 + trailing close
         // region 34, plus breathing room so the label never truncates.
@@ -1216,11 +1286,12 @@ private final class NativeTabPillControl: NSControl, NSMenuDelegate, NSDraggingS
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        titleField.lineBreakMode = .byTruncatingTail
-        titleField.font = .systemFont(ofSize: 13, weight: .medium)
+        titleField.lineBreakMode = .byTruncatingMiddle
+        titleField.font = .systemFont(ofSize: ChromeScale.primaryFontSize, weight: .medium)
         iconView.imageScaling = .scaleProportionallyDown
         let closeTitle = String(localized: "tabBar.closeTab", defaultValue: "Close Tab")
-        closeButton.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: closeTitle)
+        closeButton.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: closeTitle)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: ChromeScale.closeIconSize, weight: .semibold))
         closeButton.setAccessibilityLabel(closeTitle)
         closeButton.toolTip = closeTitle
         closeButton.isBordered = false
@@ -1238,7 +1309,7 @@ private final class NativeTabPillControl: NSControl, NSMenuDelegate, NSDraggingS
     override func layout() {
         super.layout()
         if isHeader {
-            let icon = Self.headerIconSize
+            let icon = Self.iconSlot
             iconView.frame = NSRect(x: 12, y: ((bounds.height - icon) / 2).rounded(), width: icon, height: icon)
             titleField.frame = NSRect(
                 x: Self.headerTitleX,
@@ -1248,8 +1319,8 @@ private final class NativeTabPillControl: NSControl, NSMenuDelegate, NSDraggingS
             )
             return
         }
-        iconView.frame = NSRect(x: 12, y: (bounds.height - 16) / 2, width: 16, height: 16)
-        closeButton.frame = NSRect(x: bounds.width - 28, y: (bounds.height - 20) / 2, width: 20, height: 20)
+        iconView.frame = NSRect(x: 12, y: ((bounds.height - Self.iconSlot) / 2).rounded(), width: Self.iconSlot, height: Self.iconSlot)
+        closeButton.frame = NSRect(x: bounds.width - 30, y: ((bounds.height - 24) / 2).rounded(), width: 24, height: 24)
         titleField.frame = NSRect(x: 34, y: (bounds.height - 18) / 2, width: max(10, bounds.width - 68), height: 18)
     }
 
@@ -1287,17 +1358,15 @@ private final class NativeTabPillControl: NSControl, NSMenuDelegate, NSDraggingS
         applyTabColorAction = applyTabColor
         self.dragData = dragData
         self.dragState = dragState
-        titleField.stringValue = tab.title
         applyStyle()
         if let data = tab.iconImageData, let image = NSImage(data: data) {
             iconView.image = image
         } else if let asset = tab.iconAsset, let image = NSImage(named: asset) {
             iconView.image = image
         } else if let icon = tab.icon {
-            // Unconfigured symbols render at the full 16pt slot; boxy filled
-            // glyphs like terminal.fill then dominate the pill. Match the
-            // SwiftUI tab bar's smaller optical size.
-            let configuration = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
+            // Unconfigured symbols fill the whole 16pt slot; size them to the
+            // leading-icon scale shared with the sidebar rows.
+            let configuration = NSImage.SymbolConfiguration(pointSize: ChromeScale.leadingIconSize, weight: .medium)
             // The filled variant is a solid box that dominates the pill; the
             // strip's control capsules already use the outline variant.
             let resolvedName = icon == "terminal.fill" ? "terminal" : icon
@@ -1316,11 +1385,16 @@ private final class NativeTabPillControl: NSControl, NSMenuDelegate, NSDraggingS
 
     private func applyStyle() {
         let isSelected = tab?.isSelected ?? false
+        // Pills show a path title's last component; the header has room for the
+        // whole path. Tooltip and accessibility label keep the full title.
+        if let title = tab?.title {
+            titleField.stringValue = isHeader ? title : BonsplitTabTitle.compact(title)
+        }
         if isHeader {
-            titleField.font = .systemFont(ofSize: 12, weight: .medium)
+            titleField.font = .systemFont(ofSize: ChromeScale.primaryFontSize, weight: .medium)
             titleField.textColor = .labelColor
         } else {
-            titleField.font = .systemFont(ofSize: 13, weight: isSelected ? .semibold : .medium)
+            titleField.font = .systemFont(ofSize: ChromeScale.primaryFontSize, weight: isSelected ? .semibold : .medium)
             titleField.textColor = isSelected ? .labelColor : .secondaryLabelColor
         }
         // Selection reads through the title weight and surface tone; a primary-

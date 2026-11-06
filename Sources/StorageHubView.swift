@@ -13,7 +13,7 @@ struct SidebarStorageButton: View {
         Button { isPopoverPresented.toggle() } label: {
             Image(systemName: "internaldrive")
                 .symbolRenderingMode(.monochrome)
-                .symbolRasterSize(11, weight: .medium)
+                .symbolRasterSize(ChromeScale.toolbarIconSize, weight: .regular)
                 .foregroundStyle(Color(nsColor: .secondaryLabelColor))
                 .frame(width: buttonSize, height: buttonSize)
                 .contentShape(Rectangle())

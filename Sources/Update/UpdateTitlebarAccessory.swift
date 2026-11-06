@@ -21,11 +21,9 @@ final class NonDraggableHostingView<Content: View>: NSHostingView<Content> {
 }
 
 /// macOS traffic lights are 12pt circles laid out on a 20pt pitch — an 8pt visual gap
-/// between adjacent lights. We mirror that same 8pt gap for the inter-icon spacing in the
-/// titlebar row (classic preset) and for the leading inset between the last traffic light
-/// and the first titlebar icon, so the whole row reads as one continuous rhythm instead of
-/// two different tempos. Do not "tidy" this back into a rounder-looking magic number — 8 is
-/// the traffic-light gap, not an arbitrary pick.
+/// between adjacent lights. The bare-glyph presets (macOS 14/15) derive their inter-icon
+/// spacing from that same 8pt gap, so the row reads as one rhythm with the lights. Do not
+/// "tidy" this into a rounder-looking magic number — 8 is the traffic-light gap.
 private enum TitlebarControlsRhythm {
     static let trafficLightGap: CGFloat = 8
 
@@ -129,6 +127,59 @@ enum TitlebarControlsStyle: Int, CaseIterable, Identifiable {
     }
 }
 
+/// Titlebar cluster geometry. On macOS 26+ it matches a stock NavigationSplitView
+/// toolbar (measured on macOS 27.2): bell and "+" share one glass capsule, the
+/// sidebar toggle is its own glass circle, both 37pt tall with a 7pt gap.
+enum TitlebarControlsMetrics {
+    static let glassHeight: CGFloat = 37
+    static let glassGap: CGFloat = 7
+    /// Gap between the toggle's glass edge and the sidebar's trailing edge.
+    static let sidebarTrailingInset: CGFloat = 8
+    /// Gap between the zoom button and the first glass shape when the sidebar is hidden.
+    static let gapAfterTrafficLights: CGFloat = 16
+    /// Leading padding inside the `.left` titlebar accessory. AppKit already places the
+    /// accessory a few points past the zoom button; this tops it up to `gapAfterTrafficLights`.
+    static let accessoryLeadingInset: CGFloat = 8
+
+    static let glassConfig = TitlebarControlsStyleConfig(
+        spacing: 0,
+        iconSize: ChromeScale.toolbarIconSize,
+        buttonSize: glassHeight,
+        groupBackground: false,
+        groupPadding: EdgeInsets(),
+        buttonBackground: false,
+        buttonCornerRadius: glassHeight / 2,
+        hoverBackground: false,
+        primaryGlyphAtRest: true
+    )
+
+    /// Leading inset of the first pane's tab strip while the hidden-sidebar cluster
+    /// shares its row: past the traffic lights (80), the cluster, and one pill gap.
+    static var collapsedStripLeadingInset: CGFloat {
+        80 + gapAfterTrafficLights + clusterWidth + 8
+    }
+
+    /// Width of the whole cluster for the active style.
+    static var clusterWidth: CGFloat {
+        if WindowGlassEffect.isAvailable {
+            return glassHeight * 3 + glassGap
+        }
+        let style = TitlebarControlsStyle(
+            rawValue: UserDefaults.standard.integer(forKey: "titlebarControlsStyle")
+        ) ?? .classic
+        let config = style.config
+        return config.buttonSize * 3 + config.spacing * 2 + config.groupPadding.leading + config.groupPadding.trailing
+    }
+}
+
+/// Where a titlebar controls cluster sits; decides its outer insets.
+enum TitlebarControlsPlacement: Equatable {
+    /// Trailing edge of the sidebar header row.
+    case sidebarHeader
+    /// Leading edge of its host: past the traffic lights, or the window edge in fullscreen.
+    case leading(inset: CGFloat)
+}
+
 struct TitlebarControlsStyleConfig {
     let spacing: CGFloat
     let iconSize: CGFloat
@@ -138,6 +189,8 @@ struct TitlebarControlsStyleConfig {
     let buttonBackground: Bool
     let buttonCornerRadius: CGFloat
     let hoverBackground: Bool
+    /// Glass toolbar buttons draw full-strength glyphs at rest, like Finder and Mail.
+    var primaryGlyphAtRest = false
 }
 
 final class TitlebarControlsViewModel: ObservableObject {
@@ -313,7 +366,7 @@ struct TitlebarControlsView: View {
     let onToggleNotifications: () -> Void
     let onNewTab: () -> Void
     let visibilityMode: TitlebarControlsVisibilityMode
-    var layout: TitlebarControlsLayout = .contiguous
+    var placement: TitlebarControlsPlacement = .leading(inset: 0)
     @AppStorage("titlebarControlsStyle") private var styleRawValue = TitlebarControlsStyle.classic.rawValue
     @AppStorage(ShortcutHintDebugSettings.titlebarHintXKey) private var titlebarShortcutHintXOffset = ShortcutHintDebugSettings.defaultTitlebarHintX
     @AppStorage(ShortcutHintDebugSettings.titlebarHintYKey) private var titlebarShortcutHintYOffset = ShortcutHintDebugSettings.defaultTitlebarHintY
@@ -325,10 +378,12 @@ struct TitlebarControlsView: View {
     private let titlebarHintRightSafetyShift: CGFloat = 10
     private let titlebarHintBaseXShift: CGFloat = -10
 
+    /// Declared in display order: bell, "+", then the sidebar toggle last, as in a
+    /// stock NavigationSplitView toolbar.
     private enum HintSlot: Int, CaseIterable {
-        case toggleSidebar
         case showNotifications
         case newTab
+        case toggleSidebar
 
         var action: KeyboardShortcutSettings.Action {
             switch self {
@@ -398,44 +453,56 @@ struct TitlebarControlsView: View {
             }
     }
 
-    /// Puts the last icon's center 24pt from the sidebar edge, the same column
-    /// as the row close buttons and the row icon column mirrored from the left.
+    /// Glass: the toggle's glass edge sits `sidebarTrailingInset` from the sidebar edge.
+    /// Bare glyphs: the last icon's center sits on the row icon column mirrored from the left.
     private func titlebarHintTrailingInset(for config: TitlebarControlsStyleConfig) -> CGFloat {
-        max(0, SidebarRowMetrics.trailingIconColumnCenter - config.buttonSize / 2)
+        if WindowGlassEffect.isAvailable {
+            return TitlebarControlsMetrics.sidebarTrailingInset
+        }
+        return max(0, SidebarRowMetrics.trailingIconColumnCenter - config.buttonSize / 2)
     }
 
+    /// Glass buttons are tall enough that a bottom-aligned hint would cover the glyph,
+    /// so their hint straddles the glass's bottom edge instead.
     private func titlebarHintVerticalBaseOffset(for config: TitlebarControlsStyleConfig) -> CGFloat {
-        titlebarShortcutHintVerticalOffset(for: config)
+        if WindowGlassEffect.isAvailable {
+            return config.buttonSize - titlebarShortcutHintHeight(for: config) / 2
+        }
+        return titlebarShortcutHintVerticalOffset(for: config)
     }
 
     @ViewBuilder
     private func laidOutControls(config: TitlebarControlsStyleConfig) -> some View {
-        switch layout {
-        case .contiguous:
-            controlsGroup(slots: HintSlot.allCases, config: config)
-                // Leading inset mirrors the inter-icon spacing (see TitlebarControlsRhythm) so the
-                // gap between the last traffic light and the first titlebar icon matches the gap
-                // between the icons themselves — one rhythm, not two.
-                .padding(.leading, config.spacing)
+        switch placement {
+        case .sidebarHeader:
+            controlGroups(config: config)
                 .padding(.trailing, titlebarHintTrailingInset(for: config))
-                .contentShape(Rectangle())
-        case .splitLeadingToggle(let leadingInset):
-            // Only the two button groups take a content shape: the gap between them must
-            // stay inert so the header strip underneath keeps dragging the window.
-            HStack(spacing: 0) {
-                controlsGroup(slots: [.toggleSidebar], config: config)
-                    .contentShape(Rectangle())
-                Spacer(minLength: 0)
-                controlsGroup(slots: [.showNotifications, .newTab], config: config)
-                    .contentShape(Rectangle())
-            }
-            .padding(.leading, leadingInset)
-            .padding(.trailing, titlebarHintTrailingInset(for: config))
+        case .leading(let inset):
+            controlGroups(config: config)
+                .padding(.leading, inset)
         }
     }
 
     @ViewBuilder
-    private func controlsGroup(slots: [HintSlot], config: TitlebarControlsStyleConfig) -> some View {
+    private func controlGroups(config: TitlebarControlsStyleConfig) -> some View {
+        if WindowGlassEffect.isAvailable {
+            let glass = TitlebarControlsMetrics.glassConfig
+            HStack(spacing: TitlebarControlsMetrics.glassGap) {
+                controlsGroup(slots: [.showNotifications, .newTab], config: glass, glass: .capsule)
+                controlsGroup(slots: [.toggleSidebar], config: glass, glass: .circle)
+            }
+        } else {
+            controlsGroup(slots: HintSlot.allCases, config: config)
+                .contentShape(Rectangle())
+        }
+    }
+
+    @ViewBuilder
+    private func controlsGroup(
+        slots: [HintSlot],
+        config: TitlebarControlsStyleConfig,
+        glass: TitlebarGlassSurface.GlassShape? = nil
+    ) -> some View {
         let hintLayoutItems = titlebarHintLayoutItems(slots: slots, config: config)
         let content = HStack(spacing: config.spacing) {
             ForEach(slots, id: \.self) { slot in
@@ -460,6 +527,7 @@ struct TitlebarControlsView: View {
                 }
         } else {
             paddedContent
+                .modifier(TitlebarGlassSurface(shape: glass))
                 .overlay(alignment: .topLeading) {
                     titlebarShortcutHintOverlay(items: hintLayoutItems, config: config)
                 }
@@ -560,11 +628,13 @@ struct TitlebarControlsView: View {
             guard shortcut.command else { return nil }
 
             let width = titlebarHintWidth(for: shortcut, config: config)
-            let rightEdge = config.groupPadding.leading
-                + titlebarButtonRightEdge(at: position, config: config)
-                + xOffset
-                + titlebarHintRightSafetyShift
-                + titlebarHintBaseXShift
+            // Glass: centered under the glyph. Bare glyphs: hugging the button's right edge.
+            let anchor = WindowGlassEffect.isAvailable
+                ? titlebarButtonRightEdge(at: position, config: config) - (config.buttonSize - width) / 2
+                : titlebarButtonRightEdge(at: position, config: config)
+                    + titlebarHintRightSafetyShift
+                    + titlebarHintBaseXShift
+            let rightEdge = config.groupPadding.leading + anchor + xOffset
             return (slot.action, shortcut, width, (rightEdge - width)...rightEdge)
         }
     }
@@ -626,7 +696,7 @@ struct TitlebarControlsView: View {
     private func iconLabel(systemName: String, config: TitlebarControlsStyleConfig, isHovering: Bool) -> some View {
         let icon = Image(systemName: systemName)
             .font(.system(size: titlebarIconRenderSize(for: systemName, config: config), weight: .regular))
-            .foregroundColor(isHovering ? Color(nsColor: .labelColor) : Color(nsColor: .secondaryLabelColor))
+            .foregroundColor(isHovering || config.primaryGlyphAtRest ? Color(nsColor: .labelColor) : Color(nsColor: .secondaryLabelColor))
             .frame(width: config.buttonSize, height: config.buttonSize)
 
         if config.buttonBackground {
@@ -641,19 +711,41 @@ struct TitlebarControlsView: View {
     }
 }
 
+/// System glass behind one titlebar button group (macOS 26+); a no-op elsewhere.
+struct TitlebarGlassSurface: ViewModifier {
+    enum GlassShape {
+        case capsule
+        case circle
+    }
+
+    let shape: GlassShape?
+
+    func body(content: Content) -> some View {
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *), let shape {
+            switch shape {
+            case .capsule:
+                content.glassEffect(.regular.interactive(), in: Capsule())
+            case .circle:
+                content.glassEffect(.regular.interactive(), in: Circle())
+            }
+        } else {
+            content
+        }
+        #else
+        content
+        #endif
+    }
+}
+
 struct HiddenTitlebarSidebarControlsView: View {
     @ObservedObject var notificationStore: TerminalNotificationStore
     @ObservedObject var sidebarState: SidebarState
     @StateObject private var viewModel = TitlebarControlsViewModel()
-    /// Header-local x where the sidebar toggle starts; nil while the traffic lights
-    /// are not in this window (fullscreen, hidden), which keeps the trailing cluster.
-    /// Seeded from the last measurement: hiding the sidebar unmounts this view, and an
-    /// unseeded first frame would draw the toggle trailing before it snaps leading.
-    @State private var toggleLeadingInset: CGFloat? = Self.leadingInset(
-        forZoomMaxX: TrafficLightsTrailingEdgeView.lastMeasuredMaxX
-    )
 
-    private let hostHeight: CGFloat = 28
+    private var hostHeight: CGFloat {
+        WindowGlassEffect.isAvailable ? TitlebarControlsMetrics.glassHeight : 28
+    }
 
     var body: some View {
         TitlebarControlsView(
@@ -668,125 +760,10 @@ struct HiddenTitlebarSidebarControlsView: View {
             },
             onNewTab: { _ = AppDelegate.shared?.tabManager?.addTab() },
             visibilityMode: .alwaysVisible,
-            layout: toggleLeadingInset.map { .splitLeadingToggle(leadingInset: $0) } ?? .contiguous
+            placement: .sidebarHeader
         )
         .frame(maxWidth: .infinity, alignment: .trailing)
         .frame(height: hostHeight)
-        .background(alignment: .leading) {
-            TrafficLightsTrailingEdgeReader { maxX in
-                let inset = Self.leadingInset(forZoomMaxX: maxX)
-                if inset != toggleLeadingInset {
-                    toggleLeadingInset = inset
-                }
-            }
-            .frame(width: 0, height: 0)
-        }
-    }
-
-    private static func leadingInset(forZoomMaxX maxX: CGFloat?) -> CGFloat? {
-        maxX.map { $0 + TitlebarControlsRhythm.trafficLightGap }
-    }
-}
-
-enum TitlebarControlsLayout: Equatable {
-    /// All controls in one row, hugging the trailing edge.
-    case contiguous
-    /// Sidebar toggle at `leadingInset` from the host's leading edge (just past the
-    /// traffic lights); notifications and new-workspace stay trailing.
-    case splitLeadingToggle(leadingInset: CGFloat)
-}
-
-/// Reports the zoom button's maxX in this view's own coordinates, or nil when the
-/// traffic lights are not laid out in this window (fullscreen moves them into the
-/// fullscreen toolbar window). Measuring in local space keeps the result correct
-/// whatever inset the sidebar sits at.
-private struct TrafficLightsTrailingEdgeReader: NSViewRepresentable {
-    let onChange: (CGFloat?) -> Void
-
-    func makeNSView(context: Context) -> TrafficLightsTrailingEdgeView {
-        let view = TrafficLightsTrailingEdgeView()
-        view.onChange = onChange
-        return view
-    }
-
-    func updateNSView(_ nsView: TrafficLightsTrailingEdgeView, context: Context) {
-        nsView.onChange = onChange
-        nsView.scheduleMeasure()
-    }
-
-    static func dismantleNSView(_ nsView: TrafficLightsTrailingEdgeView, coordinator: ()) {
-        nsView.stopObservingWindow()
-    }
-}
-
-private final class TrafficLightsTrailingEdgeView: NSView {
-    /// Last non-fullscreen measurement, shared by every window: the traffic-light
-    /// geometry relative to the sidebar header is the same in all of them.
-    static var lastMeasuredMaxX: CGFloat?
-
-    var onChange: ((CGFloat?) -> Void)?
-    private var windowObservers: [NSObjectProtocol] = []
-    private var measurePending = false
-
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        stopObservingWindow()
-        guard let window else { return }
-        let names: [Notification.Name] = [
-            NSWindow.didEnterFullScreenNotification,
-            NSWindow.didExitFullScreenNotification,
-        ]
-        windowObservers = names.map { name in
-            NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
-                self?.scheduleMeasure()
-            }
-        }
-        // Measurements are skipped while the sidebar slides, so measure once it settles.
-        windowObservers.append(
-            NotificationCenter.default.addObserver(
-                forName: .programaSidebarToggleDidSettle, object: nil, queue: .main
-            ) { [weak self] _ in
-                self?.scheduleMeasure()
-            }
-        )
-        scheduleMeasure()
-    }
-
-    override func setFrameOrigin(_ newOrigin: NSPoint) {
-        super.setFrameOrigin(newOrigin)
-        scheduleMeasure()
-    }
-
-    func stopObservingWindow() {
-        windowObservers.forEach { NotificationCenter.default.removeObserver($0) }
-        windowObservers = []
-    }
-
-    /// Deferred to the next main-queue turn so the measurement sees settled layout and
-    /// the SwiftUI state write never lands inside a layout or update pass.
-    func scheduleMeasure() {
-        guard !measurePending else { return }
-        measurePending = true
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.measurePending = false
-            // Mid-slide frames carry the transition offset; the settle notification re-measures.
-            guard !TerminalWindowPortalRegistry.isInteractiveGeometryResizeActive else { return }
-            self.onChange?(self.measureZoomButtonMaxX())
-        }
-    }
-
-    private func measureZoomButtonMaxX() -> CGFloat? {
-        guard let window,
-              !window.styleMask.contains(.fullScreen),
-              let zoom = window.standardWindowButton(.zoomButton),
-              zoom.window === window,
-              !zoom.isHiddenOrHasHiddenAncestor else { return nil }
-        let maxX = zoom.convert(zoom.bounds, to: self).maxX
-        Self.lastMeasuredMaxX = maxX
-        return maxX
     }
 }
 
@@ -1005,8 +982,10 @@ final class TitlebarControlsAccessoryViewController: NSTitlebarAccessoryViewCont
     /// The sidebar panel renders its own always-visible controls in its header;
     /// the titlebar accessory copy only appears when the sidebar is hidden.
     private var showsWorkspaceTitlebar: Bool {
-        !WorkspacePresentationModeSettings.isMinimal() &&
-            AppDelegate.shared?.sidebarState?.isVisible != true
+        let windowSidebar = view.window.flatMap {
+            AppDelegate.shared?.contextForMainTerminalWindow($0, reindex: false)?.sidebarState
+        }
+        return (windowSidebar ?? AppDelegate.shared?.sidebarState)?.isVisible != true
     }
     /// Box for deferred weak-self capture so the sidebar toggle closure
     /// can resolve the window this accessory is attached to (#1779).
@@ -1038,7 +1017,8 @@ final class TitlebarControlsAccessoryViewController: NSTitlebarAccessoryViewCont
                 onToggleSidebar: toggleSidebar,
                 onToggleNotifications: toggleNotifications,
                 onNewTab: newTab,
-                visibilityMode: .alwaysVisible
+                visibilityMode: .alwaysVisible,
+                placement: .leading(inset: TitlebarControlsMetrics.accessoryLeadingInset)
             )
         )
 
@@ -1589,9 +1569,10 @@ final class UpdateTitlebarAccessoryController {
     private var startupScanWorkItems: [DispatchWorkItem] = []
     private let controlsIdentifier = NSUserInterfaceItemIdentifier("programa.titlebarControls")
     private let controlsControllers = NSHashTable<TitlebarControlsAccessoryViewController>.weakObjects()
-    /// Minimal mode attaches no titlebar accessory, so nothing in `controlsControllers` can own
-    /// the notifications popover there. This detached controller owns it instead; the popover
-    /// anchors to the sidebar bell when one is passed, otherwise to the key window.
+    /// In minimal mode a window with a visible sidebar has no titlebar accessory, so nothing in
+    /// `controlsControllers` may own the notifications popover. This detached controller owns
+    /// it then; the popover anchors to the sidebar bell when one is passed, otherwise to the
+    /// key window.
     private var detachedNotificationsController: TitlebarControlsAccessoryViewController?
 
     /// Attached controllers first, so standard mode keeps anchoring to its titlebar controls.
@@ -1656,7 +1637,7 @@ final class UpdateTitlebarAccessoryController {
         })
 
         // Re-evaluate all windows when the presentation mode changes so that
-        // accessories are removed in minimal mode and re-attached in standard mode.
+        // minimal mode keeps accessories only on windows whose sidebar is hidden.
         observers.append(center.addObserver(
             forName: UserDefaults.didChangeNotification,
             object: nil,
@@ -1664,6 +1645,18 @@ final class UpdateTitlebarAccessoryController {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.reattachIfPresentationModeChanged()
+            }
+        })
+
+        // Minimal mode attaches the accessory only while a window's sidebar is hidden.
+        observers.append(center.addObserver(
+            forName: .programaSidebarVisibilityDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard WorkspacePresentationModeSettings.isMinimal() else { return }
+                self?.attachToExistingWindows()
             }
         })
 
@@ -1676,8 +1669,8 @@ final class UpdateTitlebarAccessoryController {
         guard currentMode != lastKnownPresentationMode else { return }
         lastKnownPresentationMode = currentMode
         // Ensure accessories exist on all windows. TitlebarControlsAccessoryViewController
-        // handles its own visibility (hidden in minimal, visible in standard) via its
-        // UserDefaults observer, so we just need to make sure it's attached.
+        // shows itself only while its window's sidebar is hidden, so we just need to make
+        // sure it's attached where the mode allows it.
         attachToExistingWindows()
 
         // When switching back to standard mode while a window is in fullscreen,
@@ -1749,11 +1742,12 @@ final class UpdateTitlebarAccessoryController {
 
         pendingAttachRetries.removeValue(forKey: ObjectIdentifier(window))
 
-        // Minimal mode has no titlebar chrome at all, so the accessory controller
-        // must be removed outright rather than left attached-but-hidden: a hidden
-        // accessory view controller still participates in titlebar layout/safe-area
-        // calculations on some window states.
-        guard WorkspacePresentationModeSettings.mode() != .minimal else {
+        // Minimal mode shows the accessory only while the window's sidebar is hidden
+        // (the sidebar header carries the controls otherwise). It is removed outright
+        // rather than left attached-but-hidden: a hidden accessory view controller still
+        // participates in titlebar layout/safe-area calculations on some window states.
+        if WorkspacePresentationModeSettings.mode() == .minimal,
+           AppDelegate.shared?.contextForMainTerminalWindow(window, reindex: false)?.sidebarState.isVisible != false {
             removeAccessoryIfPresent(from: window)
             return
         }
@@ -1816,10 +1810,7 @@ final class UpdateTitlebarAccessoryController {
     }
 
     private func isSettingsWindow(_ window: NSWindow) -> Bool {
-        if window.identifier?.rawValue == "programa.settings" {
-            return true
-        }
-        return window.title == "Settings"
+        window.identifier?.rawValue == "programa.settings"
     }
 
     private func isMainTerminalWindow(_ window: NSWindow) -> Bool {

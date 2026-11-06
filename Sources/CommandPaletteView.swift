@@ -85,11 +85,11 @@ extension CommandPaletteView {
                 }
                 .frame(width: targetWidth)
                 .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: ChromeScale.rowCornerRadius, style: .continuous)
                         .fill(Color(nsColor: .windowBackgroundColor).opacity(0.98))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: ChromeScale.rowCornerRadius, style: .continuous)
                         .stroke(Color(nsColor: .separatorColor).opacity(0.7), lineWidth: 1)
                 )
                 .shadow(color: Color.black.opacity(0.24), radius: 10, x: 0, y: 5)

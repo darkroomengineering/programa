@@ -104,9 +104,11 @@ struct SurfaceSearchOverlay: View {
                 onNavigateSearch("navigate_search:next")
             }) {
                 Image(systemName: "chevron.up")
+                    .font(.system(size: ChromeScale.controlIconSize, weight: .regular))
             }
             .buttonStyle(SearchButtonStyle())
             .safeHelp(String(localized: "search.nextMatch.help", defaultValue: "Next match (Return)"))
+            .accessibilityLabel(String(localized: "menu.find.findNext", defaultValue: "Find Next"))
 
             Button(action: {
                 #if DEBUG
@@ -115,9 +117,11 @@ struct SurfaceSearchOverlay: View {
                 onNavigateSearch("navigate_search:previous")
             }) {
                 Image(systemName: "chevron.down")
+                    .font(.system(size: ChromeScale.controlIconSize, weight: .regular))
             }
             .buttonStyle(SearchButtonStyle())
             .safeHelp(String(localized: "search.previousMatch.help", defaultValue: "Previous match (Shift+Return)"))
+            .accessibilityLabel(String(localized: "menu.find.findPrevious", defaultValue: "Find Previous"))
 
             Button(action: {
                 #if DEBUG
@@ -126,9 +130,11 @@ struct SurfaceSearchOverlay: View {
                 onClose()
             }) {
                 Image(systemName: "xmark")
+                    .font(.system(size: ChromeScale.closeIconSize, weight: .semibold))
             }
             .buttonStyle(SearchButtonStyle())
             .safeHelp(String(localized: "search.close.help", defaultValue: "Close (Esc)"))
+            .accessibilityLabel(String(localized: "workspace.markdown.find.close", defaultValue: "Close Find"))
         }
         .padding(8)
     }
@@ -139,7 +145,7 @@ struct SurfaceSearchOverlay: View {
             ProgramaNativeGlassContentHost(
                 content: searchControls,
                 tintColor: nil,
-                cornerRadius: 8
+                cornerRadius: ChromeScale.rowCornerRadius
             )
             .fixedSize(horizontal: true, vertical: true)
             .shadow(radius: 4)
@@ -192,7 +198,7 @@ struct SurfaceSearchOverlay: View {
     }
 
     private var clipShape: some Shape {
-        RoundedRectangle(cornerRadius: 8)
+        RoundedRectangle(cornerRadius: ChromeScale.rowCornerRadius)
     }
 
     enum Corner {
@@ -244,12 +250,12 @@ struct SearchButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(isHovered || configuration.isPressed ? .primary : .secondary)
-            .padding(.horizontal, 2)
-            .frame(height: 26)
+            .frame(minWidth: ChromeScale.minimumHitTarget, minHeight: 26)
             .background(
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: ChromeScale.controlCornerRadius)
                     .fill(backgroundColor(isPressed: configuration.isPressed))
             )
+            .contentShape(Rectangle())
             .onHover { hovering in
                 isHovered = hovering
             }

@@ -10158,6 +10158,40 @@
         }
       }
     },
+    "settings.app.settingsFile.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings File"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定ファイル"
+          }
+        }
+      }
+    },
+    "settings.app.settingsFile.open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開く"
+          }
+        }
+      }
+    },
     "settings.app.showInMenuBar": {
       "extractionState": "manual",
       "localizations": {
@@ -11059,6 +11093,23 @@
         }
       }
     },
+    "settings.notifications.sound.preview": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Play Sound"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サウンドを再生"
+          }
+        }
+      }
+    },
     "settings.preset.hudGlass": {
       "extractionState": "manual",
       "localizations": {
@@ -11276,23 +11327,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "通知"
-          }
-        }
-      }
-    },
-    "settings.section.reset": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reset"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "リセット"
           }
         }
       }
@@ -15445,6 +15479,23 @@
         }
       }
     },
+    "tabBar.showAllTabs": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show All Tabs"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべてのタブを表示"
+          }
+        }
+      }
+    },
     "crash_recovery.notification.title": {
       "extractionState": "manual",
       "localizations": {
@@ -15594,6 +15645,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "フォント"
+          }
+        }
+      }
+    },
+    "settings.terminalFont.size": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Font Size"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォントサイズ"
           }
         }
       }

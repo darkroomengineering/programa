@@ -64,7 +64,7 @@ private struct SidebarFooterButtons: View {
 private struct SidebarUsageButton: View {
     private let title = String(localized: "sidebar.usage.button", defaultValue: "Provider Usage")
     private let buttonSize = SidebarFooterControlLayout.buttonSize
-    private let iconSize: CGFloat = 11
+    private let iconSize = ChromeScale.toolbarIconSize
 
     @StateObject private var store = ProviderUsageStore()
     @State private var isPopoverPresented = false
@@ -81,7 +81,7 @@ private struct SidebarUsageButton: View {
         } label: {
             Image(systemName: "gauge.with.dots.needle.33percent")
                 .symbolRenderingMode(.monochrome)
-                .symbolRasterSize(iconSize, weight: .medium)
+                .symbolRasterSize(iconSize, weight: .regular)
                 .foregroundStyle(Color(nsColor: .secondaryLabelColor))
                 .frame(width: buttonSize, height: buttonSize, alignment: .center)
                 .contentShape(Rectangle())
@@ -131,7 +131,7 @@ private struct SidebarHelpMenuButton: View {
     private let websiteURL = URL(string: "https://darkroom.engineering")
     private let helpTitle = String(localized: "sidebar.help.button", defaultValue: "Help")
     private let buttonSize = SidebarFooterControlLayout.buttonSize
-    private let iconSize: CGFloat = 11
+    private let iconSize = ChromeScale.toolbarIconSize
     @ObservedObject private var keyboardShortcutSettingsObserver = KeyboardShortcutSettingsObserver.shared
 
     let onSendFeedback: () -> Void
@@ -149,7 +149,7 @@ private struct SidebarHelpMenuButton: View {
         } label: {
             Image(systemName: "questionmark.circle")
                 .symbolRenderingMode(.monochrome)
-                .symbolRasterSize(iconSize, weight: .medium)
+                .symbolRasterSize(iconSize, weight: .regular)
                 .foregroundStyle(Color(nsColor: .secondaryLabelColor))
                 .frame(width: buttonSize, height: buttonSize, alignment: .center)
                 .contentShape(Rectangle())
@@ -284,7 +284,7 @@ private struct SidebarHelpMenuButton: View {
                     helpOptionTrailingIcon(systemName: trailingSystemImage)
                 }
                 if isExternalLink {
-                    helpOptionTrailingIcon(systemName: "arrow.up.right", size: 8)
+                    helpOptionTrailingIcon(systemName: "arrow.up.right", size: ChromeScale.captionFontSize)
                 }
             }
             .padding(.horizontal, 8)

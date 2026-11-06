@@ -894,8 +894,11 @@ struct ReviewPanelView: View {
             Button {
                 panel.removeComment(id: comment.id)
             } label: {
-                Image(systemName: "xmark.circle.fill")
+                Image(systemName: "xmark")
+                    .font(.system(size: ChromeScale.closeIconSize, weight: .semibold))
                     .foregroundColor(.secondary)
+                    .frame(width: ChromeScale.minimumHitTarget, height: ChromeScale.minimumHitTarget)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .safeHelp(String(localized: "review.comment.remove.help", defaultValue: "Remove comment"))

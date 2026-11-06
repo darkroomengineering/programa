@@ -83,9 +83,9 @@ struct TabBarView: View {
     @AppStorage("chromeDensity.tabBarHeight") private var densityTabBarHeight = 26.0
     @AppStorage("chromeDensity.tabHorizontalPadding") private var densityTabHorizontalPadding = 8.0
     @AppStorage("chromeDensity.tabIconSize") private var densityTabIconSize = 13.0
-    @AppStorage("chromeDensity.tabTitleFontSize") private var densityTabTitleFontSize = 12.0
+    @AppStorage("chromeDensity.tabTitleFontSize") private var densityTabTitleFontSize = 13.0
     @AppStorage("chromeDensity.tabCloseButtonSize") private var densityTabCloseButtonSize = 14.0
-    @AppStorage("chromeDensity.tabCloseIconSize") private var densityTabCloseIconSize = 8.0
+    @AppStorage("chromeDensity.tabCloseIconSize") private var densityTabCloseIconSize = 10.0
     @AppStorage("chromeDensity.tabContentSpacing") private var densityTabContentSpacing = 5.0
     #endif
 
@@ -519,12 +519,12 @@ struct TabBarView: View {
     @ViewBuilder
     private var splitButtons: some View {
         let tooltips = controller.configuration.appearance.splitButtonTooltips
-        HStack(spacing: 4) {
+        HStack(spacing: 0) {
             Button {
                 controller.requestNewTab(kind: "terminal", inPane: pane.id)
             } label: {
                 Image(systemName: "terminal")
-                    .font(.system(size: 12))
+                    .font(.system(size: TabBarMetrics.controlIconSize))
             }
             .buttonStyle(SplitActionButtonStyle(appearance: appearance))
             .safeHelp(tooltips.newTerminal)
@@ -533,7 +533,7 @@ struct TabBarView: View {
                 controller.splitPane(pane.id, orientation: .horizontal)
             } label: {
                 Image(systemName: "square.split.2x1")
-                    .font(.system(size: 12))
+                    .font(.system(size: TabBarMetrics.controlIconSize))
             }
             .buttonStyle(SplitActionButtonStyle(appearance: appearance))
             .safeHelp(tooltips.splitRight)
@@ -542,7 +542,7 @@ struct TabBarView: View {
                 controller.splitPane(pane.id, orientation: .vertical)
             } label: {
                 Image(systemName: "square.split.1x2")
-                    .font(.system(size: 12))
+                    .font(.system(size: TabBarMetrics.controlIconSize))
             }
             .buttonStyle(SplitActionButtonStyle(appearance: appearance))
             .safeHelp(tooltips.splitDown)
@@ -621,6 +621,8 @@ private struct SplitActionButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(TabBarColors.splitActionIcon(for: appearance, isPressed: configuration.isPressed))
+            .frame(width: TabBarMetrics.minimumHitTarget, height: TabBarMetrics.minimumHitTarget)
+            .contentShape(Rectangle())
     }
 }
 

@@ -28,12 +28,15 @@ enum TabBarMetrics {
     static let tabSpacing: CGFloat = 0
     static let activeIndicatorHeight: CGFloat = 2
 
-    // MARK: - Tab Content
+    // MARK: - Tab Content (twin of Programa's `ChromeScale` in Sources/WindowChrome.swift)
 
     static var iconSize: CGFloat { resolved("tabIconSize", default: 13) }
-    static var titleFontSize: CGFloat { resolved("tabTitleFontSize", default: 12) }
+    static var titleFontSize: CGFloat { resolved("tabTitleFontSize", default: 13) }
     static var closeButtonSize: CGFloat { resolved("tabCloseButtonSize", default: 14) }
-    static var closeIconSize: CGFloat { resolved("tabCloseIconSize", default: 8) }
+    static var closeIconSize: CGFloat { resolved("tabCloseIconSize", default: 10) }
+    /// Clickable area of an icon-only button; the drawn glyph and hover fill stay smaller.
+    static let minimumHitTarget: CGFloat = 24
+    static let controlIconSize: CGFloat = 13
     static let dirtyIndicatorSize: CGFloat = 8
     static let notificationBadgeSize: CGFloat = 6
     static var contentSpacing: CGFloat { resolved("tabContentSpacing", default: 5) }
