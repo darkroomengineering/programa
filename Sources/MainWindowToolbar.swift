@@ -133,6 +133,43 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
         return trailingEdge
     }
 
+    private static var cachedCollapsedTrailingEdge: CGFloat?
+
+    /// Where the collapsed-sidebar controls end in a windowed main window. Every main window
+    /// shares the traffic lights and toolbar, so the first reading is measured once in an
+    /// offscreen window with the collapsed item set; a window that has not collapsed yet uses
+    /// it so its first collapse does not start from a stale inset.
+    static func expectedCollapsedControlsTrailingEdge() -> CGFloat? {
+        if let cachedCollapsedTrailingEdge { return cachedCollapsedTrailingEdge }
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 900, height: 450),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: true
+        )
+        window.isReleasedWhenClosed = false
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        let delegate = MainWindowToolbar()
+        delegate.window = window
+        let toolbar = NSToolbar(identifier: makeIdentifier())
+        toolbar.delegate = delegate
+        toolbar.allowsUserCustomization = false
+        toolbar.autosavesConfiguration = false
+        toolbar.displayMode = .iconOnly
+        window.toolbar = toolbar
+        window.toolbarStyle = .unified
+        for index in toolbar.items.indices.reversed()
+        where [.flexibleSpace, trackingID].contains(toolbar.items[index].itemIdentifier) {
+            toolbar.removeItem(at: index)
+        }
+        let edge = collapsedControlsTrailingEdge(in: window)
+        window.toolbar = nil
+        window.close()
+        cachedCollapsedTrailingEdge = edge
+        return edge
+    }
+
     /// The bell of `window`'s toolbar while the toolbar is showing; the notifications
     /// popover anchors to it.
     static func notificationsItem(in window: NSWindow) -> NSToolbarItem? {
