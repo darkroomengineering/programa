@@ -76,6 +76,14 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
         }
     }
 
+    /// The bell of `window`'s toolbar while the toolbar is showing; the notifications
+    /// popover anchors to it.
+    static func notificationsItem(in window: NSWindow) -> NSToolbarItem? {
+        guard let toolbar = window.toolbar, toolbar.isVisible,
+              let delegate = toolbar.delegate as? MainWindowToolbar else { return nil }
+        return delegate.notificationsItem
+    }
+
     private static func sidebarSplitView(in view: NSView?) -> NSSplitView? {
         guard let view else { return nil }
         if let split = view as? NSSplitView, split is MainSidebarSplitViewMarker { return split }
@@ -191,7 +199,7 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
     }
 
     @objc private func showNotifications(_ sender: Any?) {
-        AppDelegate.shared?.toggleNotificationsPopover(animated: true, anchorView: nil)
+        AppDelegate.shared?.toggleNotificationsPopover(animated: true, window: window)
     }
 
     @objc private func newTab(_ sender: Any?) {

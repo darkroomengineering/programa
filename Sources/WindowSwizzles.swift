@@ -386,28 +386,13 @@ extension NSWindow {
         return false
     }
 
-    /// True when `hitView` is owned by a `TitlebarControlsAccessoryViewController`
-    /// (the help/notifications/new-tab cluster) installed on `window`, so its own
-    /// gestures (including non-`NSControl` hover chrome inside it) are preserved.
-    private static func programaIsWithinTitlebarControlsAccessory(_ hitView: NSView, in window: NSWindow) -> Bool {
-        for controller in window.titlebarAccessoryViewControllers {
-            guard controller is TitlebarControlsAccessoryViewController else { continue }
-            if hitView === controller.view || hitView.isDescendant(of: controller.view) {
-                return true
-            }
-        }
-        return false
-    }
-
     /// True when a `leftMouseDown` hit on `hitView` should start a titlebar-style
     /// window drag (or, on double-click, the standard zoom): unclaimed background
-    /// (see `programaIsTitlebarChromeHit`), and not a real control or the titlebar
-    /// controls accessory cluster. Internal (not private) as the unit-test seam
+    /// (see `programaIsTitlebarChromeHit`), and not a real control. Internal (not private) as the unit-test seam
     /// for the popover-click regression in WindowAndDragTests.
     static func programaIsTitlebarBackgroundDragTarget(_ hitView: NSView, in window: NSWindow) -> Bool {
         guard programaIsTitlebarChromeHit(hitView) else { return false }
         if programaIsControlOrControlDescendant(hitView) { return false }
-        if programaIsWithinTitlebarControlsAccessory(hitView, in: window) { return false }
         return true
     }
 
