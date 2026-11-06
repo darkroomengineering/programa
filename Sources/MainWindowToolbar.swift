@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 
 /// The main window's system toolbar: `[flexible space, (notifications, new tab), toggle,
 /// tracking separator]`, with the tracking separator pinned to the sidebar split's divider so
@@ -15,6 +16,9 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
 
     private weak var window: NSWindow?
     private weak var splitView: NSSplitView?
+    private weak var notificationsItem: NSToolbarItem?
+    private var unreadCancellable: AnyCancellable?
+    private var showsUnreadImage: Bool?
 
     /// Toolbars that share an identifier sync item removals across windows, so every main
     /// window gets its own.
@@ -29,8 +33,6 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
     /// Installs the toolbar once the window's sidebar split exists. Called from the split
     /// view reaching the window and from `configureMainWindow`, whichever runs last wins.
     static func installIfNeeded(on window: NSWindow) {
-        // PR 2 brings the toolbar to macOS 14/15; until then they keep the sidebar header controls.
-        guard WindowGlassEffect.isAvailable else { return }
         if window.toolbar?.delegate is MainWindowToolbar { return }
         guard let split = sidebarSplitView(in: window.contentView),
               let controller = split.delegate as? MainSidebarSplitViewController else { return }
@@ -121,6 +123,8 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
             )
             let group = NSToolbarItemGroup(itemIdentifier: itemIdentifier)
             group.subitems = [notifications, newTab]
+            notificationsItem = notifications
+            observeUnreadNotifications()
             return group
         case Self.toggleID:
             return makeItem(
@@ -155,6 +159,35 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
         item.target = self
         item.action = action
         return item
+    }
+
+    /// Unread notifications swap the bell for a filled bell in the accent color.
+    private func observeUnreadNotifications() {
+        refreshNotificationsImage()
+        guard unreadCancellable == nil else { return }
+        // `notifications` publishes from willSet; hopping to the next main-queue turn reads
+        // the unread count after the store has rebuilt its indexes.
+        unreadCancellable = TerminalNotificationStore.shared.$notifications
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated { self?.refreshNotificationsImage() }
+            }
+    }
+
+    private func refreshNotificationsImage() {
+        guard let item = notificationsItem else { return }
+        let hasUnread = TerminalNotificationStore.shared.unreadCount > 0
+        guard showsUnreadImage != hasUnread else { return }
+        showsUnreadImage = hasUnread
+        if hasUnread {
+            let image = NSImage(systemSymbolName: "bell.fill", accessibilityDescription: item.label)?
+                .withSymbolConfiguration(NSImage.SymbolConfiguration(paletteColors: [programaAccentNSColor()]))
+            // Toolbar buttons tint template images with the label color.
+            image?.isTemplate = false
+            item.image = image
+        } else {
+            item.image = NSImage(systemSymbolName: "bell", accessibilityDescription: item.label)
+        }
     }
 
     @objc private func showNotifications(_ sender: Any?) {

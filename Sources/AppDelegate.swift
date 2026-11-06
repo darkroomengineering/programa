@@ -5269,6 +5269,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         if !window.titlebarAppearsTransparent {
             window.titlebarAppearsTransparent = true
         }
+        // The toolbar shares the titlebar row; the WindowGroup launch window would
+        // otherwise show its title until the toolbar installs.
+        if window.titleVisibility != .hidden {
+            window.titleVisibility = .hidden
+        }
         // isMovableByWindowBackground=true breaks sidebar tab reordering, so
         // drag-to-move goes through WindowDragHandleView's performDrag. The
         // window itself stays movable (see createMainWindow) so the Window menu
