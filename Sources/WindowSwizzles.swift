@@ -154,6 +154,7 @@ extension NSWindow {
         // own gestures -- and folder-icon drag suppression keeps priority over
         // this (checked first, matching the guard below).
         if event.type == .leftMouseDown,
+           event.locationInWindow.y >= contentLayoutRect.maxY,
            !shouldSuppressWindowMoveForFolderDrag(window: self, event: event),
            let hitView = programaFirstResponderGuardHitViewContext,
            Self.programaIsTitlebarBackgroundDragTarget(hitView, in: self) {
@@ -354,8 +355,7 @@ extension NSWindow {
         return hitView.isDescendant(of: container)
     }
 
-    /// True when `hitView` is a main-window SwiftUI host (`window.contentView` in
-    /// AppKit-created windows, or a sidebar split column host) -- what AppKit's
+    /// True when `hitView` is the main-window root SwiftUI host -- what AppKit's
     /// hit-test falls back to when nothing more specific (no SwiftUI view, no
     /// WindowDragHandleView mount) claims the point.
     ///
@@ -371,8 +371,8 @@ extension NSWindow {
     /// contentView — treating that as dead chrome swallows every click in the
     /// update popover (including its Install button), and the accessory check
     /// downstream throws on popover-style windows.
-    private static func programaIsTitlebarChromeHit(_ hitView: NSView) -> Bool {
-        hitView is MainWindowHostingViewMarker
+    private static func programaIsTitlebarChromeHit(_ hitView: NSView, in window: NSWindow) -> Bool {
+        hitView === window.contentView && hitView is MainWindowHostingViewMarker
     }
 
     private static func programaIsControlOrControlDescendant(_ view: NSView) -> Bool {
@@ -391,7 +391,7 @@ extension NSWindow {
     /// (see `programaIsTitlebarChromeHit`), and not a real control. Internal (not private) as the unit-test seam
     /// for the popover-click regression in WindowAndDragTests.
     static func programaIsTitlebarBackgroundDragTarget(_ hitView: NSView, in window: NSWindow) -> Bool {
-        guard programaIsTitlebarChromeHit(hitView) else { return false }
+        guard programaIsTitlebarChromeHit(hitView, in: window) else { return false }
         if programaIsControlOrControlDescendant(hitView) { return false }
         return true
     }

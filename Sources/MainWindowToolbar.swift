@@ -68,6 +68,12 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
             window.titleVisibility = .hidden
         }
         setSidebarCollapsed(controller.isSidebarCollapsed, in: window)
+        if let themeFrame = window.contentView?.superview {
+            let router = MainWindowToolbarHitView(frame: themeFrame.bounds)
+            router.contentHost = controller.contentHost
+            router.autoresizingMask = [.width, .height]
+            themeFrame.addSubview(router, positioned: .above, relativeTo: nil)
+        }
     }
 
     /// With the sidebar collapsed the group and toggle sit right after the traffic lights.
@@ -345,5 +351,44 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
 
     @objc private func toggleSidebar(_ sender: Any?) {
         _ = AppDelegate.shared?.toggleSidebarForWindow(window)
+    }
+}
+
+/// The transparent toolbar overlaps minimal-mode pane chrome. Route background hits
+/// through the theme frame so AppKit retains normal mouse tracking and accessibility hits.
+private final class MainWindowToolbarHitView: NSView {
+    weak var contentHost: NSView?
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        switch NSApp.currentEvent?.type {
+        case .keyDown, .keyUp, .flagsChanged:
+            return nil
+        default:
+            break
+        }
+        guard let window, let themeFrame = superview,
+              window.toolbar?.isVisible == true,
+              !window.styleMask.contains(.fullScreen),
+              WorkspacePresentationModeSettings.isMinimal(),
+              frame.contains(point),
+              let titlebar = window.standardWindowButton(.closeButton)?.superview else { return nil }
+        let windowPoint = themeFrame.convert(point, to: nil)
+        guard windowPoint.y >= window.contentLayoutRect.maxY else { return nil }
+        let container = titlebar.superview ?? titlebar
+        guard let containerParent = container.superview,
+              let titlebarHit = container.hitTest(containerParent.convert(windowPoint, from: nil)) else { return nil }
+        var ancestor: NSView? = titlebarHit
+        while let view = ancestor {
+            if view is NSControl { return nil }
+            ancestor = view.superview
+        }
+        for sibling in themeFrame.subviews.reversed() where sibling !== self && sibling !== container {
+            guard !sibling.isHiddenOrHasHiddenAncestor,
+                  let hit = sibling.hitTest(point) else { continue }
+            if hit === window.contentView { continue }
+            if hit is MainWindowHostingViewMarker, hit !== contentHost { continue }
+            return hit
+        }
+        return nil
     }
 }
