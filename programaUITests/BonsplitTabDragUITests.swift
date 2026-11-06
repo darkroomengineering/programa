@@ -184,11 +184,14 @@ final class BonsplitTabDragUITests: XCTestCase {
         let workspaceRow = app.descendants(matching: .any).matching(identifier: workspaceRowIdentifier).firstMatch
         XCTAssertTrue(workspaceRow.waitForExistence(timeout: 5.0), "Expected workspace row to exist")
 
-        // Unified toolbar holding the traffic lights and controls (52) + list padding (8).
+        let toolbar = window.toolbars.firstMatch
+        XCTAssertTrue(toolbar.waitForExistence(timeout: 5.0), "Expected the main window toolbar to exist")
+        let toolbarHeight = toolbar.frame.maxY - window.frame.minY
+        XCTAssertGreaterThan(toolbarHeight, 0, "Expected the toolbar to have a measurable height")
         let topInset = distanceToTopEdge(of: workspaceRow, in: window)
         XCTAssertEqual(
             topInset,
-            60,
+            toolbarHeight + 8,
             accuracy: 4,
             "Expected minimal mode to keep the sidebar workspace row below the toolbar that holds the traffic lights. window=\(window.frame) workspaceRow=\(workspaceRow.frame) topInset=\(topInset)"
         )
