@@ -92,7 +92,7 @@ final class WindowGlassEffectTests: XCTestCase {
         XCTAssertFalse(themeFrame.subviews.contains(where: { $0 === backdrop }))
     }
 
-    func testMainWindowToolbarHidesInFullScreenAndReturnsAfter() {
+    func testMainWindowToolbarStaysVisibleThroughFullScreenTransitions() {
         _ = NSApplication.shared
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 320, height: 200),
@@ -104,19 +104,17 @@ final class WindowGlassEffectTests: XCTestCase {
         window.toolbar = toolbar
         XCTAssertTrue(toolbar.isVisible)
 
-        // Native full screen draws a visible toolbar as an opaque strip over
-        // the sidebar header and tab strip; the toolbar must go away for the
-        // duration and come back in the window.
-        AppDelegate.syncMainWindowToolbarVisibility(window, inFullScreen: true)
-        XCTAssertFalse(toolbar.isVisible)
-        AppDelegate.syncMainWindowToolbarVisibility(window, inFullScreen: false)
-        XCTAssertTrue(toolbar.isVisible)
-
-        // Only main-window toolbars (per-window identifiers) are managed.
-        let foreign = NSToolbar(identifier: NSToolbar.Identifier("test.other"))
-        window.toolbar = foreign
-        AppDelegate.syncMainWindowToolbarVisibility(window, inFullScreen: true)
-        XCTAssertTrue(foreign.isVisible)
+        // Full screen keeps the toolbar: its bell anchors the notifications popover and its
+        // toggle shows the sidebar there too.
+        for name in [
+            NSWindow.willEnterFullScreenNotification,
+            NSWindow.didEnterFullScreenNotification,
+            NSWindow.willExitFullScreenNotification,
+            NSWindow.didExitFullScreenNotification,
+        ] {
+            NotificationCenter.default.post(name: name, object: window)
+            XCTAssertTrue(toolbar.isVisible, "\(name.rawValue) hid the main window toolbar")
+        }
     }
 
     func testNativePaneChromePillsOwnAppKitControlsAboveTerminalPortal() throws {

@@ -65,7 +65,7 @@ extension AppDelegate {
         (.newWindow, consume { app, _, _ in app.openNewMainWindow(nil) }),
         (.openFolder, consume { app, _, _ in app.showOpenFolderPanel() }),
         (.showNotifications, consume { app, _, _ in
-            app.toggleNotificationsPopover(animated: false, anchorView: app.fullscreenControlsViewModel?.notificationsAnchorView)
+            app.toggleNotificationsPopover(animated: false)
         }),
         (.sendFeedback, { app, _, event, _ in app.handleSendFeedbackShortcutAction(event: event) }),
         (.jumpToUnread, consume { app, _, _ in

@@ -718,35 +718,6 @@ struct TitlebarGlassSurface: ViewModifier {
     }
 }
 
-struct HiddenTitlebarSidebarControlsView: View {
-    @ObservedObject var notificationStore: TerminalNotificationStore
-    @ObservedObject var sidebarState: SidebarState
-    @StateObject private var viewModel = TitlebarControlsViewModel()
-
-    private var hostHeight: CGFloat {
-        WindowGlassEffect.isAvailable ? TitlebarControlsMetrics.glassHeight : 28
-    }
-
-    var body: some View {
-        TitlebarControlsView(
-            notificationStore: notificationStore,
-            viewModel: viewModel,
-            onToggleSidebar: { sidebarState.toggle() },
-            onToggleNotifications: { [viewModel] in
-                AppDelegate.shared?.toggleNotificationsPopover(
-                    animated: true,
-                    anchorView: viewModel.notificationsAnchorView
-                )
-            },
-            onNewTab: { _ = AppDelegate.shared?.tabManager?.addTab() },
-            visibilityMode: .alwaysVisible,
-            placement: .sidebarHeader
-        )
-        .frame(maxWidth: .infinity, alignment: .trailing)
-        .frame(height: hostHeight)
-    }
-}
-
 enum TitlebarControlsVisibilityMode {
     case alwaysVisible
     case onHover
@@ -945,9 +916,8 @@ func titlebarControlsShouldApplyLayout(
         || abs(previous.yOffset - next.yOffset) > tolerance
 }
 
-/// Owns the app's notifications popover. It anchors to the main window toolbar's bell, or
-/// to an explicit anchor view (the full-screen controls), and falls back to the window's
-/// top-left corner when the toolbar is hidden.
+/// Owns the app's notifications popover. It anchors to the main window toolbar's bell, in
+/// full screen too, and falls back to the window's top-left corner when the toolbar is hidden.
 @MainActor
 final class NotificationsPopoverController: NSObject, NSPopoverDelegate {
     private lazy var popover: NSPopover = {
@@ -960,17 +930,17 @@ final class NotificationsPopoverController: NSObject, NSPopoverDelegate {
 
     var isShown: Bool { popover.isShown }
 
-    func toggle(animated: Bool, anchorView: NSView? = nil, window: NSWindow? = nil) {
+    func toggle(animated: Bool, window: NSWindow? = nil) {
         if popover.isShown {
             popover.performClose(nil)
             return
         }
-        show(animated: animated, anchorView: anchorView, window: window)
+        show(animated: animated, window: window)
     }
 
-    func show(animated: Bool, anchorView: NSView? = nil, window: NSWindow? = nil) {
+    func show(animated: Bool, window: NSWindow? = nil) {
         guard !popover.isShown,
-              let window = anchorView?.window ?? window ?? Self.preferredMainWindow(),
+              let window = window ?? Self.preferredMainWindow(),
               let contentView = window.contentView else { return }
         // Recreate the content each time so no SwiftUI observers outlive a closed popover.
         let hostingController = NSHostingController(
@@ -989,15 +959,6 @@ final class NotificationsPopoverController: NSObject, NSPopoverDelegate {
         popover.contentViewController = hostingController
         popover.animates = animated
 
-        if let anchorView, anchorView.window === window {
-            anchorView.superview?.layoutSubtreeIfNeeded()
-            let anchorRect = anchorView.convert(anchorView.bounds, to: contentView)
-            if !anchorRect.isEmpty {
-                popover.show(relativeTo: anchorRect, of: contentView, preferredEdge: .maxY)
-                postNotificationsPopoverVisibilityDidChange(isShown: true)
-                return
-            }
-        }
         if let bell = MainWindowToolbar.notificationsItem(in: window) {
             popover.show(relativeTo: bell)
             postNotificationsPopoverVisibilityDidChange(isShown: true)
