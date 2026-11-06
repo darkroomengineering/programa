@@ -10,7 +10,7 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
     static let newTabID = NSToolbarItem.Identifier("titlebarControl.newTab")
     static let toggleID = NSToolbarItem.Identifier("titlebarControl.toggleSidebar")
     static let trackingID = NSToolbarItem.Identifier("titlebarControl.sidebarTracking")
-    private static let identifierPrefix = "programa.main.titlebar."
+    private nonisolated static let identifierPrefix = "programa.main.titlebar."
     private static var associationKey: UInt8 = 0
 
     private weak var window: NSWindow?
@@ -18,7 +18,7 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
 
     /// Toolbars that share an identifier sync item removals across windows, so every main
     /// window gets its own.
-    static func makeIdentifier() -> NSToolbar.Identifier {
+    nonisolated static func makeIdentifier() -> NSToolbar.Identifier {
         NSToolbar.Identifier(identifierPrefix + UUID().uuidString)
     }
 
