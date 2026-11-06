@@ -134,6 +134,9 @@ struct VerticalTabsSidebar: View {
     @Binding var selection: SidebarSelection
     @Binding var selectedTabIds: Set<UUID>
     @Binding var lastSidebarSelectionIndex: Int?
+    /// Height of the window's titlebar and toolbar. The column hosts report a zero safe
+    /// area (`MainWindowHostingView`), so the list clears the toolbar explicitly.
+    let titlebarHeight: CGFloat
     @StateObject private var modifierKeyMonitor = SidebarShortcutHintModifierMonitor()
     @StateObject private var dragAutoScrollController = SidebarDragAutoScrollController()
     @StateObject private var dragFailsafeMonitor = SidebarDragFailsafeMonitor()
@@ -145,14 +148,15 @@ struct VerticalTabsSidebar: View {
     @AppStorage(WorkspacePresentationModeSettings.modeKey)
     private var workspacePresentationMode = WorkspacePresentationModeSettings.defaultMode.rawValue
 
-    /// Content clearance inside the glass panel for the traffic lights and the
-    /// always-visible titlebar controls that share the panel's top strip.
-    private let trafficLightPadding: CGFloat = WindowGlassEffect.sidebarHeaderHeight
     @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
 
-    /// Inverted layout: sidebar rendered directly on the window glass backdrop.
+    /// macOS 26+: the sidebar sits flush on the system sidebar glass.
     private var usesBackdropSidebar: Bool {
         WindowGlassEffect.isAvailable && !accessibilityReduceTransparency
+    }
+    /// The inset panel (macOS 14/15, Reduce Transparency) already starts below the column top.
+    private var toolbarClearance: CGFloat {
+        max(0, titlebarHeight - (usesBackdropSidebar ? 0 : WindowGlassEffect.sidebarPanelInset))
     }
     /// Resolved from `ChromeDensity.sidebarRowSpacing` (see `WindowChrome.swift`).
     private var tabRowSpacing: CGFloat { ChromeDensity.sidebarRowSpacing }
@@ -198,28 +202,11 @@ struct VerticalTabsSidebar: View {
         let runningHelperCounts = agentSupervision.runningHelperCounts
         let finishedHelperCounts = agentSupervision.finishedHelperCounts
         let sidebarContent = VStack(spacing: 0) {
-            // Single header row shared with the traffic lights (Maps-style): the
-            // lights float over its leading side with the sidebar toggle right after
-            // them, the other controls sit trailing, and the gaps drag/double-click
-            // like a titlebar.
-            HiddenTitlebarSidebarControlsView(
-                notificationStore: notificationStore,
-                sidebarState: sidebarState
-            )
-            .frame(height: trafficLightPadding)
-            // Flush sidebar (no panel inset): keep the header aligned with
-            // AppKit's native titlebar controls.
-            .padding(.top, usesBackdropSidebar ? WindowGlassEffect.sidebarPanelInset : 0)
-            .contentShape(Rectangle())
-            .background(
-                // onDoubleClick replaces the standard zoom/minimize titlebar
-                // action here — double-click on the header strip opens a tab.
-                WindowDragHandleView(onDoubleClick: { tabManager.addTab() })
-            )
-            // On macOS 26 the list's HostingScrollView (and its BackdropView) is laid out
-            // over the header strip. Without this, the list wins the hit-test and a click
-            // on the header controls never reaches them.
-            .zIndex(1)
+            // The traffic lights and toolbar controls sit above the list; the strip is
+            // the toolbar's, so it drags and double-click zooms like any titlebar.
+            Color.clear
+                .frame(height: toolbarClearance)
+                .allowsHitTesting(false)
 
             GeometryReader { proxy in
                 ScrollViewReader { scrollProxy in
@@ -340,8 +327,7 @@ struct VerticalTabsSidebar: View {
 
         ZStack {
             if usesBackdropSidebar {
-                // Inverted (Aside-style): the sidebar sits flush on the window's
-                // glass backdrop — no base plane, no panel inset.
+                // The system sidebar split item draws the glass; no base plane, no panel inset.
                 SidebarSurface(content: sidebarContent)
             } else {
                 SidebarTerminalBasePlane()
