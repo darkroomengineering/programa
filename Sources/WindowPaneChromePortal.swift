@@ -714,15 +714,25 @@ private final class NativePaneTabBarView: PaneChromeDragBackgroundView {
         let contentWidth = max(0, descriptor.leadingInset)
             + widths.reduce(0, +)
             + Self.pillGap * CGFloat(max(0, widths.count - 1))
-        let roomWithPlus = max(0, stripFrame.width - size - gap)
+        // In a pane too narrow for them, the "+" and then the chevron drop out
+        // rather than spill over the trailing pane controls.
+        let slot = size + gap
+        let showsPlus = stripFrame.width >= slot
+        let roomWithPlus = showsPlus ? stripFrame.width - slot : stripFrame.width
         let overflows = contentWidth > roomWithPlus + 0.5
-        overflowButton.isHidden = !overflows
-        stripFrame.size.width = overflows ? max(0, roomWithPlus - size - gap) : contentWidth
+        let showsChevron = overflows && roomWithPlus >= slot
+        newTabButton.isHidden = !showsPlus
+        overflowButton.isHidden = !showsChevron
+        stripFrame.size.width = overflows
+            ? (showsChevron ? roomWithPlus - slot : roomWithPlus)
+            : contentWidth
         let y = (stripFrame.midY - size / 2).rounded()
         var x = stripFrame.maxX + gap
-        newTabButton.frame = NSRect(x: x, y: y, width: size, height: size)
-        x += size + gap
-        if overflows {
+        if showsPlus {
+            newTabButton.frame = NSRect(x: x, y: y, width: size, height: size)
+            x += slot
+        }
+        if showsChevron {
             overflowButton.frame = NSRect(x: x, y: y, width: size, height: size)
         }
     }
