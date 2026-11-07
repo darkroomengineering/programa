@@ -430,9 +430,15 @@ extension Workspace: @preconcurrency BonsplitDelegate {
             }
         }
 
-        let explicitUserClose = explicitUserCloseTabIds.remove(tab.id) != nil
+        let explicitUserClose: Bool
+        if case .explicitUserClose? = tabCloseStates[tab.id] {
+            tabCloseStates.removeValue(forKey: tab.id)
+            explicitUserClose = true
+        } else {
+            explicitUserClose = false
+        }
 
-        if forceCloseTabIds.contains(tab.id) {
+        if case .approved? = tabCloseStates[tab.id] {
             recordPostCloseSelection()
             return true
         }
@@ -455,29 +461,43 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         }
 
         // If confirmation is required, Bonsplit will call into this delegate and we must return false.
-        // Show an app-level confirmation, then re-attempt the close with forceCloseTabIds to bypass
-        // this gating on the second pass.
+        // Show an app-level confirmation, then re-attempt the approved close.
         if panelNeedsConfirmClose(panelId: panelId, fallbackNeedsConfirmClose: terminalPanel.needsConfirmClose()) {
-            if pendingCloseConfirmTabIds.contains(tab.id) {
+            if case .confirming? = tabCloseStates[tab.id] {
                 return false
             }
 
-            pendingCloseConfirmTabIds.insert(tab.id)
+            let token = UUID()
+            tabCloseStates[tab.id] = .confirming(token)
             let tabId = tab.id
             DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
+                guard let self,
+                      case .confirming(let currentToken)? = self.tabCloseStates[tabId],
+                      currentToken == token else { return }
                 Task { @MainActor in
-                    defer { self.pendingCloseConfirmTabIds.remove(tabId) }
+                    defer {
+                        if case .confirming(let currentToken)? = self.tabCloseStates[tabId], currentToken == token {
+                            self.tabCloseStates.removeValue(forKey: tabId)
+                        }
+                    }
 
-                    // If the tab disappeared while we were scheduling, do nothing.
-                    guard self.panelIdFromSurfaceId(tabId) != nil else { return }
+                    guard case .confirming(let currentToken)? = self.tabCloseStates[tabId], currentToken == token,
+                          self.panelIdFromSurfaceId(tabId) == panelId,
+                          self.terminalPanel(for: panelId) === terminalPanel,
+                          self.bonsplitController.tabs(inPane: pane).contains(where: { $0.id == tabId }) else { return }
 
                     let confirmed = await self.confirmClosePanel(for: tabId)
-                    guard confirmed else { return }
+                    guard confirmed,
+                          case .confirming(let currentToken)? = self.tabCloseStates[tabId], currentToken == token,
+                          self.panelIdFromSurfaceId(tabId) == panelId,
+                          self.terminalPanel(for: panelId) === terminalPanel,
+                          self.bonsplitController.tabs(inPane: pane).contains(where: { $0.id == tabId }) else { return }
 
-                    self.forceCloseTabIds.insert(tabId)
+                    self.tabCloseStates[tabId] = .approved(.destroy)
                     self.markTerminalCloseForUndoStagingIfEligible(tabId: tabId, panelId: panelId, paneId: pane)
-                    self.bonsplitController.closeTab(tabId)
+                    if !self.bonsplitController.closeTab(tabId) {
+                        self.tabCloseStates.removeValue(forKey: tabId)
+                    }
                 }
             }
 
@@ -490,11 +510,21 @@ extension Workspace: @preconcurrency BonsplitDelegate {
     }
 
     func splitTabBar(_ controller: BonsplitController, didCloseTab tabId: TabID, fromPane pane: PaneID) {
-        forceCloseTabIds.remove(tabId)
+        let closeState = tabCloseStates.removeValue(forKey: tabId)
         let selectTabId = postCloseSelectTabId.removeValue(forKey: tabId)
-        let undoStageOriginalIndex = pendingUndoStageOriginalIndex.removeValue(forKey: tabId)
-        let isUndoStaging = undoStageOriginalIndex != nil
-        let isDetaching = detachingTabIds.remove(tabId) != nil || isDetachingCloseTransaction || isUndoStaging
+        let undoStageOriginalIndex: Int?
+        let isDetaching: Bool
+        switch closeState {
+        case .approved(.undo(let index))?:
+            undoStageOriginalIndex = index
+            isDetaching = true
+        case .approved(.detach)?:
+            undoStageOriginalIndex = nil
+            isDetaching = true
+        default:
+            undoStageOriginalIndex = nil
+            isDetaching = isDetachingCloseTransaction
+        }
 
         guard let panelId = panelIdFromSurfaceId(tabId) else {
             #if DEBUG
@@ -516,7 +546,7 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         if isDetaching, let panel {
             let cachedTitle = panelTitles[panelId]
             let transferFallbackTitle = cachedTitle ?? panel.displayTitle
-            pendingDetachedSurfaces[tabId] = DetachedSurfaceTransfer(
+            let transfer = DetachedSurfaceTransfer(
                 panelId: panelId,
                 panel: panel,
                 title: panelCustomTitles[panelId] ?? transferFallbackTitle,
@@ -534,13 +564,14 @@ extension Workspace: @preconcurrency BonsplitDelegate {
                 sourceWorkspaceId: id,
                 agentPresence: panelAgentPresence[panelId]
             )
-            if isUndoStaging, let originalIndex = undoStageOriginalIndex,
-               let staged = pendingDetachedSurfaces.removeValue(forKey: tabId) {
+            if let originalIndex = undoStageOriginalIndex {
                 if let onTerminalCloseStagedForUndo {
-                    onTerminalCloseStagedForUndo(staged, pane, originalIndex)
+                    onTerminalCloseStagedForUndo(transfer, pane, originalIndex)
                 } else {
-                    staged.finalizePermanently()
+                    transfer.finalizePermanently()
                 }
+            } else {
+                tabCloseStates[tabId] = .detached(transfer)
             }
         } else {
             panel?.close()
@@ -737,6 +768,10 @@ extension Workspace: @preconcurrency BonsplitDelegate {
             }
 
             let closedSet = Set(closedPanelIds)
+            for (tabId, panelId) in surfaceIdToPanelId where closedSet.contains(panelId) {
+                tabCloseStates.removeValue(forKey: tabId)
+                postCloseSelectTabId.removeValue(forKey: tabId)
+            }
             surfaceIdToPanelId = surfaceIdToPanelId.filter { !closedSet.contains($0.value) }
             recomputeListeningPorts()
 
@@ -757,7 +792,7 @@ extension Workspace: @preconcurrency BonsplitDelegate {
     func splitTabBar(_ controller: BonsplitController, shouldClosePane pane: PaneID) -> Bool {
         let tabs = controller.tabs(inPane: pane)
         for tab in tabs {
-            if forceCloseTabIds.contains(tab.id) { continue }
+            if case .approved? = tabCloseStates[tab.id] { continue }
             if let panelId = panelIdFromSurfaceId(tab.id),
                let terminalPanel = terminalPanel(for: panelId),
                panelNeedsConfirmClose(panelId: panelId, fallbackNeedsConfirmClose: terminalPanel.needsConfirmClose()) {

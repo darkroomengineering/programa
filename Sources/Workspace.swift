@@ -424,20 +424,20 @@ final class Workspace: Identifiable, ObservableObject {
 
     var surfaceIdToPanelId: [TabID: UUID] = [:]
 
-    /// Tab IDs that are allowed to close even if they would normally require confirmation.
-    /// This is used by app-level confirmation prompts (e.g., Cmd+W "Close Tab?") so the
-    /// Bonsplit delegate doesn't block the close after the user already confirmed.
-    var forceCloseTabIds: Set<TabID> = []
+    enum TabCloseDisposition {
+        case destroy
+        case undo(originalIndex: Int)
+        case detach
+    }
 
-    /// Tab IDs that are currently showing (or about to show) a close confirmation prompt.
-    /// Prevents repeated close gestures (e.g., middle-click spam) from stacking dialogs.
-    var pendingCloseConfirmTabIds: Set<TabID> = []
+    enum TabCloseState {
+        case explicitUserClose
+        case confirming(UUID)
+        case approved(TabCloseDisposition)
+        case detached(DetachedSurfaceTransfer)
+    }
 
-    /// Tab IDs whose next close attempt should be treated as an explicit
-    /// workspace-close gesture from the user (the tab-strip X button, or Cmd+W when
-    /// the shortcut preference is set to close the workspace on the last surface),
-    /// rather than an internal close/move flow.
-    var explicitUserCloseTabIds: Set<TabID> = []
+    var tabCloseStates: [TabID: TabCloseState] = [:]
 
     /// Deterministic tab selection to apply after a tab closes.
     /// Keyed by the closing tab ID, value is the tab ID we want to select next.
@@ -463,16 +463,46 @@ final class Workspace: Identifiable, ObservableObject {
     var debugLastDidMoveTabTimestamp: TimeInterval = 0
     var debugDidMoveTabEventCount: UInt64 = 0
 #endif
-    var layoutFollowUpObservers: [NSObjectProtocol] = []
-    var layoutFollowUpPanelsCancellable: AnyCancellable?
-    var layoutFollowUpTimeoutWorkItem: DispatchWorkItem?
-    var layoutFollowUpReason: String?
-    var layoutFollowUpTerminalFocusPanelId: UUID?
-    var layoutFollowUpNeedsGeometryPass = false
-    var layoutFollowUpAttemptScheduled = false
-    var layoutFollowUpAttemptVersion: Int = 0
-    var layoutFollowUpStalledAttemptCount = 0
-    var isAttemptingLayoutFollowUp = false
+    @MainActor
+    final class LayoutFollowUpRequest {
+        let token = UUID()
+        var observers: [NSObjectProtocol] = []
+        var panelsCancellable: AnyCancellable?
+        var timeoutWorkItem: DispatchWorkItem?
+        var terminalFocusPanelId: UUID?
+        var needsGeometryPass: Bool
+        var stalledAttemptCount = 0
+
+        init(terminalFocusPanelId: UUID?, needsGeometryPass: Bool) {
+            self.terminalFocusPanelId = terminalFocusPanelId
+            self.needsGeometryPass = needsGeometryPass
+        }
+
+        func cancel() {
+            timeoutWorkItem?.cancel()
+            observers.forEach { NotificationCenter.default.removeObserver($0) }
+            observers.removeAll()
+            panelsCancellable?.cancel()
+            panelsCancellable = nil
+        }
+    }
+
+    enum LayoutFollowUpState {
+        case idle
+        case waiting(LayoutFollowUpRequest)
+        case scheduled(LayoutFollowUpRequest)
+        case attempting(LayoutFollowUpRequest, next: LayoutFollowUpRequest?)
+
+        var request: LayoutFollowUpRequest? {
+            switch self {
+            case .idle: return nil
+            case .waiting(let request), .scheduled(let request): return request
+            case .attempting(let request, let next): return next ?? request
+            }
+        }
+    }
+
+    var layoutFollowUpState: LayoutFollowUpState = .idle
     var isNormalizingPinnedTabOrder = false
     var pendingNonFocusSplitFocusReassert: PendingNonFocusSplitFocusReassert?
     var nonFocusSplitFocusReassertGeneration: UInt64 = 0
@@ -616,19 +646,10 @@ final class Workspace: Identifiable, ObservableObject {
         }
     }
 
-    var detachingTabIds: Set<TabID> = []
-    var pendingDetachedSurfaces: [TabID: DetachedSurfaceTransfer] = [:]
     var activeDetachCloseTransactions: Int = 0
     var isDetachingCloseTransaction: Bool { activeDetachCloseTransactions > 0 }
 
-    /// Tabs whose confirm-close flow (`splitTabBar(_:shouldCloseTab:inPane:)`) decided to stage
-    /// the close for undo instead of tearing it down. Keyed by the tab's pre-close index within
-    /// its pane so a restore can reinsert at the same spot. Presence in this dict is what makes
-    /// `didCloseTab` take the same "keep the panel alive" branch used for drag-detach, without
-    /// reusing `detachingTabIds`/`activeDetachCloseTransactions` (those gate unrelated drag-in-
-    /// flight invariants elsewhere and are only ever touched by `detachSurface` itself).
-    var pendingUndoStageOriginalIndex: [TabID: Int] = [:]
-    /// Fires from `didCloseTab` when a close marked via `pendingUndoStageOriginalIndex` completes.
+    /// Fires from `didCloseTab` when a close approved for undo completes.
     /// Wired by `TabManager` to route the still-alive detached panel into `closedTerminalUndoStore`.
     var onTerminalCloseStagedForUndo: ((DetachedSurfaceTransfer, PaneID, Int) -> Void)?
 
@@ -644,7 +665,9 @@ final class Workspace: Identifiable, ObservableObject {
     }
 
     func markExplicitClose(surfaceId: TabID) {
-        explicitUserCloseTabIds.insert(surfaceId)
+        if tabCloseStates[surfaceId] == nil {
+            tabCloseStates[surfaceId] = .explicitUserClose
+        }
     }
 
     func surfaceIdFromPanelId(_ panelId: UUID) -> TabID? {
@@ -1133,7 +1156,7 @@ final class Workspace: Identifiable, ObservableObject {
     func closePanel(_ panelId: UUID, force: Bool = false) -> Bool {
         if let tabId = surfaceIdFromPanelId(panelId) {
             if force {
-                forceCloseTabIds.insert(tabId)
+                tabCloseStates[tabId] = .approved(.destroy)
             }
             // Close the tab in bonsplit (this triggers delegate callback)
             return bonsplitController.closeTab(tabId)
@@ -1161,7 +1184,7 @@ final class Workspace: Identifiable, ObservableObject {
         }
 
         if force {
-            forceCloseTabIds.insert(selected.id)
+            tabCloseStates[selected.id] = .approved(.destroy)
         }
         let closed = bonsplitController.closeTab(selected.id)
 #if DEBUG
@@ -1200,7 +1223,7 @@ final class Workspace: Identifiable, ObservableObject {
         guard let index = bonsplitController.tabs(inPane: paneId).firstIndex(where: { $0.id == tabId }) else {
             return false
         }
-        pendingUndoStageOriginalIndex[tabId] = index
+        tabCloseStates[tabId] = .approved(.undo(originalIndex: index))
         return true
     }
 
@@ -1249,18 +1272,17 @@ final class Workspace: Identifiable, ObservableObject {
         dlog(
             "split.detach.begin ws=\(id.uuidString.prefix(5)) panel=\(panelId.uuidString.prefix(5)) " +
             "tab=\(tabId.uuid.uuidString.prefix(5)) activeDetachTxn=\(activeDetachCloseTransactions) " +
-            "pendingDetached=\(pendingDetachedSurfaces.count)"
+            "pendingDetached=\(tabCloseStates.values.filter { if case .detached = $0 { return true }; return false }.count)"
         )
 #endif
 
-        detachingTabIds.insert(tabId)
-        forceCloseTabIds.insert(tabId)
+        tabCloseStates[tabId] = .approved(.detach)
         activeDetachCloseTransactions += 1
         defer { activeDetachCloseTransactions = max(0, activeDetachCloseTransactions - 1) }
         guard bonsplitController.closeTab(tabId) else {
-            detachingTabIds.remove(tabId)
-            pendingDetachedSurfaces.removeValue(forKey: tabId)?.finalizePermanently()
-            forceCloseTabIds.remove(tabId)
+            if case .detached(let transfer)? = tabCloseStates.removeValue(forKey: tabId) {
+                transfer.finalizePermanently()
+            }
 #if DEBUG
             dlog(
                 "split.detach.fail ws=\(id.uuidString.prefix(5)) panel=\(panelId.uuidString.prefix(5)) " +
@@ -1270,7 +1292,12 @@ final class Workspace: Identifiable, ObservableObject {
             return nil
         }
 
-        let detached = pendingDetachedSurfaces.removeValue(forKey: tabId)
+        let detached: DetachedSurfaceTransfer?
+        if case .detached(let transfer)? = tabCloseStates.removeValue(forKey: tabId) {
+            detached = transfer
+        } else {
+            detached = nil
+        }
 #if DEBUG
         dlog(
             "split.detach.end ws=\(id.uuidString.prefix(5)) panel=\(panelId.uuidString.prefix(5)) " +
