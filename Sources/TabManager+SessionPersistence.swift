@@ -54,11 +54,10 @@ extension TabManager {
         tabHistory.removeAll()
         historyIndex = -1
         isNavigatingHistory = false
-        pendingWorkspaceUnfocusTarget = nil
+        resetSelectionLifecycle()
         workspaceCycleCooldownTask?.cancel()
         workspaceCycleCooldownTask = nil
         isWorkspaceCycleHot = false
-        selectionSideEffectsGeneration &+= 1
 
         // Build the new workspace list locally to avoid intermediate @Published
         // emissions (empty tabs, nil selectedTabId) that can leave SwiftUI's

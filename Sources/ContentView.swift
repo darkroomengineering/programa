@@ -22,10 +22,55 @@ struct ContentView: View {
     @State private var isFullScreen: Bool = false
     @State var observedWindow: NSWindow?
     @StateObject private var fullscreenControlsViewModel = TitlebarControlsViewModel()
-    @State var previousSelectedWorkspaceId: UUID?
-    @State var retiringWorkspaceId: UUID?
-    @State private var workspaceHandoffGeneration: UInt64 = 0
-    @State var workspaceHandoffFallbackTask: Task<Void, Never>?
+    private struct WorkspaceHandoffContext {
+        let token: UUID
+        let retiring: UUID
+        let fallback: Task<Void, Never>
+    }
+
+    private enum WorkspaceHandoff {
+        case stable(selected: UUID?)
+        case waiting(selected: UUID, context: WorkspaceHandoffContext)
+        case awaitingSelection(WorkspaceHandoffContext)
+
+        var pending: WorkspaceHandoffContext? {
+            switch self {
+            case .stable: return nil
+            case .waiting(_, let context), .awaitingSelection(let context): return context
+            }
+        }
+    }
+
+    @State private var workspaceHandoff = WorkspaceHandoff.stable(selected: nil)
+
+    var previousSelectedWorkspaceId: UUID? {
+        get {
+            switch workspaceHandoff {
+            case .stable(let selected): return selected
+            case .waiting(let selected, _): return selected
+            case .awaitingSelection: return nil
+            }
+        }
+        nonmutating set {
+            if let context = workspaceHandoff.pending {
+                if let newValue {
+                    workspaceHandoff = .waiting(selected: newValue, context: context)
+                } else {
+                    workspaceHandoff = .awaitingSelection(context)
+                }
+            } else {
+                workspaceHandoff = .stable(selected: newValue)
+            }
+        }
+    }
+
+    var retiringWorkspaceId: UUID? {
+        workspaceHandoff.pending?.retiring
+    }
+
+    private var workspaceHandoffFallbackTask: Task<Void, Never>? {
+        workspaceHandoff.pending?.fallback
+    }
     @State private var didApplyUITestSidebarSelection = false
     @State private var titlebarThemeGeneration: UInt64 = 0
     @State var sidebarDraggedTabId: UUID?
@@ -595,9 +640,8 @@ struct ContentView: View {
             .onReceive(tabManager.$tabs) { tabs in
                 let existingIds = Set(tabs.map { $0.id })
                 if let retiringWorkspaceId, !existingIds.contains(retiringWorkspaceId) {
-                    self.retiringWorkspaceId = nil
                     workspaceHandoffFallbackTask?.cancel()
-                    workspaceHandoffFallbackTask = nil
+                    workspaceHandoff = .stable(selected: previousSelectedWorkspaceId)
                 }
                 if let previousSelectedWorkspaceId, !existingIds.contains(previousSelectedWorkspaceId) {
                     self.previousSelectedWorkspaceId = tabManager.selectedTabId
@@ -1085,16 +1129,28 @@ struct ContentView: View {
 
         guard let oldSelectedId, let newSelectedId, oldSelectedId != newSelectedId else {
             tabManager.completePendingWorkspaceUnfocus(reason: "no_handoff")
-            retiringWorkspaceId = nil
             workspaceHandoffFallbackTask?.cancel()
-            workspaceHandoffFallbackTask = nil
+            workspaceHandoff = .stable(selected: newSelectedId)
             return
         }
 
-        workspaceHandoffGeneration &+= 1
-        let generation = workspaceHandoffGeneration
-        retiringWorkspaceId = oldSelectedId
         workspaceHandoffFallbackTask?.cancel()
+        let token = UUID()
+        let fallback = Task {
+            do {
+                try await Task.sleep(nanoseconds: 150_000_000)
+            } catch {
+                return
+            }
+            await MainActor.run {
+                guard workspaceHandoff.pending?.token == token else { return }
+                completeWorkspaceHandoff(reason: "timeout")
+            }
+        }
+        workspaceHandoff = .waiting(
+            selected: newSelectedId,
+            context: WorkspaceHandoffContext(token: token, retiring: oldSelectedId, fallback: fallback)
+        )
 
 #if DEBUG
         if let snapshot = tabManager.debugCurrentWorkspaceSwitchSnapshot() {
@@ -1124,18 +1180,6 @@ struct ContentView: View {
             completeWorkspaceHandoff(reason: "ready")
             return
         }
-
-        workspaceHandoffFallbackTask = Task { [generation] in
-            do {
-                try await Task.sleep(nanoseconds: 150_000_000)
-            } catch {
-                return
-            }
-            await MainActor.run {
-                guard workspaceHandoffGeneration == generation else { return }
-                completeWorkspaceHandoff(reason: "timeout")
-            }
-        }
     }
 
     private func completeWorkspaceHandoffIfNeeded(focusedTabId: UUID, reason: String) {
@@ -1151,7 +1195,6 @@ struct ContentView: View {
 
     private func completeWorkspaceHandoff(reason: String) {
         workspaceHandoffFallbackTask?.cancel()
-        workspaceHandoffFallbackTask = nil
         let retiring = retiringWorkspaceId
 
         // Hide portal-hosted views for the retiring workspace BEFORE clearing
@@ -1163,7 +1206,7 @@ struct ContentView: View {
             workspace.hideAllTerminalPortalViews()
         }
 
-        retiringWorkspaceId = nil
+        workspaceHandoff = .stable(selected: previousSelectedWorkspaceId)
         tabManager.completePendingWorkspaceUnfocus(reason: reason)
 #if DEBUG
         if let snapshot = tabManager.debugCurrentWorkspaceSwitchSnapshot() {
