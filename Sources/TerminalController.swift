@@ -38,14 +38,48 @@ class TerminalController {
     static let shared = TerminalController()
 
     nonisolated(unsafe) var socketPath = SocketControlSettings.stableDefaultSocketPath
-    private nonisolated(unsafe) var serverSocket: Int32 = -1
-    private nonisolated(unsafe) var isRunning = false
-    private nonisolated(unsafe) var acceptLoopAlive = false
-    private nonisolated(unsafe) var activeAcceptLoopGeneration: UInt64 = 0
+    private enum ListenerState {
+        case stopped
+        case starting(UInt64)
+        case listening(socket: Int32, generation: UInt64)
+        case accepting(socket: Int32, generation: UInt64)
+        case resuming(socket: Int32, generation: UInt64)
+        case rearming(socket: Int32, generation: UInt64)
+        case waitingToRearm(UInt64)
+
+        var listener: (socket: Int32, generation: UInt64)? {
+            switch self {
+            case let .listening(socket, generation), let .accepting(socket, generation),
+                 let .resuming(socket, generation), let .rearming(socket, generation):
+                return (socket, generation)
+            default: return nil
+            }
+        }
+    }
+    private nonisolated(unsafe) var listenerState: ListenerState = .stopped
     private nonisolated(unsafe) var nextAcceptLoopGeneration: UInt64 = 0
-    private nonisolated(unsafe) var pendingAcceptLoopRearmGeneration: UInt64?
-    private nonisolated(unsafe) var pendingAcceptLoopResumeGeneration: UInt64?
-    private nonisolated(unsafe) var listenerStartInProgress = false
+    private nonisolated var serverSocket: Int32 { listenerState.listener?.socket ?? -1 }
+    private nonisolated var isRunning: Bool { listenerState.listener != nil }
+    private nonisolated var activeAcceptLoopGeneration: UInt64 { listenerState.listener?.generation ?? 0 }
+    private nonisolated var acceptLoopAlive: Bool {
+        if case .accepting = listenerState { return true }
+        if case .rearming = listenerState { return true }
+        return false
+    }
+    private nonisolated var listenerStartInProgress: Bool {
+        if case .starting = listenerState { return true }
+        return false
+    }
+    private nonisolated var pendingAcceptLoopRearmGeneration: UInt64? {
+        switch listenerState {
+        case .rearming(_, let generation), .waitingToRearm(let generation): return generation
+        default: return nil
+        }
+    }
+    private nonisolated var pendingAcceptLoopResumeGeneration: UInt64? {
+        if case .resuming(_, let generation) = listenerState { return generation }
+        return nil
+    }
     private nonisolated(unsafe) var clientAuthorizationGeneration: UInt64 = 0
     private nonisolated(unsafe) var authCredentialEpoch: UInt64 = 0
     private nonisolated(unsafe) var registeredUnixClientFDs: Set<Int32> = []
@@ -945,6 +979,10 @@ class TerminalController {
     }
 
     func start(tabManager: TabManager, socketPath: String, accessMode: SocketControlMode) {
+        start(tabManager: tabManager, socketPath: socketPath, accessMode: accessMode, rearmGeneration: nil)
+    }
+
+    private func start(tabManager: TabManager, socketPath: String, accessMode: SocketControlMode, rearmGeneration: UInt64?) {
         self.tabManager = tabManager
 
         // Screen-manifest agent detection (docs/plans/screen-manifest-detection.md): lazily
@@ -953,7 +991,7 @@ class TerminalController {
         AgentScreenDetectionEngine.shared.startIfNeeded()
 
         let reusedListener = withListenerState {
-            isRunning
+            rearmGeneration == nil && isRunning
                 && self.socketPath == socketPath
                 && self.accessMode == accessMode
                 && acceptLoopAlive
@@ -964,22 +1002,30 @@ class TerminalController {
             return
         }
 
-        if withListenerState({ isRunning }) {
-            stop()
-        }
-
         var activeSocketPath = socketPath
-        withListenerState {
+        guard let reservation = withListenerState({ () -> (generation: UInt64, socket: Int32, path: String)? in
+            if let rearmGeneration, pendingAcceptLoopRearmGeneration != rearmGeneration { return nil }
+            let previousSocket = serverSocket
+            let previousPath = self.socketPath
             invalidateUnixClientsLocked()
             self.socketPath = activeSocketPath
             self.accessMode = accessMode
-            listenerStartInProgress = true
+            nextAcceptLoopGeneration &+= 1
+            listenerState = .starting(nextAcceptLoopGeneration)
+            return (nextAcceptLoopGeneration, previousSocket, previousPath)
+        }) else { return }
+        let generation = reservation.generation
+        if reservation.socket >= 0 {
+            close(reservation.socket)
+            unlink(reservation.path)
         }
         var listenerActivated = false
         defer {
             if !listenerActivated {
                 withListenerState {
-                    listenerStartInProgress = false
+                    if case .starting(generation) = listenerState {
+                        listenerState = .stopped
+                    }
                 }
             }
         }
@@ -999,7 +1045,7 @@ class TerminalController {
            fallbackPath != failedPath {
             activeSocketPath = fallbackPath
             withListenerState {
-                self.socketPath = activeSocketPath
+                if case .starting(generation) = listenerState { self.socketPath = activeSocketPath }
             }
             bindAttempt = Self.bindListenerSocket(newServerSocket, path: activeSocketPath)
         }
@@ -1008,7 +1054,7 @@ class TerminalController {
         case .success(let boundPath):
             activeSocketPath = boundPath
             withListenerState {
-                self.socketPath = activeSocketPath
+                if case .starting(generation) = listenerState { self.socketPath = activeSocketPath }
             }
         case .pathTooLong(let failedPath):
             close(newServerSocket)
@@ -1026,19 +1072,19 @@ class TerminalController {
             return reportListenerStartFailure(path: activeSocketPath, stage: "listen", errnoCode: listenErrno)
         }
 
-        SocketControlSettings.recordLastSocketPath(activeSocketPath)
-
-        let generation = withListenerState {
-            isRunning = true
-            pendingAcceptLoopRearmGeneration = nil
-            pendingAcceptLoopResumeGeneration = nil
-            nextAcceptLoopGeneration &+= 1
-            let generation = nextAcceptLoopGeneration
-            activeAcceptLoopGeneration = generation
-            serverSocket = newServerSocket
-            listenerStartInProgress = false
-            return generation
+        let activated = withListenerState {
+            guard case .starting(generation) = listenerState else { return false }
+            listenerState = .listening(socket: newServerSocket, generation: generation)
+            return true
         }
+        guard activated else {
+            close(newServerSocket)
+            withListenerState {
+                if case .stopped = listenerState { unlink(activeSocketPath) }
+            }
+            return
+        }
+        SocketControlSettings.recordLastSocketPath(activeSocketPath)
         listenerActivated = true
         let listenerSocket = newServerSocket
         dilog("socket.listener", "start path=\(activeSocketPath) accessMode=\(accessMode)")
@@ -1223,16 +1269,10 @@ class TerminalController {
 
     nonisolated func stop() {
         let (socketToClose, socketPathToUnlink) = withListenerState {
-            isRunning = false
-            acceptLoopAlive = false
-            pendingAcceptLoopRearmGeneration = nil
-            pendingAcceptLoopResumeGeneration = nil
-            listenerStartInProgress = false
-            nextAcceptLoopGeneration &+= 1
-            activeAcceptLoopGeneration = 0
-            invalidateUnixClientsLocked()
             let socketToClose = serverSocket
-            serverSocket = -1
+            listenerState = .stopped
+            invalidateUnixClientsLocked()
+            if socketToClose >= 0 { unlink(socketPath) }
             return (socketToClose, socketPath)
         }
         dilog("socket.listener", "stop path=\(socketPathToUnlink)")
@@ -1241,20 +1281,16 @@ class TerminalController {
         // never appeared) would otherwise delete another running app's socket on quit.
         guard socketToClose >= 0 else { return }
         close(socketToClose)
-        unlink(socketPathToUnlink)
     }
 
     private nonisolated func unlinkSocketPathIfListenerStillInactive(_ path: String) {
-        let shouldUnlink = withListenerState {
-            Self.shouldUnlinkSocketPathAfterAcceptLoopCleanup(
+        withListenerState {
+            if Self.shouldUnlinkSocketPathAfterAcceptLoopCleanup(
                 pathMatches: socketPath == path,
                 isRunning: isRunning,
                 activeGeneration: activeAcceptLoopGeneration,
                 listenerStartInProgress: listenerStartInProgress
-            )
-        }
-        if shouldUnlink {
-            unlink(path)
+            ) { unlink(path) }
         }
     }
 
@@ -1329,8 +1365,8 @@ class TerminalController {
 
     private nonisolated func acceptLoop(listenerSocket: Int32, generation: UInt64) {
         let armedAcceptLoop = withListenerState {
-            guard generation == activeAcceptLoopGeneration else { return false }
-            acceptLoopAlive = true
+            guard case .listening(listenerSocket, generation) = listenerState else { return false }
+            listenerState = .accepting(socket: listenerSocket, generation: generation)
             return true
         }
         guard armedAcceptLoop else {
@@ -1351,7 +1387,6 @@ class TerminalController {
                 }
 
                 if resumeRequested && exitReason == "accept_backoff_resume" {
-                    acceptLoopAlive = false
                     return (
                         shouldCaptureExit: false,
                         socketToClose: Int32(-1),
@@ -1364,17 +1399,13 @@ class TerminalController {
                 }
                 let shouldCaptureExit = exitReason != "stopped"
 
-                acceptLoopAlive = false
-                isRunning = false
-                activeAcceptLoopGeneration = 0
-                pendingAcceptLoopResumeGeneration = nil
+                let rearmRequested = pendingAcceptLoopRearmGeneration == generation
+                let socketToClose = serverSocket == listenerSocket ? serverSocket : -1
+                listenerState = rearmRequested ? .waitingToRearm(generation) : .stopped
                 invalidateUnixClientsLocked()
 
-                var socketToClose: Int32 = -1
                 var pathToUnlink: String?
-                if serverSocket == listenerSocket {
-                    socketToClose = serverSocket
-                    serverSocket = -1
+                if socketToClose >= 0 {
                     if shouldCaptureExit {
                         pathToUnlink = socketPath
                     }
@@ -1432,7 +1463,8 @@ class TerminalController {
                         "error classification=\(Self.acceptErrorClassification(errnoCode: errnoCode)) errno=\(errnoCode) action=rearm delayMs=\(delayMs) consecutiveFailures=\(consecutiveFailures)"
                     )
                     withListenerState {
-                        pendingAcceptLoopRearmGeneration = generation
+                        guard generation == activeAcceptLoopGeneration else { return }
+                        listenerState = .rearming(socket: listenerSocket, generation: generation)
                     }
                     scheduleListenerRearm(
                         generation: generation,
@@ -1449,7 +1481,8 @@ class TerminalController {
                         "error classification=\(Self.acceptErrorClassification(errnoCode: errnoCode)) errno=\(errnoCode) action=resume delayMs=\(delayMs) consecutiveFailures=\(consecutiveFailures)"
                     )
                     withListenerState {
-                        pendingAcceptLoopResumeGeneration = generation
+                        guard generation == activeAcceptLoopGeneration else { return }
+                        listenerState = .resuming(socket: listenerSocket, generation: generation)
                     }
                     scheduleAcceptLoopResume(
                         listenerSocket: listenerSocket,
@@ -1493,16 +1526,8 @@ class TerminalController {
         DispatchQueue.main.asyncAfter(deadline: deadline) { [weak self] in
             guard let self else { return }
             let shouldResume = self.withListenerState {
-                guard self.pendingAcceptLoopResumeGeneration == generation else { return false }
-                guard self.activeAcceptLoopGeneration == generation else {
-                    self.pendingAcceptLoopResumeGeneration = nil
-                    return false
-                }
-                guard self.isRunning, self.serverSocket == listenerSocket else {
-                    self.pendingAcceptLoopResumeGeneration = nil
-                    return false
-                }
-                self.pendingAcceptLoopResumeGeneration = nil
+                guard case .resuming(listenerSocket, generation) = self.listenerState else { return false }
+                self.listenerState = .listening(socket: listenerSocket, generation: generation)
                 return true
             }
             guard shouldResume else { return }
@@ -1524,13 +1549,11 @@ class TerminalController {
             guard let tabManager = self.tabManager else { return }
             guard let restartPolicy = self.withListenerState({ () -> (path: String, mode: SocketControlMode)? in
                 guard self.pendingAcceptLoopRearmGeneration == generation else { return nil }
-                self.pendingAcceptLoopRearmGeneration = nil
                 return (self.socketPath, self.accessMode)
             }) else { return }
 
             dilog("socket.accept", "rearm executing path=\(restartPolicy.path)")
-            self.stop()
-            self.start(tabManager: tabManager, socketPath: restartPolicy.path, accessMode: restartPolicy.mode)
+            self.start(tabManager: tabManager, socketPath: restartPolicy.path, accessMode: restartPolicy.mode, rearmGeneration: generation)
         }
     }
 
