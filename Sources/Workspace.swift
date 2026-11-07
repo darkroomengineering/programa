@@ -131,14 +131,45 @@ final class Workspace: Identifiable, ObservableObject {
     @Published var pullRequest: SidebarPullRequestState?
     @Published var panelPullRequests: [UUID: SidebarPullRequestState] = [:]
     /// Changed-file count per agent surface whose last turn ended with a non-empty diff; the
-    /// sidebar shows it as a "Review" affordance. Written only by the review-nudge members in
-    /// Workspace+SidebarTelemetry.swift.
-    @Published var panelReviewNudges: [UUID: Int] = [:]
-    /// Bumped per surface on every turn edge so a probe that finishes after a newer edge is dropped.
-    var reviewNudgeProbeGenerations: [UUID: UInt64] = [:]
-    /// Uncommitted changes when the surface's current turn started; a turn that ends with the
-    /// same fingerprint changed nothing and gets no nudge.
-    var reviewNudgeBaselines: [UUID: ReviewChangeFingerprint] = [:]
+    /// sidebar shows it as a "Review" affordance.
+    @Published private(set) var panelReviewNudges: [UUID: Int] = [:]
+    enum ReviewTurn {
+        case capturingBaseline(token: UUID, directory: String)
+        case working(baseline: ReviewChangeFingerprint?)
+        case settling(token: UUID, directory: String, baseline: ReviewChangeFingerprint?, nudge: Int?)
+        case settled(baseline: ReviewChangeFingerprint?, nudge: Int?)
+
+        var baseline: ReviewChangeFingerprint? {
+            switch self {
+            case .capturingBaseline: return nil
+            case .working(let baseline), .settling(_, _, let baseline, _), .settled(let baseline, _):
+                return baseline
+            }
+        }
+
+        var nudge: Int? {
+            switch self {
+            case .capturingBaseline, .working: return nil
+            case .settling(_, _, _, let nudge), .settled(_, let nudge): return nudge
+            }
+        }
+
+        var probeToken: UUID? {
+            switch self {
+            case .capturingBaseline(let token, _), .settling(let token, _, _, _): return token
+            case .working, .settled: return nil
+            }
+        }
+    }
+    var reviewTurns: [UUID: ReviewTurn] = [:] {
+        didSet {
+            let nudges = reviewTurns.compactMapValues(\.nudge)
+            if panelReviewNudges != nudges { panelReviewNudges = nudges }
+        }
+    }
+    var reviewNudgeBaselines: [UUID: ReviewChangeFingerprint] {
+        reviewTurns.compactMapValues(\.baseline)
+    }
     /// Count of turn-end probes that reached a decision; lets tests observe a "no nudge" outcome.
     var reviewNudgeTurnEndsSettled: UInt64 = 0
     /// Directories whose repos got a turn checkpoint from this workspace; closing the workspace

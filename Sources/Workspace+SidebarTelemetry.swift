@@ -356,14 +356,20 @@ extension Workspace {
         if next == .working, previous == .blocked {
             // Same turn resuming after a prompt: keep its baseline (and any baseline probe in flight).
             if panelReviewNudges[panelId] != nil {
-                panelReviewNudges.removeValue(forKey: panelId)
+                switch reviewTurns[panelId] {
+                case .settling(let token, let directory, let baseline, _):
+                    reviewTurns[panelId] = .settling(token: token, directory: directory, baseline: baseline, nudge: nil)
+                case .settled(let baseline, _):
+                    reviewTurns[panelId] = .settled(baseline: baseline, nudge: nil)
+                default: break
+                }
             }
         } else if next == .working, previous != .working {
             saveTurnCheckpoint(panelId: panelId)
             clearReviewNudge(panelId: panelId)
             runReviewNudgeProbe(panelId: panelId, kind: .baseline)
         } else if next == .idle, previous == .working || previous == .blocked {
-            runReviewNudgeProbe(panelId: panelId, kind: .turnEnd(baseline: reviewNudgeBaselines[panelId]))
+            runReviewNudgeProbe(panelId: panelId, kind: .turnEnd(baseline: reviewTurns[panelId]?.baseline))
         }
     }
 
@@ -379,18 +385,12 @@ extension Workspace {
     }
 
     func clearReviewNudge(panelId: UUID) {
-        reviewNudgeProbeGenerations[panelId, default: 0] &+= 1
-        reviewNudgeBaselines.removeValue(forKey: panelId)
-        if panelReviewNudges[panelId] != nil {
-            panelReviewNudges.removeValue(forKey: panelId)
-        }
+        reviewTurns.removeValue(forKey: panelId)
     }
 
     /// Opening any review panel covers the workspace's diff, so every nudge in it goes.
     func clearAllReviewNudges() {
-        for panelId in Array(reviewNudgeProbeGenerations.keys) + Array(panelReviewNudges.keys) {
-            clearReviewNudge(panelId: panelId)
-        }
+        reviewTurns.removeAll()
     }
 
     private enum ReviewNudgeProbeKind: Sendable {
@@ -406,29 +406,38 @@ extension Workspace {
               let directory = sidebarResolvedDirectory(for: panelId) else {
             return
         }
-        reviewNudgeProbeGenerations[panelId, default: 0] &+= 1
-        let generation = reviewNudgeProbeGenerations[panelId]
+        let token = UUID()
+        switch kind {
+        case .baseline:
+            reviewTurns[panelId] = .capturingBaseline(token: token, directory: directory)
+        case .turnEnd(let baseline):
+            reviewTurns[panelId] = .settling(
+                token: token, directory: directory, baseline: baseline, nudge: reviewTurns[panelId]?.nudge
+            )
+        }
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let fingerprint = ReviewDiffProber.uncommittedChangeFingerprint(directory: directory)
             DispatchQueue.main.async {
                 guard let self,
-                      self.reviewNudgeProbeGenerations[panelId] == generation,
+                      self.reviewTurns[panelId]?.probeToken == token,
                       self.panels[panelId] != nil,
-                      let fingerprint else { return }
+                      self.sidebarResolvedDirectory(for: panelId) == directory else { return }
+                guard let fingerprint else {
+                    switch kind {
+                    case .baseline: self.reviewTurns[panelId] = .working(baseline: nil)
+                    case .turnEnd(let baseline):
+                        self.reviewTurns[panelId] = .settled(baseline: baseline, nudge: self.reviewTurns[panelId]?.nudge)
+                    }
+                    return
+                }
                 switch kind {
                 case .baseline:
-                    self.reviewNudgeBaselines[panelId] = fingerprint
+                    self.reviewTurns[panelId] = .working(baseline: fingerprint)
                 case .turnEnd(let baseline):
                     self.reviewNudgeTurnEndsSettled &+= 1
                     let changed = baseline.map { fingerprint.differs(from: $0) } ?? true
                     let count = changed ? fingerprint.paths.count : 0
-                    if count > 0 {
-                        if self.panelReviewNudges[panelId] != count {
-                            self.panelReviewNudges[panelId] = count
-                        }
-                    } else if self.panelReviewNudges[panelId] != nil {
-                        self.panelReviewNudges.removeValue(forKey: panelId)
-                    }
+                    self.reviewTurns[panelId] = .settled(baseline: baseline, nudge: count > 0 ? count : nil)
 #if DEBUG
                     dlog(
                         "review.nudge workspace=\(self.id.uuidString.prefix(5)) " +
@@ -593,14 +602,8 @@ extension Workspace {
         if manualUnreadMarkedAt.keys.contains(where: { !validSurfaceIds.contains($0) }) {
             manualUnreadMarkedAt = manualUnreadMarkedAt.filter { validSurfaceIds.contains($0.key) }
         }
-        if panelReviewNudges.keys.contains(where: { !validSurfaceIds.contains($0) }) {
-            panelReviewNudges = panelReviewNudges.filter { validSurfaceIds.contains($0.key) }
-        }
-        if reviewNudgeProbeGenerations.keys.contains(where: { !validSurfaceIds.contains($0) }) {
-            reviewNudgeProbeGenerations = reviewNudgeProbeGenerations.filter { validSurfaceIds.contains($0.key) }
-        }
-        if reviewNudgeBaselines.keys.contains(where: { !validSurfaceIds.contains($0) }) {
-            reviewNudgeBaselines = reviewNudgeBaselines.filter { validSurfaceIds.contains($0.key) }
+        if reviewTurns.keys.contains(where: { !validSurfaceIds.contains($0) }) {
+            reviewTurns = reviewTurns.filter { validSurfaceIds.contains($0.key) }
         }
         let didPruneListeningPorts = surfaceListeningPorts.keys.contains(where: {
             !validSurfaceIds.contains($0)

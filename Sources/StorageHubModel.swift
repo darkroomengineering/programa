@@ -84,9 +84,37 @@ enum StorageLiveSessions {
 final class StorageHubModel: ObservableObject {
     static let shared = StorageHubModel()
     @Published private(set) var snapshot: StorageHubSnapshot?
-    @Published private(set) var isRunning = false
-    @Published private(set) var preview: StorageCleanPreview?
-    @Published private(set) var result: StorageCleanPreview?
+    private enum Presentation {
+        case empty
+        case confirmation(StorageCleanPreview)
+        case result(StorageCleanPreview)
+    }
+    private enum Operation {
+        case idle(Presentation)
+        case scanning(UUID, Presentation)
+        case preparing(UUID)
+        case cancelledPreparation(UUID)
+        case cleaning(UUID)
+    }
+    @Published private var operation: Operation = .idle(.empty)
+    var isRunning: Bool {
+        if case .idle = operation { return false }
+        return true
+    }
+    private var presentation: Presentation {
+        switch operation {
+        case .idle(let presentation), .scanning(_, let presentation): return presentation
+        case .preparing, .cancelledPreparation, .cleaning: return .empty
+        }
+    }
+    var preview: StorageCleanPreview? {
+        if case .confirmation(let preview) = presentation { return preview }
+        return nil
+    }
+    var result: StorageCleanPreview? {
+        if case .result(let result) = presentation { return result }
+        return nil
+    }
     @Published private(set) var requestedWindowID: ObjectIdentifier?
     @Published private(set) var capacity: StorageVolumeCapacity?
     @Published private(set) var liveSessions: [StorageLiveSession] = []
@@ -101,6 +129,8 @@ final class StorageHubModel: ObservableObject {
     private var liveSessionSources: [StorageLiveSession] = []
     private var isRefreshingLiveSessions = false
     private var liveSessionsRefreshPending = false
+    private var liveSessionSourcesToken = UUID()
+    private var liveSessionMeasurementToken = UUID()
     private var visibleClients = Set<UUID>()
     private let queue = DispatchQueue(label: "com.darkroom.programa.storage-hub", qos: .utility)
     // Separate from `queue` so slow session measuring never delays scans or cleans.
@@ -126,7 +156,10 @@ final class StorageHubModel: ObservableObject {
 
     func closed(client: UUID) {
         visibleClients.remove(client)
-        if visibleClients.isEmpty { preview = nil }
+        if visibleClients.isEmpty {
+            cancelConfirmation()
+            liveSessionSourcesToken = UUID()
+        }
     }
 
     func refresh() {
@@ -141,25 +174,31 @@ final class StorageHubModel: ObservableObject {
         }
         let homePath = NSHomeDirectory()
         let rawWorkspaces = workspaces
+        let sourcesToken = UUID()
+        liveSessionSourcesToken = sourcesToken
         // realpath can block on a stalled network mount, so resolve off the main actor.
         liveSessionQueue.async {
             let sources = StorageLiveSessions.sessions(from: rawWorkspaces, homePath: homePath)
             DispatchQueue.main.async {
+                guard self.liveSessionSourcesToken == sourcesToken else { return }
                 self.liveSessionSources = sources
                 self.refreshLiveSessions()
             }
         }
         guard !isRunning else { return }
         let needsScan = snapshot.map { Date().timeIntervalSince($0.scannedAt) > 300 } ?? true
-        isRunning = true
+        let token = UUID()
+        operation = .scanning(token, presentation)
         let openDirectories = WorktreeStorage.openWorkspaceDirectories()
         queue.async {
             let capacity = StorageVolumeCapacity.read()
             let scanned = needsScan ? Self.scan(openDirectories: openDirectories) : nil
             DispatchQueue.main.async {
+                guard case .scanning(let currentToken, let presentation) = self.operation,
+                      currentToken == token else { return }
                 self.capacity = capacity
                 if let scanned { self.snapshot = scanned }
-                self.isRunning = false
+                self.operation = .idle(presentation)
             }
         }
     }
@@ -179,6 +218,8 @@ final class StorageHubModel: ObservableObject {
         }
         guard !stalePaths.isEmpty else { return }
         isRefreshingLiveSessions = true
+        let token = UUID()
+        liveSessionMeasurementToken = token
         liveSessionQueue.async {
             var measured: [String: LiveSessionSize] = [:]
             for path in stalePaths {
@@ -190,6 +231,7 @@ final class StorageHubModel: ObservableObject {
             }
             let results = measured
             DispatchQueue.main.async {
+                guard self.liveSessionMeasurementToken == token else { return }
                 let currentPaths = Set(self.liveSessionSources.map(\.path))
                 self.liveSessionCache.merge(results.filter { currentPaths.contains($0.key) }) { _, new in new }
                 self.isRefreshingLiveSessions = false
@@ -219,9 +261,8 @@ final class StorageHubModel: ObservableObject {
 
     func prepareClean(category: StorageCategoryID? = nil) {
         guard !visibleClients.isEmpty, !isRunning else { return }
-        isRunning = true
-        preview = nil
-        result = nil
+        let token = UUID()
+        operation = .preparing(token)
         let openDirectories = WorktreeStorage.openWorkspaceDirectories()
         queue.async {
             WorktreeStorage.passLock.lock()
@@ -236,18 +277,30 @@ final class StorageHubModel: ObservableObject {
             )
             WorktreeStorage.passLock.unlock()
             DispatchQueue.main.async {
-                if !self.visibleClients.isEmpty { self.preview = prepared }
-                self.isRunning = false
+                switch self.operation {
+                case .preparing(let currentToken) where currentToken == token:
+                    self.operation = .idle(self.visibleClients.isEmpty ? .empty : .confirmation(prepared))
+                case .cancelledPreparation(let currentToken) where currentToken == token:
+                    self.operation = .idle(.empty)
+                default: return
+                }
             }
         }
     }
 
-    func cancelConfirmation() { preview = nil }
+    func cancelConfirmation() {
+        switch operation {
+        case .preparing(let token): operation = .cancelledPreparation(token)
+        case .idle(.confirmation): operation = .idle(.empty)
+        case .scanning(let token, .confirmation): operation = .scanning(token, .empty)
+        default: break
+        }
+    }
 
     func confirmClean() {
         guard !visibleClients.isEmpty, !isRunning, let preview, !preview.summary.items.isEmpty else { return }
-        self.preview = nil
-        isRunning = true
+        let token = UUID()
+        operation = .cleaning(token)
         queue.async {
             WorktreeStorage.passLock.lock()
             // Reclassify only the confirmed worktrees, retaining the exact path and HEAD allowlist.
@@ -272,10 +325,10 @@ final class StorageHubModel: ObservableObject {
             WorktreeStorage.passLock.unlock()
             let capacity = StorageVolumeCapacity.read()
             DispatchQueue.main.async {
-                self.result = outcome
+                guard case .cleaning(let currentToken) = self.operation, currentToken == token else { return }
+                self.operation = .idle(.result(outcome))
                 self.capacity = capacity
                 self.snapshot = nil
-                self.isRunning = false
                 self.refresh()
             }
         }
