@@ -6,16 +6,42 @@ class UpdateDriver: NSObject, SPUUserDriver {
     let viewModel: UpdateViewModel
     private let minimumCheckDuration: TimeInterval = UpdateTiming.minimumCheckDisplayDuration
     private let checkTimeout: TimeInterval
-    private var lastCheckStart: Date?
-    private var pendingCheckTransition: DispatchWorkItem?
-    private var checkTimeoutWorkItem: DispatchWorkItem?
     private var lastFeedURLString: String?
-    /// Monotonically increasing id for each update check started via `beginChecking`.
-    /// Used to reconcile late Sparkle callbacks with the check they belong to.
-    private var checkGeneration: UInt64 = 0
-    /// The generation that most recently timed out, if the timed-out check has not
-    /// yet been superseded by a new `beginChecking` call.
-    private var timedOutGeneration: UInt64?
+    private enum CheckPhase {
+        case idle
+        case checking(id: UUID, start: Date, timeout: DispatchWorkItem)
+        case delayingResult(id: UUID, start: Date, work: DispatchWorkItem)
+        case timedOut(id: UUID)
+
+        var work: DispatchWorkItem? {
+            switch self {
+            case .checking(_, _, let timeout): return timeout
+            case .delayingResult(_, _, let work): return work
+            case .idle, .timedOut: return nil
+            }
+        }
+
+        var id: UUID? {
+            switch self {
+            case .idle: return nil
+            case .checking(let id, _, _), .delayingResult(let id, _, _), .timedOut(let id): return id
+            }
+        }
+    }
+    private let checkPhaseLock = NSLock()
+    private var storedCheckPhase: CheckPhase = .idle
+    private var checkPhase: CheckPhase {
+        get {
+            checkPhaseLock.lock()
+            defer { checkPhaseLock.unlock() }
+            return storedCheckPhase
+        }
+        set {
+            checkPhaseLock.lock()
+            defer { checkPhaseLock.unlock() }
+            storedCheckPhase = newValue
+        }
+    }
 
     init(viewModel: UpdateViewModel, hostBundle _: Bundle, checkTimeout: TimeInterval = UpdateTiming.checkTimeoutDuration) {
         self.viewModel = viewModel
@@ -192,42 +218,41 @@ class UpdateDriver: NSObject, SPUUserDriver {
         runOnMain { [weak self] in
             guard let self else { return }
             viewModel.overrideState = nil
-            pendingCheckTransition?.cancel()
-            pendingCheckTransition = nil
-            checkTimeoutWorkItem?.cancel()
-            checkTimeoutWorkItem = nil
-            checkGeneration += 1
-            timedOutGeneration = nil
-            lastCheckStart = Date()
+            checkPhase.work?.cancel()
+            let generation = UUID()
+            let timeout = makeCheckTimeout(generation: generation)
+            checkPhase = .checking(id: generation, start: Date(), timeout: timeout)
             applyState(.checking(.init(cancel: cancel)))
-            scheduleCheckTimeout(generation: checkGeneration)
+            DispatchQueue.main.asyncAfter(deadline: .now() + checkTimeout, execute: timeout)
         }
     }
 
-    /// True when the current callback belongs to a check that already timed out and
-    /// has not been superseded by a newer check. Callers must fulfil the callback's
-    /// obligations (reply/acknowledgement) without touching `viewModel.state`.
     private func isLateCallbackForTimedOutCheck() -> Bool {
-        timedOutGeneration == checkGeneration
+        if case .timedOut = checkPhase { return true }
+        return false
     }
 
     private func setStateAfterMinimumCheckDelay(_ newState: UpdateState) {
+        let expectedGeneration = checkPhase.id
         runOnMain { [weak self] in
-            guard let self else { return }
-            pendingCheckTransition?.cancel()
-            pendingCheckTransition = nil
-            checkTimeoutWorkItem?.cancel()
-            checkTimeoutWorkItem = nil
-
-            guard let start = lastCheckStart else {
-                lastCheckStart = nil
+            guard let self, checkPhase.id == expectedGeneration else { return }
+            let generation: UUID
+            let start: Date
+            switch checkPhase {
+            case .checking(let id, let date, _), .delayingResult(let id, let date, _):
+                generation = id
+                start = date
+            case .timedOut:
+                return
+            case .idle:
                 applyState(newState)
                 return
             }
+            checkPhase.work?.cancel()
 
             let elapsed = Date().timeIntervalSince(start)
             if elapsed >= minimumCheckDuration {
-                lastCheckStart = nil
+                checkPhase = .idle
                 applyState(newState)
                 return
             }
@@ -235,11 +260,13 @@ class UpdateDriver: NSObject, SPUUserDriver {
             let delay = minimumCheckDuration - elapsed
             let workItem = DispatchWorkItem { [weak self] in
                 guard let self else { return }
-                guard case .checking = self.viewModel.state else { return }
-                self.lastCheckStart = nil
+                guard case .delayingResult(let current, _, _) = self.checkPhase,
+                      current == generation,
+                      case .checking = self.viewModel.state else { return }
+                self.checkPhase = .idle
                 self.applyState(newState)
             }
-            pendingCheckTransition = workItem
+            checkPhase = .delayingResult(id: generation, start: start, work: workItem)
             DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
         }
     }
@@ -247,24 +274,27 @@ class UpdateDriver: NSObject, SPUUserDriver {
     private func setState(_ newState: UpdateState, logTransition: Bool = true) {
         runOnMain { [weak self] in
             guard let self else { return }
-            pendingCheckTransition?.cancel()
-            pendingCheckTransition = nil
-            checkTimeoutWorkItem?.cancel()
-            checkTimeoutWorkItem = nil
-            lastCheckStart = nil
+            checkPhase.work?.cancel()
+            switch checkPhase {
+            case .timedOut: break
+            default: checkPhase = .idle
+            }
             applyState(newState, logTransition: logTransition)
         }
     }
 
-    private func scheduleCheckTimeout(generation: UInt64) {
-        let workItem = DispatchWorkItem { [weak self] in
+    private func makeCheckTimeout(generation: UUID) -> DispatchWorkItem {
+        DispatchWorkItem { [weak self] in
             guard let self else { return }
-            guard generation == self.checkGeneration else { return }
+            guard case .checking(let current, _, _) = self.checkPhase,
+                  generation == current else { return }
             guard case let .checking(checking) = self.viewModel.state else { return }
-            self.timedOutGeneration = generation
+            self.checkPhase = .timedOut(id: generation)
             let details = "Update check timed out after \(Int(self.checkTimeout)) seconds"
             UpdateLogStore.shared.append("update check timed out after \(self.checkTimeout)s")
             checking.cancel()
+            guard case .timedOut(let current) = self.checkPhase,
+                  current == generation else { return }
             self.setState(.error(.init(
                 error: URLError(.timedOut),
                 retry: { [weak self] in
@@ -281,8 +311,6 @@ class UpdateDriver: NSObject, SPUUserDriver {
                 feedURLString: self.lastFeedURLString
             )))
         }
-        checkTimeoutWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + checkTimeout, execute: workItem)
     }
 
     private func applyState(_ newState: UpdateState, logTransition: Bool = true) {

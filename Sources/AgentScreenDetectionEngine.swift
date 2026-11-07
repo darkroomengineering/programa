@@ -46,6 +46,11 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
     /// sampling set (§1.5 demotion conditions).
     private static let demotionGracePeriod: TimeInterval = 30.0
 
+    private enum DwellState {
+        case idle
+        case matching(bucket: String, count: Int)
+    }
+
     private struct CandidateState {
         let generation: UUID
         var workspaceId: UUID
@@ -58,8 +63,7 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
         /// approval box must still accumulate consecutive samples and refresh the demotion
         /// timer, not stall forever just because nothing on screen changed between ticks.
         var lastClassification: AgentManifest.ClassificationResult?
-        var pendingBucket: String?
-        var pendingCount: Int
+        var dwell: DwellState
         var lastAnyMatchAt: Date
         var lastReportedState: AgentActivityState?
     }
@@ -129,8 +133,7 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
                 manifest: manifest,
                 lastSampledText: nil,
                 lastClassification: nil,
-                pendingBucket: nil,
-                pendingCount: 0,
+                dwell: .idle,
                 lastAnyMatchAt: now(),
                 lastReportedState: nil
             )
@@ -286,7 +289,7 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
     /// byte-identical to the previous one reuses the cached classification (skipping regex work,
     /// §1.5 step 2) but still runs through the exact same bookkeeping below. Without this, a
     /// surface sitting at a static idle prompt or approval box (nothing redraws between ticks)
-    /// would classify once, then stall at `pendingCount == 1` forever, since every subsequent
+    /// would classify once, then stall at one matching sample forever, since every subsequent
     /// tick would bail out on the identical-text check before ever incrementing it.
     func processSample(surfaceId: UUID, workspaceId: UUID, manifest: AgentManifest, text: String, expectedGeneration: UUID? = nil) {
         lock.lock()
@@ -313,20 +316,23 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
             current.lastAnyMatchAt = now()
             if classification.bucket == "blocked" {
                 // Hysteresis §1.6: blocked applies immediately, no dwell.
-                current.pendingBucket = nil
-                current.pendingCount = 0
+                current.dwell = .idle
                 resolvedState = .blocked
             } else if let mapped = AgentActivityState(manifestBucket: classification.bucket) {
-                if current.pendingBucket == classification.bucket {
-                    current.pendingCount += 1
+                let count: Int
+                if case let .matching(bucket, previousCount) = current.dwell,
+                   bucket == classification.bucket {
+                    count = previousCount + 1
                 } else {
-                    current.pendingBucket = classification.bucket
-                    current.pendingCount = 1
+                    count = 1
                 }
-                if current.pendingCount >= Self.hysteresisRequiredSamples {
+                current.dwell = .matching(bucket: classification.bucket, count: count)
+                if count >= Self.hysteresisRequiredSamples {
                     resolvedState = mapped
                 }
             }
+        } else {
+            current.dwell = .idle
         }
         let shouldDemote = classification == nil
             && now().timeIntervalSince(current.lastAnyMatchAt) > Self.demotionGracePeriod
