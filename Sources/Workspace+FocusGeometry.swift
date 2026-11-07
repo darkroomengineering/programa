@@ -364,21 +364,18 @@ extension Workspace {
         terminalFocusPanelId: UUID? = nil,
         includeGeometry: Bool = false
     ) {
-        layoutFollowUpReason = reason
-        if let terminalFocusPanelId {
-            layoutFollowUpTerminalFocusPanelId = terminalFocusPanelId
+        let previous = layoutFollowUpState.request
+        let request = LayoutFollowUpRequest(
+            terminalFocusPanelId: terminalFocusPanelId ?? previous?.terminalFocusPanelId,
+            needsGeometryPass: includeGeometry || (previous?.needsGeometryPass ?? false)
+        )
+        previous?.cancel()
+        if case .attempting(let active, _) = layoutFollowUpState {
+            layoutFollowUpState = .attempting(active, next: request)
+        } else {
+            layoutFollowUpState = .waiting(request)
         }
-        layoutFollowUpNeedsGeometryPass = layoutFollowUpNeedsGeometryPass || includeGeometry
-        layoutFollowUpStalledAttemptCount = 0
-        // Invalidate any pending retry whose delay was computed from a stale stall count.
-        // Incrementing the version causes old closures to exit early; clearing the flag
-        // allows scheduleLayoutFollowUpAttempt() below to enqueue a fresh asyncAfter(0).
-        layoutFollowUpAttemptVersion &+= 1
-        layoutFollowUpAttemptScheduled = false
-
-        if layoutFollowUpTimeoutWorkItem == nil {
-            installLayoutFollowUpObservers()
-        }
+        installLayoutFollowUpObservers()
         refreshLayoutFollowUpTimeout()
         // Use async scheduling instead of a synchronous call here. beginEventDrivenLayoutFollowUp
         // is often invoked from splitTabBar(_:didChangeGeometry:), which fires from inside
@@ -393,48 +390,50 @@ extension Workspace {
     }
 
     func installLayoutFollowUpObservers() {
-        guard layoutFollowUpTimeoutWorkItem == nil else { return }
+        guard let request = layoutFollowUpState.request, request.observers.isEmpty else { return }
+        let token = request.token
 
         let enqueueAttempt: () -> Void = { [weak self] in
-            self?.scheduleLayoutFollowUpAttempt()
+            guard let self, self.layoutFollowUpState.request?.token == token else { return }
+            self.scheduleLayoutFollowUpAttempt()
         }
 
-        layoutFollowUpObservers.append(NotificationCenter.default.addObserver(
+        request.observers.append(NotificationCenter.default.addObserver(
             forName: NSWindow.didUpdateNotification,
             object: nil,
             queue: .main
         ) { _ in
             enqueueAttempt()
         })
-        layoutFollowUpObservers.append(NotificationCenter.default.addObserver(
+        request.observers.append(NotificationCenter.default.addObserver(
             forName: .terminalSurfaceDidBecomeReady,
             object: nil,
             queue: .main
         ) { _ in
             enqueueAttempt()
         })
-        layoutFollowUpObservers.append(NotificationCenter.default.addObserver(
+        request.observers.append(NotificationCenter.default.addObserver(
             forName: .terminalSurfaceHostedViewDidMoveToWindow,
             object: nil,
             queue: .main
         ) { _ in
             enqueueAttempt()
         })
-        layoutFollowUpObservers.append(NotificationCenter.default.addObserver(
+        request.observers.append(NotificationCenter.default.addObserver(
             forName: .terminalPortalVisibilityDidChange,
             object: nil,
             queue: .main
         ) { _ in
             enqueueAttempt()
         })
-        layoutFollowUpObservers.append(NotificationCenter.default.addObserver(
+        request.observers.append(NotificationCenter.default.addObserver(
             forName: .ghosttyDidBecomeFirstResponderSurface,
             object: nil,
             queue: .main
         ) { _ in
             enqueueAttempt()
         })
-        layoutFollowUpPanelsCancellable = $panels
+        request.panelsCancellable = $panels
             .map { _ in () }
             .sink { _ in
                 enqueueAttempt()
@@ -442,48 +441,48 @@ extension Workspace {
     }
 
     func refreshLayoutFollowUpTimeout() {
-        layoutFollowUpTimeoutWorkItem?.cancel()
+        guard let request = layoutFollowUpState.request else { return }
+        request.timeoutWorkItem?.cancel()
+        let token = request.token
         let workItem = DispatchWorkItem { [weak self] in
-            self?.clearLayoutFollowUp()
+            guard let self, self.layoutFollowUpState.request?.token == token else { return }
+            self.clearLayoutFollowUp()
         }
-        layoutFollowUpTimeoutWorkItem = workItem
+        request.timeoutWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: workItem)
     }
 
     func clearLayoutFollowUp() {
-        layoutFollowUpTimeoutWorkItem?.cancel()
-        layoutFollowUpTimeoutWorkItem = nil
-        layoutFollowUpObservers.forEach { NotificationCenter.default.removeObserver($0) }
-        layoutFollowUpObservers.removeAll()
-        layoutFollowUpPanelsCancellable?.cancel()
-        layoutFollowUpPanelsCancellable = nil
-        layoutFollowUpReason = nil
-        layoutFollowUpTerminalFocusPanelId = nil
-        layoutFollowUpNeedsGeometryPass = false
-        layoutFollowUpAttemptVersion &+= 1
-        layoutFollowUpAttemptScheduled = false
-        layoutFollowUpStalledAttemptCount = 0
+        let request = layoutFollowUpState.request
+        layoutFollowUpState = .idle
+        request?.cancel()
     }
 
     func scheduleLayoutFollowUpAttempt() {
-        guard layoutFollowUpTimeoutWorkItem != nil else { return }
-        guard !layoutFollowUpAttemptScheduled else { return }
-
-        layoutFollowUpAttemptScheduled = true
+        guard let request = layoutFollowUpState.request else { return }
+        switch layoutFollowUpState {
+        case .idle, .scheduled: return
+        case .attempting(let active, _):
+            layoutFollowUpState = .attempting(active, next: request)
+            return
+        case .waiting:
+            layoutFollowUpState = .scheduled(request)
+        }
         let delay = layoutFollowUpBackoffDelay()
-        let version = layoutFollowUpAttemptVersion
+        let token = request.token
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let self else { return }
-            guard self.layoutFollowUpAttemptVersion == version else { return }
-            self.layoutFollowUpAttemptScheduled = false
+            guard let self,
+                  case .scheduled(let scheduled) = self.layoutFollowUpState,
+                  scheduled.token == token else { return }
+            self.layoutFollowUpState = .waiting(scheduled)
             self.attemptEventDrivenLayoutFollowUp()
         }
     }
 
     func layoutFollowUpBackoffDelay() -> TimeInterval {
-        guard layoutFollowUpStalledAttemptCount > 0 else { return 0 }
+        guard let count = layoutFollowUpState.request?.stalledAttemptCount, count > 0 else { return 0 }
         let baseDelay: TimeInterval = 0.01
-        let exponent = min(layoutFollowUpStalledAttemptCount - 1, 5)
+        let exponent = min(count - 1, 5)
         return min(0.25, baseDelay * pow(2.0, Double(exponent)))
     }
 
@@ -495,7 +494,7 @@ extension Workspace {
     }
 
     func terminalFocusNeedsFollowUp() -> Bool {
-        guard let panelId = layoutFollowUpTerminalFocusPanelId,
+        guard let panelId = layoutFollowUpState.request?.terminalFocusPanelId,
               let terminalPanel = terminalPanel(for: panelId) else {
             return false
         }
@@ -503,38 +502,49 @@ extension Workspace {
     }
 
     func attemptEventDrivenLayoutFollowUp() {
-        guard layoutFollowUpTimeoutWorkItem != nil, !isAttemptingLayoutFollowUp else { return }
-        isAttemptingLayoutFollowUp = true
-        defer { isAttemptingLayoutFollowUp = false }
+        guard case .waiting(let request) = layoutFollowUpState else { return }
+        layoutFollowUpState = .attempting(request, next: nil)
+        defer {
+            if case .attempting(_, let next) = layoutFollowUpState {
+                layoutFollowUpState = .waiting(next ?? request)
+                if next != nil { scheduleLayoutFollowUpAttempt() }
+            }
+        }
+        let token = request.token
 
         flushWorkspaceWindowLayouts()
+        guard layoutFollowUpState.request?.token == token else { return }
 
-        let geometryPendingBefore = layoutFollowUpNeedsGeometryPass
+        let geometryPendingBefore = request.needsGeometryPass
         let terminalPortalPendingBefore = terminalPortalVisibilityNeedsFollowUp()
         let terminalFocusPendingBefore = terminalFocusNeedsFollowUp()
 
-        if layoutFollowUpNeedsGeometryPass {
-            layoutFollowUpNeedsGeometryPass = reconcileTerminalGeometryPass()
+        if request.needsGeometryPass {
+            let needsGeometryPass = reconcileTerminalGeometryPass()
+            guard layoutFollowUpState.request?.token == token else { return }
+            request.needsGeometryPass = needsGeometryPass
         }
 
-        if let terminalFocusPanelId = layoutFollowUpTerminalFocusPanelId {
+        if let terminalFocusPanelId = request.terminalFocusPanelId {
             if let terminalPanel = terminalPanel(for: terminalFocusPanelId),
                focusedPanelId == terminalFocusPanelId {
                 terminalPanel.hostedView.ensureFocus(for: id, surfaceId: terminalFocusPanelId)
+                guard layoutFollowUpState.request?.token == token else { return }
                 if terminalPanel.hostedView.isSurfaceViewFirstResponder() {
-                    layoutFollowUpTerminalFocusPanelId = nil
+                    request.terminalFocusPanelId = nil
                 }
             } else if terminalPanel(for: terminalFocusPanelId) == nil {
-                layoutFollowUpTerminalFocusPanelId = nil
+                request.terminalFocusPanelId = nil
             }
         }
 
         reconcileTerminalPortalVisibilityForCurrentRenderedLayout()
+        guard layoutFollowUpState.request?.token == token else { return }
         let terminalPortalPending = terminalPortalVisibilityNeedsFollowUp()
 
         let terminalFocusPending = terminalFocusNeedsFollowUp()
         let needsMoreWork =
-            layoutFollowUpNeedsGeometryPass ||
+            request.needsGeometryPass ||
             terminalPortalPending ||
             terminalFocusPending
 
@@ -544,15 +554,15 @@ extension Workspace {
         }
 
         let didMakeProgress =
-            (geometryPendingBefore && !layoutFollowUpNeedsGeometryPass) ||
+            (geometryPendingBefore && !request.needsGeometryPass) ||
             (terminalPortalPendingBefore && !terminalPortalPending) ||
             (terminalFocusPendingBefore && !terminalFocusPending)
 
         if didMakeProgress {
-            layoutFollowUpStalledAttemptCount = 0
+            request.stalledAttemptCount = 0
             scheduleLayoutFollowUpAttempt()
         } else {
-            layoutFollowUpStalledAttemptCount += 1
+            request.stalledAttemptCount += 1
         }
     }
 
