@@ -68,9 +68,27 @@ final class SocketConnection: @unchecked Sendable {
     private let socket: Int32
     private let writeLock = NSLock()
     private let stateLock = NSLock()
-    private var closed = false
-    private(set) var subscription: EventSubscription?
-    private var pendingSubscription: EventSubscription?
+    private enum State {
+        case open
+        case awaitingAck(EventSubscription)
+        case subscribed(EventSubscription)
+        case closed
+
+        var subscription: EventSubscription? {
+            switch self {
+            case .awaitingAck(let subscription), .subscribed(let subscription): return subscription
+            case .open, .closed: return nil
+            }
+        }
+    }
+    private var state: State = .open
+
+    var subscription: EventSubscription? {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        guard case .subscribed(let subscription) = state else { return nil }
+        return subscription
+    }
 
     init(socket: Int32) {
         self.socket = socket
@@ -99,9 +117,13 @@ final class SocketConnection: @unchecked Sendable {
         writeLock.lock()
         defer { writeLock.unlock() }
         stateLock.lock()
-        let alreadyClosed = closed
+        if case .closed = state {
+            stateLock.unlock()
+            return false
+        }
+        let pendingID: UUID?
+        if case .awaitingAck(let pending) = state { pendingID = pending.id } else { pendingID = nil }
         stateLock.unlock()
-        guard !alreadyClosed else { return false }
 
         var offset = 0
         while offset < bytes.count {
@@ -109,34 +131,37 @@ final class SocketConnection: @unchecked Sendable {
                 write(socket, buffer.baseAddress!.advanced(by: offset), buffer.count - offset)
             }
             if written <= 0 {
-                discardPendingSubscription(reason: "response_write_failure")
+                discardPendingSubscription(id: pendingID, reason: "response_write_failure")
                 return false
             }
             offset += written
         }
         if activatesPendingSubscription {
-            activatePendingSubscription()
+            activatePendingSubscription(id: pendingID)
         }
         return true
     }
 
-    private func activatePendingSubscription() {
+    private func activatePendingSubscription(id: UUID?) {
         stateLock.lock()
-        let pending = pendingSubscription
-        pendingSubscription = nil
-        if let pending {
-            subscription = pending
+        guard case .awaitingAck(let pending) = state, pending.id == id else {
+            stateLock.unlock()
+            return
         }
+        state = .subscribed(pending)
         stateLock.unlock()
-        pending?.activate()
+        pending.activate()
     }
 
-    private func discardPendingSubscription(reason: String) {
+    private func discardPendingSubscription(id: UUID?, reason: String) {
         stateLock.lock()
-        let pending = pendingSubscription
-        pendingSubscription = nil
+        guard case .awaitingAck(let pending) = state, pending.id == id else {
+            stateLock.unlock()
+            return
+        }
+        state = .open
         stateLock.unlock()
-        pending?.teardown(reason: reason)
+        pending.teardown(reason: reason)
     }
 
     /// Attaches a subscription to this connection, tearing down any previous one first --
@@ -144,46 +169,40 @@ final class SocketConnection: @unchecked Sendable {
     /// connection has at most one).
     func attach(_ subscription: EventSubscription) {
         stateLock.lock()
-        guard !closed else {
+        if case .closed = state {
             stateLock.unlock()
             subscription.teardown(reason: "connection_closed")
             return
         }
-        let previousActive = self.subscription
-        let previousPending = pendingSubscription
-        self.subscription = nil
-        pendingSubscription = subscription
+        let previous = state.subscription
+        state = .awaitingAck(subscription)
         SocketEventBroadcaster.shared.replace(
-            previous: [previousActive, previousPending].compactMap { $0 },
+            previous: previous.map { [$0] } ?? [],
             with: subscription
         )
         stateLock.unlock()
-        previousActive?.teardown(reason: "replaced_by_new_subscription")
-        if let previousPending, previousPending !== previousActive {
-            previousPending.teardown(reason: "replaced_by_new_subscription")
-        }
+        previous?.teardown(reason: "replaced_by_new_subscription")
     }
 
     func detachSubscription() {
         stateLock.lock()
-        let previousActive = subscription
-        let previousPending = pendingSubscription
-        subscription = nil
-        pendingSubscription = nil
-        stateLock.unlock()
-        previousActive?.teardown(reason: "unsubscribed")
-        if let previousPending, previousPending !== previousActive {
-            previousPending.teardown(reason: "unsubscribed")
+        if case .closed = state {
+            stateLock.unlock()
+            return
         }
+        let previous = state.subscription
+        state = .open
+        stateLock.unlock()
+        previous?.teardown(reason: "unsubscribed")
     }
 
     /// Replaces this connection's banner claim (`notification.claim_banners`); an empty set
-    /// releases it. Checked against `closed` under `stateLock` so a claim can never be recorded
+    /// releases it. Checked against `.closed` under `stateLock` so a claim can never be recorded
     /// after `teardown()` has released it.
     func claimBanners(_ kinds: Set<NotificationBannerClaimKind>) {
         stateLock.lock()
         defer { stateLock.unlock() }
-        guard !closed else { return }
+        if case .closed = state { return }
         NotificationBannerClaims.shared.set(kinds, for: self)
     }
 
@@ -191,21 +210,15 @@ final class SocketConnection: @unchecked Sendable {
     func teardown() {
         writeLock.lock()
         stateLock.lock()
-        closed = true
-        let previousActive = subscription
-        let previousPending = pendingSubscription
-        subscription = nil
-        pendingSubscription = nil
+        let previous = state.subscription
+        state = .closed
         stateLock.unlock()
         writeLock.unlock()
         NotificationBannerClaims.shared.set([], for: self)
-        if previousActive != nil || previousPending != nil {
+        if previous != nil {
             dilog("socket.conn", "teardown hadSubscription=true")
         }
-        previousActive?.teardown(reason: "connection_closed")
-        if let previousPending, previousPending !== previousActive {
-            previousPending.teardown(reason: "connection_closed")
-        }
+        previous?.teardown(reason: "connection_closed")
     }
 }
 
@@ -230,11 +243,18 @@ final class EventSubscription: @unchecked Sendable {
     private let drainQueue: DispatchQueue
     private let lock = NSLock()
     private let deliveryLock = NSLock()
-    private var pending: [[String: Any]] = []
-    private var droppedCount = 0
-    private var isDraining = false
-    private var isActivated = false
-    private var isTornDown = false
+    private final class Buffer {
+        var pending: [[String: Any]] = []
+        var droppedCount = 0
+    }
+
+    private enum DeliveryState {
+        case buffering(Buffer)
+        case idle
+        case draining(UUID, Buffer)
+        case terminated
+    }
+    private var state: DeliveryState = .buffering(Buffer())
 
     init(connection: SocketConnection, classes: Set<SocketEventClass>, outputSurfaceIds: Set<UUID>) {
         self.connection = connection
@@ -248,18 +268,30 @@ final class EventSubscription: @unchecked Sendable {
     /// this one (a subscriber falling behind gets the *freshest* events, not a growing backlog).
     func enqueue(_ frame: [String: Any]) {
         lock.lock()
-        guard !isTornDown else { lock.unlock(); return }
-        if pending.count >= Self.maxQueuedEvents {
-            pending.removeFirst()
-            droppedCount += 1
+        let buffer: Buffer
+        let scheduledToken: UUID?
+        switch state {
+        case .terminated:
+            lock.unlock()
+            return
+        case .buffering(let existing), .draining(_, let existing):
+            buffer = existing
+            scheduledToken = nil
+        case .idle:
+            buffer = Buffer()
+            let token = UUID()
+            state = .draining(token, buffer)
+            scheduledToken = token
         }
-        pending.append(frame)
-        let shouldSchedule = isActivated && !isDraining
-        if shouldSchedule { isDraining = true }
+        if buffer.pending.count >= Self.maxQueuedEvents {
+            buffer.pending.removeFirst()
+            buffer.droppedCount += 1
+        }
+        buffer.pending.append(frame)
         lock.unlock()
 
-        if shouldSchedule {
-            drainQueue.async { [weak self] in self?.drain() }
+        if let token = scheduledToken {
+            drainQueue.async { [weak self] in self?.drain(token: token) }
         }
     }
 
@@ -268,56 +300,53 @@ final class EventSubscription: @unchecked Sendable {
     /// those response bytes on the socket.
     func activate() {
         lock.lock()
-        guard !isTornDown, !isActivated else { lock.unlock(); return }
-        isActivated = true
-        let shouldSchedule = !isDraining && (droppedCount > 0 || !pending.isEmpty)
-        if shouldSchedule { isDraining = true }
+        guard case .buffering(let buffer) = state else { lock.unlock(); return }
+        guard buffer.droppedCount > 0 || !buffer.pending.isEmpty else {
+            state = .idle
+            lock.unlock()
+            return
+        }
+        let token = UUID()
+        state = .draining(token, buffer)
         lock.unlock()
 
-        if shouldSchedule {
-            drainQueue.async { [weak self] in self?.drain() }
-        }
+        drainQueue.async { [weak self] in self?.drain(token: token) }
     }
 
-    private func drain() {
+    private func drain(token: UUID) {
         while true {
             lock.lock()
-            if isTornDown {
-                isDraining = false
+            guard case .draining(let currentToken, let buffer) = state, currentToken == token else {
                 lock.unlock()
                 return
             }
-            if !isActivated {
-                isDraining = false
-                lock.unlock()
-                return
-            }
-            if droppedCount > 0 {
-                let count = droppedCount
-                droppedCount = 0
+            if buffer.droppedCount > 0 {
+                let count = buffer.droppedCount
+                buffer.droppedCount = 0
                 lock.unlock()
                 let droppedFrame: [String: Any] = ["event": "dropped", "count": count]
-                guard writeFrame(droppedFrame) else { teardown(reason: "write_failure"); return }
+                guard writeFrame(droppedFrame, token: token) else { teardown(reason: "write_failure"); return }
                 continue
             }
-            guard !pending.isEmpty else {
-                isDraining = false
+            guard !buffer.pending.isEmpty else {
+                state = .idle
                 lock.unlock()
                 return
             }
-            let frame = pending.removeFirst()
+            let frame = buffer.pending.removeFirst()
             lock.unlock()
 
-            guard writeFrame(frame) else { teardown(reason: "write_failure"); return }
+            guard writeFrame(frame, token: token) else { teardown(reason: "write_failure"); return }
         }
     }
 
-    private func writeFrame(_ frame: [String: Any]) -> Bool {
+    private func writeFrame(_ frame: [String: Any], token: UUID) -> Bool {
         guard let line = SocketEventBroadcaster.encodeFrame(frame) else { return true }
         deliveryLock.lock()
         defer { deliveryLock.unlock() }
         lock.lock()
-        let shouldDeliver = !isTornDown
+        let shouldDeliver: Bool
+        if case .draining(let currentToken, _) = state { shouldDeliver = currentToken == token } else { shouldDeliver = false }
         lock.unlock()
         guard shouldDeliver else { return true }
         guard let connection else { return false }
@@ -328,11 +357,9 @@ final class EventSubscription: @unchecked Sendable {
     /// `SocketConnection.teardown()` when the connection itself is closing.
     func teardown(reason: String = "unknown") {
         lock.lock()
-        let wasActive = !isTornDown
-        if wasActive {
-            isTornDown = true
-            pending.removeAll()
-        }
+        let wasActive: Bool
+        if case .terminated = state { wasActive = false } else { wasActive = true }
+        state = .terminated
         lock.unlock()
         // A frame may already have left `pending`. Wait for that delivery to finish before
         // returning so an unsubscribe response is a barrier: no old event can follow its ack.
