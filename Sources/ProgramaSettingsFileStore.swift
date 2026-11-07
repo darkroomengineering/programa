@@ -1402,8 +1402,25 @@ private final class ShortcutSettingsFileWatcher {
     private let fileManager: FileManager
     private let onChange: () -> Void
     private let watcher: FileWatcher
-    private let pendingReloadLock = NSLock()
-    private var pendingReloadWorkItem: DispatchWorkItem?
+    private let lock = NSRecursiveLock()
+    private struct WatchContext {
+        let generation: UUID
+        var reload: (generation: UUID, work: DispatchWorkItem)?
+    }
+    private enum WatchState {
+        case stopped
+        case unwatched(WatchContext)
+        case file(WatchContext)
+        case directory(WatchContext)
+
+        var context: WatchContext? {
+            switch self {
+            case .stopped: return nil
+            case .unwatched(let context), .file(let context), .directory(let context): return context
+            }
+        }
+    }
+    private var state: WatchState = .stopped
 
     init(path: String, fileManager: FileManager = .default, onChange: @escaping () -> Void) {
         self.path = path
@@ -1414,22 +1431,21 @@ private final class ShortcutSettingsFileWatcher {
     }
 
     deinit {
-        cancelPendingReload()
+        stop()
     }
 
     func stop() {
+        lock.lock()
+        defer { lock.unlock() }
+        state.context?.reload?.work.cancel()
+        state = .stopped
         watcher.stop()
-        cancelPendingReload()
-    }
-
-    private func cancelPendingReload() {
-        pendingReloadLock.lock()
-        pendingReloadWorkItem?.cancel()
-        pendingReloadWorkItem = nil
-        pendingReloadLock.unlock()
     }
 
     private func start() {
+        lock.lock()
+        defer { lock.unlock() }
+        state.context?.reload?.work.cancel()
         if fileManager.fileExists(atPath: path) {
             startFileWatcher()
         } else {
@@ -1438,11 +1454,16 @@ private final class ShortcutSettingsFileWatcher {
     }
 
     private func startFileWatcher() {
+        let generation = UUID()
+        state = .file(WatchContext(generation: generation))
         let started = watcher.start(
             path: path,
             eventMask: [.write, .delete, .rename, .extend]
         ) { [weak self] flags in
             guard let self else { return }
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            guard self.state.context?.generation == generation else { return }
             if flags.contains(.delete) || flags.contains(.rename) {
                 self.start()
             }
@@ -1454,30 +1475,57 @@ private final class ShortcutSettingsFileWatcher {
     }
 
     private func startDirectoryWatcher() {
+        let generation = UUID()
+        state = .directory(WatchContext(generation: generation))
         let directoryPath = (path as NSString).deletingLastPathComponent
-        watcher.start(
+        let started = watcher.start(
             path: directoryPath,
             eventMask: [.write, .rename, .delete]
         ) { [weak self] _ in
             guard let self else { return }
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            guard self.state.context?.generation == generation else { return }
             if self.fileManager.fileExists(atPath: self.path) {
                 self.start()
             }
             self.scheduleReload()
         }
+        if !started {
+            state = .unwatched(WatchContext(generation: generation))
+        }
     }
 
     private func scheduleReload() {
+        guard var context = state.context else { return }
+        let generation = context.generation
+        let reloadGeneration = UUID()
         let workItem = DispatchWorkItem { [weak self] in
-            self?.onChange()
+            guard let self else { return }
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            guard var current = self.state.context,
+                  current.generation == generation,
+                  current.reload?.generation == reloadGeneration else { return }
+            current.reload = nil
+            self.updateContext(current)
+            self.onChange()
         }
-        pendingReloadLock.lock()
-        pendingReloadWorkItem?.cancel()
-        pendingReloadWorkItem = workItem
-        pendingReloadLock.unlock()
+        context.reload?.work.cancel()
+        context.reload = (reloadGeneration, workItem)
+        updateContext(context)
         DispatchQueue.main.asyncAfter(
             deadline: .now() + Self.reloadCoalescingDelay,
             execute: workItem
         )
+    }
+
+    private func updateContext(_ context: WatchContext) {
+        switch state {
+        case .stopped: break
+        case .unwatched: state = .unwatched(context)
+        case .file: state = .file(context)
+        case .directory: state = .directory(context)
+        }
     }
 }

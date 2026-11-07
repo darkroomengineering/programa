@@ -21,13 +21,35 @@ final class SessionAutosaveCoordinator {
     typealias XCTestRunningProvider = () -> Bool
 
     private var sessionAutosaveTimer: DispatchSourceTimer?
-    private var sessionAutosaveTickInFlight = false
+    private struct SaveSchedule {
+        var prompt: UUID?
+        var retry: UUID?
+        var declinedRetries = 0
+    }
+    private enum WritePrompt {
+        case none
+        case waiting
+    }
+    private enum AutosavePhase {
+        case idle(SaveSchedule)
+        case writing(UUID, SaveSchedule, WritePrompt)
+    }
+    private var phase: AutosavePhase = .idle(SaveSchedule())
+    private var schedule: SaveSchedule {
+        get {
+            switch phase {
+            case .idle(let schedule), .writing(_, let schedule, _): return schedule
+            }
+        }
+        set {
+            switch phase {
+            case .idle: phase = .idle(newValue)
+            case .writing(let token, _, let prompt): phase = .writing(token, newValue, prompt)
+            }
+        }
+    }
     private var autosaveGeneration = UUID()
-    private var promptSaveScheduled = false
-    private var promptSaveWaitingForWrite = false
-    private var consecutiveDeclinedSaveRetries = 0
     private static let maxConsecutiveDeclinedSaveRetries = 5
-    private var sessionAutosaveDeferredRetryPending = false
     private var lastSessionAutosaveFingerprint: Data?
     private var lastSessionAutosavePersistedAt: Date = .distantPast
     private var lastTypingActivityAt: TimeInterval = 0
@@ -82,8 +104,10 @@ final class SessionAutosaveCoordinator {
         let timer = DispatchSource.makeTimerSource(queue: .main)
         let interval = SessionPersistencePolicy.autosaveInterval
         timer.schedule(deadline: .now() + interval, repeating: interval, leeway: .seconds(1))
+        let generation = autosaveGeneration
         timer.setEventHandler { [weak self] in
             guard let self,
+                  self.autosaveGeneration == generation,
                   Self.shouldRunSessionAutosaveTick(isTerminatingApp: self.isTerminating()) else {
                 return
             }
@@ -97,11 +121,7 @@ final class SessionAutosaveCoordinator {
         sessionAutosaveTimer?.cancel()
         sessionAutosaveTimer = nil
         autosaveGeneration = UUID()
-        sessionAutosaveTickInFlight = false
-        sessionAutosaveDeferredRetryPending = false
-        promptSaveScheduled = false
-        promptSaveWaitingForWrite = false
-        consecutiveDeclinedSaveRetries = 0
+        phase = .idle(SaveSchedule())
     }
 
     nonisolated static func shouldRunSessionAutosaveTick(isTerminatingApp: Bool) -> Bool {
@@ -119,13 +139,15 @@ final class SessionAutosaveCoordinator {
 
     private func scheduleDeferredSessionAutosaveRetry(after delay: TimeInterval) {
         guard delay.isFinite, delay > 0 else { return }
-        guard !sessionAutosaveDeferredRetryPending else { return }
-        sessionAutosaveDeferredRetryPending = true
+        guard schedule.retry == nil else { return }
+        let retry = UUID()
+        schedule.retry = retry
         let generation = autosaveGeneration
         sessionPersistenceQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
             Task { @MainActor [weak self] in
-                guard let self, self.autosaveGeneration == generation else { return }
-                self.sessionAutosaveDeferredRetryPending = false
+                guard let self, self.autosaveGeneration == generation,
+                      self.schedule.retry == retry else { return }
+                self.schedule.retry = nil
                 self.runSessionAutosaveTick(source: "typingQuietRetry")
             }
         }
@@ -133,7 +155,7 @@ final class SessionAutosaveCoordinator {
 
     func runSessionAutosaveTick(source: String) {
         guard Self.shouldRunSessionAutosaveTick(isTerminatingApp: isTerminating()) else { return }
-        guard !sessionAutosaveTickInFlight else { return }
+        guard case .idle = phase else { return }
         if let remainingQuietPeriod = remainingSessionAutosaveTypingQuietPeriod() {
 #if DEBUG
             dlog(
@@ -145,7 +167,8 @@ final class SessionAutosaveCoordinator {
             return
         }
 
-        sessionAutosaveTickInFlight = true
+        let writeToken = UUID()
+        phase = .writing(writeToken, schedule, .none)
 #if DEBUG
         let timingStart = ProgramaTypingTiming.start()
         let phaseStart = ProcessInfo.processInfo.systemUptime
@@ -182,6 +205,7 @@ final class SessionAutosaveCoordinator {
 #if DEBUG
         fingerprintMs = (ProcessInfo.processInfo.systemUptime - fingerprintStart) * 1000.0
 #endif
+        guard case .writing(let currentToken, _, _) = phase, currentToken == writeToken else { return }
         if Self.shouldSkipSessionAutosaveForUnchangedFingerprint(
             isTerminatingApp: isTerminating(),
             includeScrollback: false,
@@ -190,7 +214,8 @@ final class SessionAutosaveCoordinator {
             lastPersistedAt: lastSessionAutosavePersistedAt,
             now: now
         ) {
-            sessionAutosaveTickInFlight = false
+            guard case .writing(let token, let schedule, _) = phase, token == writeToken else { return }
+            phase = .idle(schedule)
 #if DEBUG
             dlog(
                 "session.save.skipped reason=unchanged_autosave_fingerprint includeScrollback=0 source=\(source)"
@@ -204,29 +229,32 @@ final class SessionAutosaveCoordinator {
 #endif
         let generation = autosaveGeneration
         saveSnapshot(false, autosaveSnapshot) { [weak self] saved in
-            guard let self, self.autosaveGeneration == generation else { return }
-            self.sessionAutosaveTickInFlight = false
+            guard let self, self.autosaveGeneration == generation,
+                  case .writing(let token, let schedule, let prompt) = self.phase,
+                  token == writeToken else { return }
+            self.phase = .idle(schedule)
             guard !self.isTerminating() else { return }
+            defer {
+                if case .waiting = prompt {
+                    self.requestPromptSave(source: "writeCompleted", after: 0)
+                }
+            }
             guard saved else {
                 // Declined snapshots and failed disk writes must remain eligible even
                 // when their content is unchanged. Bound retries for windowless apps
                 // and persistent disk errors; the periodic timer keeps trying later.
-                if self.consecutiveDeclinedSaveRetries < Self.maxConsecutiveDeclinedSaveRetries {
-                    self.consecutiveDeclinedSaveRetries += 1
+                if self.schedule.declinedRetries < Self.maxConsecutiveDeclinedSaveRetries {
+                    self.schedule.declinedRetries += 1
                     self.scheduleDeferredSessionAutosaveRetry(after: 1.0)
                 }
                 return
             }
-            self.consecutiveDeclinedSaveRetries = 0
+            self.schedule.declinedRetries = 0
             self.updateSessionAutosaveSaveState(
                 includeScrollback: false,
                 persistedAt: Date(),
                 fingerprint: autosaveFingerprint
             )
-            if self.promptSaveWaitingForWrite {
-                self.promptSaveWaitingForWrite = false
-                self.requestPromptSave(source: "writeCompleted", after: 0)
-            }
         }
 #if DEBUG
         saveMs = (ProcessInfo.processInfo.systemUptime - saveStart) * 1000.0
@@ -241,14 +269,16 @@ final class SessionAutosaveCoordinator {
     /// learns the panel existed. One pending request at a time: bursts (multi-pane
     /// restore, N tabs opened together) fold into a single snapshot build.
     func requestPromptSave(source: String, after delay: TimeInterval = 1.0) {
-        guard !promptSaveScheduled else { return }
-        promptSaveScheduled = true
+        guard schedule.prompt == nil else { return }
+        let promptToken = UUID()
+        schedule.prompt = promptToken
         let generation = autosaveGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let self, self.autosaveGeneration == generation else { return }
-            self.promptSaveScheduled = false
-            if self.sessionAutosaveTickInFlight {
-                self.promptSaveWaitingForWrite = true
+            guard let self, self.autosaveGeneration == generation,
+                  self.schedule.prompt == promptToken else { return }
+            self.schedule.prompt = nil
+            if case .writing(let token, let schedule, _) = self.phase {
+                self.phase = .writing(token, schedule, .waiting)
                 return
             }
             self.runSessionAutosaveTick(source: source)

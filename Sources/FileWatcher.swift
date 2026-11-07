@@ -15,6 +15,7 @@ import Foundation
 /// - `ShortcutSettingsFileWatcher` in `ProgramaSettingsFileStore.swift` (settings.json watching)
 final class FileWatcher {
     private let queue: DispatchQueue
+    private let lock = NSLock()
     private var source: DispatchSourceFileSystemObject?
 
     init(queue: DispatchQueue) {
@@ -38,7 +39,10 @@ final class FileWatcher {
         eventMask: DispatchSource.FileSystemEvent,
         onEvent: @escaping (DispatchSource.FileSystemEvent) -> Void
     ) -> Bool {
-        stop()
+        lock.lock()
+        defer { lock.unlock() }
+        source?.cancel()
+        source = nil
 
         let fd = open(path, O_EVTONLY)
         guard fd >= 0 else { return false }
@@ -48,11 +52,12 @@ final class FileWatcher {
             eventMask: eventMask,
             queue: queue
         )
-        newSource.setEventHandler { [weak self] in
-            guard let self, let activeSource = self.source else { return }
-            onEvent(activeSource.data)
+        newSource.setEventHandler {
+            onEvent(newSource.data)
         }
         newSource.setCancelHandler {
+            newSource.setEventHandler(handler: nil)
+            newSource.setCancelHandler(handler: nil)
             Darwin.close(fd)
         }
         source = newSource
@@ -62,6 +67,8 @@ final class FileWatcher {
 
     /// Cancels the active watch, if any. Safe to call when nothing is active.
     func stop() {
+        lock.lock()
+        defer { lock.unlock() }
         source?.cancel()
         source = nil
     }
