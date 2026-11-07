@@ -192,22 +192,118 @@ final class GhosttySurfaceScrollView: NSView {
     // (current) blocks always match, so #241 occlusion-heal semantics on
     // didBecomeKey/didChangeOcclusionState are unaffected.
     private var windowObserverGeneration: UInt64 = 0
-    private var isLiveScrolling = false
+    private enum ScrollPosition {
+        case following
+        case reviewing
+    }
+    private enum ScrollOwnership {
+        case stationary(ScrollPosition)
+        case dragging(ScrollPosition)
+        case awaitingWheel(ScrollPosition, dragging: Bool)
+
+        var position: ScrollPosition {
+            switch self {
+            case .stationary(let position), .dragging(let position), .awaitingWheel(let position, _):
+                return position
+            }
+        }
+
+        var isDragging: Bool {
+            switch self {
+            case .stationary: return false
+            case .dragging: return true
+            case .awaitingWheel(_, let dragging): return dragging
+            }
+        }
+    }
+    private var scrollOwnership: ScrollOwnership = .stationary(.following)
+    private var isLiveScrolling: Bool {
+        get { scrollOwnership.isDragging }
+        set {
+            if case .awaitingWheel(let position, _) = scrollOwnership {
+                scrollOwnership = .awaitingWheel(position, dragging: newValue)
+            } else {
+                scrollOwnership = newValue ? .dragging(scrollOwnership.position) : .stationary(scrollOwnership.position)
+            }
+        }
+    }
     private var lastSentRow: Int?
     /// Tracks whether the user has scrolled away from the bottom to review scrollback.
     /// When true, auto-scroll should be suspended to prevent the "doomscroll" bug
     /// where the terminal fights the user's scroll position.
-    private var userScrolledAwayFromBottom = false
-    private var pendingExplicitWheelScroll = false
-    private var allowExplicitScrollbarSync = false
+    private var userScrolledAwayFromBottom: Bool {
+        get {
+            if case .reviewing = scrollOwnership.position { return true }
+            return false
+        }
+        set {
+            let position: ScrollPosition = newValue ? .reviewing : .following
+            switch scrollOwnership {
+            case .stationary: scrollOwnership = .stationary(position)
+            case .dragging: scrollOwnership = .dragging(position)
+            case .awaitingWheel(_, let dragging):
+                scrollOwnership = .awaitingWheel(position, dragging: dragging)
+            }
+        }
+    }
     /// Threshold in points from bottom to consider "at bottom" (allows for minor float drift)
     private static let scrollToBottomThreshold: CGFloat = 5.0
     // private(set): read from the debug-only RenderStats extension
     // (GhosttyTerminalView+RenderStats.swift), written only here.
-    private(set) var isActive = true
+    private enum FocusRepair {
+        case idle
+        case awaitingGeometry
+        case scheduled(UUID)
+        case scheduledAwaitingGeometry(UUID)
+
+        var requiresGeometry: Bool {
+            switch self {
+            case .awaitingGeometry, .scheduledAwaitingGeometry: return true
+            case .idle, .scheduled: return false
+            }
+        }
+
+        var token: UUID? {
+            switch self {
+            case .scheduled(let token), .scheduledAwaitingGeometry(let token): return token
+            case .idle, .awaitingGeometry: return nil
+            }
+        }
+    }
+    private enum FocusState {
+        case inactive(SearchFocusTarget)
+        case active(SearchFocusTarget, FocusRepair)
+
+        var target: SearchFocusTarget {
+            switch self {
+            case .inactive(let target), .active(let target, _): return target
+            }
+        }
+    }
+    private var focusState: FocusState = .active(.searchField, .idle)
+    private var focusIntentGeneration: UInt64 = 0
+    private(set) var isActive: Bool {
+        get {
+            if case .active = focusState { return true }
+            return false
+        }
+        set {
+            guard newValue != isActive else { return }
+            focusIntentGeneration &+= 1
+            focusState = newValue ? .active(focusState.target, .idle) : .inactive(focusState.target)
+        }
+    }
+    private var focusRepair: FocusRepair {
+        get {
+            if case .active(_, let repair) = focusState { return repair }
+            return .idle
+        }
+        set {
+            guard isActive else { return }
+            focusState = .active(focusState.target, newValue)
+        }
+    }
     private var lastFocusRefreshAt: CFTimeInterval = 0
-    private var pendingAutomaticFirstResponderApply = false
-    private var suppressedFirstResponderFocusReapplyGate = SuppressedFirstResponderFocusReapplyGate()
     // Hidden/tiny focus retry is bounded by layout/visibility signals, not a timer loop.
     private var lastRequestedPortalOcclusionVisible: Bool?
     /// Whether this surface's NSWindow is currently visible (not miniaturized,
@@ -224,7 +320,14 @@ final class GhosttySurfaceScrollView: NSView {
         case searchField
         case terminal
     }
-    private(set) var searchFocusTarget: SearchFocusTarget = .searchField
+    private(set) var searchFocusTarget: SearchFocusTarget {
+        get { focusState.target }
+        set {
+            guard newValue != focusState.target else { return }
+            focusIntentGeneration &+= 1
+            focusState = isActive ? .active(newValue, .idle) : .inactive(newValue)
+        }
+    }
 
 #if DEBUG
     private var lastDropZoneOverlayLogSignature: String?
@@ -568,7 +671,11 @@ final class GhosttySurfaceScrollView: NSView {
             object: surfaceView,
             queue: .main
         ) { [weak self] _ in
-            self?.pendingExplicitWheelScroll = true
+            guard let self else { return }
+            self.scrollOwnership = .awaitingWheel(
+                self.scrollOwnership.position,
+                dragging: self.scrollOwnership.isDragging
+            )
         })
 
         observers.append(NotificationCenter.default.addObserver(
@@ -865,6 +972,8 @@ final class GhosttySurfaceScrollView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        focusIntentGeneration &+= 1
+        focusRepair = focusRepair.requiresGeometry ? .awaitingGeometry : .idle
         windowObservers.forEach { NotificationCenter.default.removeObserver($0) }
         windowObservers.removeAll()
         windowObserverGeneration &+= 1
@@ -1173,8 +1282,10 @@ final class GhosttySurfaceScrollView: NSView {
 
         guard let field = findEditableSearchField(in: overlay) else {
             guard attemptsRemaining > 0 else { return }
+            let focusGeneration = focusIntentGeneration
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { [weak self] in
-                self?.requestMountedSearchFieldFocus(
+                guard let self, self.focusIntentGeneration == focusGeneration else { return }
+                self.requestMountedSearchFieldFocus(
                     generation: generation,
                     force: force,
                     attemptsRemaining: attemptsRemaining - 1
@@ -1197,8 +1308,10 @@ final class GhosttySurfaceScrollView: NSView {
         )
 #endif
         guard !result, attemptsRemaining > 0 else { return }
+        let focusGeneration = focusIntentGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { [weak self] in
-            self?.requestMountedSearchFieldFocus(
+            guard let self, self.focusIntentGeneration == focusGeneration else { return }
+            self.requestMountedSearchFieldFocus(
                 generation: generation,
                 force: force,
                 attemptsRemaining: attemptsRemaining - 1
@@ -1695,6 +1808,8 @@ final class GhosttySurfaceScrollView: NSView {
             )
         }
         if !visible {
+            focusIntentGeneration &+= 1
+            focusRepair = focusRepair.requiresGeometry ? .awaitingGeometry : .idle
             if let window, let fr = window.firstResponder as? NSView,
                fr === surfaceView || fr.isDescendant(of: surfaceView) {
                 window.makeFirstResponder(nil)
@@ -1781,6 +1896,8 @@ final class GhosttySurfaceScrollView: NSView {
 #endif
 
     func moveFocus(from previous: GhosttySurfaceScrollView? = nil, delay: TimeInterval? = nil) {
+        focusIntentGeneration &+= 1
+        let generation = focusIntentGeneration
 #if DEBUG
         let surfaceShort = String(self.surfaceView.terminalSurface?.id.uuidString.prefix(5) ?? "nil")
         let searchActive = self.surfaceView.terminalSurface?.searchState != nil
@@ -1792,7 +1909,7 @@ final class GhosttySurfaceScrollView: NSView {
         )
 #endif
         let work = { [weak self] in
-            guard let self else { return }
+            guard let self, self.focusIntentGeneration == generation else { return }
             guard let window = self.window else { return }
 #if DEBUG
             let before = String(describing: window.firstResponder)
@@ -1800,6 +1917,7 @@ final class GhosttySurfaceScrollView: NSView {
             if let previous, previous !== self {
                 _ = previous.surfaceView.resignFirstResponder()
             }
+            guard self.focusIntentGeneration == generation, self.window === window else { return }
             let result = window.makeFirstResponder(self.surfaceView)
 #if DEBUG
             dlog(
@@ -2106,17 +2224,22 @@ final class GhosttySurfaceScrollView: NSView {
     }
 
     func scheduleSuppressedFirstResponderFocusReapply(reason: String) {
-        suppressedFirstResponderFocusReapplyGate.schedule()
+        if let token = focusRepair.token {
+            focusRepair = .scheduledAwaitingGeometry(token)
+        } else {
+            focusRepair = .awaitingGeometry
+        }
         scheduleAutomaticFirstResponderApply(reason: reason)
     }
 
     func cancelSuppressedFirstResponderFocusReapply() {
-        suppressedFirstResponderFocusReapplyGate.cancel()
+        focusIntentGeneration &+= 1
+        focusRepair = .idle
     }
 
     func scheduleSuppressedFirstResponderFocusReapplyIfReady(reason: String) {
-        guard suppressedFirstResponderFocusReapplyGate.isPending else { return }
-        guard !pendingAutomaticFirstResponderApply else { return }
+        guard focusRepair.requiresGeometry else { return }
+        guard focusRepair.token == nil else { return }
         guard isActive, surfaceView.desiredFocus, surfaceView.isVisibleInUI else { return }
         guard isSurfaceViewFirstResponder() else { return }
         let isHiddenForFocus = isHiddenOrHasHiddenAncestor || surfaceView.isHiddenOrHasHiddenAncestor
@@ -2146,11 +2269,12 @@ final class GhosttySurfaceScrollView: NSView {
     }
 
     private func scheduleAutomaticFirstResponderApply(reason: String) {
-        guard !pendingAutomaticFirstResponderApply else { return }
-        pendingAutomaticFirstResponderApply = true
+        guard isActive, focusRepair.token == nil else { return }
+        let token = UUID()
+        focusRepair = focusRepair.requiresGeometry ? .scheduledAwaitingGeometry(token) : .scheduled(token)
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.pendingAutomaticFirstResponderApply = false
+            guard let self, self.focusRepair.token == token else { return }
+            self.focusRepair = self.focusRepair.requiresGeometry ? .awaitingGeometry : .idle
 #if DEBUG
             let surfaceShort = String(self.surfaceView.terminalSurface?.id.uuidString.prefix(5) ?? "nil")
             dlog("find.applyFirstResponder.defer surface=\(surfaceShort) reason=\(reason)")
@@ -2163,12 +2287,19 @@ final class GhosttySurfaceScrollView: NSView {
         let portalSize = bounds.size
         let surfaceSize = surfaceView.bounds.size
         let isHiddenForFocus = isHiddenOrHasHiddenAncestor || surfaceView.isHiddenOrHasHiddenAncestor
-        guard suppressedFirstResponderFocusReapplyGate.allowsFocusReassertion(
+        var gate = SuppressedFirstResponderFocusReapplyGate()
+        if focusRepair.requiresGeometry { gate.schedule() }
+        guard gate.allowsFocusReassertion(
             force: force,
             isHiddenForFocus: isHiddenForFocus,
             portalSize: portalSize,
             surfaceSize: surfaceSize
         ) else {
+            if let token = focusRepair.token {
+                focusRepair = .scheduledAwaitingGeometry(token)
+            } else {
+                focusRepair = .awaitingGeometry
+            }
 #if DEBUG
             let surfaceShort = String(surfaceView.terminalSurface?.id.uuidString.prefix(5) ?? "nil")
             dlog(
@@ -2194,7 +2325,7 @@ final class GhosttySurfaceScrollView: NSView {
         dlog("focus.surface.reassert surface=\(terminalSurface.id.uuidString.prefix(5)) reason=\(reason)")
 #endif
         terminalSurface.setFocus(true, force: force)
-        suppressedFirstResponderFocusReapplyGate.complete()
+        focusRepair = .idle
         refreshSurfaceAfterFocusIfNeeded(reason: reason)
     }
 
@@ -2227,7 +2358,7 @@ final class GhosttySurfaceScrollView: NSView {
         }()
         let isHiddenForFocus = isHiddenOrHasHiddenAncestor || surfaceView.isHiddenOrHasHiddenAncestor
         let surfaceShort = String(surfaceView.terminalSurface?.id.uuidString.prefix(5) ?? "nil")
-        let requiresSuppressedSurfaceGeometry = suppressedFirstResponderFocusReapplyGate.isPending
+        let requiresSuppressedSurfaceGeometry = focusRepair.requiresGeometry
 
         guard isActive else { return }
         guard surfaceView.isVisibleInUI else { return }
@@ -2291,7 +2422,7 @@ final class GhosttySurfaceScrollView: NSView {
         let surfaceShort = String(surfaceView.terminalSurface?.id.uuidString.prefix(5) ?? "nil")
         switch searchFocusTarget {
         case .searchField:
-            suppressedFirstResponderFocusReapplyGate.cancel()
+            cancelSuppressedFirstResponderFocusReapply()
             if let firstResponder = window.firstResponder,
                isCurrentSurfaceSearchFieldResponder(firstResponder) {
                 surfaceView.terminalSurface?.setFocus(false)
@@ -2488,7 +2619,7 @@ final class GhosttySurfaceScrollView: NSView {
             return false
         }
 
-        suppressedFirstResponderFocusReapplyGate.cancel()
+        cancelSuppressedFirstResponderFocusReapply()
         surfaceView.terminalSurface?.setFocus(false)
         resignOwnedFirstResponderIfNeeded(reason: "yieldPanelFocusIntent")
 #if DEBUG
@@ -2511,7 +2642,7 @@ final class GhosttySurfaceScrollView: NSView {
 
         guard ownsSurfaceResponder || isCurrentSurfaceSearchResponder(firstResponder) else { return }
 
-        suppressedFirstResponderFocusReapplyGate.cancel()
+        cancelSuppressedFirstResponderFocusReapply()
 #if DEBUG
         dlog(
             "focus.surface.resign surface=\(surfaceView.terminalSurface?.id.uuidString.prefix(5) ?? "nil") " +
@@ -2629,7 +2760,7 @@ final class GhosttySurfaceScrollView: NSView {
         layer.path = CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil)
     }
 
-    private func synchronizeScrollView() {
+    private func synchronizeScrollView(allowExplicitScrollbarSync: Bool = false) {
         var didChangeGeometry = false
         let targetDocumentHeight = documentHeight()
         if abs(documentView.frame.height - targetDocumentHeight) > 0.5 {
@@ -2668,8 +2799,6 @@ final class GhosttySurfaceScrollView: NSView {
             }
         }
 
-        allowExplicitScrollbarSync = false
-
         if didChangeGeometry {
             scrollView.reflectScrolledClipView(scrollView.contentView)
         }
@@ -2705,13 +2834,16 @@ final class GhosttySurfaceScrollView: NSView {
         guard let scrollbar = notification.userInfo?[GhosttyNotificationKey.scrollbar] as? GhosttyScrollbar else {
             return
         }
-        if pendingExplicitWheelScroll {
-            userScrolledAwayFromBottom = scrollbar.offset + scrollbar.len < scrollbar.total
+        let allowExplicitScrollbarSync: Bool
+        if case .awaitingWheel(_, let dragging) = scrollOwnership {
+            let position: ScrollPosition = scrollbar.offset + scrollbar.len < scrollbar.total ? .reviewing : .following
+            scrollOwnership = dragging ? .dragging(position) : .stationary(position)
             allowExplicitScrollbarSync = true
-            pendingExplicitWheelScroll = false
+        } else {
+            allowExplicitScrollbarSync = false
         }
         surfaceView.scrollbar = scrollbar
-        synchronizeScrollView()
+        synchronizeScrollView(allowExplicitScrollbarSync: allowExplicitScrollbarSync)
     }
 
     private func handlePreferredScrollerStyleChange() {

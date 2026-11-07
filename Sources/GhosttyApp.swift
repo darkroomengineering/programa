@@ -306,9 +306,13 @@ class GhosttyApp {
         let onAlwaysAllow: (@MainActor () -> Void)?
         let onDeny: (@MainActor () -> Void)?
         let denial: (() -> Void)?
-        var completion: ((String) -> Void)?
-        var alert: NSAlert?
-        var closeObserver: NSObjectProtocol?
+        private enum State {
+            case registered((String) -> Void)
+            case queued(UUID, (String) -> Void, NSObjectProtocol)
+            case presenting(UUID, (String) -> Void, NSObjectProtocol, NSAlert)
+            case finished
+        }
+        private var state: State
 
         init(
             contents: String,
@@ -329,24 +333,34 @@ class GhosttyApp {
             self.onAlwaysAllow = onAlwaysAllow
             self.onDeny = onDeny
             self.denial = denial
-            self.completion = completion
+            self.state = .registered(completion)
         }
 
         func finish(allow: Bool) {
-            guard let completion else { return }
-            self.completion = nil
+            let completion: (String) -> Void
+            let closeObserver: NSObjectProtocol?
+            let alert: NSAlert?
+            switch state {
+            case .registered(let callback):
+                (completion, closeObserver, alert) = (callback, nil, nil)
+            case .queued(_, let callback, let observer):
+                (completion, closeObserver, alert) = (callback, observer, nil)
+            case .presenting(_, let callback, let observer, let sheet):
+                (completion, closeObserver, alert) = (callback, observer, sheet)
+            case .finished:
+                return
+            }
+            state = .finished
             if let surfaceIdentity,
                GhosttyApp.clipboardConfirmations[surfaceIdentity] === self {
                 GhosttyApp.clipboardConfirmations.removeValue(forKey: surfaceIdentity)
             }
             if let closeObserver {
                 NotificationCenter.default.removeObserver(closeObserver)
-                self.closeObserver = nil
             }
             if let alert, let parent = alert.window.sheetParent {
                 parent.endSheet(alert.window, returnCode: .cancel)
             }
-            alert = nil
             if !allow, let denial {
                 denial()
             } else {
@@ -354,8 +368,35 @@ class GhosttyApp {
             }
         }
 
-        func present() {
-            guard completion != nil else { return }
+        func enqueue(in window: NSWindow) {
+            guard case .registered(let completion) = state else { return }
+            let token = UUID()
+            let observer = NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification,
+                object: window,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self, self.isCurrent(token) else { return }
+                    self.finish(allow: false)
+                }
+            }
+            state = .queued(token, completion, observer)
+            DispatchQueue.main.async { [self] in present(token: token) }
+        }
+
+        private func isCurrent(_ token: UUID) -> Bool {
+            switch state {
+            case .queued(let current, _, _), .presenting(let current, _, _, _):
+                return current == token
+            case .registered, .finished:
+                return false
+            }
+        }
+
+        private func present(token: UUID) {
+            guard case .queued(let current, let completion, let observer) = state,
+                  current == token else { return }
             guard let window, window.isVisible, window.attachedSheet == nil else {
                 finish(allow: false)
                 return
@@ -396,8 +437,10 @@ class GhosttyApp {
                     always.keyEquivalent = ""
                 }
             }
-            self.alert = alert
+            state = .presenting(token, completion, observer, alert)
             alert.beginSheetModal(for: window) { [self] response in
+                guard case .presenting(let current, _, _, _) = state,
+                      current == token else { return }
                 if response == .alertThirdButtonReturn { onAlwaysAllow?() }
                 if response == .alertFirstButtonReturn { onDeny?() }
                 finish(allow: response == .alertSecondButtonReturn || response == .alertThirdButtonReturn)
@@ -482,14 +525,7 @@ class GhosttyApp {
             completion: completion
         )
         if let identity { clipboardConfirmations[identity] = request }
-        request.closeObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.willCloseNotification,
-            object: window,
-            queue: .main
-        ) { [weak request] _ in
-            MainActor.assumeIsolated { request?.finish(allow: false) }
-        }
-        DispatchQueue.main.async { request.present() }
+        request.enqueue(in: window)
     }
 
     @MainActor
