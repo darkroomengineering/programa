@@ -1587,7 +1587,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
                 Self.surfaceLog("createSurface diagnostics count=\(count)")
                 for i in 0..<count {
                     let diag = ghostty_config_get_diagnostic(cfg, UInt32(i))
-                    let msg = diag.message.flatMap { String(cString: $0) } ?? "(null)"
+                    let msg = String(cString: diag.message)
                     Self.surfaceLog("  [\(i)] \(msg)")
                 }
             } else {

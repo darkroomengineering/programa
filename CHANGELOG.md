@@ -6,6 +6,8 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-07
+
 ### Added
 - A Storage button in the sidebar footer opens a popover with your free disk space, the worktrees Programa can remove, Xcode, Android and package manager caches, and how much disk each open workspace uses with its biggest build folders. Each Clean button shows what it would remove and removes nothing until you confirm. See `docs/workspace-interface.md`.
 - `programa storage scan` lists every git worktree and developer cache with its size and the reason it would be kept, and `programa storage clean` removes merged worktrees and the caches their tools rebuild on their own. `--xcode`, `--android` and `--packages` limit a run to one kind of cache and `--dry-run` shows what would go. The `storage.scan` and `storage.clean` socket methods do the same.
@@ -37,6 +39,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 - `programa aside install-mcp` also registers Programa in Aside's own MCP settings, so Aside can start agents in Programa panes and read their results. `uninstall-mcp` removes it and `programa aside status` shows it. See `docs/aside-browser.md`.
 
 ### Changed
+- The terminal engine is updated to Ghostty's libghostty-vt 1.0 release (Zig 0.17 to build from source). Program status (OSC 7501) and kitty notifications (OSC 99) now use Ghostty's own parsers.
 - Sidebar rows start with the running agent's icon, or a terminal symbol, and show one status line under the title, with the agent's state as a colored pill and how long ago the status changed on the right. Hover a row for a ••• button that opens its right-click menu. The directory line is hidden when it is `~` or repeats the title, and the selected row is a raised white pill while the window is active.
 - The sidebar toggle, notifications bell and new workspace button sit right after the window's traffic lights.
 - The sidebar slides in and out when you toggle it, and fades instead when Reduce Motion is on.

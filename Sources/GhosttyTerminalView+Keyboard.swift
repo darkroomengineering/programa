@@ -1198,7 +1198,7 @@ extension GhosttyNSView {
             let namePtr = action.value.activate.name
             let nameLen = Int(action.value.activate.len)
             let name: String
-            if let namePtr, nameLen > 0 {
+            if nameLen > 0 {
                 let data = Data(bytes: namePtr, count: nameLen)
                 name = String(data: data, encoding: .utf8) ?? ""
             } else {
