@@ -1823,10 +1823,10 @@ final class SessionWALStore {
 /// allocate or reach back into ghostty.
 private func sessionWALPTYTeeCallback(
     _ userdata: UnsafeMutableRawPointer?,
-    _ bytes: UnsafePointer<CChar>?,
+    _ bytes: UnsafePointer<CChar>,
     _ len: UInt
 ) {
-    guard let bytes, let userdata, len > 0 else { return }
+    guard let userdata, len > 0 else { return }
     let context = Unmanaged<SessionWALStore.Context>.fromOpaque(userdata).takeUnretainedValue()
     let buf = UnsafeRawPointer(bytes).assumingMemoryBound(to: UInt8.self)
     context.ringBuffer.append(buf, Int(len))

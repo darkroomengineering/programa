@@ -11,9 +11,36 @@ import Bonsplit
 private func programaRuntimeReadClipboardCallback(
     _ userdata: UnsafeMutableRawPointer?,
     _ location: ghostty_clipboard_e,
-    _ state: UnsafeMutableRawPointer?
-) -> Bool {
-    GhosttyApp.runtimeReadClipboardCallback(userdata, location, state)
+    _ state: UnsafeMutableRawPointer,
+    _ mimes: UnsafePointer<UnsafePointer<CChar>>,
+    _ mimeCount: Int,
+    _ list: Bool
+) -> ghostty_clipboard_read_result_e {
+    GhosttyApp.runtimeReadClipboardCallback(userdata, location, state, mimes, mimeCount, list)
+}
+
+private func completeTextClipboardRequest(
+    _ surface: ghostty_surface_t,
+    text: String,
+    state: UnsafeMutableRawPointer,
+    confirmed: Bool
+) {
+    "text/plain".withCString { mime in
+        text.withCString { data in
+            var content = ghostty_clipboard_content_s(mime: mime, data: data, len: text.utf8.count)
+            withUnsafePointer(to: &content) { contents in
+                var complete = ghostty_clipboard_complete_s(
+                    contents: contents,
+                    contents_len: 1,
+                    available: nil,
+                    available_len: 0,
+                    confirmed: confirmed,
+                    remember: false
+                )
+                ghostty_surface_complete_clipboard_request(surface, &complete, state)
+            }
+        }
+    }
 }
 
 /// Pinned Ghostty heap-allocates this opaque state for async completion and owns and
@@ -278,6 +305,7 @@ class GhosttyApp {
         weak var window: NSWindow?
         let onAlwaysAllow: (@MainActor () -> Void)?
         let onDeny: (@MainActor () -> Void)?
+        let denial: (() -> Void)?
         var completion: ((String) -> Void)?
         var alert: NSAlert?
         var closeObserver: NSObjectProtocol?
@@ -290,6 +318,7 @@ class GhosttyApp {
             sourceName: String?,
             onAlwaysAllow: (@MainActor () -> Void)?,
             onDeny: (@MainActor () -> Void)?,
+            denial: (() -> Void)?,
             completion: @escaping (String) -> Void
         ) {
             self.contents = contents
@@ -299,6 +328,7 @@ class GhosttyApp {
             self.sourceName = sourceName
             self.onAlwaysAllow = onAlwaysAllow
             self.onDeny = onDeny
+            self.denial = denial
             self.completion = completion
         }
 
@@ -317,9 +347,11 @@ class GhosttyApp {
                 parent.endSheet(alert.window, returnCode: .cancel)
             }
             alert = nil
-            // confirmed=false re-enters Ghostty's confirmation callback. An empty
-            // confirmed completion denies the content and releases the request state.
-            completion(allow ? contents : "")
+            if !allow, let denial {
+                denial()
+            } else {
+                completion(allow ? contents : "")
+            }
         }
 
         func present() {
@@ -419,6 +451,7 @@ class GhosttyApp {
         sourceName: String? = nil,
         onAlwaysAllow: (@MainActor () -> Void)? = nil,
         onDeny: (@MainActor () -> Void)? = nil,
+        denial: (() -> Void)? = nil,
         completion: @escaping (String) -> Void
     ) {
         let identity = surface.map { UInt(bitPattern: $0) }
@@ -426,7 +459,7 @@ class GhosttyApp {
             // A program can send OSC 52 in a loop; replacing the sheet on every request would
             // keep it out from under the user's click, so later requests are denied instead.
             if kind == GHOSTTY_CLIPBOARD_REQUEST_OSC_52_WRITE || kind == GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ {
-                completion("")
+                if let denial { denial() } else { completion("") }
                 return
             }
             pending.finish(allow: false)
@@ -434,7 +467,7 @@ class GhosttyApp {
         guard let window, let kind,
               kind == GHOSTTY_CLIPBOARD_REQUEST_PASTE || kind == GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ
                 || kind == GHOSTTY_CLIPBOARD_REQUEST_OSC_52_WRITE else {
-            completion("")
+            if let denial { denial() } else { completion("") }
             return
         }
         let request = ClipboardConfirmation(
@@ -445,6 +478,7 @@ class GhosttyApp {
             sourceName: sourceName,
             onAlwaysAllow: onAlwaysAllow,
             onDeny: onDeny,
+            denial: denial,
             completion: completion
         )
         if let identity { clipboardConfirmations[identity] = request }
@@ -466,14 +500,21 @@ class GhosttyApp {
     fileprivate static func runtimeReadClipboardCallback(
         _ userdata: UnsafeMutableRawPointer?,
         _ location: ghostty_clipboard_e,
-        _ state: UnsafeMutableRawPointer?
-    ) -> Bool {
+        _ state: UnsafeMutableRawPointer,
+        _ mimes: UnsafePointer<UnsafePointer<CChar>>,
+        _ mimeCount: Int,
+        _ list: Bool
+    ) -> ghostty_clipboard_read_result_e {
+        guard !list, (0..<mimeCount).contains(where: { String(cString: mimes[$0]) == "text/plain" }) else {
+            return GHOSTTY_CLIPBOARD_READ_UNSUPPORTED
+        }
         // Only value fields are read here, off-main -- see GhosttySurfaceCallbackContext's
         // doc comment. All live-object resolution (including the ghostty_surface_t itself)
         // happens on main below.
-        guard let state else { return false }
         let requestState = GhosttyClipboardRequestState(pointer: state)
-        guard let callbackContext = Self.callbackContext(from: userdata) else { return false }
+        guard let callbackContext = Self.callbackContext(from: userdata) else {
+            return GHOSTTY_CLIPBOARD_READ_UNAVAILABLE
+        }
         let callbackSurfaceId = callbackContext.surfaceId
         let callbackTabId = callbackContext.tabId
 
@@ -484,8 +525,7 @@ class GhosttyApp {
                     surfaceId: callbackSurfaceId
                 ) else { return }
                 // We cannot tell off-main whether the surface is still live, so this callback
-                // always returns `true` (accepted) below rather than synchronously falling back
-                // to `false` when the surface is already gone. If resolution fails here, the
+                // returns READ_STARTED below. If resolution fails here, the
                 // read silently completes as a no-op: ghostty's clipboard-read request is
                 // simply never fulfilled, as when the surface goes away mid-flight.
                 guard let requestSurface = terminalSurface.liveSurfaceForGhosttyAccess(
@@ -505,18 +545,16 @@ class GhosttyApp {
                             guard currentSurfaceIdentity == requestSurfaceIdentity else {
                                 return
                             }
-                            text.withCString { ptr in
-                                GhosttyClipboardRequestIdentityRegistry.withIdentity(
-                                    state: requestState,
-                                    identity: currentSurfaceIdentity
-                                ) {
-                                    ghostty_surface_complete_clipboard_request(
-                                        currentSurface,
-                                        ptr,
-                                        requestState.pointer,
-                                        false
-                                    )
-                                }
+                            GhosttyClipboardRequestIdentityRegistry.withIdentity(
+                                state: requestState,
+                                identity: currentSurfaceIdentity
+                            ) {
+                                completeTextClipboardRequest(
+                                    currentSurface,
+                                    text: text,
+                                    state: requestState.pointer,
+                                    confirmed: false
+                                )
                             }
                         }
                     }
@@ -541,7 +579,7 @@ class GhosttyApp {
             }
         }
 
-        return true
+        return GHOSTTY_CLIPBOARD_READ_STARTED
     }
 
     let backgroundLogEnabled = {
@@ -610,7 +648,7 @@ class GhosttyApp {
         initLog("ghostty diagnostics (\(label)): count=\(count)")
         for i in 0..<count {
             let diag = ghostty_config_get_diagnostic(config, UInt32(i))
-            let msg = diag.message.flatMap { String(cString: $0) } ?? "(null)"
+            let msg = String(cString: diag.message)
             initLog("  [\(i)] \(msg)")
         }
     }
@@ -638,30 +676,45 @@ class GhosttyApp {
         loadDefaultConfigFilesWithLegacyFallback(primaryConfig)
         updateDefaultBackground(from: primaryConfig, source: "initialize.primaryConfig")
 
-        var runtimeConfig = ghostty_runtime_config_s()
-        runtimeConfig.userdata = Unmanaged.passUnretained(self).toOpaque()
-        runtimeConfig.supports_selection_clipboard = true
-        runtimeConfig.wakeup_cb = { userdata in
+        let wakeupCallback: ghostty_runtime_wakeup_cb = { userdata in
             GhosttyApp.shared.scheduleTick()
         }
-        runtimeConfig.action_cb = { app, target, action in
+        let actionCallback: ghostty_runtime_action_cb = { app, target, action in
             return GhosttyApp.shared.handleAction(target: target, action: action)
         }
-        runtimeConfig.read_clipboard_cb = programaRuntimeReadClipboardCallback
-        runtimeConfig.confirm_read_clipboard_cb = { userdata, content, state, kind in
-            guard let content else { return }
-            guard let state else { return }
+        let confirmReadClipboardCallback: ghostty_runtime_confirm_read_clipboard_cb = { userdata, content, state, kind in
             let requestState = GhosttyClipboardRequestState(pointer: state)
             guard let callbackContext = GhosttyApp.callbackContext(from: userdata) else { return }
             let callbackSurfaceId = callbackContext.surfaceId
             let callbackTabId = callbackContext.tabId
+            if kind != GHOSTTY_CLIPBOARD_REQUEST_PASTE && kind != GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ
+                && kind != GHOSTTY_CLIPBOARD_REQUEST_OSC_52_WRITE {
+                let userdataIdentity = userdata.map { UInt(bitPattern: $0) }
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        guard let surface = GhosttyApp.resolveLiveSurface(
+                            tabId: callbackTabId,
+                            surfaceId: callbackSurfaceId,
+                            reason: "clipboard.deny"
+                        ), ghostty_surface_userdata(surface).map({ UInt(bitPattern: $0) }) == userdataIdentity else { return }
+                        ghostty_surface_deny_clipboard_request(surface, requestState.pointer)
+                    }
+                }
+                return
+            }
             guard let originatingSurfaceIdentity = GhosttyClipboardRequestIdentityRegistry.identity(
                 for: requestState
             ) else { return }
-            // Snapshot the C string while it is valid. Recognized provenance comes
+            // Snapshot the borrowed text while it is valid. Recognized provenance comes
             // only from our main-actor completion above: pinned Ghostty invokes
             // confirmation synchronously before that completion returns.
-            let contentString = String(cString: content)
+            let representations = content.pointee.contents.map {
+                UnsafeBufferPointer(start: $0, count: content.pointee.contents_len)
+            }
+            let text = representations?.first { String(cString: $0.mime) == "text/plain" }
+            let contentString = text.map {
+                String(decoding: UnsafeRawBufferPointer(start: $0.data, count: $0.len), as: UTF8.self)
+            } ?? ""
 
             MainActor.assumeIsolated { () -> Void in
                 guard let terminalSurface = GhosttyApp.resolveTerminalSurface(
@@ -675,29 +728,27 @@ class GhosttyApp {
                     contents: contentString,
                     kind: kind,
                     window: terminalSurface.hostedView.window,
-                    surface: surface
+                    surface: surface,
+                    denial: { ghostty_surface_deny_clipboard_request(surface, requestState.pointer) }
                 ) { confirmedContent in
-                    confirmedContent.withCString { ptr in
-                        ghostty_surface_complete_clipboard_request(
-                            surface,
-                            ptr,
-                            requestState.pointer,
-                            true
-                        )
-                    }
+                    completeTextClipboardRequest(
+                        surface,
+                        text: confirmedContent,
+                        state: requestState.pointer,
+                        confirmed: true
+                    )
                 }
             }
         }
-        runtimeConfig.write_clipboard_cb = { userdata, location, content, len, confirm in
+        let writeClipboardCallback: ghostty_runtime_write_clipboard_cb = { userdata, location, content, len, confirm in
             // Write clipboard. Prefer text/plain, else the first item.
-            guard let content = content, len > 0 else { return }
+            guard len > 0 else { return }
             let buffer = UnsafeBufferPointer(start: content, count: Int(len))
 
             var chosen: String?
             for item in buffer {
-                guard let dataPtr = item.data else { continue }
-                let value = String(cString: dataPtr)
-                if let mimePtr = item.mime, String(cString: mimePtr).hasPrefix("text/plain") {
+                let value = String(decoding: UnsafeRawBufferPointer(start: item.data, count: item.len), as: UTF8.self)
+                if String(cString: item.mime).hasPrefix("text/plain") {
                     chosen = value
                     break
                 }
@@ -748,7 +799,7 @@ class GhosttyApp {
                 DispatchQueue.main.async(execute: presentConfirmation)
             }
         }
-        runtimeConfig.close_surface_cb = { userdata, needsConfirmClose in
+        let closeSurfaceCallback: ghostty_runtime_close_surface_cb = { userdata, needsConfirmClose in
             guard let callbackContext = GhosttyApp.callbackContext(from: userdata) else { return }
             let callbackSurfaceId = callbackContext.surfaceId
             let callbackTabId = callbackContext.tabId
@@ -791,6 +842,17 @@ class GhosttyApp {
             }
         }
 
+        var runtimeConfig = ghostty_runtime_config_s(
+            userdata: Unmanaged.passUnretained(self).toOpaque(),
+            supports_selection_clipboard: true,
+            wakeup_cb: wakeupCallback,
+            action_cb: actionCallback,
+            read_clipboard_cb: programaRuntimeReadClipboardCallback,
+            confirm_read_clipboard_cb: confirmReadClipboardCallback,
+            write_clipboard_cb: writeClipboardCallback,
+            close_surface_cb: closeSurfaceCallback,
+            tmux_control_cb: nil
+        )
         if let created = ghostty_app_new(&runtimeConfig, primaryConfig) {
             self.app = created
             self.config = primaryConfig
@@ -1913,10 +1975,8 @@ class GhosttyApp {
             }
 
             if action.tag == GHOSTTY_ACTION_DESKTOP_NOTIFICATION {
-                let actionTitle = action.action.desktop_notification.title
-                    .flatMap { String(cString: $0) } ?? ""
-                let actionBody = action.action.desktop_notification.body
-                    .flatMap { String(cString: $0) } ?? ""
+                let actionTitle = String(cString: action.action.desktop_notification.title)
+                let actionBody = String(cString: action.action.desktop_notification.body)
                 return performOnMain {
                     guard let tabManager = AppDelegate.shared?.tabManager,
                           let tabId = tabManager.selectedTabId else {
@@ -1997,7 +2057,7 @@ class GhosttyApp {
 
             return false
         }
-        let callbackContext = Self.callbackContext(from: ghostty_surface_userdata(target.target.surface))
+        let callbackContext = Self.callbackContext(from: target.target.surface.flatMap { ghostty_surface_userdata($0) })
         let callbackTabId = callbackContext?.tabId
         let callbackSurfaceId = callbackContext?.surfaceId
 
@@ -2170,7 +2230,7 @@ class GhosttyApp {
             }
             return true
         case GHOSTTY_ACTION_START_SEARCH:
-            let needle = action.action.start_search.needle.flatMap { String(cString: $0) }
+            let needle = String(cString: action.action.start_search.needle)
             let searchTabId = callbackTabId
             let searchSurfaceId = callbackSurfaceId
             DispatchQueue.main.async {
@@ -2178,11 +2238,11 @@ class GhosttyApp {
                     Self.resolveTerminalSurface(tabId: searchTabId, surfaceId: searchSurfaceId)
                 }) else { return }
                 if let searchState = terminalSurface.searchState {
-                    if let needle, !needle.isEmpty {
+                    if !needle.isEmpty {
                         searchState.needle = needle
                     }
                 } else {
-                    terminalSurface.searchState = TerminalSurface.SearchState(needle: needle ?? "")
+                    terminalSurface.searchState = TerminalSurface.SearchState(needle: needle)
                 }
                 NotificationCenter.default.post(name: .ghosttySearchFocus, object: terminalSurface)
             }
@@ -2219,8 +2279,7 @@ class GhosttyApp {
             }
             return true
         case GHOSTTY_ACTION_SET_TITLE:
-            let title = action.action.set_title.title
-                .flatMap { String(cString: $0) } ?? ""
+            let title = String(cString: action.action.set_title.title)
             if let tabId = callbackTabId,
                let surfaceId = callbackSurfaceId {
                 // Coalesced: shells/agent CLIs
@@ -2246,7 +2305,7 @@ class GhosttyApp {
         case GHOSTTY_ACTION_PWD:
             guard let tabId = callbackTabId,
                   let surfaceId = callbackSurfaceId else { return true }
-            let reportedPwd = action.action.pwd.pwd.flatMap { String(cString: $0) } ?? ""
+            let reportedPwd = String(cString: action.action.pwd.pwd)
             // The existence check can block on a stalled network mount, so it runs on a
             // serial queue; serial-then-main keeps each terminal's updates in order.
             Self.reportedDirectoryValidationQueue.async {
@@ -2302,7 +2361,7 @@ class GhosttyApp {
             guard let tabId = callbackTabId,
                   let surfaceId = callbackSurfaceId else { return true }
             let status = action.action.program_status
-            let body = status.data.map { Data(bytes: $0, count: Int(status.len)) } ?? Data()
+            let body = Data(bytes: status.data, count: Int(status.len))
             ProgramStatusDispatcher.handle(
                 tabId: tabId, surfaceId: surfaceId, event: status.event, state: status.state, body: body
             )
@@ -2370,10 +2429,8 @@ class GhosttyApp {
         case GHOSTTY_ACTION_DESKTOP_NOTIFICATION:
             guard let tabId = callbackTabId else { return true }
             let surfaceId = callbackSurfaceId
-            let actionTitle = action.action.desktop_notification.title
-                .flatMap { String(cString: $0) } ?? ""
-            let actionBody = action.action.desktop_notification.body
-                .flatMap { String(cString: $0) } ?? ""
+            let actionTitle = String(cString: action.action.desktop_notification.title)
+            let actionBody = String(cString: action.action.desktop_notification.body)
             performOnMain {
                 // Suppress OSC notifications for workspaces with active hook-managed agent
                 // sessions (Claude Code, Codex, etc.).
@@ -2475,7 +2532,7 @@ class GhosttyApp {
             }
         case GHOSTTY_ACTION_OPEN_URL:
             let openUrl = action.action.open_url
-            guard let cstr = openUrl.url else { return false }
+            let cstr = openUrl.url
             let urlString = String(
                 data: Data(bytes: cstr, count: Int(openUrl.len)),
                 encoding: .utf8
