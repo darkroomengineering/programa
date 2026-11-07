@@ -104,9 +104,21 @@ final class WindowCommandPaletteOverlayController: NSObject {
     }()
     private var installConstraints: [NSLayoutConstraint] = []
     private weak var installedThemeFrame: NSView?
-    private var focusLockTimer: DispatchSourceTimer?
-    private var scheduledFocusWorkItem: DispatchWorkItem?
-    private var isPaletteVisible = false
+    private enum PaletteState {
+        case hidden
+        case visibleInactive
+        case visibleActive(
+            generation: UUID,
+            timer: DispatchSourceTimer,
+            pendingFocus: (token: UUID, work: DispatchWorkItem)?
+        )
+    }
+    private var paletteState: PaletteState = .hidden
+
+    private var isPaletteVisible: Bool {
+        if case .hidden = paletteState { return false }
+        return true
+    }
 
     /// Visible-overlay state read on every keyDown; O(1), unlike a view-tree search.
     var isPresented: Bool {
@@ -267,7 +279,8 @@ final class WindowCommandPaletteOverlayController: NSObject {
         return nil
     }
 
-    private func focusPaletteTextInput(in window: NSWindow) -> Bool {
+    private func focusPaletteTextInput(in window: NSWindow, generation: UUID) -> Bool {
+        guard canAcquireFocus(generation: generation) else { return false }
         guard let input = firstEditableTextInput(in: hostingView) else {
 #if DEBUG
             dlog(
@@ -294,6 +307,7 @@ final class WindowCommandPaletteOverlayController: NSObject {
 #endif
             return false
         }
+        guard canAcquireFocus(generation: generation) else { return false }
 
         if let textView = input as? NSTextView, !textView.isFieldEditor {
             let length = (textView.string as NSString).length
@@ -312,7 +326,17 @@ final class WindowCommandPaletteOverlayController: NSObject {
         return didSettle
     }
 
-    private func scheduleFocusIntoPalette(retries: Int = 4) {
+    private func canAcquireFocus(generation: UUID) -> Bool {
+        guard case .visibleActive(let currentGeneration, _, _) = paletteState,
+              currentGeneration == generation,
+              window?.isKeyWindow == true,
+              isPresented else { return false }
+        return true
+    }
+
+    private func scheduleFocusIntoPalette(retries: Int = 4, delay: TimeInterval = 0) {
+        guard case .visibleActive(let generation, let timer, let pendingFocus) = paletteState,
+              canAcquireFocus(generation: generation) else { return }
 #if DEBUG
         if let window {
             dlog(
@@ -324,17 +348,27 @@ final class WindowCommandPaletteOverlayController: NSObject {
             dlog("palette.focus.schedule retries=\(retries) window=nil")
         }
 #endif
-        scheduledFocusWorkItem?.cancel()
+        pendingFocus?.work.cancel()
+        let token = UUID()
         let workItem = DispatchWorkItem { [weak self] in
-            self?.scheduledFocusWorkItem = nil
-            self?.focusIntoPalette(retries: retries)
+            guard let self,
+                  case .visibleActive(let currentGeneration, let currentTimer, let currentFocus) = self.paletteState,
+                  currentGeneration == generation,
+                  currentFocus?.token == token,
+                  self.canAcquireFocus(generation: generation) else { return }
+            self.paletteState = .visibleActive(generation: generation, timer: currentTimer, pendingFocus: nil)
+            self.focusIntoPalette(retries: retries, generation: generation)
         }
-        scheduledFocusWorkItem = workItem
-        DispatchQueue.main.async(execute: workItem)
+        paletteState = .visibleActive(generation: generation, timer: timer, pendingFocus: (token, workItem))
+        if delay > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+        } else {
+            DispatchQueue.main.async(execute: workItem)
+        }
     }
 
-    private func focusIntoPalette(retries: Int) {
-        guard let window else { return }
+    private func focusIntoPalette(retries: Int, generation: UUID) {
+        guard canAcquireFocus(generation: generation), let window else { return }
 #if DEBUG
         dlog(
             "palette.focus.retry start retries=\(retries) " +
@@ -352,7 +386,7 @@ final class WindowCommandPaletteOverlayController: NSObject {
             return
         }
 
-        if focusPaletteTextInput(in: window) {
+        if focusPaletteTextInput(in: window, generation: generation) {
 #if DEBUG
             dlog(
                 "palette.focus.retry directSuccess retries=\(retries) " +
@@ -362,7 +396,9 @@ final class WindowCommandPaletteOverlayController: NSObject {
             return
         }
 
+        guard canAcquireFocus(generation: generation) else { return }
         let containerFocused = window.makeFirstResponder(containerView)
+        guard canAcquireFocus(generation: generation) else { return }
 #if DEBUG
         dlog(
             "palette.focus.retry containerResult retries=\(retries) " +
@@ -372,7 +408,7 @@ final class WindowCommandPaletteOverlayController: NSObject {
         )
 #endif
         if containerFocused {
-            if focusPaletteTextInput(in: window) {
+            if focusPaletteTextInput(in: window, generation: generation) {
 #if DEBUG
                 dlog(
                     "palette.focus.retry containerAssistedSuccess retries=\(retries) " +
@@ -383,6 +419,7 @@ final class WindowCommandPaletteOverlayController: NSObject {
             }
         }
 
+        guard canAcquireFocus(generation: generation) else { return }
         guard retries > 0 else {
 #if DEBUG
             dlog(
@@ -398,9 +435,7 @@ final class WindowCommandPaletteOverlayController: NSObject {
             "window={\(debugCommandPaletteWindowSummary(window))}"
         )
 #endif
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { [weak self] in
-            self?.focusIntoPalette(retries: retries - 1)
-        }
+        scheduleFocusIntoPalette(retries: retries - 1, delay: 0.02)
     }
 
     private func installWindowKeyObservers() {
@@ -410,7 +445,7 @@ final class WindowCommandPaletteOverlayController: NSObject {
             object: window,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            MainActor.assumeIsolated {
                 self?.updateFocusLockForWindowState()
             }
         }
@@ -419,7 +454,7 @@ final class WindowCommandPaletteOverlayController: NSObject {
             object: window,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            MainActor.assumeIsolated {
                 self?.updateFocusLockForWindowState()
             }
         }
@@ -467,29 +502,27 @@ final class WindowCommandPaletteOverlayController: NSObject {
     }
 
     private func startFocusLockTimer() {
-        guard focusLockTimer == nil else { return }
+        guard case .visibleInactive = paletteState else { return }
+        let generation = UUID()
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now(), repeating: .milliseconds(80), leeway: .milliseconds(12))
         timer.setEventHandler { [weak self] in
-            guard let self else { return }
-            guard let window = self.window else {
-                self.stopFocusLockTimer()
-                return
-            }
+            guard let self, self.canAcquireFocus(generation: generation),
+                  let window = self.window else { return }
             if self.isPaletteTextInputFirstResponder(window.firstResponder) {
                 return
             }
-            self.focusIntoPalette(retries: 1)
+            self.focusIntoPalette(retries: 1, generation: generation)
         }
-        focusLockTimer = timer
+        paletteState = .visibleActive(generation: generation, timer: timer, pendingFocus: nil)
         timer.resume()
     }
 
     private func stopFocusLockTimer() {
-        focusLockTimer?.cancel()
-        focusLockTimer = nil
-        scheduledFocusWorkItem?.cancel()
-        scheduledFocusWorkItem = nil
+        guard case .visibleActive(_, let timer, let pendingFocus) = paletteState else { return }
+        paletteState = .visibleInactive
+        timer.cancel()
+        pendingFocus?.work.cancel()
     }
 
     private func normalizeSelectionAfterProgrammaticFocus() {
@@ -527,8 +560,10 @@ final class WindowCommandPaletteOverlayController: NSObject {
             dlog("palette.overlay.update visible=\(isVisible ? 1 : 0) promote=\(shouldPromote ? 1 : 0) window=nil")
         }
 #endif
-        isPaletteVisible = isVisible
         if isVisible {
+            if case .hidden = paletteState {
+                paletteState = .visibleInactive
+            }
             hostingView.rootView = rootView
             containerView.capturesMouseEvents = true
             containerView.isHidden = false
@@ -539,6 +574,7 @@ final class WindowCommandPaletteOverlayController: NSObject {
             updateFocusLockForWindowState()
         } else {
             stopFocusLockTimer()
+            paletteState = .hidden
             if let window, isPaletteResponder(window.firstResponder) {
                 _ = window.makeFirstResponder(nil)
             }
