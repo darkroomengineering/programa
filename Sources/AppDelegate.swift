@@ -284,10 +284,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     /// Tracks the cascade point for new windows, matching Ghostty's upstream algorithm.
     /// Reset to `.zero` so the first window seeds the point from its own position.
     var lastCascadePoint = NSPoint.zero
-    private var startupSessionSnapshot: AppSessionSnapshot?
-    private var didPrepareStartupSessionSnapshot = false
-    private(set) var didAttemptStartupSessionRestore = false
-    var isApplyingStartupSessionRestore = false
+    private enum StartupSessionState {
+        case unprepared
+        case preparing(UUID)
+        case prepared(AppSessionSnapshot?)
+        case explicitOpenAwaitingPreparation
+        case skippedExplicitly
+        case restoring(UUID)
+        case finishing(UUID)
+        case complete
+    }
+    private var startupSessionState: StartupSessionState = .unprepared
+    var didAttemptStartupSessionRestore: Bool {
+        switch startupSessionState {
+        case .unprepared, .preparing, .prepared: return false
+        case .explicitOpenAwaitingPreparation, .skippedExplicitly, .restoring, .finishing, .complete: return true
+        }
+    }
+    var isApplyingStartupSessionRestore: Bool {
+        if case .restoring = startupSessionState { return true }
+        return false
+    }
     let sessionPersistenceQueue = DispatchQueue(
         label: "com.darkroom.programa.app.sessionPersistence",
         qos: .utility
@@ -315,8 +332,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     private nonisolated static func enqueueLaunchServicesRegistrationWork(_ work: @escaping @Sendable () -> Void) {
         launchServicesRegistrationQueue.async(execute: work)
     }
-    private var didHandleExplicitOpenIntentAtStartup = false
     let appLifecycleCoordinator = AppLifecycleCoordinator()
+    private var pendingQuitReplyToken: UUID?
     var isTerminatingApp: Bool { appLifecycleCoordinator.isTerminating }
     let socketListenerFailureNotice = SocketListenerFailureNotice()
 #if DEBUG
@@ -526,6 +543,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        pendingQuitReplyToken = nil
         let lifecycleDecision = appLifecycleCoordinator.beginTermination(
             isTaggedDevBuild: SocketControlSettings.isTaggedDevBuild(),
             isQuitWarningEnabled: QuitWarningSettings.isEnabled()
@@ -563,8 +581,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         dilog("app.quit", "pid=\(getpid()) outcome=warning reason=ordinary_quit")
 
         // Reply asynchronously so we can return .terminateLater now.
+        let quitRequestToken = appLifecycleCoordinator.quitRequestToken
+        pendingQuitReplyToken = quitRequestToken
         DispatchQueue.main.async {
+            guard let quitRequestToken, self.pendingQuitReplyToken == quitRequestToken else { return }
+            guard self.appLifecycleCoordinator.quitRequestToken == quitRequestToken else {
+                self.pendingQuitReplyToken = nil
+                NSApp.reply(toApplicationShouldTerminate: false)
+                return
+            }
             let shouldQuit = self.runQuitConfirmationAlert()
+            guard self.pendingQuitReplyToken == quitRequestToken else { return }
+            self.pendingQuitReplyToken = nil
+            guard self.appLifecycleCoordinator.quitRequestToken == quitRequestToken else {
+                NSApp.reply(toApplicationShouldTerminate: false)
+                return
+            }
             if shouldQuit {
                 self.appLifecycleCoordinator.confirmQuit()
                 self.finalizeStagedTerminalClosesThenMarkTerminating()
@@ -658,8 +690,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     private func prepareStartupSessionSnapshotIfNeeded() {
-        guard !didPrepareStartupSessionSnapshot else { return }
-        didPrepareStartupSessionSnapshot = true
+        let token = UUID()
+        switch startupSessionState {
+        case .unprepared:
+            startupSessionState = .preparing(token)
+        case .explicitOpenAwaitingPreparation:
+            startupSessionState = .skippedExplicitly
+        default:
+            return
+        }
         // Archive whatever the previous launch left behind before any code path below (or
         // later in startup) can overwrite it -- including a launch that skips restore entirely
         // (explicit open intent), which otherwise clobbers the file with no way back.
@@ -678,8 +717,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             if archivedWithContent == nil {
                 SessionPersistenceStore.rotateIntoHistory(includeScrollback: false, data: liveData)
             }
-            guard !didHandleExplicitOpenIntentAtStartup, SessionRestorePolicy.shouldAttemptRestore() else { return }
-            startupSessionSnapshot = core.sessionSnapshots.loadWithHistoryFallback(data: liveData)
+            guard case .preparing(let currentToken) = startupSessionState, currentToken == token else { return }
+            let snapshot = SessionRestorePolicy.shouldAttemptRestore()
+                ? core.sessionSnapshots.loadWithHistoryFallback(data: liveData)
+                : nil
+            guard case .preparing(let preparedToken) = startupSessionState, preparedToken == token else { return }
+            startupSessionState = .prepared(snapshot)
         }
     }
 
@@ -761,11 +804,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     func attemptStartupSessionRestoreIfNeeded(primaryWindow: NSWindow) {
         guard !didAttemptStartupSessionRestore else { return }
         prepareStartupSessionSnapshotIfNeeded()
-        didAttemptStartupSessionRestore = true
-        guard !didHandleExplicitOpenIntentAtStartup else { return }
+        guard case .prepared(let startupSnapshot) = startupSessionState else { return }
+        startupSessionState = .complete
         guard let primaryContext = contextForMainTerminalWindow(primaryWindow) else { return }
 
-        let startupSnapshot = startupSessionSnapshot
+        let token = UUID()
+        startupSessionState = .finishing(token)
         if startupSnapshot?.cleanShutdown == false {
             // The previous run's last snapshot was a periodic autosave, meaning the
             // process died without walking applicationWillTerminate — a crash or a
@@ -776,7 +820,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let windowsToRestore = startupSnapshot.map { SessionPersistenceStore.windowsToRestore(from: $0) } ?? []
         let primaryWindowSnapshot = windowsToRestore.first
         if let primaryWindowSnapshot {
-            isApplyingStartupSessionRestore = true
+            startupSessionState = .restoring(token)
 #if DEBUG
             dlog(
                 "session.restore.start windows=\(windowsToRestore.count) " +
@@ -816,17 +860,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 #endif
             if !additionalWindows.isEmpty {
                 DispatchQueue.main.async { [weak self] in
-                    guard let self else { return }
+                    guard let self, self.isStartupSessionRestoreCurrent(token) else { return }
                     for windowSnapshot in additionalWindows {
+                        guard self.isStartupSessionRestoreCurrent(token) else { return }
                         _ = self.createMainWindow(sessionWindowSnapshot: windowSnapshot)
                     }
-                    self.completeStartupSessionRestore()
+                    self.completeStartupSessionRestore(token: token)
                 }
             } else {
-                completeStartupSessionRestore()
+                completeStartupSessionRestore(token: token)
             }
         } else {
-            completeStartupSessionRestore()
+            completeStartupSessionRestore(token: token)
         }
     }
 
@@ -848,9 +893,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         )
     }
 
-    private func completeStartupSessionRestore() {
-        startupSessionSnapshot = nil
-        isApplyingStartupSessionRestore = false
+    private func isStartupSessionRestoreCurrent(_ token: UUID) -> Bool {
+        switch startupSessionState {
+        case .restoring(let current), .finishing(let current): return current == token
+        default: return false
+        }
+    }
+
+    private func completeStartupSessionRestore(token: UUID) {
+        guard isStartupSessionRestoreCurrent(token) else { return }
+        startupSessionState = .complete
         saveSessionSnapshot(includeScrollback: false)
         reconcileOrphanedEscrowedSessions()
     }
@@ -1427,8 +1479,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            let token = MainActor.assumeIsolated { self?.appLifecycleCoordinator.transitionToken }
             Task { @MainActor [weak self] in
-                guard let self else { return }
+                guard let self, self.appLifecycleCoordinator.transitionToken == token else { return }
                 self.appLifecycleCoordinator.beginPowerOff()
                 SessionMachineryGate.isApplicationTerminating = true
                 // `willPowerOff` can still be cancelled. Only applicationWillTerminate may
@@ -1443,8 +1496,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            let token = MainActor.assumeIsolated { self?.appLifecycleCoordinator.transitionToken }
             Task { @MainActor [weak self] in
-                guard let self else { return }
+                guard let self, self.appLifecycleCoordinator.transitionToken == token else { return }
                 if self.isTerminatingApp {
                     self.saveSessionSnapshot(includeScrollback: true, removeWhenEmpty: false)
                 } else {
@@ -3025,10 +3079,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     private func prepareForExplicitOpenIntentAtStartup() {
-        didHandleExplicitOpenIntentAtStartup = true
-        if !didAttemptStartupSessionRestore {
-            startupSessionSnapshot = nil
-            didAttemptStartupSessionRestore = true
+        switch startupSessionState {
+        case .unprepared:
+            startupSessionState = .explicitOpenAwaitingPreparation
+        case .preparing, .prepared:
+            startupSessionState = .skippedExplicitly
+        default:
+            break
         }
     }
 

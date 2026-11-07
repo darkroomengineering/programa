@@ -9,9 +9,48 @@ final class AppLifecycleCoordinator {
         let logReason: String
     }
 
-    private(set) var isTerminating = false
-    private(set) var isAwaitingPowerOff = false
-    private(set) var isQuitWarningConfirmed = false
+    private enum TerminationState {
+        case running
+        case quitAuthorized
+        case quitRequested(UUID)
+        case confirmedQuit
+        case awaitingPowerOff(UUID?, QuitAuthorization)
+        case updateRelaunch
+        case terminating(QuitAuthorization)
+    }
+
+    private enum QuitAuthorization {
+        case required
+        case confirmed
+    }
+
+    private var terminationState: TerminationState = .running {
+        didSet { transitionToken = UUID() }
+    }
+    private(set) var transitionToken = UUID()
+    var isTerminating: Bool {
+        switch terminationState {
+        case .running, .quitAuthorized: return false
+        default: return true
+        }
+    }
+    var isAwaitingPowerOff: Bool {
+        if case .awaitingPowerOff = terminationState { return true }
+        return false
+    }
+    var isQuitWarningConfirmed: Bool {
+        switch terminationState {
+        case .quitAuthorized, .confirmedQuit, .updateRelaunch: return true
+        case .awaitingPowerOff(_, .confirmed), .terminating(.confirmed): return true
+        default: return false
+        }
+    }
+    var quitRequestToken: UUID? {
+        switch terminationState {
+        case .quitRequested(let token), .awaitingPowerOff(.some(let token), _): return token
+        default: return nil
+        }
+    }
     private var didInstallSnapshotObservers = false
     private var didDisableSuddenTermination = false
 
@@ -19,44 +58,48 @@ final class AppLifecycleCoordinator {
         isTaggedDevBuild: Bool,
         isQuitWarningEnabled: Bool
     ) -> TerminationDecision {
-        isTerminating = true
         let shouldWarn = AppDelegate.shouldWarnBeforeTermination(
             isTaggedDevBuild: isTaggedDevBuild,
             isQuitWarningConfirmed: isQuitWarningConfirmed,
             isQuitWarningEnabled: isQuitWarningEnabled
         )
+        if isAwaitingPowerOff {
+            terminationState = .awaitingPowerOff(UUID(), isQuitWarningConfirmed ? .confirmed : .required)
+        } else {
+            terminationState = isQuitWarningConfirmed ? .confirmedQuit : .quitRequested(UUID())
+        }
         return TerminationDecision(shouldWarn: shouldWarn, logReason: "warning_bypassed")
     }
 
     func confirmQuit() {
-        isQuitWarningConfirmed = true
+        if case .awaitingPowerOff(let token, _) = terminationState {
+            terminationState = .awaitingPowerOff(token, .confirmed)
+        } else {
+            terminationState = isTerminating ? .confirmedQuit : .quitAuthorized
+        }
     }
 
     func cancelTermination() {
-        isTerminating = false
+        terminationState = isQuitWarningConfirmed ? .quitAuthorized : .running
     }
 
     func beginPowerOff() {
-        isAwaitingPowerOff = true
-        isTerminating = true
+        terminationState = .awaitingPowerOff(nil, isQuitWarningConfirmed ? .confirmed : .required)
     }
 
     @discardableResult
     func resumeAfterCancelledPowerOff() -> Bool {
         guard isAwaitingPowerOff else { return false }
-        isAwaitingPowerOff = false
-        isTerminating = false
+        terminationState = isQuitWarningConfirmed ? .quitAuthorized : .running
         return true
     }
 
     func willTerminate() {
-        isAwaitingPowerOff = false
-        isTerminating = true
+        terminationState = .terminating(isQuitWarningConfirmed ? .confirmed : .required)
     }
 
     func beginUpdateRelaunch() {
-        isTerminating = true
-        isQuitWarningConfirmed = true
+        terminationState = .updateRelaunch
     }
 
     func claimSnapshotObserverInstallation() -> Bool {
