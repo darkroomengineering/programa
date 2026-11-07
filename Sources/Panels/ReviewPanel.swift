@@ -8,6 +8,28 @@ import Bonsplit
 /// rather than continuously live. See docs/plans/diff-review-panel.md.
 @MainActor
 final class ReviewPanel: Panel, ObservableObject {
+    private enum Operation<Value> {
+        case settled(generation: UInt64, value: Value)
+        case running(generation: UInt64, previous: Value)
+
+        var generation: UInt64 {
+            switch self {
+            case .settled(let generation, _), .running(let generation, _): return generation
+            }
+        }
+
+        var value: Value {
+            switch self {
+            case .settled(_, let value), .running(_, let value): return value
+            }
+        }
+
+        var isRunning: Bool {
+            if case .running = self { return true }
+            return false
+        }
+    }
+
     let id: UUID
     let panelType: PanelType = .review
 
@@ -25,25 +47,37 @@ final class ReviewPanel: Panel, ObservableObject {
 
     @Published private(set) var mode: ReviewDiffMode
     @Published private(set) var baseBranch: String
-    @Published private(set) var files: [ReviewFileDiff] = []
+    var files: [ReviewFileDiff] { diffOperation.value?.files ?? [] }
     private(set) var filesRevision: UInt64 = 0
     /// Raw `git diff` text behind `files`, served to the Pierre diff viewer (debug spike).
-    @Published private(set) var rawDiff = ""
+    var rawDiff: String { diffOperation.value?.rawDiff ?? "" }
     @Published private(set) var comments: [ReviewComment] = []
     @Published private(set) var commentDeliveryFailed = false
-    @Published private(set) var isRefreshing: Bool = false
-    @Published private(set) var lastError: ReviewDiffError?
-    @Published private(set) var lastRefreshedAt: Date?
+    @Published private var diffOperation: Operation<ReviewDiffSnapshot?> = .settled(generation: 0, value: nil)
+    var isRefreshing: Bool { diffOperation.isRunning }
+    var lastError: ReviewDiffError? { diffOperation.value?.error }
+    var lastRefreshedAt: Date? { diffOperation.value?.generatedAt }
     @Published private(set) var displayTitle: String = ""
     /// Newest file checkpoint of the reviewed surface in this repo (`ReviewCheckpointStore`).
-    @Published private(set) var latestCheckpoint: ReviewCheckpoint?
-    @Published private(set) var isRestoringCheckpoint = false
-    @Published var checkpointRestoreError: String?
-    private var checkpointGeneration: UInt64 = 0
+    @Published private var checkpointOperation: Operation<ReviewCheckpoint?> = .settled(generation: 0, value: nil)
+    var latestCheckpoint: ReviewCheckpoint? { checkpointOperation.value }
+    @Published private var restoreOperation: Operation<String?> = .settled(generation: 0, value: nil)
+    var isRestoringCheckpoint: Bool { restoreOperation.isRunning }
+    var checkpointRestoreError: String? {
+        get { restoreOperation.value }
+        set {
+            switch restoreOperation {
+            case .settled(let generation, _):
+                restoreOperation = .settled(generation: generation, value: newValue)
+            case .running(let generation, _):
+                restoreOperation = .running(generation: generation, previous: newValue)
+            }
+        }
+    }
     /// nil when the workspace has no GitHub pull request.
-    @Published private(set) var mergeReadiness: ReviewMergeReadinessState?
-    @Published private(set) var isRefreshingMergeReadiness = false
-    private var mergeReadinessGeneration: UInt64 = 0
+    @Published private var readinessOperation: Operation<ReviewMergeReadinessState?> = .settled(generation: 0, value: nil)
+    var mergeReadiness: ReviewMergeReadinessState? { readinessOperation.value }
+    var isRefreshingMergeReadiness: Bool { readinessOperation.isRunning }
 
     /// Token incremented to trigger the focus flash animation (mirrors `MarkdownPanel`).
     @Published private(set) var focusFlashToken: Int = 0
@@ -53,7 +87,7 @@ final class ReviewPanel: Panel, ObservableObject {
     /// under still matches -- this stops a slow probe from a stale request (e.g. a prior branch
     /// selection) from overwriting a newer result. See M12 in
     /// docs/audits/codebase-audit-2026-09-11.md.
-    private(set) var refreshGeneration: UInt64 = 0
+    var refreshGeneration: UInt64 { diffOperation.generation }
 
     var displayIcon: String? { "checklist" }
 
@@ -115,9 +149,8 @@ final class ReviewPanel: Panel, ObservableObject {
     /// result back on the main actor. Never blocks the caller -- see the socket threading
     /// policy in docs/plans/diff-review-panel.md §2.
     func refresh() {
-        isRefreshing = true
-        refreshGeneration &+= 1
-        let generation = refreshGeneration
+        let generation = refreshGeneration &+ 1
+        diffOperation = .running(generation: generation, previous: diffOperation.value)
         let capturedDirectory = directory
         let capturedMode = mode
         let capturedBaseBranch = baseBranch
@@ -135,7 +168,7 @@ final class ReviewPanel: Panel, ObservableObject {
     /// generation itself so that any `refresh()` still in flight from before this panel existed
     /// (or from a superseded request) is discarded when it later completes.
     func apply(snapshot: ReviewDiffSnapshot) {
-        refreshGeneration &+= 1
+        diffOperation = .running(generation: refreshGeneration &+ 1, previous: diffOperation.value)
         apply(snapshot: snapshot, generation: refreshGeneration)
     }
 
@@ -146,12 +179,8 @@ final class ReviewPanel: Panel, ObservableObject {
     /// directly -- see M12 in docs/audits/codebase-audit-2026-09-11.md.
     func apply(snapshot: ReviewDiffSnapshot, generation: UInt64) {
         guard generation == refreshGeneration else { return }
-        files = snapshot.files
-        rawDiff = snapshot.rawDiff
         filesRevision &+= 1
-        lastError = snapshot.error
-        lastRefreshedAt = snapshot.generatedAt
-        isRefreshing = false
+        diffOperation = .settled(generation: generation, value: snapshot)
         if case .branch = mode, let resolvedBaseBranch = snapshot.resolvedBaseBranch {
             baseBranch = resolvedBaseBranch
             displayTitle = Self.title(mode: mode, baseBranch: resolvedBaseBranch)
@@ -199,27 +228,28 @@ final class ReviewPanel: Panel, ObservableObject {
     /// Fetches PR state, checks and unresolved review threads with `gh` off-main. Runs only on
     /// explicit requests (panel shown, refresh button), never on a timer or an agent turn edge.
     func refreshMergeReadiness() {
-        mergeReadinessGeneration &+= 1
-        let generation = mergeReadinessGeneration
+        let generation = readinessOperation.generation &+ 1
         guard let pullRequest = workspacePullRequest,
               ReviewMergeReadinessProber.coordinates(from: pullRequest.url) != nil else {
-            mergeReadiness = nil
-            isRefreshingMergeReadiness = false
+            readinessOperation = .settled(generation: generation, value: nil)
             return
         }
         let number = pullRequest.number
         let url = pullRequest.url
-        if mergeReadiness?.url != url {
-            mergeReadiness = ReviewMergeReadinessState(number: number, url: url, result: nil)
-        }
-        isRefreshingMergeReadiness = true
+        let previous = mergeReadiness?.url == url
+            ? mergeReadiness
+            : ReviewMergeReadinessState(number: number, url: url, result: nil)
+        readinessOperation = .running(generation: generation, previous: previous)
         let directory = directory
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result = ReviewMergeReadinessProber.fetch(pullRequestURL: url, directory: directory)
             DispatchQueue.main.async {
-                guard let self, self.mergeReadinessGeneration == generation else { return }
-                self.isRefreshingMergeReadiness = false
-                self.mergeReadiness = ReviewMergeReadinessState(number: number, url: url, result: result)
+                guard let self, self.readinessOperation.isRunning,
+                      self.readinessOperation.generation == generation else { return }
+                self.readinessOperation = .settled(
+                    generation: generation,
+                    value: ReviewMergeReadinessState(number: number, url: url, result: result)
+                )
             }
         }
     }
@@ -233,16 +263,17 @@ final class ReviewPanel: Panel, ObservableObject {
     }
 
     private func reloadLatestCheckpoint() {
-        checkpointGeneration &+= 1
-        let generation = checkpointGeneration
+        let generation = checkpointOperation.generation &+ 1
+        checkpointOperation = .running(generation: generation, previous: checkpointOperation.value)
         let directory = directory
         let workspaceId = checkpointWorkspaceId
         let surfaceId = sourceSurfaceId
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let newest = ReviewCheckpointStore.list(directory: directory, workspaceId: workspaceId, surfaceId: surfaceId).first
             DispatchQueue.main.async {
-                guard let self, self.checkpointGeneration == generation, self.latestCheckpoint != newest else { return }
-                self.latestCheckpoint = newest
+                guard let self, self.checkpointOperation.isRunning,
+                      self.checkpointOperation.generation == generation else { return }
+                self.checkpointOperation = .settled(generation: generation, value: newest)
             }
         }
     }
@@ -251,7 +282,8 @@ final class ReviewPanel: Panel, ObservableObject {
     /// then refreshes the diff. Failures land in `checkpointRestoreError`.
     func revertToLatestCheckpoint() {
         guard let checkpoint = latestCheckpoint, !isRestoringCheckpoint else { return }
-        isRestoringCheckpoint = true
+        let generation = restoreOperation.generation &+ 1
+        restoreOperation = .running(generation: generation, previous: checkpointRestoreError)
         let directory = directory
         let workspaceId = checkpointWorkspaceId
         let surfaceId = sourceSurfaceId
@@ -263,11 +295,15 @@ final class ReviewPanel: Panel, ObservableObject {
                 surfaceId: surfaceId
             )
             DispatchQueue.main.async {
-                guard let self else { return }
-                self.isRestoringCheckpoint = false
+                guard let self, self.restoreOperation.isRunning,
+                      self.restoreOperation.generation == generation else { return }
+                let errorMessage: String?
                 if case .failure(let error) = result {
-                    self.checkpointRestoreError = Self.message(for: error)
+                    errorMessage = Self.message(for: error)
+                } else {
+                    errorMessage = self.checkpointRestoreError
                 }
+                self.restoreOperation = .settled(generation: generation, value: errorMessage)
                 self.refresh()
             }
         }
