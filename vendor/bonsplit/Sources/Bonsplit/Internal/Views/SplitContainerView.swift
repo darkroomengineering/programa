@@ -152,11 +152,13 @@ struct SplitContainerView<Content: View, EmptyContent: View>: NSViewRepresentabl
             splitState.animationOrigin = nil
         }
 
+        let initializationToken = context.coordinator.dividerLifecycle.token
+
         // Apply the initial divider position once after initial layout scheduling.
         func applyInitialDividerPosition() {
-            if context.coordinator.didApplyInitialDividerPosition {
-                return
-            }
+            guard context.coordinator.dividerLifecycle.token == initializationToken,
+                  case .awaitingLayout(_, let attempts, _) = context.coordinator.dividerLifecycle,
+                  context.coordinator.splitView === splitView else { return }
 
             let totalSize = splitState.orientation == .horizontal
                 ? splitView.bounds.width
@@ -166,9 +168,13 @@ struct SplitContainerView<Content: View, EmptyContent: View>: NSViewRepresentabl
             guard availableSize > 0 else {
                 // makeNSView can run before NSSplitView has a real frame; retry on the
                 // next runloop so we still apply the intended entry position.
-                context.coordinator.initialDividerApplyAttempts += 1
+                let attempt = attempts + 1
+                context.coordinator.dividerLifecycle = .awaitingLayout(
+                    token: initializationToken,
+                    attempts: attempt,
+                    interaction: context.coordinator.dividerLifecycle.interaction
+                )
 #if DEBUG
-                let attempt = context.coordinator.initialDividerApplyAttempts
                 if attempt == 1 || attempt == 4 || attempt == 8 || attempt == 12 {
                     dlog(
                         "split.entry.wait split=\(splitDebugToken) orientation=\(orientationToken) " +
@@ -177,30 +183,30 @@ struct SplitContainerView<Content: View, EmptyContent: View>: NSViewRepresentabl
                     )
                 }
 #endif
-                if context.coordinator.initialDividerApplyAttempts < 12 {
+                if attempt < 12 {
                     DispatchQueue.main.async {
                         applyInitialDividerPosition()
                     }
                     return
                 }
 
-                context.coordinator.didApplyInitialDividerPosition = true
+                context.coordinator.finishInitialDividerPosition()
 #if DEBUG
                 dlog(
                     "split.entry.fallback split=\(splitDebugToken) orientation=\(orientationToken) " +
-                    "origin=\(animationOriginToken) attempts=\(context.coordinator.initialDividerApplyAttempts)"
+                    "origin=\(animationOriginToken) attempts=\(attempt)"
                 )
 #endif
                 return
             }
 
-            context.coordinator.didApplyInitialDividerPosition = true
-            context.coordinator.initialDividerApplyAttempts = 0
+            context.coordinator.finishInitialDividerPosition()
 
             if animationOrigin != nil {
                 let targetPosition = availableSize * 0.5
                 splitState.dividerPosition = 0.5
 
+                guard context.coordinator.dividerLifecycle.token == initializationToken else { return }
                 context.coordinator.setPositionSafely(targetPosition, in: splitView, layout: false)
 #if DEBUG
                 dlog(
@@ -275,6 +281,11 @@ struct SplitContainerView<Content: View, EmptyContent: View>: NSViewRepresentabl
         // Then sync if the position changed externally
         let currentPosition = splitState.dividerPosition
         context.coordinator.syncPosition(currentPosition, in: splitView)
+    }
+
+    static func dismantleNSView(_ splitView: NSSplitView, coordinator: Coordinator) {
+        splitView.delegate = nil
+        coordinator.splitView = nil
     }
 
     // MARK: - Helpers
@@ -358,20 +369,92 @@ struct SplitContainerView<Content: View, EmptyContent: View>: NSViewRepresentabl
     // MARK: - Coordinator
 
     class Coordinator: NSObject, NSSplitViewDelegate {
+        enum DividerInteraction {
+            case idle(position: CGFloat)
+            case dragging(position: CGFloat)
+            indirect case syncing(resume: DividerInteraction)
+
+            var position: CGFloat {
+                get {
+                    switch self {
+                    case .idle(let position), .dragging(let position): return position
+                    case .syncing(let resume): return resume.position
+                    }
+                }
+                set {
+                    switch self {
+                    case .idle: self = .idle(position: newValue)
+                    case .dragging: self = .dragging(position: newValue)
+                    case .syncing(var resume):
+                        resume.position = newValue
+                        self = .syncing(resume: resume)
+                    }
+                }
+            }
+
+            var isDragging: Bool {
+                get {
+                    switch self {
+                    case .idle: return false
+                    case .dragging: return true
+                    case .syncing(let resume): return resume.isDragging
+                    }
+                }
+                set {
+                    switch self {
+                    case .idle, .dragging:
+                        self = newValue ? .dragging(position: position) : .idle(position: position)
+                    case .syncing(var resume):
+                        resume.isDragging = newValue
+                        self = .syncing(resume: resume)
+                    }
+                }
+            }
+        }
+
+        enum DividerLifecycle {
+            case awaitingLayout(token: UUID, attempts: Int, interaction: DividerInteraction)
+            case ready(token: UUID, interaction: DividerInteraction)
+
+            var token: UUID {
+                switch self {
+                case .awaitingLayout(let token, _, _), .ready(let token, _): return token
+                }
+            }
+
+            var interaction: DividerInteraction {
+                get {
+                    switch self {
+                    case .awaitingLayout(_, _, let interaction), .ready(_, let interaction): return interaction
+                    }
+                }
+                set {
+                    switch self {
+                    case .awaitingLayout(let token, let attempts, _):
+                        self = .awaitingLayout(token: token, attempts: attempts, interaction: newValue)
+                    case .ready(let token, _):
+                        self = .ready(token: token, interaction: newValue)
+                    }
+                }
+            }
+        }
+
         var splitState: SplitState
-        private var splitStateId: UUID
         weak var splitView: NSSplitView?
-        var didApplyInitialDividerPosition = false
-        /// Initial divider placement can run before NSSplitView has a real size.
-        /// Retry a few turns so the entry position is not dropped on first layout.
-        var initialDividerApplyAttempts = 0
+        var dividerLifecycle: DividerLifecycle
         var onGeometryChange: ((_ isDragging: Bool) -> Void)?
-        /// Track last applied position to detect external changes
-        var lastAppliedPosition: CGFloat = 0.5
-        // Guard programmatic `setPosition` re-entrancy from resize callbacks.
-        var isSyncingProgrammatically = false
-        /// Track if user is actively dragging the divider
-        var isDragging = false
+        var lastAppliedPosition: CGFloat {
+            get { dividerLifecycle.interaction.position }
+            set { dividerLifecycle.interaction.position = newValue }
+        }
+        var isSyncingProgrammatically: Bool {
+            if case .syncing = dividerLifecycle.interaction { return true }
+            return false
+        }
+        var isDragging: Bool {
+            get { dividerLifecycle.interaction.isDragging }
+            set { dividerLifecycle.interaction.isDragging = newValue }
+        }
         /// Retain hosting controllers so SwiftUI content stays alive
         var firstHostingController: NSHostingController<AnyView>?
         var secondHostingController: NSHostingController<AnyView>?
@@ -381,9 +464,14 @@ struct SplitContainerView<Content: View, EmptyContent: View>: NSViewRepresentabl
             onGeometryChange: ((_ isDragging: Bool) -> Void)?
         ) {
             self.splitState = splitState
-            self.splitStateId = splitState.id
             self.onGeometryChange = onGeometryChange
-            self.lastAppliedPosition = splitState.dividerPosition
+            self.dividerLifecycle = .awaitingLayout(
+                token: UUID(), attempts: 0, interaction: .idle(position: splitState.dividerPosition)
+            )
+        }
+
+        func finishInitialDividerPosition() {
+            dividerLifecycle = .ready(token: dividerLifecycle.token, interaction: dividerLifecycle.interaction)
         }
 
         func update(
@@ -394,13 +482,11 @@ struct SplitContainerView<Content: View, EmptyContent: View>: NSViewRepresentabl
 
             // If SwiftUI reused this representable for a different split node,
             // reset our cached sync state so we don't "pin" the divider to an edge.
-            if newState.id != splitStateId {
-                splitStateId = newState.id
+            if newState.id != splitState.id {
                 splitState = newState
-                lastAppliedPosition = newState.dividerPosition
-                didApplyInitialDividerPosition = false
-                initialDividerApplyAttempts = 0
-                isDragging = false
+                dividerLifecycle = .ready(
+                    token: UUID(), interaction: .idle(position: newState.dividerPosition)
+                )
                 return
             }
 
@@ -485,10 +571,14 @@ struct SplitContainerView<Content: View, EmptyContent: View>: NSViewRepresentabl
 #endif
         /// Apply external position changes to the NSSplitView
         func setPositionSafely(_ position: CGFloat, in splitView: NSSplitView, layout: Bool = true) {
-            isSyncingProgrammatically = true
+            let token = dividerLifecycle.token
+            dividerLifecycle.interaction = .syncing(resume: dividerLifecycle.interaction)
             splitContainerProgrammaticSyncDepth += 1
             defer {
-                isSyncingProgrammatically = false
+                if dividerLifecycle.token == token,
+                   case .syncing(let resume) = dividerLifecycle.interaction {
+                    dividerLifecycle.interaction = resume
+                }
                 splitContainerProgrammaticSyncDepth = max(0, splitContainerProgrammaticSyncDepth - 1)
             }
             let clampedPosition = clampedDividerPosition(position, in: splitView)
@@ -539,7 +629,9 @@ struct SplitContainerView<Content: View, EmptyContent: View>: NSViewRepresentabl
             }
 
             let pixelPosition = availableSize * clampedStatePosition
+            let token = dividerLifecycle.token
             setPositionSafely(pixelPosition, in: splitView, layout: true)
+            guard dividerLifecycle.token == token else { return }
             lastAppliedPosition = clampedStatePosition
         }
 

@@ -119,12 +119,14 @@ class TabManager: ObservableObject {
                 "to=\(Self.debugShortWorkspaceId(selectedTabId)) dt=\(Self.debugMsText(switchDtMs))"
             )
 #endif
-            selectionSideEffectsGeneration &+= 1
-            let generation = selectionSideEffectsGeneration
+            guard !isStopped else { return }
+            let token = UUID()
+            selectionLifecycle = .queued(token, pendingWorkspaceUnfocusTarget)
             DispatchQueue.main.async { [weak self] in
                 guard let self,
-                      !self.isStopped,
-                      self.selectionSideEffectsGeneration == generation else { return }
+                      case .queued(let currentToken, _) = self.selectionLifecycle,
+                      currentToken == token else { return }
+                self.finishQueuedSelection(token: token)
                 if let focusTransitionRequest {
                     guard self.focusTransitionCoordinator.completeTransition(focusTransitionRequest) else {
                         return
@@ -136,7 +138,9 @@ class TabManager: ObservableObject {
                 } else {
                     self.focusSelectedTabPanel(previousTabId: previousTabId)
                 }
+                guard self.selectionLifecycle.token == token else { return }
                 self.updateWindowTitleForSelectedTab()
+                guard self.selectionLifecycle.token == token else { return }
                 if let selectedTabId = self.selectedTabId {
                     self.dismissFocusedPanelNotificationIfActive(tabId: selectedTabId)
                 }
@@ -152,9 +156,46 @@ class TabManager: ObservableObject {
             }
         }
     }
-    private(set) var isStopped = false
+    private enum SelectionLifecycle {
+        case stable(UUID)
+        case queued(UUID, (tabId: UUID, panelId: UUID)?)
+        case awaitingUnfocus(UUID, (tabId: UUID, panelId: UUID))
+        case stopped
+
+        var token: UUID? {
+            switch self {
+            case .stable(let token), .queued(let token, _), .awaitingUnfocus(let token, _):
+                return token
+            case .stopped:
+                return nil
+            }
+        }
+
+        var pendingUnfocus: (tabId: UUID, panelId: UUID)? {
+            switch self {
+            case .queued(_, let pending): return pending
+            case .awaitingUnfocus(_, let pending): return pending
+            case .stable, .stopped: return nil
+            }
+        }
+    }
+
+    private enum FocusFlashPolicy {
+        case normal
+        case suppressed(UUID)
+    }
+
+    private var selectionLifecycle: SelectionLifecycle = .stable(UUID())
+    var isStopped: Bool {
+        if case .stopped = selectionLifecycle { return true }
+        return false
+    }
     private var observers: [NSObjectProtocol] = []
-    private var suppressFocusFlash = false
+    private var focusFlashPolicy: FocusFlashPolicy = .normal
+    private var suppressFocusFlash: Bool {
+        if case .suppressed = focusFlashPolicy { return true }
+        return false
+    }
     var lastFocusedPanelByTab: [UUID: UUID] = [:]
     struct PanelTitleUpdateKey: Hashable {
         let tabId: UUID
@@ -190,10 +231,36 @@ class TabManager: ObservableObject {
     var historyIndex: Int = -1
     var isNavigatingHistory = false
     private let maxHistorySize = 50
-    var selectionSideEffectsGeneration: UInt64 = 0
     private var workspaceCycleGeneration: UInt64 = 0
     var workspaceCycleCooldownTask: Task<Void, Never>?
-    var pendingWorkspaceUnfocusTarget: (tabId: UUID, panelId: UUID)?
+    var pendingWorkspaceUnfocusTarget: (tabId: UUID, panelId: UUID)? {
+        get { selectionLifecycle.pendingUnfocus }
+        set {
+            guard let token = selectionLifecycle.token else { return }
+            if case .queued = selectionLifecycle {
+                selectionLifecycle = .queued(token, newValue)
+            } else if let newValue {
+                selectionLifecycle = .awaitingUnfocus(token, newValue)
+            } else {
+                selectionLifecycle = .stable(token)
+            }
+        }
+    }
+
+    func resetSelectionLifecycle() {
+        guard !isStopped else { return }
+        selectionLifecycle = .stable(UUID())
+    }
+
+    private func finishQueuedSelection(token: UUID) {
+        guard case .queued(let currentToken, let pending) = selectionLifecycle,
+              currentToken == token else { return }
+        if let pending {
+            selectionLifecycle = .awaitingUnfocus(token, pending)
+        } else {
+            selectionLifecycle = .stable(token)
+        }
+    }
     var sidebarSelectedWorkspaceIds: Set<UUID> = []
     var confirmCloseHandler: ((String, String, Bool) -> Bool)?
     private struct WorkspaceCreationTabSnapshot {
@@ -1655,10 +1722,8 @@ class TabManager: ObservableObject {
     /// undo transfer, or callback may outlive the context.
     func teardownForWindowClose(notifyOwner: Bool = true) {
         guard !isStopped else { return }
-        isStopped = true
-
-        selectionSideEffectsGeneration &+= 1
-        pendingWorkspaceUnfocusTarget = nil
+        selectionLifecycle = .stopped
+        focusFlashPolicy = .normal
         workspaceCycleGeneration &+= 1
         workspaceCycleCooldownTask?.cancel()
         workspaceCycleCooldownTask = nil
@@ -2355,7 +2420,8 @@ class TabManager: ObservableObject {
         requestedPanelId: UUID? = nil
     ) {
         guard let selectedTabId,
-              let tab = workspace(withId: selectedTabId) else { return }
+              let tab = workspace(withId: selectedTabId),
+              let selectionToken = selectionLifecycle.token else { return }
 
         let panelId: UUID
         if let requestedPanelId {
@@ -2384,6 +2450,7 @@ class TabManager: ObservableObject {
 
         // Route workspace reactivation through the normal focus machinery so panel-local
         // activation intents like terminal find-field focus are restored on return.
+        guard selectionLifecycle.token == selectionToken else { return }
         tab.focusPanel(panelId)
     }
 
@@ -2422,6 +2489,7 @@ class TabManager: ObservableObject {
     }
 
     private func replacePendingWorkspaceUnfocusTarget(with next: (tabId: UUID, panelId: UUID)) {
+        guard let selectionToken = selectionLifecycle.token else { return }
         if let current = pendingWorkspaceUnfocusTarget,
            current.tabId == next.tabId,
            current.panelId == next.panelId {
@@ -2449,6 +2517,7 @@ class TabManager: ObservableObject {
             }
         }
 
+        guard selectionLifecycle.token == selectionToken else { return }
         pendingWorkspaceUnfocusTarget = next
 #if DEBUG
         if let snapshot = debugCurrentWorkspaceSwitchSnapshot() {
@@ -2477,7 +2546,7 @@ class TabManager: ObservableObject {
 
     private func dismissFocusedPanelNotificationIfActive(tabId: UUID) {
         let shouldSuppressFlash = suppressFocusFlash
-        suppressFocusFlash = false
+        focusFlashPolicy = .normal
         guard !shouldSuppressFlash else { return }
         guard AppFocusState.isAppActive() else { return }
         guard let panelId = focusedPanelId(for: tabId) else { return }
@@ -2570,7 +2639,11 @@ class TabManager: ObservableObject {
     }
 
     func focusTab(_ tabId: UUID, surfaceId: UUID? = nil, suppressFlash: Bool = false) {
-        guard let tab = workspace(withId: tabId) else { return }
+        _ = focusTabWithSelectionToken(tabId, surfaceId: surfaceId, suppressFlash: suppressFlash)
+    }
+
+    private func focusTabWithSelectionToken(_ tabId: UUID, surfaceId: UUID?, suppressFlash: Bool) -> UUID? {
+        guard !isStopped, let tab = workspace(withId: tabId) else { return nil }
         if let surfaceId, tab.panels[surfaceId] != nil {
             // Keep selected-surface intent stable across selectedTabId didSet async restore.
             lastFocusedPanelByTab[tabId] = surfaceId
@@ -2579,16 +2652,24 @@ class TabManager: ObservableObject {
         debugPrimeWorkspaceSwitchTrigger("focus", to: tabId)
 #endif
         selectedTabId = tabId
+        let selectionToken = selectionLifecycle.token
         NotificationCenter.default.post(
             name: .ghosttyDidFocusTab,
             object: nil,
             userInfo: [GhosttyNotificationKey.tabId: tabId]
         )
 
+        guard let selectionToken,
+              selectionLifecycle.token == selectionToken,
+              selectedTabId == tabId else { return nil }
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
+            guard let self,
+                  self.selectionLifecycle.token == selectionToken,
+                  self.selectedTabId == tabId else { return }
             NSRunningApplication.current.activate(options: [.activateAllWindows])
+            guard self.selectionLifecycle.token == selectionToken else { return }
             NSApp.unhide(nil)
+            guard self.selectionLifecycle.token == selectionToken else { return }
             if let app = AppDelegate.shared,
                let windowId = app.windowId(for: self),
                let window = app.mainWindow(for: windowId) {
@@ -2605,6 +2686,7 @@ class TabManager: ObservableObject {
                 tab.focusPanel(surfaceId)
             }
         }
+        return selectionToken
     }
 
     @discardableResult
@@ -2633,9 +2715,17 @@ class TabManager: ObservableObject {
         // Jump-to-unread should reveal the destination pane instead of keeping an old split-zoom
         // state active around it.
         tab.clearSplitZoom()
-        suppressFocusFlash = true
-        focusTab(tabId, surfaceId: desiredPanelId, suppressFlash: true)
-        suppressFocusFlash = false
+        let suppressionToken = UUID()
+        let previousFlashPolicy = focusFlashPolicy
+        focusFlashPolicy = .suppressed(suppressionToken)
+        let selectionToken = focusTabWithSelectionToken(tabId, surfaceId: desiredPanelId, suppressFlash: true)
+        if case .suppressed(let currentToken) = focusFlashPolicy,
+           currentToken == suppressionToken {
+            focusFlashPolicy = previousFlashPolicy
+        }
+        guard let selectionToken,
+              selectionLifecycle.token == selectionToken,
+              selectedTabId == tabId else { return false }
 
         let targetPanelId = desiredPanelId ?? tab.focusedPanelId
 
