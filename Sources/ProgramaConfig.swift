@@ -402,6 +402,24 @@ final class ProgramaConfigStore: ObservableObject {
     private let localFileWatcher: FileWatcher
     private let globalFileWatcher: FileWatcher
 
+    private enum WatchState {
+        case stopped
+        case file(path: String, generation: UUID)
+        case directory(path: String, generation: UUID)
+        case retrying(path: String, generation: UUID, attempt: Int)
+
+        var generation: UUID? {
+            switch self {
+            case .stopped: return nil
+            case .file(_, let generation), .directory(_, let generation), .retrying(_, let generation, _):
+                return generation
+            }
+        }
+    }
+
+    private var localWatchState: WatchState = .stopped
+    private var globalWatchState: WatchState = .stopped
+
     private static let maxReattachAttempts = 5
     private static let reattachDelay: TimeInterval = 0.5
 
@@ -596,6 +614,8 @@ final class ProgramaConfigStore: ObservableObject {
 
     private func startLocalFileWatcher() {
         guard let path = localConfigPath else { return }
+        let generation = UUID()
+        localWatchState = .file(path: path, generation: generation)
         let started = localFileWatcher.start(
             path: path,
             eventMask: [.write, .delete, .rename, .extend]
@@ -603,12 +623,14 @@ final class ProgramaConfigStore: ObservableObject {
             guard let self else { return }
             if flags.contains(.delete) || flags.contains(.rename) {
                 DispatchQueue.main.async {
+                    guard self.localWatchState.generation == generation else { return }
                     self.stopLocalFileWatcher()
                     self.loadAll()
                     self.scheduleLocalReattach(attempt: 1)
                 }
             } else {
                 DispatchQueue.main.async {
+                    guard self.localWatchState.generation == generation else { return }
                     self.loadAll()
                 }
             }
@@ -621,29 +643,36 @@ final class ProgramaConfigStore: ObservableObject {
 
     private func startLocalDirectoryWatcher() {
         guard let path = localConfigPath else { return }
+        let generation = UUID()
+        localWatchState = .directory(path: path, generation: generation)
         let dirPath = (path as NSString).deletingLastPathComponent
-        localFileWatcher.start(
+        let started = localFileWatcher.start(
             path: dirPath,
             eventMask: [.write, .link, .rename]
         ) { [weak self] _ in
             guard let self else { return }
             DispatchQueue.main.async {
-                guard let configPath = self.localConfigPath,
-                      FileManager.default.fileExists(atPath: configPath) else { return }
+                guard self.localWatchState.generation == generation,
+                      FileManager.default.fileExists(atPath: path) else { return }
                 // File appeared — switch to file-level watching
                 self.stopLocalFileWatcher()
                 self.loadAll()
                 self.startLocalFileWatcher()
             }
         }
+        if !started {
+            localWatchState = .stopped
+        }
     }
 
     private func scheduleLocalReattach(attempt: Int) {
-        guard attempt <= Self.maxReattachAttempts else { return }
+        guard attempt <= Self.maxReattachAttempts, let path = localConfigPath else { return }
+        let generation = UUID()
+        localWatchState = .retrying(path: path, generation: generation, attempt: attempt)
         watchQueue.asyncAfter(deadline: .now() + Self.reattachDelay) { [weak self] in
             guard let self else { return }
             DispatchQueue.main.async {
-                guard let path = self.localConfigPath else { return }
+                guard self.localWatchState.generation == generation else { return }
                 if FileManager.default.fileExists(atPath: path) {
                     self.loadAll()
                     self.startLocalFileWatcher()
@@ -655,25 +684,31 @@ final class ProgramaConfigStore: ObservableObject {
     }
 
     private func stopLocalFileWatcher() {
+        localWatchState = .stopped
         localFileWatcher.stop()
     }
 
     // MARK: - File watching (global)
 
     private func startGlobalFileWatcher() {
+        let path = globalConfigPath
+        let generation = UUID()
+        globalWatchState = .file(path: path, generation: generation)
         let started = globalFileWatcher.start(
-            path: globalConfigPath,
+            path: path,
             eventMask: [.write, .delete, .rename, .extend]
         ) { [weak self] flags in
             guard let self else { return }
             if flags.contains(.delete) || flags.contains(.rename) {
                 DispatchQueue.main.async {
+                    guard self.globalWatchState.generation == generation else { return }
                     self.stopGlobalFileWatcher()
                     self.loadAll()
                     self.scheduleGlobalReattach(attempt: 1)
                 }
             } else {
                 DispatchQueue.main.async {
+                    guard self.globalWatchState.generation == generation else { return }
                     self.loadAll()
                 }
             }
@@ -688,10 +723,14 @@ final class ProgramaConfigStore: ObservableObject {
             startGlobalDirectoryWatcher()
             return
         }
+        let path = globalConfigPath
+        let generation = UUID()
+        globalWatchState = .retrying(path: path, generation: generation, attempt: attempt)
         watchQueue.asyncAfter(deadline: .now() + Self.reattachDelay) { [weak self] in
             guard let self else { return }
             DispatchQueue.main.async {
-                if FileManager.default.fileExists(atPath: self.globalConfigPath) {
+                guard self.globalWatchState.generation == generation else { return }
+                if FileManager.default.fileExists(atPath: path) {
                     self.loadAll()
                     self.startGlobalFileWatcher()
                 } else {
@@ -702,26 +741,34 @@ final class ProgramaConfigStore: ObservableObject {
     }
 
     private func startGlobalDirectoryWatcher() {
-        let dirPath = (globalConfigPath as NSString).deletingLastPathComponent
+        let path = globalConfigPath
+        let generation = UUID()
+        globalWatchState = .directory(path: path, generation: generation)
+        let dirPath = (path as NSString).deletingLastPathComponent
         let fm = FileManager.default
         if !fm.fileExists(atPath: dirPath) {
             try? fm.createDirectory(atPath: dirPath, withIntermediateDirectories: true)
         }
-        globalFileWatcher.start(
+        let started = globalFileWatcher.start(
             path: dirPath,
             eventMask: [.write, .link, .rename]
         ) { [weak self] _ in
             guard let self else { return }
             DispatchQueue.main.async {
-                guard FileManager.default.fileExists(atPath: self.globalConfigPath) else { return }
+                guard self.globalWatchState.generation == generation,
+                      FileManager.default.fileExists(atPath: path) else { return }
                 self.stopGlobalFileWatcher()
                 self.loadAll()
                 self.startGlobalFileWatcher()
             }
         }
+        if !started {
+            globalWatchState = .stopped
+        }
     }
 
     private func stopGlobalFileWatcher() {
+        globalWatchState = .stopped
         globalFileWatcher.stop()
     }
 }
