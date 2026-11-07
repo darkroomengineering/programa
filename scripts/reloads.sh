@@ -126,6 +126,10 @@ XCODEBUILD_ARGS=(
   -scheme programa
   -configuration Release
   -destination 'platform=macOS'
+  # Release defaults to a universal build, but a locally built GhosttyKit only
+  # has this machine's slice, so the other architecture fails to link.
+  ONLY_ACTIVE_ARCH=YES
+  ARCHS="$(uname -m)"
 )
 if [[ -n "$DERIVED_DATA" ]]; then
   XCODEBUILD_ARGS+=(-derivedDataPath "$DERIVED_DATA")
