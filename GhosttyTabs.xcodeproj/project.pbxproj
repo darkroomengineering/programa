@@ -148,6 +148,7 @@
 			A5001006 /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5001016 /* GhosttyKit.xcframework */; };
 		A5001007 /* TerminalController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001019 /* TerminalController.swift */; };
 		H1AP0002 /* AppLifecycleCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1AP0001 /* AppLifecycleCoordinator.swift */; };
+		H1AP0004 /* AppTerminationState.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1AP0003 /* AppTerminationState.swift */; };
 		BEAD00000000000000000002 /* MainWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEAD00000000000000000001 /* MainWindowController.swift */; };
 		H1SN0002 /* AppDelegate+SessionSnapshotPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1SN0001 /* AppDelegate+SessionSnapshotPersistence.swift */; };
 		NRTC0011 /* TerminalController+System.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTC0001 /* TerminalController+System.swift */; };
@@ -617,6 +618,7 @@
 		CESH000003 /* session_escrow_shim.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = session_escrow_shim.h; sourceTree = "<group>"; };
 		A5001019 /* TerminalController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalController.swift; sourceTree = "<group>"; };
 		H1AP0001 /* AppLifecycleCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLifecycleCoordinator.swift; sourceTree = "<group>"; };
+		H1AP0003 /* AppTerminationState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTerminationState.swift; sourceTree = "<group>"; };
 		BEAD00000000000000000001 /* MainWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowController.swift; sourceTree = "<group>"; };
 		H1SN0001 /* AppDelegate+SessionSnapshotPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+SessionSnapshotPersistence.swift"; sourceTree = "<group>"; };
 		NRTC0001 /* TerminalController+System.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+System.swift"; sourceTree = "<group>"; };
@@ -1147,6 +1149,7 @@
 				D1320AA0D1320AA0D1320AA4 /* AppIconDockTilePlugin.swift */,
 				A5001090 /* AppDelegate.swift */,
 				H1AP0001 /* AppLifecycleCoordinator.swift */,
+				H1AP0003 /* AppTerminationState.swift */,
 				BEAD00000000000000000001 /* MainWindowController.swift */,
 				H1SN0001 /* AppDelegate+SessionSnapshotPersistence.swift */,
 				C5E68FD3C9918B5717603304 /* SessionAutosaveCoordinator.swift */,
@@ -1723,6 +1726,7 @@
 				A5FF0008 /* HostedViewPortalRegistry.swift in Sources */,
 				A5001007 /* TerminalController.swift in Sources */,
 				H1AP0002 /* AppLifecycleCoordinator.swift in Sources */,
+				H1AP0004 /* AppTerminationState.swift in Sources */,
 				BEAD00000000000000000002 /* MainWindowController.swift in Sources */,
 				H1SN0002 /* AppDelegate+SessionSnapshotPersistence.swift in Sources */,
 				NRTC0011 /* TerminalController+System.swift in Sources */,

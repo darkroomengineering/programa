@@ -9,9 +9,14 @@ final class AppLifecycleCoordinator {
         let logReason: String
     }
 
-    private(set) var isTerminating = false
-    private(set) var isAwaitingPowerOff = false
-    private(set) var isQuitWarningConfirmed = false
+    private var terminationState: AppTerminationState = .running {
+        didSet { transitionToken = UUID() }
+    }
+    private(set) var transitionToken = UUID()
+    var isTerminating: Bool { terminationState.isTerminating }
+    var isAwaitingPowerOff: Bool { terminationState.isAwaitingPowerOff }
+    var isQuitWarningConfirmed: Bool { terminationState.isQuitWarningConfirmed }
+    var quitRequestToken: UUID? { terminationState.quitRequestToken }
     private var didInstallSnapshotObservers = false
     private var didDisableSuddenTermination = false
 
@@ -19,44 +24,26 @@ final class AppLifecycleCoordinator {
         isTaggedDevBuild: Bool,
         isQuitWarningEnabled: Bool
     ) -> TerminationDecision {
-        isTerminating = true
         let shouldWarn = AppDelegate.shouldWarnBeforeTermination(
             isTaggedDevBuild: isTaggedDevBuild,
             isQuitWarningConfirmed: isQuitWarningConfirmed,
             isQuitWarningEnabled: isQuitWarningEnabled
         )
+        terminationState.beginTermination()
         return TerminationDecision(shouldWarn: shouldWarn, logReason: "warning_bypassed")
     }
 
-    func confirmQuit() {
-        isQuitWarningConfirmed = true
-    }
-
-    func cancelTermination() {
-        isTerminating = false
-    }
-
-    func beginPowerOff() {
-        isAwaitingPowerOff = true
-        isTerminating = true
-    }
+    func confirmQuit() { terminationState.confirmQuit() }
+    func cancelTermination() { terminationState.settle() }
+    func beginPowerOff() { terminationState = .awaitingPowerOff(nil, terminationState.authorization) }
+    func willTerminate() { terminationState = .terminating(terminationState.authorization) }
+    func beginUpdateRelaunch() { terminationState = .updateRelaunch }
 
     @discardableResult
     func resumeAfterCancelledPowerOff() -> Bool {
         guard isAwaitingPowerOff else { return false }
-        isAwaitingPowerOff = false
-        isTerminating = false
+        terminationState.settle()
         return true
-    }
-
-    func willTerminate() {
-        isAwaitingPowerOff = false
-        isTerminating = true
-    }
-
-    func beginUpdateRelaunch() {
-        isTerminating = true
-        isQuitWarningConfirmed = true
     }
 
     func claimSnapshotObserverInstallation() -> Bool {

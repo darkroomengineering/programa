@@ -1428,8 +1428,11 @@ private struct AcknowledgmentsView: View {
 
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     static let shared = SettingsWindowController()
-    private var pendingFocusRestoreWorkItems: [DispatchWorkItem] = []
-    private var focusRestoreGeneration = 0
+    private enum FocusRestore {
+        case idle
+        case armed(token: UUID, attempts: [UUID: DispatchWorkItem])
+    }
+    private var focusRestore: FocusRestore = .idle
 
     private init() {
         let window = NSWindow(
@@ -1488,12 +1491,12 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     func preserveFocusAfterPreferenceMutation() {
         guard let window, window.isVisible else { return }
         cancelPendingFocusRestore()
-        focusRestoreGeneration += 1
-        let generation = focusRestoreGeneration
+        let token = UUID()
+        focusRestore = .armed(token: token, attempts: [:])
         writeFocusDiagnosticsIfNeeded(stage: "requested")
         scheduleFocusRestore(
             for: window,
-            generation: generation,
+            token: token,
             delays: [0, 0.04, 0.12, 0.24, 0.4, 0.7]
         )
     }
@@ -1510,44 +1513,60 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     func windowDidResignKey(_ notification: Notification) {
         guard let window else { return }
         writeFocusDiagnosticsIfNeeded(stage: "didResignKey")
-        guard focusRestoreGeneration > 0 else { return }
+        guard case let .armed(token, _) = focusRestore else { return }
         scheduleFocusRestore(
             for: window,
-            generation: focusRestoreGeneration,
+            token: token,
             delays: [0, 0.03, 0.1]
         )
     }
 
     private func scheduleFocusRestore(
         for window: NSWindow,
-        generation: Int,
+        token: UUID,
         delays: [TimeInterval]
     ) {
         for (index, delay) in delays.enumerated() {
-            let isLastAttempt = index == delays.count - 1
+            let attempt = UUID()
             let workItem = DispatchWorkItem { [weak self, weak window] in
-                guard let self, let window, window.isVisible else { return }
-                guard self.focusRestoreGeneration == generation else { return }
+                guard let self else { return }
+                guard case let .armed(activeToken, attempts) = self.focusRestore,
+                      activeToken == token, attempts[attempt] != nil else { return }
+                defer {
+                    if case let .armed(activeToken, attempts) = self.focusRestore,
+                       activeToken == token {
+                        var remainingAttempts = attempts
+                        remainingAttempts.removeValue(forKey: attempt)
+                        self.focusRestore = remainingAttempts.isEmpty
+                            ? .idle : .armed(token: token, attempts: remainingAttempts)
+                    }
+                }
+                guard let window, window.isVisible else { return }
                 self.writeFocusDiagnosticsIfNeeded(stage: "restoreAttempt.\(index)")
                 if !window.isKeyWindow {
                     NSApp.activate(ignoringOtherApps: true)
+                    guard case let .armed(activeToken, _) = self.focusRestore,
+                          activeToken == token, window.isVisible else { return }
                     window.orderFrontRegardless()
+                    guard case let .armed(activeToken, _) = self.focusRestore,
+                          activeToken == token, window.isVisible else { return }
                     window.makeKeyAndOrderFront(nil)
                     self.writeFocusDiagnosticsIfNeeded(stage: "restoreApplied.\(index)")
                 }
-                if isLastAttempt, self.focusRestoreGeneration == generation {
-                    self.focusRestoreGeneration = 0
-                }
             }
-            pendingFocusRestoreWorkItems.append(workItem)
+            guard case let .armed(activeToken, attempts) = focusRestore,
+                  activeToken == token else { return }
+            var pendingAttempts = attempts
+            pendingAttempts[attempt] = workItem
+            focusRestore = .armed(token: token, attempts: pendingAttempts)
             DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
         }
     }
 
     private func cancelPendingFocusRestore() {
-        pendingFocusRestoreWorkItems.forEach { $0.cancel() }
-        pendingFocusRestoreWorkItems.removeAll()
-        focusRestoreGeneration = 0
+        guard case let .armed(_, attempts) = focusRestore else { return }
+        focusRestore = .idle
+        attempts.values.forEach { $0.cancel() }
     }
 
     private func writeFocusDiagnosticsIfNeeded(stage: String) {

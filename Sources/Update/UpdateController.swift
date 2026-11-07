@@ -76,13 +76,53 @@ enum UpdateSettings {
 class UpdateController {
     private(set) var updater: SPUUpdater
     private let userDriver: UpdateDriver
-    private var installCancellable: AnyCancellable?
-    private var attemptInstallCancellable: AnyCancellable?
-    private var didObserveAttemptUpdateProgress: Bool = false
+    private enum Installation {
+        case idle
+        case subscribing(UUID)
+        case monitoring(UUID, AnyCancellable)
+    }
+
+    private enum Attempt {
+        case idle
+        case waiting(UUID, AnyCancellable)
+        case observedProgress(UUID, AnyCancellable)
+    }
+
+    private enum Check {
+        case idle
+        case preparing(UUID)
+        case waiting(UUID, DispatchWorkItem)
+        case cancelling(UUID, DispatchWorkItem)
+        case checking(UUID)
+
+        var token: UUID? {
+            switch self {
+            case .idle: nil
+            case .preparing(let token), .waiting(let token, _),
+                 .cancelling(let token, _), .checking(let token): token
+            }
+        }
+    }
+
+    private enum Startup {
+        case stopped
+        case starting(UUID)
+        case started
+        case failed(UUID)
+    }
+
+    private enum Dismissal {
+        case idle
+        case scheduled(UUID, DispatchWorkItem)
+    }
+
+    private var installation: Installation = .idle
+    private var attempt: Attempt = .idle
+    private var check: Check = .idle
+    private var startup: Startup = .stopped
+    private var dismissal: Dismissal = .idle
     private var noUpdateDismissCancellable: AnyCancellable?
-    private var noUpdateDismissWorkItem: DispatchWorkItem?
-    private var readyCheckWorkItem: DispatchWorkItem?
-    private var didStartUpdater: Bool = false
+    private let noUpdateDismissObserverToken = UUID()
     private let readyRetryDelay: TimeInterval = 0.25
     private let readyRetryCount: Int = 20
 
@@ -106,17 +146,28 @@ class UpdateController {
     }
 
     deinit {
-        installCancellable?.cancel()
-        attemptInstallCancellable?.cancel()
+        if case .monitoring(_, let subscription) = installation { subscription.cancel() }
+        switch attempt {
+        case .waiting(_, let subscription), .observedProgress(_, let subscription): subscription.cancel()
+        case .idle: break
+        }
         noUpdateDismissCancellable?.cancel()
-        noUpdateDismissWorkItem?.cancel()
-        readyCheckWorkItem?.cancel()
+        if case .scheduled(_, let work) = dismissal { work.cancel() }
+        switch check {
+        case .waiting(_, let work), .cancelling(_, let work): work.cancel()
+        default: break
+        }
     }
 
     /// Start the updater. If startup fails, the error is shown via the custom UI.
     func startUpdaterIfNeeded() {
         guard !updateControllerShouldSkipStartup(bundleIdentifier: Bundle.main.bundleIdentifier) else { return }
-        guard !didStartUpdater else { return }
+        switch startup {
+        case .starting, .started: return
+        case .stopped, .failed: break
+        }
+        let token = UUID()
+        startup = .starting(token)
         ensureSparkleInstallationCache()
 #if DEBUG
         // Keep the permission-related defaults resettable for UI tests even though the
@@ -135,22 +186,28 @@ class UpdateController {
 #endif
         do {
             try updater.start()
-            didStartUpdater = true
+            guard case .starting(token) = startup else { return }
+            startup = .started
             let interval = Int(updater.updateCheckInterval.rounded())
             UpdateLogStore.shared.append(
                 "updater started (autoChecks=\(updater.automaticallyChecksForUpdates), interval=\(interval)s, autoDownloads=\(updater.automaticallyDownloadsUpdates))"
             )
             startLaunchUpdateProbeIfNeeded()
         } catch {
+            guard case .starting(token) = startup else { return }
+            startup = .failed(token)
             userDriver.viewModel.state = .error(.init(
                 error: error,
                 retry: { [weak self] in
-                    self?.userDriver.viewModel.state = .idle
-                    self?.didStartUpdater = false
-                    self?.startUpdaterIfNeeded()
+                    guard let self, case .failed(token) = self.startup else { return }
+                    self.startup = .stopped
+                    self.userDriver.viewModel.state = .idle
+                    self.startUpdaterIfNeeded()
                 },
                 dismiss: { [weak self] in
-                    self?.userDriver.viewModel.state = .idle
+                    guard let self, case .failed(token) = self.startup else { return }
+                    self.startup = .stopped
+                    self.userDriver.viewModel.state = .idle
                 }
             ))
         }
@@ -171,30 +228,56 @@ class UpdateController {
     /// Force install the current update by auto-confirming all installable states.
     func installUpdate() {
         guard viewModel.state.isInstallable else { return }
-        guard installCancellable == nil else { return }
+        guard case .idle = installation else { return }
+        switch check {
+        case .waiting(_, let work), .cancelling(_, let work): work.cancel()
+        default: break
+        }
+        check = .idle
+        let token = UUID()
+        installation = .subscribing(token)
 
-        installCancellable = viewModel.$state.sink { [weak self] state in
+        let subscription = viewModel.$state.sink { [weak self] state in
             guard let self else { return }
+            switch self.installation {
+            case .subscribing(token), .monitoring(token, _): break
+            default: return
+            }
             guard state.isInstallable else {
-                self.installCancellable = nil
+                self.installation = .idle
                 return
             }
             state.confirm()
+        }
+        if case .subscribing(token) = installation {
+            installation = .monitoring(token, subscription)
+        } else {
+            subscription.cancel()
         }
     }
 
     /// Check for updates and auto-confirm install if one is found.
     func attemptUpdate() {
         stopAttemptUpdateMonitoring()
-        didObserveAttemptUpdateProgress = false
+        let token = UUID()
 
-        attemptInstallCancellable = viewModel.$state
+        let subscription = viewModel.$state
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 guard let self else { return }
-
+                let subscription: AnyCancellable
+                let didObserveProgress: Bool
+                switch self.attempt {
+                case .waiting(token, let current):
+                    subscription = current
+                    didObserveProgress = false
+                case .observedProgress(token, let current):
+                    subscription = current
+                    didObserveProgress = true
+                default: return
+                }
                 if state.isInstallable || !state.isIdle {
-                    self.didObserveAttemptUpdateProgress = true
+                    self.attempt = .observedProgress(token, subscription)
                 }
 
                 if case .updateAvailable = state {
@@ -206,11 +289,13 @@ class UpdateController {
                 // Only stop on terminal failure states (.notFound, .error).
                 // Don't stop on .idle — the check may still be starting up
                 // (e.g. retry loop, background probe finishing).
-                guard self.didObserveAttemptUpdateProgress, !state.isInstallable, !state.isIdle else {
+                guard didObserveProgress || state.isInstallable || !state.isIdle,
+                      !state.isInstallable, !state.isIdle else {
                     return
                 }
                 self.stopAttemptUpdateMonitoring()
             }
+        attempt = .waiting(token, subscription)
 
         checkForUpdates()
     }
@@ -226,37 +311,58 @@ class UpdateController {
         checkForUpdatesWhenReady(retries: readyRetryCount)
     }
 
-    private func performCheckForUpdates() {
+    private func performCheckForUpdates(token: UUID) {
+        guard check.token == token else { return }
         startUpdaterIfNeeded()
+        guard check.token == token else { return }
         ensureSparkleInstallationCache()
         if viewModel.state == .idle {
+            check = .checking(token)
             updater.checkForUpdates()
             return
         }
 
-        installCancellable?.cancel()
+        if case .monitoring(_, let subscription) = installation { subscription.cancel() }
+        installation = .idle
         viewModel.state.cancel()
+        guard check.token == token else { return }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(100)) { [weak self] in
-            self?.updater.checkForUpdates()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, case .cancelling(token, _) = self.check else { return }
+            self.check = .checking(token)
+            self.updater.checkForUpdates()
         }
+        check = .cancelling(token, work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(100), execute: work)
     }
 
     /// Check for updates once the updater is ready (used by UI tests).
     func checkForUpdatesWhenReady(retries: Int = 10) {
-        readyCheckWorkItem?.cancel()
-        readyCheckWorkItem = nil
+        switch check {
+        case .waiting(_, let work), .cancelling(_, let work): work.cancel()
+        default: break
+        }
+        let token = UUID()
+        check = .preparing(token)
+        checkForUpdatesWhenReady(retries: retries, token: token)
+    }
+
+    private func checkForUpdatesWhenReady(retries: Int, token: UUID) {
+        guard check.token == token else { return }
+        check = .preparing(token)
         startUpdaterIfNeeded()
+        guard check.token == token else { return }
         ensureSparkleInstallationCache()
         let canCheck = updater.canCheckForUpdates
         UpdateLogStore.shared.append("checkForUpdatesWhenReady invoked (canCheck=\(canCheck))")
         if canCheck {
-            performCheckForUpdates()
+            performCheckForUpdates(token: token)
             return
         }
         if viewModel.state.isIdle {
             viewModel.state = .checking(.init(cancel: {}))
         }
+        guard check.token == token else { return }
         guard retries > 0 else {
             UpdateLogStore.shared.append("checkForUpdatesWhenReady timed out")
             if case .checking = viewModel.state {
@@ -271,16 +377,23 @@ class UpdateController {
                             )
                         ]
                     ),
-                    retry: { [weak self] in self?.checkForUpdates() },
-                    dismiss: { [weak self] in self?.viewModel.state = .idle }
+                    retry: { [weak self] in
+                        guard let self, self.check.token == token else { return }
+                        self.checkForUpdates()
+                    },
+                    dismiss: { [weak self] in
+                        guard let self, self.check.token == token else { return }
+                        self.viewModel.state = .idle
+                    }
                 ))
             }
             return
         }
         let workItem = DispatchWorkItem { [weak self] in
-            self?.checkForUpdatesWhenReady(retries: retries - 1)
+            guard let self, case .waiting(token, _) = self.check else { return }
+            self.checkForUpdatesWhenReady(retries: retries - 1, token: token)
         }
-        readyCheckWorkItem = workItem
+        check = .waiting(token, workItem)
         DispatchQueue.main.asyncAfter(deadline: .now() + readyRetryDelay, execute: workItem)
     }
 
@@ -294,29 +407,36 @@ class UpdateController {
     }
 
     private func stopAttemptUpdateMonitoring() {
-        attemptInstallCancellable?.cancel()
-        attemptInstallCancellable = nil
-        didObserveAttemptUpdateProgress = false
+        let previous = attempt
+        attempt = .idle
+        switch previous {
+        case .waiting(_, let subscription), .observedProgress(_, let subscription): subscription.cancel()
+        case .idle: break
+        }
     }
 
     private func installNoUpdateDismissObserver() {
+        let token = noUpdateDismissObserverToken
         noUpdateDismissCancellable = Publishers.CombineLatest(viewModel.$state, viewModel.$overrideState)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state, overrideState in
-                self?.scheduleNoUpdateDismiss(for: state, overrideState: overrideState)
+                guard let self, self.noUpdateDismissObserverToken == token else { return }
+                self.scheduleNoUpdateDismiss(for: state, overrideState: overrideState)
             }
     }
 
     private func scheduleNoUpdateDismiss(for state: UpdateState, overrideState: UpdateState?) {
-        noUpdateDismissWorkItem?.cancel()
-        noUpdateDismissWorkItem = nil
+        if case .scheduled(_, let work) = dismissal { work.cancel() }
+        dismissal = .idle
 
         guard overrideState == nil else { return }
         guard case .notFound(let notFound) = state else { return }
 
         recordUITestTimestamp(key: "noUpdateShownAt")
+        let token = UUID()
         let workItem = DispatchWorkItem { [weak self] in
-            guard let self else { return }
+            guard let self, case .scheduled(token, _) = self.dismissal else { return }
+            self.dismissal = .idle
             guard self.viewModel.overrideState == nil,
                   case .notFound = self.viewModel.state else { return }
 
@@ -327,7 +447,7 @@ class UpdateController {
             }
             notFound.acknowledgement()
         }
-        noUpdateDismissWorkItem = workItem
+        dismissal = .scheduled(token, workItem)
         DispatchQueue.main.asyncAfter(
             deadline: .now() + UpdateTiming.noUpdateDisplayDuration,
             execute: workItem
