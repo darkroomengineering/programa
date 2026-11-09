@@ -41,18 +41,22 @@ if [[ ! -f "$PROJECT_DIR/ghostty/build.zig.zon" ]]; then
   exit 1
 fi
 
-ZIG_REQUIRED="$($SCRIPT_DIR/required-zig-version.sh)"
-if ! command -v zig >/dev/null 2>&1; then
-  echo "Error: zig is not installed (required: $ZIG_REQUIRED)." >&2
-  echo "Download: https://ziglang.org/download/${ZIG_REQUIRED}/" >&2
-  exit 1
-fi
-ZIG_FOUND="$(zig version)"
-if [[ "$ZIG_FOUND" != "$ZIG_REQUIRED" ]]; then
-  echo "Error: exact Zig version required: $ZIG_REQUIRED; found: $ZIG_FOUND" >&2
-  echo "Download: https://ziglang.org/download/${ZIG_REQUIRED}/" >&2
-  exit 1
-fi
+# Only a real build needs Zig; a ready cache entry for this key is reused as is.
+require_exact_zig() {
+  local required found
+  required="$("$SCRIPT_DIR/required-zig-version.sh")"
+  if ! command -v zig >/dev/null 2>&1; then
+    echo "Error: zig is not installed (required: $required)." >&2
+    echo "Download: https://ziglang.org/download/${required}/" >&2
+    exit 1
+  fi
+  found="$(zig version)"
+  if [[ "$found" != "$required" ]]; then
+    echo "Error: exact Zig version required: $required; found: $found" >&2
+    echo "Download: https://ziglang.org/download/${required}/" >&2
+    exit 1
+  fi
+}
 
 if [[ ! -f "$PROJECT_DIR/ghostty/include/ghostty.h" ]]; then
   echo "error: ghostty/include/ghostty.h is missing. Run ./scripts/setup.sh first." >&2
@@ -280,6 +284,7 @@ else
       if [[ -d "$LOCAL_XCFRAMEWORK" && "$LOCAL_KEY" == "$GHOSTTY_KEY" ]]; then
         echo "==> Seeding cache from existing local GhosttyKit.xcframework (build key matches)"
       else
+        require_exact_zig
         echo "==> Building GhosttyKit.xcframework (this may take a few minutes)..."
         (
           cd ghostty
