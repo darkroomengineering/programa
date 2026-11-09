@@ -60,6 +60,7 @@
 			NRSP0058A1B2C3D4E5F60719 /* V2CommandCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0057A1B2C3D4E5F60719 /* V2CommandCatalog.swift */; };
 			NRSP0056A1B2C3D4E5F60719 /* TerminalWindowPortalRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0055A1B2C3D4E5F60719 /* TerminalWindowPortalRegistry.swift */; };
 			NRSP0054A1B2C3D4E5F60719 /* TerminalSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRSP0053A1B2C3D4E5F60719 /* TerminalSurface.swift */; };
+			A1D00000000000000000000D /* TerminalSurface+DraftGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D00000000000000000000C /* TerminalSurface+DraftGate.swift */; };
 			WALS000001 /* SessionWALStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = WALS000002 /* SessionWALStore.swift */; };
 			ESCH000001 /* SessionEscrow.swift in Sources */ = {isa = PBXBuildFile; fileRef = ESCH000002 /* SessionEscrow.swift */; };
 			ESCH000003 /* SessionEscrowPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = ESCH000004 /* SessionEscrowPolicy.swift */; };
@@ -528,6 +529,7 @@
 			NRSP0057A1B2C3D4E5F60719 /* V2CommandCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V2CommandCatalog.swift; sourceTree = "<group>"; };
 			NRSP0055A1B2C3D4E5F60719 /* TerminalWindowPortalRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalWindowPortalRegistry.swift; sourceTree = "<group>"; };
 			NRSP0053A1B2C3D4E5F60719 /* TerminalSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalSurface.swift; sourceTree = "<group>"; };
+			A1D00000000000000000000C /* TerminalSurface+DraftGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalSurface+DraftGate.swift"; sourceTree = "<group>"; };
 			WALS000002 /* SessionWALStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionWALStore.swift; sourceTree = "<group>"; };
 			ESCH000002 /* SessionEscrow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionEscrow.swift; sourceTree = "<group>"; };
 			ESCH000004 /* SessionEscrowPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionEscrowPolicy.swift; sourceTree = "<group>"; };
@@ -1041,6 +1043,7 @@
 					NRSP0057A1B2C3D4E5F60719 /* V2CommandCatalog.swift */,
 					NRSP0055A1B2C3D4E5F60719 /* TerminalWindowPortalRegistry.swift */,
 					NRSP0053A1B2C3D4E5F60719 /* TerminalSurface.swift */,
+					A1D00000000000000000000C /* TerminalSurface+DraftGate.swift */,
 					WALS000002 /* SessionWALStore.swift */,
 					ESCH000002 /* SessionEscrow.swift */,
 					ESCH000004 /* SessionEscrowPolicy.swift */,
@@ -1645,6 +1648,7 @@
 					NRSP0058A1B2C3D4E5F60719 /* V2CommandCatalog.swift in Sources */,
 					NRSP0056A1B2C3D4E5F60719 /* TerminalWindowPortalRegistry.swift in Sources */,
 					NRSP0054A1B2C3D4E5F60719 /* TerminalSurface.swift in Sources */,
+					A1D00000000000000000000D /* TerminalSurface+DraftGate.swift in Sources */,
 					WALS000001 /* SessionWALStore.swift in Sources */,
 					ESCH000001 /* SessionEscrow.swift in Sources */,
 					ESCH000003 /* SessionEscrowPolicy.swift in Sources */,

@@ -572,6 +572,9 @@ final class ProgramaSettingsFileStore {
         if let value = jsonBool(section["claudeCodeIntegration"]) {
             snapshot.managedUserDefaults[ClaudeCodeIntegrationSettings.hooksEnabledKey] = .bool(value)
         }
+        if let value = jsonBool(section["holdAgentTextWhileTyping"]) {
+            snapshot.managedUserDefaults[DraftGuardSettings.enabledKey] = .bool(value)
+        }
     }
 
     private func parseCustomCommandsSection(
@@ -1186,6 +1189,7 @@ final class ProgramaSettingsFileStore {
                     "socketControlMode": SocketControlSettings.defaultMode.rawValue,
                     "socketPassword": "",
                     "claudeCodeIntegration": ClaudeCodeIntegrationSettings.defaultHooksEnabled,
+                    "holdAgentTextWhileTyping": DraftGuardSettings.defaultEnabled,
                 ],
             ],
             [

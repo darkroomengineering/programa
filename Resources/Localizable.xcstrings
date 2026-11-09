@@ -9818,6 +9818,57 @@
         }
       }
     },
+    "settings.agents.holdAgentText": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Protect Unsent Typing"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未送信の入力を保護"
+          }
+        }
+      }
+    },
+    "settings.agents.holdAgentText.subtitleOff": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent text can land in the middle of what you are typing."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "エージェントのテキストが入力中の内容の途中に入ることがあります。"
+          }
+        }
+      }
+    },
+    "settings.agents.holdAgentText.subtitleOn": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agents can't send text to a pane while you have unsent typing there."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "入力した内容を送信するか消去するまで、エージェントのテキストは送られません。"
+          }
+        }
+      }
+    },
     "settings.app.autoResumeAgents": {
       "extractionState": "manual",
       "localizations": {

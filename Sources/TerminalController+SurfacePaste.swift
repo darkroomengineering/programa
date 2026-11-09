@@ -28,6 +28,9 @@ extension TerminalController {
             case .resolved(let target):
                 (ws, surfaceId, terminalPanel) = target
             }
+            if let rejection = v2DraftGuardRejection(params: params, surfaceId: surfaceId, terminalPanel: terminalPanel) {
+                return rejection
+            }
 
             let queued = terminalPanel.surface.surface == nil
             terminalPanel.surface.sendPaste(text)

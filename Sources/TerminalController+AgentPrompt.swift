@@ -25,6 +25,9 @@
 //      rule) and resolve with `working_observed: true`.
 //   4. If step 3's wait exceeds the overall timeout, the call fails with `timeout` -- the agent
 //      started working but never finished within the requested budget.
+//
+// A person's unsent typed input in the surface rejects the call with `draft_in_progress` before
+// step 1 and sends nothing, like `surface.send_text`; `force: true` skips that check.
 import Foundation
 
 extension TerminalController {
@@ -105,6 +108,10 @@ extension TerminalController {
                 setupError = .err(code: "invalid_params", message: "Surface is not a terminal", data: ["surface_id": surfaceId.uuidString])
                 return
             }
+            if let rejection = self.v2DraftGuardRejection(params: params, surfaceId: surfaceId, terminalPanel: terminalPanel) {
+                setupError = rejection
+                return
+            }
 
             workspaceId = ws.id
             surfaceIdOut = surfaceId
@@ -122,6 +129,7 @@ extension TerminalController {
                 terminalPanel.surface.requestBackgroundSurfaceStartIfNeeded()
                 queued = true
             }
+            self.v2NoteSocketSubmit(text: textToSend, terminalPanel: terminalPanel)
 
             // Register the watcher in this SAME hop -- see file header step 1.
             if baselineState == .working {

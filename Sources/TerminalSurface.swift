@@ -247,6 +247,18 @@ final class TerminalSurface: Identifiable, ObservableObject {
     private var pendingSocketInputQueue: [PendingSocketInput] = []
     private var pendingSocketInputBytes: Int = 0
     private let maxPendingSocketInputBytes = 1_048_576
+    /// Unsent person input (TerminalSurface+DraftGate.swift). Never `@Published`: keyDown
+    /// writes it on every keystroke of a draft, and a publish would invalidate SwiftUI each time.
+    private(set) var draftGate: PersonDraftGate = .open
+
+    func noteDraftEvent(_ event: PersonDraftEvent) {
+        let next = PersonDraftGate.next(draftGate, event)
+        guard next != draftGate else { return }
+#if DEBUG
+        logDraftGateTransition(from: draftGate, to: next, event: event)
+#endif
+        draftGate = next
+    }
     private var backgroundSurfaceStartQueued = false
     private var surfaceCallbackContext: Unmanaged<GhosttySurfaceCallbackContext>?
     /// Per-surface userdata for the PTY tee that feeds the session

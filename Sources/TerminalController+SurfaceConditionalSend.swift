@@ -64,6 +64,11 @@ extension TerminalController {
                 )
             }
 
+            // After the fingerprint check, so `mismatch` keeps priority over `draft_in_progress`.
+            if let rejection = v2DraftGuardRejection(params: params, surfaceId: surfaceId, terminalPanel: terminalPanel) {
+                return rejection
+            }
+
             // The read above succeeds only on an attached surface, so nothing here is queued.
             if !text.isEmpty {
                 _ = v2DeliverSocketText(text, to: terminalPanel, reason: "terminalController.v2SurfaceSendIfUnchanged")
@@ -71,6 +76,7 @@ extension TerminalController {
             for key in keys {
                 _ = v2DeliverNamedKey(key, to: terminalPanel, reason: "terminalController.v2SurfaceSendIfUnchanged")
             }
+            v2NoteSocketSubmit(text: text, keys: keys, terminalPanel: terminalPanel)
 
             let windowId = v2ResolveWindowId(tabManager: tabManager)
             return .ok([

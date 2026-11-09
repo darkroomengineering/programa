@@ -1007,10 +1007,14 @@ extension TerminalController {
             case .resolved(let target):
                 (ws, surfaceId, terminalPanel) = target
             }
+            if let rejection = v2DraftGuardRejection(params: params, surfaceId: surfaceId, terminalPanel: terminalPanel) {
+                return rejection
+            }
             #if DEBUG
             let sendStart = ProcessInfo.processInfo.systemUptime
             #endif
             let queued = v2DeliverSocketText(text, to: terminalPanel, reason: "terminalController.v2SurfaceSendText")
+            v2NoteSocketSubmit(text: text, terminalPanel: terminalPanel)
 #if DEBUG
             let sendMs = (ProcessInfo.processInfo.systemUptime - sendStart) * 1000.0
             dlog(
@@ -1042,9 +1046,16 @@ extension TerminalController {
             case .resolved(let target):
                 (ws, surfaceId, terminalPanel) = target
             }
+            guard terminalPanel.surface.isKnownNamedKey(key) else {
+                return .err(code: "invalid_params", message: "Unknown key", data: ["key": key])
+            }
+            if let rejection = v2DraftGuardRejection(params: params, surfaceId: surfaceId, terminalPanel: terminalPanel) {
+                return rejection
+            }
             guard v2DeliverNamedKey(key, to: terminalPanel, reason: "terminalController.v2SurfaceSendKey") else {
                 return .err(code: "invalid_params", message: "Unknown key", data: ["key": key])
             }
+            v2NoteSocketSubmit(text: "", keys: [key], terminalPanel: terminalPanel)
             return .ok(["workspace_id": ws.id.uuidString, "workspace_ref": v2Ref(kind: .workspace, uuid: ws.id), "surface_id": surfaceId.uuidString, "surface_ref": v2Ref(kind: .surface, uuid: surfaceId), "window_id": v2OrNull(v2ResolveWindowId(tabManager: tabManager)?.uuidString), "window_ref": v2Ref(kind: .window, uuid: v2ResolveWindowId(tabManager: tabManager))])
         }
     }
@@ -1339,6 +1350,37 @@ extension TerminalController {
             terminalPanel.surface.forceRefresh(reason: reason)
         }
         return true
+    }
+
+    /// The `draft_in_progress` error for a socket write into a terminal where a person has unsent
+    /// typed input, or nil when the write may go ahead: `force: true`, the
+    /// `automation.holdAgentTextWhileTyping` setting is off, or no draft holds the surface. Call it
+    /// in the same main hop as the write it guards, so no keystroke lands between them.
+    func v2DraftGuardRejection(params: [String: Any], surfaceId: UUID, terminalPanel: TerminalPanel) -> V2CallResult? {
+        guard v2Bool(params, "force") != true, DraftGuardSettings.isEnabled(),
+              let hold = terminalPanel.surface.activeDraftHold() else { return nil }
+        let surfaceRef = (v2Ref(kind: .surface, uuid: surfaceId) as? String) ?? surfaceId.uuidString
+        return .err(
+            code: "draft_in_progress",
+            message: "\(surfaceRef) has unsent typed input; nothing was sent",
+            data: [
+                "surface_id": surfaceId.uuidString,
+                "surface_ref": surfaceRef,
+                "draft_age_ms": hold.ageMs,
+                "expires_in_ms": hold.expiresInMs
+            ]
+        )
+    }
+
+    /// Call after a delivered socket write. Text with CR or LF, or an Enter key, submitted
+    /// whatever the person had typed along with it, so the draft no longer holds the surface. A
+    /// write only reaches a drafting surface with `force: true` or with the hold turned off.
+    func v2NoteSocketSubmit(text: String, keys: [String] = [], terminalPanel: TerminalPanel) {
+        let submits = text.unicodeScalars.contains { $0 == "\r" || $0 == "\n" }
+            || keys.contains { $0.lowercased() == "enter" || $0.lowercased() == "return" }
+        if submits {
+            terminalPanel.surface.noteDraftEvent(.forcedSubmitDelivered)
+        }
     }
 }
 

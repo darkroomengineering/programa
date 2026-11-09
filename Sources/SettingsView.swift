@@ -46,6 +46,8 @@ struct SettingsView: View {
     private var claudeCodeHooksEnabled = ClaudeCodeIntegrationSettings.defaultHooksEnabled
     @AppStorage(AgentScreenDetectionSettings.enabledKey)
     private var agentScreenDetectionEnabled = AgentScreenDetectionSettings.defaultEnabled
+    @AppStorage(DraftGuardSettings.enabledKey)
+    private var holdAgentTextWhileTyping = DraftGuardSettings.defaultEnabled
     @AppStorage(NotificationSoundSettings.key) private var notificationSound = NotificationSoundSettings.defaultValue
     @AppStorage(MenuBarExtraSettings.showInMenuBarKey) private var showMenuBarExtra = MenuBarExtraSettings.defaultShowInMenuBar
     @AppStorage(QuitWarningSettings.warnBeforeQuitKey) private var warnBeforeQuitShortcut = QuitWarningSettings.defaultWarnBeforeQuit
@@ -793,6 +795,21 @@ struct SettingsView: View {
             SettingsCardDivider()
 
             SettingsCardRow(
+                String(localized: "settings.agents.holdAgentText", defaultValue: "Protect Unsent Typing"),
+                subtitle: holdAgentTextWhileTyping
+                    ? String(localized: "settings.agents.holdAgentText.subtitleOn", defaultValue: "Agents can't send text to a pane while you have unsent typing there.")
+                    : String(localized: "settings.agents.holdAgentText.subtitleOff", defaultValue: "Agent text can land in the middle of what you are typing.")
+            ) {
+                Toggle("", isOn: $holdAgentTextWhileTyping)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .accessibilityIdentifier("SettingsHoldAgentTextToggle")
+            }
+            .managedBySettingsFile(settingsFileStatus.isManaged(DraftGuardSettings.enabledKey))
+
+            SettingsCardDivider()
+
+            SettingsCardRow(
                 String(localized: "settings.automation.agentScreenDetection", defaultValue: "Screen-Based Agent Detection"),
                 subtitle: agentScreenDetectionEnabled
                     ? String(localized: "settings.automation.agentScreenDetection.subtitleOn", defaultValue: "Infers working/blocked/idle status for agent CLIs without an installed integration by reading the terminal screen.")
@@ -912,6 +929,7 @@ struct SettingsView: View {
         socketControlMode = SocketControlSettings.defaultMode.rawValue
         claudeCodeHooksEnabled = ClaudeCodeIntegrationSettings.defaultHooksEnabled
         agentScreenDetectionEnabled = AgentScreenDetectionSettings.defaultEnabled
+        holdAgentTextWhileTyping = DraftGuardSettings.defaultEnabled
         notificationSound = NotificationSoundSettings.defaultValue
         showMenuBarExtra = MenuBarExtraSettings.defaultShowInMenuBar
         warnBeforeQuitShortcut = QuitWarningSettings.defaultWarnBeforeQuit

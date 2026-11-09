@@ -39,6 +39,9 @@ extension GhosttyNSView {
         case .reject:
             return false
         case .insertText(let text):
+            // A dropped path is the person's input. Marked here, not in TerminalSurface.sendText,
+            // which socket writes also use.
+            terminalSurface?.noteDraftEvent(.typed(at: ProcessInfo.processInfo.systemUptime))
             terminalSurface?.sendText(text)
             return true
         }

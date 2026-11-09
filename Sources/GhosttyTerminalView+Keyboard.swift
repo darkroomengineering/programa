@@ -267,13 +267,20 @@ extension GhosttyNSView {
 
     // MARK: - Clipboard paste
 
+    // Cmd+V reaches these through Edit > Paste: performKeyEquivalent lets the menu try a
+    // consumed binding first. Clipboard callbacks in GhosttyApp are not hooked: OSC 52 read
+    // replies use them too, and those are not the person's input.
     @IBAction func paste(_ sender: Any?) {
-        _ = performBindingAction("paste_from_clipboard")
+        if performBindingAction("paste_from_clipboard") {
+            terminalSurface?.noteDraftEvent(.typed(at: ProcessInfo.processInfo.systemUptime))
+        }
     }
 
     /// Pastes clipboard text as plain text, stripping any rich formatting.
     @IBAction func pasteAsPlainText(_ sender: Any?) {
-        _ = performBindingAction("paste_from_clipboard")
+        if performBindingAction("paste_from_clipboard") {
+            terminalSurface?.noteDraftEvent(.typed(at: ProcessInfo.processInfo.systemUptime))
+        }
     }
 
     /// Validates whether edit menu items (copy, paste, split) should be enabled.
@@ -612,6 +619,10 @@ extension GhosttyNSView {
                 "ign=\(programaScalarHex(event.charactersIgnoringModifiers)) mods=\(event.modifierFlags.rawValue)"
             )
 #endif
+            // Ctrl+C and Ctrl+U discard the line the person was typing.
+            if text == "c" || text == "u" {
+                terminalSurface?.noteDraftEvent(.cleared)
+            }
             // If Ghostty handled the key (action/encoding), we're done.
             // If not (e.g. `ignore` keybind), fall through to interpretKeyEvents
             // so the IME gets a chance to process this event.
@@ -750,6 +761,7 @@ extension GhosttyNSView {
             return [escTildeOverride]
         }()
         var shouldRefreshAfterTextInput = false
+        var sentCommittedIMEConfirmKey = false
         if !accumulatedText.isEmpty {
             // Accumulated text comes from insertText (IME composition result).
             // These never have "composing" set to true because these are the
@@ -803,10 +815,11 @@ extension GhosttyNSView {
                 }
             }
 
-            if shouldSendCommittedIMEConfirmKey(
+            sentCommittedIMEConfirmKey = shouldSendCommittedIMEConfirmKey(
                 event: translationEvent,
                 markedTextBefore: markedTextBefore
-            ) {
+            )
+            if sentCommittedIMEConfirmKey {
                 keyEvent.consumed_mods = GHOSTTY_MODS_NONE
                 keyEvent.text = nil
 #if DEBUG
@@ -899,6 +912,20 @@ extension GhosttyNSView {
                 _ = ghostty_surface_key(surface, keyEvent)
                 #endif
             }
+        }
+
+        // Person-draft tracking (TerminalSurface+DraftGate.swift). Typing-latency path: keep it to
+        // flag checks and one enum write; no allocation, IO or agent-state lookups.
+        // Shift/Option+Return insert a newline in agent TUIs, so only a bare Return submits; an
+        // Enter that only confirms a Japanese/Chinese conversion (marked text before, no Korean
+        // confirm key sent) is not a submit either. Command, Control and function-key events are
+        // bindings and navigation, not typing.
+        if event.keyCode == 36 || event.keyCode == 76,
+           flags.isDisjoint(with: [.shift, .option, .command, .control]),
+           !markedTextBefore || sentCommittedIMEConfirmKey {
+            terminalSurface?.noteDraftEvent(.submitted)
+        } else if shouldRefreshAfterTextInput, flags.isDisjoint(with: [.command, .control, .function]) {
+            terminalSurface?.noteDraftEvent(.typed(at: event.timestamp))
         }
 
         if shouldRefreshAfterTextInput {
