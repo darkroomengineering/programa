@@ -243,7 +243,7 @@ is `contracts/v2/methods.json`.
 
 System:
 - ping -> `system.ping` (liveness; the CLI's `ping` subcommand calls this and prints "PONG" on success)
-- `system.identify` (params: `caller`, `surface_id`, `tab_id`, `window_id`, `workspace_id`)
+- `system.identify` (params: `caller`, `surface_id`, `tab_id`, `window_id`, `workspace_id`). The result's `build` object carries the `commit` and the `source_fingerprint` the app was built from; `scripts/source-fingerprint.sh` prints the same hash for a checkout.
 - `settings.open` (params: `activate`, `target`)
 - `feedback.open` (params: `activate`, `window_id`, `workspace_id`)
 - `feedback.submit` (no params in the contract)

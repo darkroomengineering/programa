@@ -54,6 +54,7 @@ extension TerminalController {
         guard let snapshot else {
             return .ok([
                 "socket_path": requestPolicy.socketPath,
+                "build": Self.v2IdentifyBuild,
                 "focused": NSNull(),
                 "caller": NSNull()
             ])
@@ -61,10 +62,21 @@ extension TerminalController {
 
         return .ok([
             "socket_path": requestPolicy.socketPath,
+            "build": Self.v2IdentifyBuild,
             "focused": snapshot.focused.isEmpty ? (NSNull() as Any) : snapshot.focused,
             "caller": v2OrNull(snapshot.caller)
         ])
     }
+
+    /// tests_v2 compares `source_fingerprint` against `scripts/source-fingerprint.sh` to refuse a stale build.
+    private nonisolated static let v2IdentifyBuild: [String: Any] = {
+        let info = Bundle.main.infoDictionary ?? [:]
+        func value(_ key: String) -> Any {
+            guard let string = info[key] as? String, !string.isEmpty else { return NSNull() }
+            return string
+        }
+        return ["commit": value("ProgramaCommit"), "source_fingerprint": value("ProgramaSourceFingerprint")]
+    }()
 
     private nonisolated func v2IdentifyTargetNotFound(key: String, raw: String) -> V2CallResult {
         .err(code: "not_found", message: "Target not found for the given \(key)", data: [key: raw])

@@ -141,3 +141,6 @@ the top of each file for names and defaults.
 
 The `*_ALLOW_MAIN_SOCKET` variants (`PROGRAMA_LAG_`, `PROGRAMA_REFRESH_COST_`) let a harness run against the default production socket. Leave them unset
 unless you mean it.
+
+`PROGRAMA_ALLOW_STALE_BUILD=1` lets `tests_v2/programa_client.py` drive an app whose
+`build.source_fingerprint` differs from the checkout. See [testing-layout.md](testing-layout.md#running-them).
