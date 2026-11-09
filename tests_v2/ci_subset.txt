@@ -23,6 +23,7 @@ test_agent_activity_state_socket.py
 test_program_status_osc7501.py
 test_agent_event_socket.py
 test_agent_state_wait_and_prompt.py
+test_surface_approval_gate.py
 test_socket_event_subscriptions.py
 test_notification_claim_banners.py
 test_app_browsers.py
