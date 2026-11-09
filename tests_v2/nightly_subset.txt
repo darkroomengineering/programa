@@ -50,6 +50,7 @@ test_split_cmd_shift_d_ctrl_d_no_portal_orphans.py
 test_split_flash_and_layout.py
 test_split_pane_cap.py
 test_splits_focus_close_resize.py
+test_surface_draft_gate.py
 test_surface_move_reorder_api.py
 test_surface_send_if_unchanged.py
 test_surface_send_paste.py
