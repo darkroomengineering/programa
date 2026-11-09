@@ -2147,6 +2147,8 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
 
         XCTAssertEqual(manager.tabs.count, 1)
         XCTAssertEqual(manager.tabs[0].panels.count, 1)
+        // The last-pane close prompt would otherwise block on NSAlert.runModal.
+        manager.confirmCloseHandler = { _, _, _ in true }
 
         guard let event = makeKeyDownEvent(
             key: "w",
