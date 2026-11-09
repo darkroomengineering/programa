@@ -459,6 +459,7 @@ extension TerminalController {
 
             // Deliver, unless the person started typing again during the settle.
             var delivered = false
+            var outOfTime = false
             v2MainSync {
                 guard let ws = self.v2WorkspaceContaining(surfaceId: surfaceId),
                       let panel = ws.panels[surfaceId] as? TerminalPanel else {
@@ -466,6 +467,13 @@ extension TerminalController {
                     return
                 }
                 let now = Date()
+                // The settle grace is capped at the deadline, so it can end exactly there; a send now
+                // would leave no budget for observing the prompt's own turn. Checked before releasedAt
+                // is cleared so the error's held_ms/settle_ms split stays right.
+                if now >= deadline {
+                    outOfTime = true
+                    return
+                }
                 if let releasedAt { settleTotal += now.timeIntervalSince(releasedAt) }
                 releasedAt = nil
                 if self.v2DraftGuardRejection(params: params, surfaceId: surfaceId, terminalPanel: panel) != nil {
@@ -476,6 +484,7 @@ extension TerminalController {
                 delivered = true
             }
             if gone { return closed() }
+            if outOfTime { return notSent("released its draft too close to the timeout", settling: true) }
             if delivered { return .delivered(heldMs: ms(heldTotal), settleMs: ms(settleTotal)) }
         }
     }
