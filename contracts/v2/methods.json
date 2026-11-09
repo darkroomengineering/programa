@@ -1127,7 +1127,7 @@
     "debug.settle": {
       "auth_required": true,
       "debug_only": true,
-      "description": "DEBUG-build-only: return once the main run loop has turned `passes` times, running work the previous command queued with DispatchQueue.main.async and laying out and committing every visible window on each turn. (settle).",
+      "description": "DEBUG-build-only: return once `passes` sentinels queued one after another on the main queue have run, so work earlier commands queued with DispatchQueue.main.async has run, laying out and committing every visible window on each pass. (settle).",
       "errors": [
         "internal_error",
         "invalid_params",
