@@ -139,8 +139,19 @@ final class PersonDraftGateTransitionTests: XCTestCase {
                        .promptShowing(.permission, since: t0 + 30, draft: nil))
         XCTAssertEqual(next(prompt(nil, draft: draft), .agentPrompt(.auth, at: t0 + 30)),
                        .promptShowing(.auth, since: t0 + 30, draft: draft))
-        XCTAssertEqual(next(prompt(.permission), .agentPrompt(.question, at: t0 + 30)),
-                       .promptShowing(.question, since: t0 + 30, draft: nil))
+    }
+
+    /// Any client can report `question`; letting that replace a showing permission or sign-in
+    /// prompt would let one extra socket call lift the refusal and approve the tool.
+    func testNonRefusingKindNeverReplacesARefusingKind() {
+        for kind in [ProgramStatusKind.permission, .auth] {
+            for weaker in [ProgramStatusKind.question, nil] {
+                XCTAssertEqual(next(prompt(kind, draft: draft), .agentPrompt(weaker, at: t0 + 30)),
+                               prompt(kind, draft: draft), "\(kind) <- \(String(describing: weaker))")
+            }
+        }
+        XCTAssertEqual(next(prompt(.permission), .agentPrompt(.auth, at: t0 + 30)),
+                       .promptShowing(.auth, since: t0 + 30, draft: nil))
     }
 
     /// `report_agent_state blocked` carries no kind; re-reporting it must not lift a permission
