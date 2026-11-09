@@ -76,10 +76,10 @@ enum PersonDraftGate: Equatable {
             case .expired:
                 return .promptShowing(kind, since: since, draft: nil)
             case .agentPrompt(let newKind, let at):
-                // Reporters repeat the same prompt; keep its age unless the kind changed. A
-                // kindless report (`report_agent_state blocked`) never downgrades a known kind,
-                // or any script could lift a permission refusal by re-reporting `blocked`.
-                let resolved = newKind ?? kind
+                // Reporters repeat the same prompt; keep its age unless the kind changed. Any
+                // client can report `blocked` or `question`, so a kind that refuses writes is
+                // never replaced by one that doesn't; only an answer or a close ends it.
+                let resolved = PersonDraftGate.refusesWrites(kind) ? (newKind.flatMap { PersonDraftGate.refusesWrites($0) ? $0 : nil } ?? kind) : (newKind ?? kind)
                 return .promptShowing(resolved, since: resolved == kind ? since : at, draft: draft)
             }
         }
