@@ -41,6 +41,12 @@ delivery and AppKit: clicks, drags, menus, focus.
 
 ## Running them
 
+`tests_v2/programa_client.py` refuses to connect to an app built from different
+sources than the checkout it lives in. It compares the app's
+`system.identify` `build.source_fingerprint` with `scripts/source-fingerprint.sh`,
+which hashes only app inputs, so editing a test does not count. Rebuild with
+`reload.sh --tag`, or set `PROGRAMA_ALLOW_STALE_BUILD=1` to run anyway.
+
 `.github/workflows/nightly-extended-tests.yml` runs, once a night and on demand,
 the tests that are too slow or too load-sensitive to gate PRs:
 `tests_v2/nightly_subset.txt` and `scripts/nightly-ui-classes.txt`. To try a new

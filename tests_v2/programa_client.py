@@ -24,6 +24,7 @@ import json
 import os
 import select
 import socket
+import subprocess
 import time
 import uuid
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -139,13 +140,59 @@ def _unescape_backslash_controls(s: str) -> str:
     return "".join(out)
 
 
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_FRESHNESS_CHECKED: set = set()
+
+
+def _checkout_fingerprint() -> Optional[str]:
+    script = os.path.join(_REPO_ROOT, "scripts", "source-fingerprint.sh")
+    try:
+        out = subprocess.run(
+            [script, _REPO_ROOT], capture_output=True, text=True, timeout=30, check=True
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out or None
+
+
+def _ensure_fresh_build(socket_path: str) -> None:
+    """Refuse to drive an app built from different sources than this checkout.
+
+    Uses its own connection so a caller's request/response stream is untouched. Skips
+    silently when either side cannot report a fingerprint (older or Release builds,
+    no git checkout, auth required).
+    """
+    if os.environ.get("PROGRAMA_ALLOW_STALE_BUILD") == "1" or socket_path in _FRESHNESS_CHECKED:
+        return
+    probe = ProgramaClient(socket_path, check_build=False)
+    try:
+        probe.connect()
+        build = (probe._call("system.identify", timeout_s=5.0) or {}).get("build") or {}
+    except ProgramaClientError:
+        return
+    finally:
+        probe.close()
+    running = build.get("source_fingerprint")
+    expected = _checkout_fingerprint() if running else None
+    if not running or not expected or expected == running:
+        # Only a passing or inapplicable check is cached; a refusal repeats on every connect.
+        _FRESHNESS_CHECKED.add(socket_path)
+        return
+    raise ProgramaClientError(
+        f"Stale build at {socket_path}: the app was built from sources {running}, "
+        f"this checkout is {expected}. Rebuild with ./scripts/reload.sh --tag <tag> "
+        "and relaunch it, or set PROGRAMA_ALLOW_STALE_BUILD=1 to run anyway."
+    )
+
+
 class ProgramaClient:
     """Client for controlling programa via the v2 JSON Unix socket."""
 
     DEFAULT_SOCKET_PATH = _default_socket_path()
 
-    def __init__(self, socket_path: str = None):
+    def __init__(self, socket_path: str = None, check_build: bool = True):
         self.socket_path = socket_path or self.DEFAULT_SOCKET_PATH
+        self._check_build = check_build
         self._socket: Optional[socket.socket] = None
         self._recv_buffer: str = ""
         self._next_id: int = 1
@@ -169,7 +216,7 @@ class ProgramaClient:
             try:
                 self._socket.connect(self.socket_path)
                 self._socket.settimeout(10.0)
-                return
+                break
             except socket.error as e:
                 last_error = e
                 try:
@@ -181,6 +228,13 @@ class ProgramaClient:
                     time.sleep(0.1)
                     continue
                 raise ProgramaClientError(f"Failed to connect: {e}")
+
+        if self._check_build:
+            try:
+                _ensure_fresh_build(self.socket_path)
+            except ProgramaClientError:
+                self.close()
+                raise
 
     def close(self) -> None:
         if self._socket is not None:
