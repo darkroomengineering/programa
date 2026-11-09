@@ -29,10 +29,14 @@ done > "$LIST"
 {
   paste "$LIST" <(git hash-object --stdin-paths < "$LIST")
   # The ghostty submodule: its checked-out commit (the pin when not initialized)
-  # and any changes to its tracked files.
-  if git -C ghostty rev-parse --verify -q HEAD 2>/dev/null; then
+  # and any changes to its tracked files. An uninitialized submodule is an empty
+  # directory inside this repo, where `git -C ghostty` would answer for the parent,
+  # so check that ghostty is its own work tree first. A clean checkout of the pin
+  # and an uninitialized one must hash the same: CI jobs check out without submodules.
+  if [[ "$(git -C ghostty rev-parse --show-toplevel 2>/dev/null)" == "$(git rev-parse --show-toplevel)/ghostty" ]]; then
+    git -C ghostty rev-parse HEAD
     git -C ghostty diff HEAD --binary --no-ext-diff --no-color
   else
-    git ls-tree HEAD ghostty
+    git rev-parse HEAD:ghostty
   fi
 } | shasum -a 256 | cut -c1-12
