@@ -2174,6 +2174,7 @@ class TabManager: ObservableObject {
         }
         if tabs.count <= 1 {
             // Closing the last workspace explicitly ends its sessions, unlike closing the window UI.
+            AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: workspace.id)
             if let window, let app = AppDelegate.shared {
                 app.disposeMainWindow(window)
             } else {
@@ -2232,12 +2233,10 @@ class TabManager: ObservableObject {
             "panelsAfterCall=\(tab.panels.count)"
         )
 #endif
-        // Don't gate on `closed`: for a workspace's last surface, bonsplit's shouldCloseTab escalates
-        // to closeWorkspaceFromLastPaneWithConfirmation(...) and returns false even when the workspace
-        // then closes. Check whether the panel survived instead, so cancelling a close prompt keeps
-        // the surface's notifications.
-        let panelSurvived = tabs.contains(where: { $0.id == tab.id }) && tab.panels[panelId] != nil
-        if !panelSurvived {
+        // For a workspace's last surface, bonsplit's shouldCloseTab escalates to
+        // closeWorkspaceFromLastPaneWithConfirmation(...) and returns false here; that path clears the
+        // workspace's notifications itself once the close is confirmed, so a cancelled prompt keeps them.
+        if closed {
             AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: tab.id, surfaceId: panelId)
         }
     }

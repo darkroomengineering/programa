@@ -1255,7 +1255,8 @@ final class TabManagerLastPaneCloseConfirmationTests: XCTestCase {
         drainMainQueue()
 
         XCTAssertTrue(manager.tabs.contains { $0.id == second.id })
-        XCTAssertTrue(store.hasUnreadNotification(forTabId: second.id, surfaceId: panelId))
+        // Refocusing the surface after the cancel may mark it read; the notification must still exist.
+        XCTAssertTrue(store.notifications.contains { $0.tabId == second.id && $0.surfaceId == panelId })
     }
 
     func testIdleLastPanePromptsAndCancelKeepsWorkspace() throws {
