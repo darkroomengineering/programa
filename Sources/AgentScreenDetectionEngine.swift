@@ -362,7 +362,9 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
                 panelId: surfaceId,
                 state: resolvedState,
                 source: .inferred,
-                inferredAgent: manifest.agent
+                inferredAgent: manifest.agent,
+                // A manifest's blocked bucket matches the agent's approval box.
+                promptKind: resolvedState == .blocked ? .permission : nil
             )
         }
     }

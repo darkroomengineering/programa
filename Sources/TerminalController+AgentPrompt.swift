@@ -4,6 +4,11 @@
 // the full semantics this implements.
 //
 // Semantics (documented, not just implied by the code -- keep the doc in sync with this file):
+//   A. Refuse at an approval prompt (INC-695). If the agent in the surface waits on a permission
+//      or sign-in prompt, the call fails at once with `agent_awaiting_approval` and nothing is
+//      sent; it never holds for one. `answer_prompt: true` skips this check. Every hop of step 0
+//      that reads the draft checks this first, so a prompt that appears during the hold or the
+//      settle refuses too.
 //   0. Hold for a person's draft (INC-687). If a person has unsent typed input in the surface,
 //      nothing is sent yet. The connection's thread re-reads the draft every 100 ms within
 //      `timeout_ms`; if the budget runs out while the person is still drafting, the call fails
@@ -35,7 +40,7 @@
 //      rule) and resolve with `working_observed: true`.
 //   4. If step 3's wait exceeds the overall timeout, the call fails with `timeout` -- the agent
 //      started working but never finished within the requested budget. `timeout` always means
-//      the prompt was sent; `draft_in_progress` always means it was not.
+//      the prompt was sent; `draft_in_progress` and `agent_awaiting_approval` always mean it was not.
 import Foundation
 
 extension TerminalController {
@@ -162,6 +167,10 @@ extension TerminalController {
             workspaceId = ws.id
             surfaceIdOut = surfaceId
             windowId = self.v2ResolveWindowId(tabManager: tabManager)
+            if let refusal = self.v2ApprovalGuardRejection(params: params, surfaceId: surfaceId, terminalPanel: terminalPanel, workspace: ws) {
+                setupError = refusal
+                return
+            }
             if self.v2DraftGuardRejection(params: params, surfaceId: surfaceId, terminalPanel: terminalPanel) != nil {
                 heldSince = Date()
                 return
@@ -331,7 +340,8 @@ private enum AgentPromptHoldOutcome {
 extension TerminalController {
     /// File header step 0. Runs on the connection's thread: waits while a person's draft holds
     /// the prompt, settles once it ends, then calls `deliver` inside the main hop that last read
-    /// the draft as released, so that read and the send cannot be split by a keystroke.
+    /// the draft as released, so that read and the send cannot be split by a keystroke. An
+    /// approval prompt (header step A) read in any of those hops fails the call instead.
     private nonisolated func v2AgentPromptHold(
         heldSince: Date,
         surfaceId: UUID,
@@ -385,14 +395,18 @@ extension TerminalController {
                 }
                 var gone = false
                 var holding = false
+                var refusal: V2CallResult?
                 v2MainSync {
-                    guard let panel = self.v2WorkspaceContaining(surfaceId: surfaceId)?.panels[surfaceId] as? TerminalPanel else {
+                    guard let ws = self.v2WorkspaceContaining(surfaceId: surfaceId),
+                          let panel = ws.panels[surfaceId] as? TerminalPanel else {
                         gone = true
                         return
                     }
+                    refusal = self.v2ApprovalGuardRejection(params: params, surfaceId: surfaceId, terminalPanel: panel, workspace: ws)
                     holding = self.v2DraftGuardRejection(params: params, surfaceId: surfaceId, terminalPanel: panel) != nil
                 }
                 if gone { return closed() }
+                if let refusal { return .failed(refusal) }
                 if !holding {
                     let now = Date()
                     heldTotal += now.timeIntervalSince(holdStart)
@@ -457,15 +471,19 @@ extension TerminalController {
                 }
             }
 
-            // Deliver, unless the person started typing again during the settle.
+            // Deliver, unless an approval prompt appeared or the person started typing again
+            // during the settle.
             var delivered = false
             var outOfTime = false
+            var refusal: V2CallResult?
             v2MainSync {
                 guard let ws = self.v2WorkspaceContaining(surfaceId: surfaceId),
                       let panel = ws.panels[surfaceId] as? TerminalPanel else {
                     gone = true
                     return
                 }
+                refusal = self.v2ApprovalGuardRejection(params: params, surfaceId: surfaceId, terminalPanel: panel, workspace: ws)
+                if refusal != nil { return }
                 let now = Date()
                 // The settle grace is capped at the deadline, so it can end exactly there; a send now
                 // would leave no budget for observing the prompt's own turn. Checked before releasedAt
@@ -484,6 +502,7 @@ extension TerminalController {
                 delivered = true
             }
             if gone { return closed() }
+            if let refusal { return .failed(refusal) }
             if outOfTime { return notSent("released its draft too close to the timeout", settling: true) }
             if delivered { return .delivered(heldMs: ms(heldTotal), settleMs: ms(settleTotal)) }
         }

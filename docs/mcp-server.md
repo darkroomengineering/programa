@@ -159,6 +159,9 @@ it to run any shell command.
 
 The write is refused with `draft_in_progress` while the person has unsent input in that pane.
 Retry after they submit or clear it, or pass `force: true` (`--force` in the CLI) only when the user asked for it.
+It is also refused, with `agent_awaiting_approval`, while the agent in that pane waits on a
+permission or sign-in prompt, so the tools cannot answer it for the person. Ask the user, and pass
+`answer_prompt: true` (`--answer-prompt` in the CLI) only when they told you to answer it.
 
 ## Resources
 

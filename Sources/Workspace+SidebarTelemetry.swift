@@ -237,6 +237,10 @@ extension Workspace {
     ///   writes are dropped if its state is active (working/blocked), and, if it is resting
     ///   (idle/done/error), accepted only when they report an active state. Accepting only active
     ///   claims keeps a hook `idle` from overwriting a program `done` badge.
+    ///
+    /// `promptKind` is what a `blocked` report is waiting on (nil when the reporter did not say).
+    /// It goes only to the surface's person-input gate, which refuses socket writes while a
+    /// permission or sign-in prompt shows (TerminalSurface+DraftGate.swift).
     func updatePanelAgentState(
         panelId: UUID,
         state: AgentActivityState,
@@ -245,6 +249,7 @@ extension Workspace {
         transcriptPath: String? = nil,
         inferredAgent: String? = nil,
         programState: ProgramStatusState? = nil,
+        promptKind: ProgramStatusKind? = nil,
         at now: Date = Date()
     ) {
         let current = panelAgentPresence[panelId]
@@ -299,6 +304,11 @@ extension Workspace {
             // threshold. No wait-registry or socket fan-out, since nothing observable changed.
             panelAgentPresence[panelId]?.lastEventAt = now
             panelAgentPresence[panelId]?.staleObserved = false
+            // A repeated `blocked` report (a second permission request in one turn) re-arms a
+            // prompt the person already answered with a key.
+            if state == .blocked {
+                (panels[panelId] as? TerminalPanel)?.surface.noteAgentPrompt(promptKind, isBlocked: true)
+            }
             return
         }
         panelAgentPresence[panelId] = AgentPresence(
@@ -309,8 +319,8 @@ extension Workspace {
             inferredAgent: resolvedInferredAgent,
             programState: programState
         )
-        if (current?.state == .blocked) != (state == .blocked) {
-            (panels[panelId] as? TerminalPanel)?.surface.noteAgentBlockedChange(isBlocked: state == .blocked)
+        if state == .blocked || current?.state == .blocked {
+            (panels[panelId] as? TerminalPanel)?.surface.noteAgentPrompt(promptKind, isBlocked: state == .blocked)
         }
         noteReviewNudgeTurnEdge(panelId: panelId, previous: current?.state, next: state)
         // Event-driven half of surface.wait's `agent_state` condition (#166 task 2) and
@@ -343,7 +353,7 @@ extension Workspace {
         if !force, (source == .program) != (current.source == .program) { return }
         panelAgentPresence.removeValue(forKey: panelId)
         if current.state == .blocked {
-            (panels[panelId] as? TerminalPanel)?.surface.noteAgentBlockedChange(isBlocked: false)
+            (panels[panelId] as? TerminalPanel)?.surface.noteAgentPrompt(nil, isBlocked: false)
         }
         AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil, source: nil)
         SocketEventBroadcaster.shared.publishAgentState(workspaceId: id, surfaceId: panelId, state: nil, source: nil)
@@ -506,7 +516,7 @@ extension Workspace {
         }
         let clearedAgentSurfaceIds = Array(panelAgentPresence.keys)
         for (panelId, presence) in panelAgentPresence where presence.state == .blocked {
-            (panels[panelId] as? TerminalPanel)?.surface.noteAgentBlockedChange(isBlocked: false)
+            (panels[panelId] as? TerminalPanel)?.surface.noteAgentPrompt(nil, isBlocked: false)
         }
         panelAgentPresence.removeAll()
         for surfaceId in clearedAgentSurfaceIds {

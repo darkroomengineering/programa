@@ -209,6 +209,7 @@
       "debug_only": false,
       "description": "Agent task lifecycle, spawning, and prompt delivery. (prompt).",
       "errors": [
+        "agent_awaiting_approval",
         "client_disconnected",
         "draft_in_progress",
         "internal_error",
@@ -222,6 +223,9 @@
       "params": {
         "additionalProperties": false,
         "properties": {
+          "answer_prompt": {
+            "type": "boolean"
+          },
           "force": {
             "type": "boolean"
           },
@@ -3795,6 +3799,7 @@
       "debug_only": false,
       "description": "Terminal surface (pane content) lifecycle and IO. (send if unchanged: sends text and keys only while the read_text fingerprint still matches).",
       "errors": [
+        "agent_awaiting_approval",
         "draft_in_progress",
         "internal_error",
         "invalid_params",
@@ -3807,6 +3812,9 @@
       "params": {
         "additionalProperties": false,
         "properties": {
+          "answer_prompt": {
+            "type": "boolean"
+          },
           "expected_fingerprint": {
             "type": "string"
           },
@@ -3860,6 +3868,7 @@
       "debug_only": false,
       "description": "Terminal surface (pane content) lifecycle and IO. (send key).",
       "errors": [
+        "agent_awaiting_approval",
         "draft_in_progress",
         "invalid_params",
         "not_found",
@@ -3870,6 +3879,9 @@
       "params": {
         "additionalProperties": false,
         "properties": {
+          "answer_prompt": {
+            "type": "boolean"
+          },
           "force": {
             "type": "boolean"
           },
@@ -3908,6 +3920,7 @@
       "debug_only": false,
       "description": "Terminal surface (pane content) lifecycle and IO. (send paste: one paste, never presses Return).",
       "errors": [
+        "agent_awaiting_approval",
         "draft_in_progress",
         "invalid_params",
         "not_found",
@@ -3918,6 +3931,9 @@
       "params": {
         "additionalProperties": false,
         "properties": {
+          "answer_prompt": {
+            "type": "boolean"
+          },
           "force": {
             "type": "boolean"
           },
@@ -3956,6 +3972,7 @@
       "debug_only": false,
       "description": "Terminal surface (pane content) lifecycle and IO. (send text).",
       "errors": [
+        "agent_awaiting_approval",
         "draft_in_progress",
         "invalid_params",
         "not_found",
@@ -3966,6 +3983,9 @@
       "params": {
         "additionalProperties": false,
         "properties": {
+          "answer_prompt": {
+            "type": "boolean"
+          },
           "force": {
             "type": "boolean"
           },

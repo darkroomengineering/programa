@@ -191,6 +191,11 @@
           "type": "boolean",
           "default": true,
           "description": "Refuse agent and script text sent to a terminal while you have typed input there that you have not submitted. A draft stops holding text 60 seconds after your last keystroke."
+        },
+        "protectApprovalPrompts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Refuse agent and script writes to a terminal while the agent there waits on a permission or sign-in prompt, so only you can answer it. The refusal lifts when you press a key at the prompt or the agent moves on."
         }
       }
     },

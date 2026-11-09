@@ -169,7 +169,7 @@ extension ProgramaCLI {
 
             CommandDescriptor(
                 names: ["prompt-agent"],
-                helpLines: ["prompt-agent [--workspace <id|ref>] [--surface <id|ref>] [--timeout <seconds>] [--working-grace <seconds>] [--force] <text>"],
+                helpLines: ["prompt-agent [--workspace <id|ref>] [--surface <id|ref>] [--timeout <seconds>] [--working-grace <seconds>] [--force] [--answer-prompt] <text>"],
                 detailedUsage: """
                 Usage: programa prompt-agent [flags] [--] <text>
 
@@ -189,6 +189,10 @@ extension ProgramaCLI {
                 for them to submit or clear it, then sends. If --timeout runs out first, nothing
                 is sent and the command fails (draft_in_progress). --force sends without waiting.
 
+                If the agent waits on a permission or sign-in prompt, nothing is sent and the
+                command fails at once (agent_awaiting_approval). Ask the person to answer it;
+                --answer-prompt sends anyway, only when they asked you to answer for them.
+
                 Flags:
                   --workspace <id|ref>      Target workspace (default: $PROGRAMA_WORKSPACE_ID)
                   --surface <id|ref>        Target surface (default: $PROGRAMA_SURFACE_ID)
@@ -198,24 +202,27 @@ extension ProgramaCLI {
                                             --timeout budget (default: 3)
                   --force                   Send even if a person has unsent typed input in the
                                             surface
+                  --answer-prompt           Send even if the agent waits on an approval prompt
 
                 Example:
                   programa prompt-agent "review this diff for bugs"
                   programa prompt-agent --surface surface:2 --timeout 300 "run the test suite"
                 """,
-                grammar: CLIArgumentGrammar(valueOptions: ["workspace", "surface", "timeout", "working-grace"], booleanOptions: ["force"], minPositionals: 1, maxPositionals: nil),
+                grammar: CLIArgumentGrammar(valueOptions: ["workspace", "surface", "timeout", "working-grace"], booleanOptions: ["force", "answer-prompt"], minPositionals: 1, maxPositionals: nil),
                 execute: { ctx in
                     let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
                     let (sfArg, rem1) = self.parseOption(rem0, name: "--surface")
                     let (timeoutArg, rem2) = self.parseOption(rem1, name: "--timeout")
                     let (graceArg, rem3) = self.parseOption(rem2, name: "--working-grace")
-                    let (force, rem4) = self.takeForceFlag(rem3)
+                    let (force, rem4) = self.takeFlag("--force", rem3)
+                    let (answerPrompt, rem5) = self.takeFlag("--answer-prompt", rem4)
                     let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-                    let rawText = rem4.dropFirst(rem4.first == "--" ? 1 : 0).joined(separator: " ")
+                    let rawText = rem5.dropFirst(rem5.first == "--" ? 1 : 0).joined(separator: " ")
                     guard !rawText.isEmpty else { throw CLIError(message: "prompt-agent requires text") }
 
                     var params: [String: Any] = ["text": rawText]
                     if force { params["force"] = true }
+                    if answerPrompt { params["answer_prompt"] = true }
                     let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
                     if let wsId { params["workspace_id"] = wsId }
                     let sfId = try self.resolveCommandSurface(
@@ -454,7 +461,7 @@ extension ProgramaCLI {
 
             CommandDescriptor(
                 names: ["send"],
-                helpLines: ["send [--workspace <id|ref>] [--surface <id|ref>] [--force] <text>"],
+                helpLines: ["send [--workspace <id|ref>] [--surface <id|ref>] [--force] [--answer-prompt] <text>"],
                 detailedUsage: """
                 Usage: programa send [flags] [--] <text>
 
@@ -465,22 +472,27 @@ extension ProgramaCLI {
                   --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
                   --force                Send even if a person has unsent typed input in the
                                          surface (by default that returns draft_in_progress)
+                  --answer-prompt        Send even if the agent there waits on a permission or
+                                         sign-in prompt (agent_awaiting_approval). Pass it only
+                                         when the person asked you to answer for them
 
                 Example:
                   programa send "echo hello"
                   programa send --surface surface:2 "ls -la\\n"
                 """,
-                grammar: CLIArgumentGrammar(valueOptions: ["workspace", "surface"], booleanOptions: ["force"], minPositionals: 1, maxPositionals: nil),
+                grammar: CLIArgumentGrammar(valueOptions: ["workspace", "surface"], booleanOptions: ["force", "answer-prompt"], minPositionals: 1, maxPositionals: nil),
                 execute: { ctx in
                     let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
                     let (sfArg, rem1) = self.parseOption(rem0, name: "--surface")
-                    let (force, rem2) = self.takeForceFlag(rem1)
+                    let (force, rem2) = self.takeFlag("--force", rem1)
+                    let (answerPrompt, rem3) = self.takeFlag("--answer-prompt", rem2)
                     let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-                    let rawText = rem2.dropFirst(rem2.first == "--" ? 1 : 0).joined(separator: " ")
+                    let rawText = rem3.dropFirst(rem3.first == "--" ? 1 : 0).joined(separator: " ")
                     guard !rawText.isEmpty else { throw CLIError(message: "send requires text") }
                     let text = self.unescapeSendText(rawText)
                     var params: [String: Any] = ["text": text]
                     if force { params["force"] = true }
+                    if answerPrompt { params["answer_prompt"] = true }
                     let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
                     if let wsId { params["workspace_id"] = wsId }
                     let sfId = try self.resolveCommandSurface(
@@ -495,7 +507,7 @@ extension ProgramaCLI {
 
             CommandDescriptor(
                 names: ["send-key"],
-                helpLines: ["send-key [--workspace <id|ref>] [--surface <id|ref>] [--force] <key>"],
+                helpLines: ["send-key [--workspace <id|ref>] [--surface <id|ref>] [--force] [--answer-prompt] <key>"],
                 detailedUsage: """
                 Usage: programa send-key [flags] [--] <key>
 
@@ -506,21 +518,26 @@ extension ProgramaCLI {
                   --surface <id|ref>     Target surface (default: $PROGRAMA_SURFACE_ID)
                   --force                Send even if a person has unsent typed input in the
                                          surface (by default that returns draft_in_progress)
+                  --answer-prompt        Send even if the agent there waits on a permission or
+                                         sign-in prompt (agent_awaiting_approval). Pass it only
+                                         when the person asked you to answer for them
 
                 Example:
                   programa send-key enter
                   programa send-key --surface surface:2 ctrl+c
                 """,
-                grammar: CLIArgumentGrammar(valueOptions: ["workspace", "surface"], booleanOptions: ["force"], minPositionals: 1, maxPositionals: 1),
+                grammar: CLIArgumentGrammar(valueOptions: ["workspace", "surface"], booleanOptions: ["force", "answer-prompt"], minPositionals: 1, maxPositionals: 1),
                 execute: { ctx in
                     let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
                     let (sfArg, rem1) = self.parseOption(rem0, name: "--surface")
-                    let (force, rem2) = self.takeForceFlag(rem1)
+                    let (force, rem2) = self.takeFlag("--force", rem1)
+                    let (answerPrompt, rem3) = self.takeFlag("--answer-prompt", rem2)
                     let workspaceArg = wsArg ?? (ctx.windowId == nil ? ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"] : nil)
-                    let keyArgs = rem2.first == "--" ? Array(rem2.dropFirst()) : rem2
+                    let keyArgs = rem3.first == "--" ? Array(rem3.dropFirst()) : rem3
                     guard let key = keyArgs.first else { throw CLIError(message: "send-key requires a key") }
                     var params: [String: Any] = ["key": key]
                     if force { params["force"] = true }
+                    if answerPrompt { params["answer_prompt"] = true }
                     let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
                     if let wsId { params["workspace_id"] = wsId }
                     let sfId = try self.resolveCommandSurface(
@@ -535,7 +552,7 @@ extension ProgramaCLI {
 
             CommandDescriptor(
                 names: ["send-panel"],
-                helpLines: ["send-panel --panel <id|ref> [--workspace <id|ref>] [--force] <text>"],
+                helpLines: ["send-panel --panel <id|ref> [--workspace <id|ref>] [--force] [--answer-prompt] <text>"],
                 detailedUsage: """
                 Usage: programa send-panel --panel <id|ref> [flags] [--] <text>
 
@@ -546,11 +563,14 @@ extension ProgramaCLI {
                   --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
                   --force                Send even if a person has unsent typed input in the
                                          surface (by default that returns draft_in_progress)
+                  --answer-prompt        Send even if the agent there waits on a permission or
+                                         sign-in prompt (agent_awaiting_approval). Pass it only
+                                         when the person asked you to answer for them
 
                 Example:
                   programa send-panel --panel surface:2 "echo hello\\n"
                 """,
-                grammar: CLIArgumentGrammar(valueOptions: ["panel", "workspace"], booleanOptions: ["force"], requiredOptions: ["panel"], minPositionals: 1, maxPositionals: nil),
+                grammar: CLIArgumentGrammar(valueOptions: ["panel", "workspace"], booleanOptions: ["force", "answer-prompt"], requiredOptions: ["panel"], minPositionals: 1, maxPositionals: nil),
                 execute: { ctx in
                     let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
                     let (panelArg, rem1) = self.parseOption(rem0, name: "--panel")
@@ -558,12 +578,14 @@ extension ProgramaCLI {
                     guard let panelArg else {
                         throw CLIError(message: "send-panel requires --panel")
                     }
-                    let (force, rem2) = self.takeForceFlag(rem1)
-                    let rawText = rem2.dropFirst(rem2.first == "--" ? 1 : 0).joined(separator: " ")
+                    let (force, rem2) = self.takeFlag("--force", rem1)
+                    let (answerPrompt, rem3) = self.takeFlag("--answer-prompt", rem2)
+                    let rawText = rem3.dropFirst(rem3.first == "--" ? 1 : 0).joined(separator: " ")
                     guard !rawText.isEmpty else { throw CLIError(message: "send-panel requires text") }
                     let text = self.unescapeSendText(rawText)
                     var params: [String: Any] = ["text": text]
                     if force { params["force"] = true }
+                    if answerPrompt { params["answer_prompt"] = true }
                     let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
                     if let wsId { params["workspace_id"] = wsId }
                     let sfId = try self.normalizeSurfaceHandle(panelArg, client: ctx.client, workspaceHandle: wsId)
@@ -575,7 +597,7 @@ extension ProgramaCLI {
 
             CommandDescriptor(
                 names: ["send-key-panel"],
-                helpLines: ["send-key-panel --panel <id|ref> [--workspace <id|ref>] [--force] <key>"],
+                helpLines: ["send-key-panel --panel <id|ref> [--workspace <id|ref>] [--force] [--answer-prompt] <key>"],
                 detailedUsage: """
                 Usage: programa send-key-panel --panel <id|ref> [flags] [--] <key>
 
@@ -586,12 +608,15 @@ extension ProgramaCLI {
                   --workspace <id|ref>   Target workspace (default: $PROGRAMA_WORKSPACE_ID)
                   --force                Send even if a person has unsent typed input in the
                                          surface (by default that returns draft_in_progress)
+                  --answer-prompt        Send even if the agent there waits on a permission or
+                                         sign-in prompt (agent_awaiting_approval). Pass it only
+                                         when the person asked you to answer for them
 
                 Example:
                   programa send-key-panel --panel surface:2 enter
                   programa send-key-panel --panel surface:2 ctrl+c
                 """,
-                grammar: CLIArgumentGrammar(valueOptions: ["panel", "workspace"], booleanOptions: ["force"], requiredOptions: ["panel"], minPositionals: 1, maxPositionals: 1),
+                grammar: CLIArgumentGrammar(valueOptions: ["panel", "workspace"], booleanOptions: ["force", "answer-prompt"], requiredOptions: ["panel"], minPositionals: 1, maxPositionals: 1),
                 execute: { ctx in
                     let (wsArg, rem0) = self.parseOption(ctx.commandArgs, name: "--workspace")
                     let (panelArg, rem1) = self.parseOption(rem0, name: "--panel")
@@ -599,12 +624,14 @@ extension ProgramaCLI {
                     guard let panelArg else {
                         throw CLIError(message: "send-key-panel requires --panel")
                     }
-                    let (force, rem2) = self.takeForceFlag(rem1)
-                    let skpArgs = rem2.first == "--" ? Array(rem2.dropFirst()) : rem2
+                    let (force, rem2) = self.takeFlag("--force", rem1)
+                    let (answerPrompt, rem3) = self.takeFlag("--answer-prompt", rem2)
+                    let skpArgs = rem3.first == "--" ? Array(rem3.dropFirst()) : rem3
                     let key = skpArgs.first ?? ""
                     guard !key.isEmpty else { throw CLIError(message: "send-key-panel requires a key") }
                     var params: [String: Any] = ["key": key]
                     if force { params["force"] = true }
+                    if answerPrompt { params["answer_prompt"] = true }
                     let wsId = try self.normalizeWorkspaceHandle(workspaceArg, client: ctx.client)
                     if let wsId { params["workspace_id"] = wsId }
                     let sfId = try self.normalizeSurfaceHandle(panelArg, client: ctx.client, workspaceHandle: wsId)
@@ -616,31 +643,37 @@ extension ProgramaCLI {
         ]
     }
 
-    /// Splits `--force` out of a command's arguments. Only tokens ahead of a `--` separator
-    /// count, so `send -- --force` still sends the literal text.
-    func takeForceFlag(_ args: [String]) -> (force: Bool, rest: [String]) {
+    /// Splits a boolean flag such as `--force` out of a command's arguments. Only tokens ahead
+    /// of a `--` separator count, so `send -- --force` still sends the literal text.
+    func takeFlag(_ flag: String, _ args: [String]) -> (isSet: Bool, rest: [String]) {
         let separator = args.firstIndex(of: "--") ?? args.endIndex
-        guard args[..<separator].contains("--force") else { return (false, args) }
-        return (true, args[..<separator].filter { $0 != "--force" } + args[separator...])
+        guard args[..<separator].contains(flag) else { return (false, args) }
+        return (true, args[..<separator].filter { $0 != flag } + args[separator...])
     }
 
     /// `sendV2` for a write the server refuses while a person has unsent typed input in the
-    /// target, with that refusal (`draft_in_progress`) turned into one line for the person.
+    /// target (`draft_in_progress`) or while its agent waits on an approval prompt
+    /// (`agent_awaiting_approval`), with the refusal turned into one line for the person.
+    /// `approvalHint` replaces the `--answer-prompt` advice for a command without that flag.
     func sendDraftGuardedV2(
         _ client: SocketClient,
         method: String,
         params: [String: Any],
-        minimumReceiveTimeout: TimeInterval? = nil
+        minimumReceiveTimeout: TimeInterval? = nil,
+        approvalHint: String = "Answer it in the pane, or pass --answer-prompt only if the person asked you to."
     ) throws -> [String: Any] {
-        let prefix = "draft_in_progress: "
+        let draftPrefix = "draft_in_progress: "
+        let approvalPrefix = "agent_awaiting_approval: "
         do {
             return try client.sendV2(method: method, params: params, minimumReceiveTimeout: minimumReceiveTimeout)
-        } catch let error as CLIError where error.message.hasPrefix(prefix) {
+        } catch let error as CLIError where error.message.hasPrefix(draftPrefix) {
             // agent.prompt already waited out its --timeout, so "retry later" is the wrong advice.
             let hint = method == V2MethodNames.agentPrompt
                 ? "Pass a longer --timeout, or --force to send now."
                 : "Retry after it is submitted or cleared, or pass --force."
-            throw CLIError(message: "\(error.message.dropFirst(prefix.count)). \(hint)")
+            throw CLIError(message: "\(error.message.dropFirst(draftPrefix.count)). \(hint)")
+        } catch let error as CLIError where error.message.hasPrefix(approvalPrefix) {
+            throw CLIError(message: "\(error.message.dropFirst(approvalPrefix.count)). \(approvalHint)")
         }
     }
 }

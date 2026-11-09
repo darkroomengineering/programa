@@ -54,6 +54,7 @@ Socket control and automation settings from Settings > Automation.
 | `socketPassword` | object |  | Password for password-mode socket access. Use null or an empty string to clear it. |
 | `claudeCodeIntegration` | boolean | `true` | Enable Programa integration hooks for Claude Code. |
 | `holdAgentTextWhileTyping` | boolean | `true` | Refuse agent and script text sent to a terminal while you have typed input there that you have not submitted. Socket writes return `draft_in_progress` instead (see [socket-api.md](socket-api.md#text-delivery-draft_in_progress)). A draft stops holding text 60 seconds after your last keystroke. |
+| `protectApprovalPrompts` | boolean | `true` | Refuse agent and script writes to a terminal while the agent there waits on a permission or sign-in prompt, so only you can answer it. Socket writes return `agent_awaiting_approval` instead (see [socket-api.md](socket-api.md#approval-prompts-agent_awaiting_approval)). The refusal lifts when you press a key at the prompt or the agent moves on. Questions are not protected. |
 
 ## `customCommands`
 

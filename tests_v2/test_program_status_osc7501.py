@@ -109,8 +109,10 @@ def _poll_surface(client, workspace_id, surface_id, pred, what: str, timeout_s: 
 
 
 def _reset(client: ProgramaClient, workspace_id: str, surface_id: str) -> None:
-    """Interrupt any held command, then RIS clears every record (case 10 asserts RIS itself)."""
-    client._call("surface.send_key", {"surface_id": surface_id, "key": "ctrl+c"})
+    """Interrupt any held command, then RIS clears every record (case 10 asserts RIS itself).
+    Case 2 leaves a permission prompt showing, which refuses socket writes (INC-695), so the
+    interrupt passes answer_prompt."""
+    client._call("surface.send_key", {"surface_id": surface_id, "key": "ctrl+c", "answer_prompt": True})
     _emit_marked(client, workspace_id, surface_id, [RIS])
     _poll_surface(
         client, workspace_id, surface_id,

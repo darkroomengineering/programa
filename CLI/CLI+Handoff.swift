@@ -13,7 +13,8 @@ extension ProgramaCLI {
                 Paste another pane's recent output into a pane's prompt as context. The text
                 arrives as one paste and Return is never pressed, so you can keep typing before
                 you submit. If you have typed into the target pane and not submitted it, nothing
-                is pasted and the command fails unless you pass --force.
+                is pasted and the command fails unless you pass --force. Nothing is pasted
+                either while the agent in the target pane waits on a permission or sign-in prompt.
 
                 Flags:
                   --from <id|ref>   Pane to copy output from (required)
@@ -39,7 +40,7 @@ extension ProgramaCLI {
         let (linesArg, rem1) = parseOption(rem0, name: "--lines")
         let (noteArg, rem2) = parseOption(rem1, name: "--note")
         let (toArg, rem3) = parseOption(rem2, name: "--to")
-        let force = takeForceFlag(rem3).force
+        let force = takeFlag("--force", rem3).isSet
 
         var lineCount = PaneHandoffFormatter.defaultLineCount
         if let linesArg {
@@ -96,7 +97,10 @@ extension ProgramaCLI {
         )
         var pasteParams: [String: Any] = ["surface_id": targetId, "text": text]
         if force { pasteParams["force"] = true }
-        let payload = try sendDraftGuardedV2(ctx.client, method: V2MethodNames.surfaceSendPaste, params: pasteParams)
+        let payload = try sendDraftGuardedV2(
+            ctx.client, method: V2MethodNames.surfaceSendPaste, params: pasteParams,
+            approvalHint: "Answer the prompt in that pane, then run handoff again."
+        )
         if ctx.jsonOutput {
             print(jsonString(formatIDs(payload, mode: ctx.idFormat)))
         } else {

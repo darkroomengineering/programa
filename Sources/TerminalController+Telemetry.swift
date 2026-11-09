@@ -403,6 +403,11 @@ extension TerminalController {
             )
         }
         let eventType = rawEventType.lowercased()
+        let promptKind: ProgramStatusKind? = switch eventType {
+        case "request.opened": .permission
+        case "user-input.requested": .question
+        default: nil
+        }
         let rawTranscriptPath = v2RawString(params, "transcript_path")?.trimmingCharacters(in: .whitespacesAndNewlines)
         let transcriptPath = rawTranscriptPath?.isEmpty == false ? rawTranscriptPath : nil
 
@@ -429,7 +434,7 @@ extension TerminalController {
             v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { [weak self] tabManager, tab, sid in
                 tabManager.updateSurfaceAgentState(
                     tabId: workspaceId, surfaceId: sid, state: state, source: .hooks, sessionKey: sessionKey,
-                    transcriptPath: transcriptPath
+                    transcriptPath: transcriptPath, promptKind: promptKind
                 )
                 _ = try? AgentSupervisionRegistry.shared.updateActiveSurface(
                     workspaceId: workspaceId,
@@ -505,7 +510,10 @@ extension TerminalController {
         let needsInputFields = ["kind": kind ?? "", "provider": rawProvider ?? "", "subtitle": subtitle, "body": body]
 
         v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { [weak self] tabManager, tab, sid in
-            tabManager.updateSurfaceAgentState(tabId: workspaceId, surfaceId: sid, state: .blocked, source: .hooks, sessionKey: sessionKey)
+            tabManager.updateSurfaceAgentState(
+                tabId: workspaceId, surfaceId: sid, state: .blocked, source: .hooks, sessionKey: sessionKey,
+                promptKind: kind.flatMap(ProgramStatusKind.init(rawValue:))
+            )
 
             let resolvedTitle = TerminalController.v2ResolveNotificationTitle(title: title, workspace: tab, surfaceId: sid)
             TerminalNotificationStore.shared.addNotification(

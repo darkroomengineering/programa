@@ -37,6 +37,7 @@ from programa_client import ProgramaClient, ProgramaClientError
 from v2_support import must as _must
 from v2_support import read_terminal_text_until as _read_terminal_text_until
 from v2_support import report_agent_state as _report_agent_state
+from v2_support import surface_agent_state as _surface_agent_state
 from v2_support import wait_for as _wait_for
 from pane_resize_test_support import (
     wait_for_surface_command_roundtrip as _wait_for_surface_command_roundtrip,
@@ -464,6 +465,28 @@ def main() -> int:
             c.settle()
             _expect_draft_rejection("surface.send_text", {"surface_id": pane_b, "text": "x"}, pane_b)
             print("  PASS: approval answers leave no draft, and an earlier draft survives the prompt")
+
+            # 10b. A permission prompt refuses writes until the person's first key answers it;
+            #      keys after that are a draft again (INC-695).
+            _press(c, "ctrl+u")
+            _report_agent_state(SOCKET_PATH, workspace_id, pane_b, "working")
+            c._call(
+                "agent.needs_input",
+                {"workspace_id": workspace_id, "surface_id": pane_b, "provider": "claude-code", "body": f"allow? {STAMP}", "kind": "permission"},
+            )
+            _wait_for(lambda: _surface_agent_state(c, workspace_id, pane_b) == "blocked", timeout_s=5.0)
+            refused = _call_full("surface.send_text", {"surface_id": pane_b, "text": "x"})
+            _must(
+                (refused.get("error") or {}).get("code") == "agent_awaiting_approval",
+                f"a permission prompt should refuse socket writes: {refused!r}",
+            )
+            _type_keys(c, "y")
+            _type_keys(c, "qzx")
+            _expect_draft_rejection("surface.send_text", {"surface_id": pane_b, "text": "x"}, pane_b)
+            _press(c, "ctrl+u")
+            _send_text_ok_and_visible(c, pane_b, f"AFTERPERMISSIONKEY{STAMP}")
+            _report_agent_state(SOCKET_PATH, workspace_id, pane_b, "working")
+            print("  PASS: a person's key at a permission prompt lifts the refusal and later keys draft")
 
             # 11. agent.prompt holds for the draft and the person's turn, then sends on its own line.
             _check_prompt_holds_until_submit_and_turn(c, workspace_id)

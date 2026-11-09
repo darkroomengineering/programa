@@ -1007,7 +1007,7 @@ extension TerminalController {
             case .resolved(let target):
                 (ws, surfaceId, terminalPanel) = target
             }
-            if let rejection = v2DraftGuardRejection(params: params, surfaceId: surfaceId, terminalPanel: terminalPanel) {
+            if let rejection = v2SocketWriteRejection(params: params, surfaceId: surfaceId, terminalPanel: terminalPanel, workspace: ws) {
                 return rejection
             }
             #if DEBUG
@@ -1049,7 +1049,7 @@ extension TerminalController {
             guard terminalPanel.surface.isKnownNamedKey(key) else {
                 return .err(code: "invalid_params", message: "Unknown key", data: ["key": key])
             }
-            if let rejection = v2DraftGuardRejection(params: params, surfaceId: surfaceId, terminalPanel: terminalPanel) {
+            if let rejection = v2SocketWriteRejection(params: params, surfaceId: surfaceId, terminalPanel: terminalPanel, workspace: ws) {
                 return rejection
             }
             guard v2DeliverNamedKey(key, to: terminalPanel, reason: "terminalController.v2SurfaceSendKey") else {
@@ -1352,6 +1352,37 @@ extension TerminalController {
         return true
     }
 
+    /// The error that refuses a socket write into a terminal, or nil when the write may go ahead.
+    /// An approval prompt is checked before a draft, so a write that meets both needs both
+    /// `answer_prompt` and `force`. Call it in the same main hop as the write it guards, so no
+    /// keystroke or agent-state report lands between them.
+    func v2SocketWriteRejection(params: [String: Any], surfaceId: UUID, terminalPanel: TerminalPanel, workspace: Workspace) -> V2CallResult? {
+        v2ApprovalGuardRejection(params: params, surfaceId: surfaceId, terminalPanel: terminalPanel, workspace: workspace)
+            ?? v2DraftGuardRejection(params: params, surfaceId: surfaceId, terminalPanel: terminalPanel)
+    }
+
+    /// The `agent_awaiting_approval` error for a socket write into a terminal whose agent waits on
+    /// a permission or sign-in prompt, or nil when the write may go ahead: `answer_prompt: true`,
+    /// the `automation.protectApprovalPrompts` setting is off, or no such prompt shows.
+    func v2ApprovalGuardRejection(params: [String: Any], surfaceId: UUID, terminalPanel: TerminalPanel, workspace: Workspace) -> V2CallResult? {
+        guard v2Bool(params, "answer_prompt") != true, ApprovalGuardSettings.isEnabled(),
+              let hold = terminalPanel.surface.activePromptHold() else { return nil }
+        let surfaceRef = (v2Ref(kind: .surface, uuid: surfaceId) as? String) ?? surfaceId.uuidString
+        let presence = workspace.panelAgentPresence[surfaceId]
+        return .err(
+            code: "agent_awaiting_approval",
+            message: "\(surfaceRef) is waiting on an approval prompt; nothing was sent",
+            data: [
+                "surface_id": surfaceId.uuidString,
+                "surface_ref": surfaceRef,
+                "prompt_kind": hold.kind.rawValue,
+                "prompt_age_ms": hold.ageMs,
+                "agent_state_source": v2OrNull(presence?.source.rawValue),
+                "stale": presence?.isStale(now: Date()) ?? false
+            ]
+        )
+    }
+
     /// The `draft_in_progress` error for a socket write into a terminal where a person has unsent
     /// typed input, or nil when the write may go ahead: `force: true`, the
     /// `automation.holdAgentTextWhileTyping` setting is off, or no draft holds the surface. Call it
@@ -1372,14 +1403,16 @@ extension TerminalController {
         )
     }
 
-    /// Call after a delivered socket write. CR/LF or Enter submits the person's draft;
-    /// Ctrl+C or Ctrl+U clears it. A write only reaches a drafting surface with `force: true`
-    /// or with the hold turned off.
+    /// Call after every delivered socket write except a paste, which posts only
+    /// `.socketWriteDelivered`. CR/LF or Enter submits the person's draft; Ctrl+C or Ctrl+U
+    /// clears it. Any delivered write answers an open prompt. Submit and clear go first, so a
+    /// write that answers a prompt with Enter leaves the draft typed before the prompt in place.
     func v2NoteSocketSubmit(text: String, keys: [String] = [], terminalPanel: TerminalPanel) {
+        defer { terminalPanel.surface.noteDraftEvent(.socketWriteDelivered) }
         let submits = text.unicodeScalars.contains { $0 == "\r" || $0 == "\n" }
             || keys.contains { $0.lowercased() == "enter" || $0.lowercased() == "return" }
         if submits {
-            terminalPanel.surface.noteDraftEvent(.forcedSubmitDelivered)
+            terminalPanel.surface.noteDraftEvent(.submitted)
         }
         let clears = text.unicodeScalars.contains { $0 == "\u{03}" || $0 == "\u{15}" }
             || keys.contains {
