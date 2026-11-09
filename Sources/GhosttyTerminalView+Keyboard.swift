@@ -402,6 +402,16 @@ extension GhosttyNSView {
                 }
             }
 
+            // Ghostty's default cmd+v is performable, so it lands in keyDown, which skips
+            // draft tracking for Command keys, instead of paste(_:).
+            // SHORTCUT: matches only the default paste key. ceiling: a paste rebound in the
+            // Ghostty config does not start a draft. upgrade: when Ghostty can report the
+            // action a key event triggered, match paste_from_clipboard instead.
+            if isPerformable,
+               event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command,
+               event.charactersIgnoringModifiers == "v" {
+                terminalSurface?.noteDraftEvent(.typed(at: event.timestamp))
+            }
             keyDown(with: event)
             return true
         }
