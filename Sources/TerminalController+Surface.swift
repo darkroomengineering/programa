@@ -1372,14 +1372,27 @@ extension TerminalController {
         )
     }
 
-    /// Call after a delivered socket write. Text with CR or LF, or an Enter key, submitted
-    /// whatever the person had typed along with it, so the draft no longer holds the surface. A
-    /// write only reaches a drafting surface with `force: true` or with the hold turned off.
+    /// Call after a delivered socket write. CR/LF or Enter submits the person's draft;
+    /// Ctrl+C or Ctrl+U clears it. A write only reaches a drafting surface with `force: true`
+    /// or with the hold turned off.
     func v2NoteSocketSubmit(text: String, keys: [String] = [], terminalPanel: TerminalPanel) {
         let submits = text.unicodeScalars.contains { $0 == "\r" || $0 == "\n" }
             || keys.contains { $0.lowercased() == "enter" || $0.lowercased() == "return" }
         if submits {
             terminalPanel.surface.noteDraftEvent(.forcedSubmitDelivered)
+        }
+        let clears = text.unicodeScalars.contains { $0 == "\u{03}" || $0 == "\u{15}" }
+            || keys.contains {
+                switch $0.lowercased() {
+                case "ctrl+c", "ctrl-c", "control+c", "control-c", "sigint",
+                     "ctrl+u", "ctrl-u", "control+u", "control-u":
+                    return true
+                default:
+                    return false
+                }
+            }
+        if clears {
+            terminalPanel.surface.noteDraftEvent(.cleared)
         }
     }
 }
