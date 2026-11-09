@@ -11,7 +11,6 @@ Callers branch on the error code, so each case pins the code:
 
 import os
 import sys
-import time
 import uuid
 from pathlib import Path
 
@@ -44,7 +43,7 @@ def main() -> int:
 
             # 3. last workspace of a window. A fresh window has exactly one workspace.
             created_window = c.new_window()
-            time.sleep(0.5)
+            c.settle()
             rows = c.list_workspaces(window_id=created_window)
             _must(len(rows) == 1, f"expected a fresh window to hold 1 workspace, got {rows}")
             only_ws = rows[0][1]
@@ -53,17 +52,17 @@ def main() -> int:
             _must([r[1] for r in rows_after] == [only_ws], f"last workspace must survive: {rows_after}")
             c.close_window(created_window)
             created_window = None
-            time.sleep(0.3)
+            c.settle()
 
             # Fixtures for the rest: a workspace with a second surface, then close that surface.
             ws = c.new_workspace()
             created_workspaces.append(ws)
             c.select_workspace(ws)
-            time.sleep(0.3)
+            c.settle()
             extra = c.new_split("right")
-            time.sleep(0.3)
+            c.settle()
             c.close_surface(extra)
-            time.sleep(0.3)
+            c.settle()
 
             # 7. notify a closed surface
             _expect_code(c, "not_found", "notification.create_for_surface",

@@ -43,7 +43,7 @@ def main() -> int:
         with ProgramaClient(SOCKET_PATH) as client:
             workspace_id = client.new_workspace()
             client.select_workspace(workspace_id)
-            time.sleep(0.2)
+            client.settle()
 
             current_payload = client._call("surface.current", {"workspace_id": workspace_id}) or {}
             surface_id = str(current_payload.get("surface_id") or "")

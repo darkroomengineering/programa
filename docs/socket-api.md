@@ -388,6 +388,7 @@ Debug / Test-only:
 - flash_count / flash_reset -> `debug.flash.count` (`surface_id` required) / `debug.flash.reset`
 - panel_snapshot / panel_snapshot_reset -> `debug.panel_snapshot` / `debug.panel_snapshot.reset`
 - screenshot -> `debug.window.screenshot`
+- `debug.settle` (params: `passes`, default 3, at most 20; `timeout_ms`, default 5000). Returns after `passes` sentinels, queued one after another on the main queue, have run; every visible window is laid out and committed on each pass. Malformed values are rejected with `invalid_params`. Tests call it through `ProgramaClient.settle()` instead of a fixed sleep after a command whose UI effect is queued with `DispatchQueue.main.async`. It does not wait for terminal output; use `surface.wait` for that.
 - `debug.command_palette.toggle`, `debug.command_palette.visible`, `debug.command_palette.selection`, `debug.command_palette.results`, `debug.command_palette.rename_tab.open`, `debug.command_palette.rename_input.interact`, `debug.command_palette.rename_input.selection`, `debug.command_palette.rename_input.delete_backward` (params: `window_id`; `debug.command_palette.results` also takes `limit`)
 - `debug.glass.set` (params: `enabled` (required), `surface` (required))
 - `debug.portal.stats` (no params)

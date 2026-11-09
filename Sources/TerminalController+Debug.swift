@@ -404,6 +404,45 @@ extension TerminalController {
         }
     }
 
+    /// Replaces fixed sleeps in socket tests. Each pass enqueues a sentinel on the main queue
+    /// and waits for it. The main queue is FIFO, so the sentinel runs after every block a
+    /// previous command queued with `DispatchQueue.main.async` (focus and window-title updates
+    /// after a select, for example); later passes catch blocks those blocks queued in turn.
+    /// Runs off-main: blocking the socket thread is the point, the main thread never waits.
+    nonisolated func v2DebugSettle(params: [String: Any]) -> V2CallResult {
+        let passes = params["passes"] == nil ? 3 : v2Int(params, "passes")
+        let timeoutMs = params["timeout_ms"] == nil ? 5_000 : v2Int(params, "timeout_ms")
+        guard let passes, let timeoutMs, (1...20).contains(passes), (1...30_000).contains(timeoutMs) else {
+            return .err(
+                code: "invalid_params",
+                message: "passes must be an integer in 1...20 and timeout_ms an integer in 1...30000",
+                data: nil
+            )
+        }
+        let start = DispatchTime.now()
+        let deadline = start + .milliseconds(timeoutMs)
+        for pass in 0..<passes {
+            let ran = DispatchSemaphore(value: 0)
+            DispatchQueue.main.async {
+                for window in NSApp.windows where window.isVisible {
+                    window.contentView?.layoutSubtreeIfNeeded()
+                    window.displayIfNeeded()
+                }
+                CATransaction.flush()
+                ran.signal()
+            }
+            if ran.wait(timeout: deadline) == .timedOut {
+                return .err(
+                    code: "timeout",
+                    message: "Main queue did not settle before timeout",
+                    data: ["passes_completed": pass, "timeout_ms": timeoutMs]
+                )
+            }
+        }
+        let elapsedMs = Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000
+        return .ok(["passes": passes, "elapsed_ms": elapsedMs])
+    }
+
     nonisolated func v2DebugFlashCount(params: [String: Any]) -> V2CallResult {
         guard let surfaceId = v2String(params, "surface_id") else {
             return .err(code: "invalid_params", message: "Missing surface_id", data: nil)

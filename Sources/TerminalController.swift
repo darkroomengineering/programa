@@ -2110,6 +2110,8 @@ class TerminalController {
             return v2Result(id: id, self.v2DebugNotificationBannerCount())
         case "debug.notification.banner_reset":
             return v2Result(id: id, self.v2DebugNotificationBannerReset())
+        case "debug.settle":
+            return v2Result(id: id, self.v2DebugSettle(params: params))
         case "debug.flash.count":
             return v2Result(id: id, self.v2DebugFlashCount(params: params))
         case "debug.flash.reset":

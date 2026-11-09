@@ -1124,6 +1124,39 @@
       },
       "threading": "main"
     },
+    "debug.settle": {
+      "auth_required": true,
+      "debug_only": true,
+      "description": "DEBUG-build-only: return once `passes` sentinels queued one after another on the main queue have run, so work earlier commands queued with DispatchQueue.main.async has run, laying out and committing every visible window on each pass. (settle).",
+      "errors": [
+        "internal_error",
+        "invalid_params",
+        "timeout"
+      ],
+      "focus_intent": false,
+      "handler": "v2DebugSettle",
+      "params": {
+        "additionalProperties": false,
+        "properties": {
+          "passes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30000
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "result": {
+        "type": "object"
+      },
+      "threading": "off_main"
+    },
     "debug.shortcut.set": {
       "auth_required": true,
       "debug_only": true,

@@ -4,7 +4,6 @@
 import json
 import os
 import sys
-import time
 from pathlib import Path
 from typing import Any
 
@@ -60,9 +59,9 @@ def main() -> int:
 
         # Build a pane with two surfaces so an incorrectly coerced index would mutate state.
         split_surface = c.new_split("right")
-        time.sleep(0.2)
+        c.settle()
         second_surface = c.new_surface(panel_type="terminal")
-        time.sleep(0.2)
+        c.settle()
         pane_rows = c.list_panes()
         focused_pane = next(
             (pane_id for _idx, pane_id, _count, focused in pane_rows if focused),
