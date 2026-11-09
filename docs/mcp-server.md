@@ -157,6 +157,9 @@ own, and `surface_read_text` can read any of them. Allowing `surface_send_text` 
 `surface_send_key` without a prompt in your agent's permission settings is the same as allowing
 it to run any shell command.
 
+The write is refused with `draft_in_progress` while the person has unsent input in that pane.
+Retry after they submit or clear it, or pass `force: true` (`--force` in the CLI) only when the user asked for it.
+
 ## Resources
 
 | URI | Contents |

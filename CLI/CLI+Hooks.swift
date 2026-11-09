@@ -1818,7 +1818,7 @@ extension ProgramaCLI {
     | The user asks for the same pane arrangement again | `programa layout save` / `layout apply` |
     | You need output from another pane | `read-screen --surface <ref>` |
     | Need another pane's output in your prompt | `programa handoff --from <pane>` |
-    | Hand text to another agent's prompt without submitting it | MCP `surface_send_paste`: one paste, Return is never pressed. `send` and `surface_send_text` turn each newline into Return |
+    | Hand text to another agent's prompt without submitting it | MCP `surface_send_paste`: one paste, Return is never pressed. `send` and `surface_send_text` turn each newline into Return. The write is refused with `draft_in_progress` while the person has unsent input in that pane. Retry after they submit or clear it, or pass `force: true` (`--force` in the CLI) only when the user asked for it. |
     | An agent in a pane exited, or Programa restarted, and its work should continue | `programa resume --surface <ref>` types its resume command at that pane's shell prompt |
     | The user asks for a recap of a change | write `.programa/recaps/<slug>.md`, then `programa recap open <slug>` |
 

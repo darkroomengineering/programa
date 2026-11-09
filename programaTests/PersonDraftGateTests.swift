@@ -184,7 +184,7 @@ final class PersonDraftHoldGuardTests: XCTestCase {
                         "turning the hold back on mid-draft protects that draft")
     }
 
-    func testOnlyASubmittingForcedWriteEndsTheDraft() {
+    func testSubmittingForcedWriteEndsTheDraft() {
         let surface = makeSurface()
         let panel = TerminalPanel(workspaceId: UUID(), surface: surface)
         let now = ProcessInfo.processInfo.systemUptime
@@ -206,6 +206,41 @@ final class PersonDraftHoldGuardTests: XCTestCase {
             TerminalController.shared.v2NoteSocketSubmit(text: "", keys: [key], terminalPanel: panel)
             XCTAssertEqual(surface.draftGate, .open, "key \(key)")
         }
+    }
+
+    func testForcedControlTextClearsTheDraft() {
+        let surface = makeSurface()
+        let panel = TerminalPanel(workspaceId: UUID(), surface: surface)
+        let now = ProcessInfo.processInfo.systemUptime
+
+        for text in ["partial\u{03}", "partial\u{15}"] {
+            surface.noteDraftEvent(.typed(at: now))
+            TerminalController.shared.v2NoteSocketSubmit(text: text, terminalPanel: panel)
+            XCTAssertEqual(surface.draftGate, .open, "a delivered line-clear control releases the draft")
+        }
+    }
+
+    func testForcedControlKeyClearsTheDraft() {
+        let surface = makeSurface()
+        let panel = TerminalPanel(workspaceId: UUID(), surface: surface)
+        let now = ProcessInfo.processInfo.systemUptime
+
+        for key in ["ctrl+c", "ctrl-c", "control+c", "control-c", "sigint",
+                    "ctrl+u", "ctrl-u", "control+u", "control-u", "Ctrl+C", "CTRL+U", "SIGINT"] {
+            surface.noteDraftEvent(.typed(at: now))
+            TerminalController.shared.v2NoteSocketSubmit(text: "", keys: [key], terminalPanel: panel)
+            XCTAssertEqual(surface.draftGate, .open, "key \(key) clears the person's line")
+        }
+    }
+
+    func testForcedPlainTextCLeavesTheDraftHeld() {
+        let surface = makeSurface()
+        let panel = TerminalPanel(workspaceId: UUID(), surface: surface)
+        let now = ProcessInfo.processInfo.systemUptime
+
+        surface.noteDraftEvent(.typed(at: now))
+        TerminalController.shared.v2NoteSocketSubmit(text: "c", terminalPanel: panel)
+        XCTAssertTrue(surface.draftGate.isDrafting, "plain c does not clear the person's line")
     }
 }
 
