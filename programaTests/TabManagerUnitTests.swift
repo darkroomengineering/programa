@@ -1228,6 +1228,36 @@ final class TabManagerLastPaneCloseConfirmationTests: XCTestCase {
         return (first, second, panelId)
     }
 
+    func testCancellingLastPanePromptKeepsSurfaceNotifications() throws {
+        LastPaneCloseWarningSettings.setEnabled(true)
+        let appDelegate = AppDelegate.shared ?? AppDelegate()
+        let manager = TabManager()
+        let store = TerminalNotificationStore.shared
+        let originalTabManager = appDelegate.tabManager
+        let originalNotificationStore = appDelegate.notificationStore
+        store.replaceNotificationsForTesting([])
+        store.configureNotificationDeliveryHandlerForTesting { _, _ in }
+        appDelegate.tabManager = manager
+        appDelegate.notificationStore = store
+        defer {
+            store.replaceNotificationsForTesting([])
+            store.resetNotificationDeliveryHandlerForTesting()
+            appDelegate.tabManager = originalTabManager
+            appDelegate.notificationStore = originalNotificationStore
+        }
+
+        let (_, second, panelId) = try makeIdleSecondWorkspace(manager)
+        store.addNotification(tabId: second.id, surfaceId: panelId, title: "Unread", subtitle: "", body: "")
+
+        manager.confirmCloseHandler = { _, _, _ in false }
+        manager.closeCurrentPanelWithConfirmation()
+        drainMainQueue()
+        drainMainQueue()
+
+        XCTAssertTrue(manager.tabs.contains { $0.id == second.id })
+        XCTAssertTrue(store.hasUnreadNotification(forTabId: second.id, surfaceId: panelId))
+    }
+
     func testIdleLastPanePromptsAndCancelKeepsWorkspace() throws {
         LastPaneCloseWarningSettings.setEnabled(true)
         let manager = TabManager()
