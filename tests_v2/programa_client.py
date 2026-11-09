@@ -164,7 +164,6 @@ def _ensure_fresh_build(socket_path: str) -> None:
     """
     if os.environ.get("PROGRAMA_ALLOW_STALE_BUILD") == "1" or socket_path in _FRESHNESS_CHECKED:
         return
-    _FRESHNESS_CHECKED.add(socket_path)
     probe = ProgramaClient(socket_path, check_build=False)
     try:
         probe.connect()
@@ -174,15 +173,16 @@ def _ensure_fresh_build(socket_path: str) -> None:
     finally:
         probe.close()
     running = build.get("source_fingerprint")
-    if not running:
+    expected = _checkout_fingerprint() if running else None
+    if not running or not expected or expected == running:
+        # Only a passing or inapplicable check is cached; a refusal repeats on every connect.
+        _FRESHNESS_CHECKED.add(socket_path)
         return
-    expected = _checkout_fingerprint()
-    if expected and expected != running:
-        raise ProgramaClientError(
-            f"Stale build at {socket_path}: the app was built from sources {running}, "
-            f"this checkout is {expected}. Rebuild with ./scripts/reload.sh --tag <tag> "
-            "and relaunch it, or set PROGRAMA_ALLOW_STALE_BUILD=1 to run anyway."
-        )
+    raise ProgramaClientError(
+        f"Stale build at {socket_path}: the app was built from sources {running}, "
+        f"this checkout is {expected}. Rebuild with ./scripts/reload.sh --tag <tag> "
+        "and relaunch it, or set PROGRAMA_ALLOW_STALE_BUILD=1 to run anyway."
+    )
 
 
 class ProgramaClient:
