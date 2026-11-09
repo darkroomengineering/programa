@@ -378,6 +378,7 @@
 					4378399A7C0245EF8186F306 /* OmnibarAndToolsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B09C007F42697761B5F1A2AB /* OmnibarAndToolsTests.swift */; };
 					734F49D37E543DD01C2F4FEF /* NotificationAndMenuBarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C075029771815DD5DA1332 /* NotificationAndMenuBarTests.swift */; };
 					B6BF3DC98DB1495E57900199 /* TabManagerUnitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42092CDB2109E250F7F2A76E /* TabManagerUnitTests.swift */; };
+					9166A33CB28B66F70CA1AF4B /* PersonDraftGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2201D54CD73461762C406A1 /* PersonDraftGateTests.swift */; };
 					DCC935C5F55C1DCB33E25521 /* WorkspacePullRequestSidebarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A7DC53B9CA33BE2A421711 /* WorkspacePullRequestSidebarTests.swift */; };
 				08F8EF4F188B4E255A7C813B /* AgentActivityStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B7B486518E6CD0E6F36894B /* AgentActivityStateTests.swift */; };
 			7501A0000000000000000005 /* ProgramStatusStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7501A0000000000000000006 /* ProgramStatusStoreTests.swift */; };
@@ -839,6 +840,7 @@
 				B09C007F42697761B5F1A2AB /* OmnibarAndToolsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmnibarAndToolsTests.swift; sourceTree = "<group>"; };
 				D2C075029771815DD5DA1332 /* NotificationAndMenuBarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationAndMenuBarTests.swift; sourceTree = "<group>"; };
 				42092CDB2109E250F7F2A76E /* TabManagerUnitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabManagerUnitTests.swift; sourceTree = "<group>"; };
+				A2201D54CD73461762C406A1 /* PersonDraftGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonDraftGateTests.swift; sourceTree = "<group>"; };
 				14A7DC53B9CA33BE2A421711 /* WorkspacePullRequestSidebarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspacePullRequestSidebarTests.swift; sourceTree = "<group>"; };
 				8B7B486518E6CD0E6F36894B /* AgentActivityStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentActivityStateTests.swift; sourceTree = "<group>"; };
 			7501A0000000000000000006 /* ProgramStatusStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramStatusStoreTests.swift; sourceTree = "<group>"; };
@@ -1413,6 +1415,7 @@
 					B09C007F42697761B5F1A2AB /* OmnibarAndToolsTests.swift */,
 					D2C075029771815DD5DA1332 /* NotificationAndMenuBarTests.swift */,
 					42092CDB2109E250F7F2A76E /* TabManagerUnitTests.swift */,
+					A2201D54CD73461762C406A1 /* PersonDraftGateTests.swift */,
 					14A7DC53B9CA33BE2A421711 /* WorkspacePullRequestSidebarTests.swift */,
 					8B7B486518E6CD0E6F36894B /* AgentActivityStateTests.swift */,
 					7501A0000000000000000006 /* ProgramStatusStoreTests.swift */,
@@ -1906,6 +1909,7 @@
 					4378399A7C0245EF8186F306 /* OmnibarAndToolsTests.swift in Sources */,
 					734F49D37E543DD01C2F4FEF /* NotificationAndMenuBarTests.swift in Sources */,
 					B6BF3DC98DB1495E57900199 /* TabManagerUnitTests.swift in Sources */,
+					9166A33CB28B66F70CA1AF4B /* PersonDraftGateTests.swift in Sources */,
 					DCC935C5F55C1DCB33E25521 /* WorkspacePullRequestSidebarTests.swift in Sources */,
 					08F8EF4F188B4E255A7C813B /* AgentActivityStateTests.swift in Sources */,
 					7501A0000000000000000005 /* ProgramStatusStoreTests.swift in Sources */,

@@ -138,7 +138,8 @@ def _type_and_wait_visible(c: ProgramaClient, panel_id: str, cmd: str) -> bool:
     except ProgramaClientError:
         # Final fallback for v2 in VM mode: direct surface send without asserting
         # key-window text echo timing.
-        c.send_surface(panel_id, cmd)
+        # force: the simulate_type above may have left `cmd` as an unsent draft in this pane.
+        c.send_surface(panel_id, cmd, force=True)
         return False
 
 
@@ -160,7 +161,8 @@ def _wait_for_tmp_write(c: ProgramaClient, panel_id: str, tmp: str, token: str) 
             c.simulate_type("\n")
 
     # Final fallback in headless VM mode: send the full command directly.
-    c.send_surface(panel_id, f"echo {token} > {tmp}\n")
+    # force: if the typed command never ran, it is still an unsent draft in this pane.
+    c.send_surface(panel_id, f"echo {token} > {tmp}\n", force=True)
     start = time.time()
     while time.time() - start < 3.5:
         try:

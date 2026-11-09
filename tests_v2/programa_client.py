@@ -185,6 +185,14 @@ def _ensure_fresh_build(socket_path: str) -> None:
     )
 
 
+def _with_force(params: Dict[str, Any], force: bool) -> Dict[str, Any]:
+    """`force` skips the draft_in_progress guard; a test that typed into the pane as a person
+    and then writes to it over the socket passes it. Omitted otherwise, so requests stay as-is."""
+    if force:
+        params["force"] = True
+    return params
+
+
 class ProgramaClient:
     """Client for controlling programa via the v2 JSON Unix socket."""
 
@@ -722,25 +730,25 @@ class ProgramaClient:
         return out
 
 
-    def send(self, text: str) -> None:
+    def send(self, text: str, *, force: bool = False) -> None:
         text2 = _unescape_backslash_controls(text)
-        self._call("surface.send_text", {"text": text2})
+        self._call("surface.send_text", _with_force({"text": text2}, force))
 
-    def send_surface(self, surface: Union[str, int], text: str) -> None:
+    def send_surface(self, surface: Union[str, int], text: str, *, force: bool = False) -> None:
         sid = self._resolve_surface_id(surface)
         if not sid:
             raise ProgramaClientError(f"Invalid surface: {surface!r}")
         text2 = _unescape_backslash_controls(text)
-        self._call("surface.send_text", {"surface_id": sid, "text": text2})
+        self._call("surface.send_text", _with_force({"surface_id": sid, "text": text2}, force))
 
     def send_key(self, key: str) -> None:
         self._call("surface.send_key", {"key": key})
 
-    def send_key_surface(self, surface: Union[str, int], key: str) -> None:
+    def send_key_surface(self, surface: Union[str, int], key: str, *, force: bool = False) -> None:
         sid = self._resolve_surface_id(surface)
         if not sid:
             raise ProgramaClientError(f"Invalid surface: {surface!r}")
-        self._call("surface.send_key", {"surface_id": sid, "key": key})
+        self._call("surface.send_key", _with_force({"surface_id": sid, "key": key}, force))
 
     def send_ctrl_c(self) -> None:
         self.send_key("ctrl-c")

@@ -224,8 +224,10 @@ def focused_terminal_panel(client: ProgramaClient) -> str:
 
 
 def send_line(client: ProgramaClient, text: str) -> None:
-    # client.send() unescapes backslash-n into a real newline.
-    client.send(text + "\\n")
+    # client.send() unescapes backslash-n into a real newline. force: the churn scenario seeds
+    # the pane the baseline burst just typed into, and debug.shortcut.simulate's arrow keys
+    # carry a printable arrow character, which counts as an unsent draft.
+    client.send(text + "\\n", force=True)
 
 
 def seed_history(client: ProgramaClient, lines: int) -> None:
