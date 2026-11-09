@@ -153,10 +153,11 @@ enum SurfaceTools {
         ProgramaTool(
             name: "surface_send_text",
             socketMethod: V2MethodNames.surfaceSendText,
-            description: "Types text into a terminal surface, as if typed at the keyboard (no Enter is sent automatically -- include \\n in text if you want to submit a command).",
+            description: "Types text into a terminal surface, as if typed at the keyboard (no Enter is sent automatically -- include \\n in text if you want to submit a command). If a person has typed into the surface and not submitted it, nothing is sent and the call fails with draft_in_progress; retry later or pass force.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
                     "text": ProgramaToolSchema.string("Text to type into the terminal."),
+                    "force": ProgramaToolSchema.boolean("If true, send even if a person has unsent typed input in the surface. Defaults to false."),
                     "surface_id": ProgramaToolSchema.string("Target terminal surface UUID or short ref. Defaults to the workspace's focused surface."),
                     "window_id": ProgramaToolSchema.windowIdProperty,
                     "workspace_id": ProgramaToolSchema.workspaceIdProperty,
@@ -167,10 +168,11 @@ enum SurfaceTools {
         ProgramaTool(
             name: "surface_send_paste",
             socketMethod: V2MethodNames.surfaceSendPaste,
-            description: "Pastes text into a terminal surface as one bracketed paste and never presses Return, so newlines stay in the text and an agent prompt keeps it as an editable draft. Use it to hand text to another agent's pane; use surface_send_text to run a command.",
+            description: "Pastes text into a terminal surface as one bracketed paste and never presses Return, so newlines stay in the text and an agent prompt keeps it as an editable draft. Use it to hand text to another agent's pane; use surface_send_text to run a command. If a person has typed into the surface and not submitted it, nothing is sent and the call fails with draft_in_progress; retry later or pass force.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
                     "text": ProgramaToolSchema.string("Text to paste. Must not be empty."),
+                    "force": ProgramaToolSchema.boolean("If true, send even if a person has unsent typed input in the surface. Defaults to false."),
                     "surface_id": ProgramaToolSchema.string("Target terminal surface UUID or short ref. Defaults to the workspace's focused surface."),
                     "tab_id": ProgramaToolSchema.string("Optional surface (tab) UUID or short ref used only to resolve the workspace when surface_id and workspace_id are omitted."),
                     "window_id": ProgramaToolSchema.windowIdProperty,
@@ -182,10 +184,11 @@ enum SurfaceTools {
         ProgramaTool(
             name: "surface_send_key",
             socketMethod: V2MethodNames.surfaceSendKey,
-            description: "Sends a single named key (e.g. enter, escape, ctrl+c, up, tab) to a terminal surface.",
+            description: "Sends a single named key (e.g. enter, escape, ctrl+c, up, tab) to a terminal surface. If a person has typed into the surface and not submitted it, nothing is sent and the call fails with draft_in_progress; retry later or pass force.",
             inputSchema: ProgramaToolSchema.object(
                 properties: [
                     "key": ProgramaToolSchema.string("Named key to send, e.g. enter, escape, tab, up, down, ctrl+c."),
+                    "force": ProgramaToolSchema.boolean("If true, send even if a person has unsent typed input in the surface. Defaults to false."),
                     "surface_id": ProgramaToolSchema.string("Target terminal surface UUID or short ref. Defaults to the workspace's focused surface."),
                     "window_id": ProgramaToolSchema.windowIdProperty,
                     "workspace_id": ProgramaToolSchema.workspaceIdProperty,

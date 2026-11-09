@@ -534,13 +534,15 @@ inside the paste; otherwise they become spaces, so a shell gets one line and run
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `text` | string | yes | Must not be empty. |
+| `force` | boolean | no | Paste even while a person has unsent typed input in the terminal. See "Text delivery: `draft_in_progress`". |
 | `surface_id` | string | no | Target terminal; defaults to the focused surface of the resolved workspace. |
 | `workspace_id` / `window_id` / `tab_id` | string | no | Same resolution as `surface.send_text`. |
 
 Returns `{"workspace_id", "workspace_ref", "surface_id", "surface_ref", "window_id", "window_ref"}`
 plus `"queued": true` when the terminal was not attached yet. Errors: `invalid_params` for missing
-or empty `text` or a non-terminal surface, `not_found` for an unknown workspace or surface. Runs on
-main like `surface.send_text` and changes no focus or selection.
+or empty `text` or a non-terminal surface, `not_found` for an unknown workspace or surface,
+`draft_in_progress` when a person has unsent typed input in the terminal. Runs on main like
+`surface.send_text` and changes no focus or selection.
 
 ## `surface.send_if_unchanged`
 
@@ -557,6 +559,7 @@ command or terminal update runs between the check and the input.
 | `text` | string | no | Sent like `surface.send_text` (newlines become Return). |
 | `keys` | array of string | no | Key names `surface.send_key` accepts, sent in order after `text`. |
 | `lines` / `scrollback` | integer / boolean | no | Same meaning and bounds as `surface.read_text`; use the values from the read that produced the fingerprint. |
+| `force` | boolean | no | Send even while a person has unsent typed input in the terminal. |
 | `surface_id` | string | no | Target terminal; defaults to the focused surface of the resolved workspace. |
 | `workspace_id` / `window_id` / `tab_id` | string | no | Same resolution as `surface.send_text`. |
 
@@ -566,6 +569,9 @@ At least one of a non-empty `text` or a non-empty `keys` is required. Returns
 
 - `mismatch`: the screen changed. Nothing was sent. `data` is `{"current_fingerprint", "surface_id"}`;
   read again before deciding what to send.
+- `draft_in_progress`: the fingerprint matched, but a person has unsent typed input in the terminal.
+  Nothing was sent. A draft typed before the read still matches the fingerprint, so this is checked
+  after `mismatch`. See "Text delivery: `draft_in_progress`".
 - `invalid_params`: missing `expected_fingerprint`, no `text` or `keys`, a wrong-typed `text` or
   `keys`, `lines` not greater than 0, an unknown key name (`data.key`, checked before anything is
   sent), or a non-terminal surface.
@@ -579,6 +585,33 @@ Changes no focus or selection.
 `surface.send_text`, `surface.send_paste` and `agent.prompt` include `"queued": true` in the result when the target
 terminal was not attached yet and the text went to its pending queue; it is delivered once the
 terminal attaches. The field is absent or `false` when the text was written directly.
+
+## Text delivery: `draft_in_progress`
+
+When a person has typed into a terminal and not submitted it, Programa refuses to write socket text
+there, so agent text never mixes into that half-typed line or submits it. `surface.send_text`,
+`surface.send_key`, `surface.send_paste`, `surface.send_if_unchanged` and `agent.prompt` return
+`draft_in_progress` and send nothing. `programa send`, `send-key`, `send-panel`, `send-key-panel`,
+`prompt-agent` and `handoff` print one line saying so and exit non-zero.
+
+- A draft starts when the person types, pastes, drops a file, or commits IME or dictation text in
+  that terminal. Command shortcuts, arrows and other function keys do not start one.
+- It ends when the person presses Return, Ctrl+C or Ctrl+U, or 60 seconds after their last
+  keystroke there. Shift+Return and Option+Return insert a newline in agent prompts, so they do not
+  end it, and an Enter that only confirms an IME conversion does not end it either.
+- Keys typed while the surface's agent is `blocked` answer its prompt and never start a draft.
+- Terminal replies (cursor reports, color queries, focus reports) and socket writes never count as
+  typing. Each terminal has its own draft, so a draft in one pane never blocks another.
+
+`data` is `{"surface_id", "surface_ref", "draft_age_ms", "expires_in_ms"}`: how long ago the draft
+started, and how long until it stops holding writes if the person types nothing more. The message
+names the surface, for example `surface:3 has unsent typed input; nothing was sent`.
+
+Pass `"force": true` to write anyway. A forced write that contains CR or LF, or the `enter`/`return`
+key, submits the person's text along with it, so the terminal stops holding writes afterwards. The
+Settings toggle Agents > Protect Unsent Typing (`automation.holdAgentTextWhileTyping` in
+[settings.json](settings-json.md)) turns the check off; drafts are still tracked while it is off.
+The check and the write run in one main-thread pass, and a refusal changes no focus or selection.
 
 ## `agent.prompt` (#166)
 
@@ -594,6 +627,7 @@ Request params:
 | `text` | string | yes | The prompt. Enter is always submitted after it (trailing whitespace/newlines in `text` are trimmed first, so this never sends a stray blank line) — callers don't pass their own line ending. |
 | `timeout_ms` | int | no | Overall budget for the agent to finish. Default `120000`. Also accepts `timeout`. |
 | `working_grace_ms` | int | no | How long to wait for the agent to report it started working before giving up on observing that transition, capped by the remaining overall `timeout_ms` budget. Default `3000`. |
+| `force` | boolean | no | Send even while a person has unsent typed input in the surface. Without it that case returns `draft_in_progress` and nothing is sent (see "Text delivery: `draft_in_progress`"). |
 
 Response (`ok: true`):
 

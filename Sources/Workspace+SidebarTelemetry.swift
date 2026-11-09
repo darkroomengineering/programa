@@ -309,6 +309,9 @@ extension Workspace {
             inferredAgent: resolvedInferredAgent,
             programState: programState
         )
+        if (current?.state == .blocked) != (state == .blocked) {
+            (panels[panelId] as? TerminalPanel)?.surface.noteAgentBlockedChange(isBlocked: state == .blocked)
+        }
         noteReviewNudgeTurnEdge(panelId: panelId, previous: current?.state, next: state)
         // Event-driven half of surface.wait's `agent_state` condition (#166 task 2) and
         // agent.prompt's internal working/idle watch (#166 task 3) -- see
@@ -339,6 +342,9 @@ extension Workspace {
         guard let current = panelAgentPresence[panelId] else { return }
         if !force, (source == .program) != (current.source == .program) { return }
         panelAgentPresence.removeValue(forKey: panelId)
+        if current.state == .blocked {
+            (panels[panelId] as? TerminalPanel)?.surface.noteAgentBlockedChange(isBlocked: false)
+        }
         AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil, source: nil)
         SocketEventBroadcaster.shared.publishAgentState(workspaceId: id, surfaceId: panelId, state: nil, source: nil)
 #if DEBUG
@@ -499,6 +505,9 @@ extension Workspace {
             }
         }
         let clearedAgentSurfaceIds = Array(panelAgentPresence.keys)
+        for (panelId, presence) in panelAgentPresence where presence.state == .blocked {
+            (panels[panelId] as? TerminalPanel)?.surface.noteAgentBlockedChange(isBlocked: false)
+        }
         panelAgentPresence.removeAll()
         for surfaceId in clearedAgentSurfaceIds {
             AgentStateWaitRegistry.shared.notify(surfaceId: surfaceId, newState: nil, source: nil)

@@ -52,6 +52,7 @@ Socket control and automation settings from Settings > Automation.
 | `socketControlMode` | string | `"programaOnly"` | Socket control mode. Legacy aliases are accepted and normalized. One of: `off`, `programaOnly`, `automation`, `password`, `allowAll`, `openAccess`, `fullOpenAccess`, `notifications`, `full`. |
 | `socketPassword` | object |  | Password for password-mode socket access. Use null or an empty string to clear it. |
 | `claudeCodeIntegration` | boolean | `true` | Enable Programa integration hooks for Claude Code. |
+| `holdAgentTextWhileTyping` | boolean | `true` | Refuse agent and script text sent to a terminal while you have typed input there that you have not submitted. Socket writes return `draft_in_progress` instead (see [socket-api.md](socket-api.md#text-delivery-draft_in_progress)). A draft stops holding text 60 seconds after your last keystroke. |
 
 ## `customCommands`
 

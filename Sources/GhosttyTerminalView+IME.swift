@@ -454,6 +454,15 @@ extension GhosttyNSView: NSTextInputClient {
 
         guard !sanitizedChars.isEmpty else { return }
 
+        // IME commits, dictation and voice apps: person input outside keyDown (keyDown's own
+        // text took the accumulator return above, so nothing is counted twice).
+        let lastScalar = sanitizedChars.unicodeScalars.last
+        terminalSurface?.noteDraftEvent(
+            lastScalar == "\r" || lastScalar == "\n"
+                ? .submitted
+                : .typed(at: ProcessInfo.processInfo.systemUptime)
+        )
+
         // Otherwise send directly to the terminal
         sendTextToSurface(
             sanitizedChars,

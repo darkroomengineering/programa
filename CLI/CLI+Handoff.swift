@@ -6,25 +6,27 @@ extension ProgramaCLI {
         [
             CommandDescriptor(
                 names: ["handoff"],
-                helpLines: ["handoff --from <id|ref> [--lines <n>] [--note <text>] [--to <id|ref>]"],
+                helpLines: ["handoff --from <id|ref> [--lines <n>] [--note <text>] [--to <id|ref>] [--force]"],
                 detailedUsage: """
                 Usage: programa handoff --from <id|ref> [flags]
 
                 Paste another pane's recent output into a pane's prompt as context. The text
                 arrives as one paste and Return is never pressed, so you can keep typing before
-                you submit.
+                you submit. If you have typed into the target pane and not submitted it, nothing
+                is pasted and the command fails unless you pass --force.
 
                 Flags:
                   --from <id|ref>   Pane to copy output from (required)
                   --lines <n>       How many of its last lines to include (default: \(PaneHandoffFormatter.defaultLineCount), max: \(PaneHandoffFormatter.maxLineCount))
                   --note <text>     Add a "Note:" line after the context
                   --to <id|ref>     Pane to paste into (default: $PROGRAMA_SURFACE_ID)
+                  --force           Paste even if the target pane has unsent typed input
 
                 Example:
                   programa handoff --from surface:3
                   programa handoff --from surface:3 --lines 50 --note "Why does this test fail?"
                 """,
-                grammar: CLIArgumentGrammar(valueOptions: ["from", "lines", "note", "to"], requiredOptions: ["from"]),
+                grammar: CLIArgumentGrammar(valueOptions: ["from", "lines", "note", "to"], booleanOptions: ["force"], requiredOptions: ["from"]),
                 execute: { ctx in
                     try self.runHandoff(ctx: ctx)
                 }
@@ -36,7 +38,8 @@ extension ProgramaCLI {
         let (fromArg, rem0) = parseOption(ctx.commandArgs, name: "--from")
         let (linesArg, rem1) = parseOption(rem0, name: "--lines")
         let (noteArg, rem2) = parseOption(rem1, name: "--note")
-        let (toArg, _) = parseOption(rem2, name: "--to")
+        let (toArg, rem3) = parseOption(rem2, name: "--to")
+        let force = takeForceFlag(rem3).force
 
         var lineCount = PaneHandoffFormatter.defaultLineCount
         if let linesArg {
@@ -91,9 +94,9 @@ extension ProgramaCLI {
             text: (sourcePayload["text"] as? String) ?? "",
             note: noteArg
         )
-        let payload = try ctx.client.sendV2(
-            method: V2MethodNames.surfaceSendPaste, params: ["surface_id": targetId, "text": text]
-        )
+        var pasteParams: [String: Any] = ["surface_id": targetId, "text": text]
+        if force { pasteParams["force"] = true }
+        let payload = try sendDraftGuardedV2(ctx.client, method: V2MethodNames.surfaceSendPaste, params: pasteParams)
         if ctx.jsonOutput {
             print(jsonString(formatIDs(payload, mode: ctx.idFormat)))
         } else {
