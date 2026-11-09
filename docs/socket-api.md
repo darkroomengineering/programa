@@ -590,9 +590,11 @@ terminal attaches. The field is absent or `false` when the text was written dire
 
 When a person has typed into a terminal and not submitted it, Programa refuses to write socket text
 there, so agent text never mixes into that half-typed line or submits it. `surface.send_text`,
-`surface.send_key`, `surface.send_paste`, `surface.send_if_unchanged` and `agent.prompt` return
-`draft_in_progress` and send nothing. `programa send`, `send-key`, `send-panel`, `send-key-panel`,
-`prompt-agent` and `handoff` print one line saying so and exit non-zero.
+`surface.send_key`, `surface.send_paste` and `surface.send_if_unchanged` return
+`draft_in_progress` and send nothing. `programa send`, `send-key`, `send-panel`, `send-key-panel`
+and `handoff` print one line saying so and exit non-zero. `agent.prompt` (`programa prompt-agent`)
+waits for the draft to end instead, within its own `timeout_ms`, and returns `draft_in_progress`
+only when that budget runs out first (see "`agent.prompt` (#166)").
 
 - A draft starts when the person types, pastes, drops a file, or commits IME or dictation text in
   that terminal. Command shortcuts, arrows and other function keys do not start one.
@@ -627,7 +629,7 @@ Request params:
 | `text` | string | yes | The prompt. Enter is always submitted after it (trailing whitespace/newlines in `text` are trimmed first, so this never sends a stray blank line) — callers don't pass their own line ending. |
 | `timeout_ms` | int | no | Overall budget for the agent to finish. Default `120000`. Also accepts `timeout`. |
 | `working_grace_ms` | int | no | How long to wait for the agent to report it started working before giving up on observing that transition, capped by the remaining overall `timeout_ms` budget. Default `3000`. |
-| `force` | boolean | no | Send even while a person has unsent typed input in the surface. Without it that case returns `draft_in_progress` and nothing is sent (see "Text delivery: `draft_in_progress`"). |
+| `force` | boolean | no | Send right away even while a person has unsent typed input in the surface. Without it the call waits for that input to be submitted or cleared first (step 0 below; see "Text delivery: `draft_in_progress`"). |
 
 Response (`ok: true`):
 
@@ -649,8 +651,29 @@ Response (`ok: true`):
 all — neither before the prompt was sent nor during the grace window — which usually means agent
 hooks were never installed for this surface.
 
-### Semantics (phased, event-driven — no polling)
+When a person's draft held the prompt (step 0), the result also carries `held_ms`, the time spent
+waiting for the draft to end, and `settle_ms`, the time spent letting the person's own turn go
+first. Both are absent when the prompt was sent right away.
 
+### Semantics (phased, event-driven except the draft hold)
+
+0. **Hold for a person's draft.** If a person has unsent typed input in the surface, nothing is
+   sent yet. The app re-reads the draft every 100 ms on the request's own connection thread. A
+   closed surface resolves with `outcome: "closed"`, and a disconnected client ends the wait.
+   - If `timeout_ms` runs out while the person is still drafting, the call fails with
+     `{"code": "draft_in_progress", "data": {"held_ms", "timeout_ms", "surface_id", "surface_ref"}}`, and the
+     prompt was never sent.
+   - Once the draft ends (Return, Ctrl+C, Ctrl+U, or 60 seconds without a keystroke), the call
+     settles: it waits up to `min(working_grace_ms, 1500)` ms for a `working` report, since one
+     arriving now belongs to the turn the person just submitted. If `working` is seen (or the
+     surface already reports it), it waits for `idle` within the remaining budget. If the budget
+     runs out first, the call fails with `draft_in_progress` (`data` also carries `settle_ms`)
+     and the prompt was never sent.
+   - Then one main-thread hop re-reads the draft. If the person started typing again, the call
+     goes back to holding; otherwise step 1 runs in that same hop, on the remaining budget.
+
+   `draft_in_progress` always means nothing was sent, and `timeout` always means the prompt was
+   sent. `force: true` skips this step.
 1. **Send + register, atomically.** The text is sent via the exact same path
    `surface.send_text` uses, and — inside that *same* main-thread hop — the surface's
    `agent_state` at that instant is captured and a watcher for the next `working` transition is
