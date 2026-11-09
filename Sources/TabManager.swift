@@ -2232,12 +2232,14 @@ class TabManager: ObservableObject {
             "panelsAfterCall=\(tab.panels.count)"
         )
 #endif
-        // Clear unconditionally, matching closeRuntimeSurfaceWithConfirmation/closeRuntimeSurface:
-        // when this is the workspace's last surface, bonsplit's shouldCloseTab delegate escalates
-        // to owningTabManager.closeWorkspaceFromLastPaneWithConfirmation(...) and returns false here (the panel
-        // itself isn't closed via this call), so gating on `closed` would leave the notification
-        // for an explicitly-closed surface stuck as unread.
-        AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: tab.id, surfaceId: panelId)
+        // Don't gate on `closed`: for a workspace's last surface, bonsplit's shouldCloseTab escalates
+        // to closeWorkspaceFromLastPaneWithConfirmation(...) and returns false even when the workspace
+        // then closes. Check whether the panel survived instead, so cancelling a close prompt keeps
+        // the surface's notifications.
+        let panelSurvived = tabs.contains(where: { $0.id == tab.id }) && tab.panels[panelId] != nil
+        if !panelSurvived {
+            AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: tab.id, surfaceId: panelId)
+        }
     }
 
     private func shortcutCloseTargetPanelId(in workspace: Workspace) -> UUID? {
