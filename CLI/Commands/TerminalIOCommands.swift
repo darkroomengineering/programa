@@ -185,8 +185,9 @@ extension ProgramaCLI {
                 a timeout error. If the surface never reported any agent_state at all, JSON
                 output carries a `warning` noting hooks may not be installed.
 
-                If a person has typed into the surface and not submitted it, nothing is sent
-                and the command fails (draft_in_progress) unless you pass --force.
+                If a person has typed into the surface and not submitted it, the command waits
+                for them to submit or clear it, then sends. If --timeout runs out first, nothing
+                is sent and the command fails (draft_in_progress). --force sends without waiting.
 
                 Flags:
                   --workspace <id|ref>      Target workspace (default: $PROGRAMA_WORKSPACE_ID)
@@ -635,9 +636,11 @@ extension ProgramaCLI {
         do {
             return try client.sendV2(method: method, params: params, minimumReceiveTimeout: minimumReceiveTimeout)
         } catch let error as CLIError where error.message.hasPrefix(prefix) {
-            throw CLIError(
-                message: "\(error.message.dropFirst(prefix.count)). Retry after it is submitted or cleared, or pass --force."
-            )
+            // agent.prompt already waited out its --timeout, so "retry later" is the wrong advice.
+            let hint = method == V2MethodNames.agentPrompt
+                ? "Pass a longer --timeout, or --force to send now."
+                : "Retry after it is submitted or cleared, or pass --force."
+            throw CLIError(message: "\(error.message.dropFirst(prefix.count)). \(hint)")
         }
     }
 }
