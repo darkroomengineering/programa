@@ -291,6 +291,34 @@ final class PersonDraftGateKeyDownTests: XCTestCase {
         XCTAssertEqual(surface.draftGate, .open)
     }
 
+    // Ghostty marks its default cmd+v binding performable, so AppKit routes it through
+    // performKeyEquivalent into keyDown and never calls paste(_:).
+    func testCmdVThroughKeyEquivalentStartsDraft() throws {
+        let pasteboard = NSPasteboard.general
+        let saved = pasteboard.string(forType: .string)
+        defer {
+            pasteboard.clearContents()
+            if let saved { pasteboard.setString(saved, forType: .string) }
+        }
+        pasteboard.clearContents()
+        pasteboard.setString("pasted", forType: .string)
+
+        let event = try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: .command,
+            timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: window.windowNumber,
+            context: nil,
+            characters: "v",
+            charactersIgnoringModifiers: "v",
+            isARepeat: false,
+            keyCode: 9
+        ))
+        XCTAssertTrue(view.performKeyEquivalent(with: event), "cmd+v must be handled as a Ghostty binding")
+        XCTAssertTrue(surface.draftGate.isDrafting, "a person's cmd+v paste must start a draft")
+    }
+
     func testKeypadEnterSubmits() throws {
         try typeDraft()
         try press("\u{3}", keyCode: 76, flags: [.numericPad])
