@@ -65,9 +65,13 @@ enum PersonDraftGate: Equatable {
             }
         case .promptShowing(let kind, let since, let draft):
             switch event {
+            case .submitted where !refusesWrites(kind), .cleared where !refusesWrites(kind):
+                // At a question or kindless prompt the input box is the prompt, so Return sends
+                // the draft and Ctrl+C/Ctrl+U clears it.
+                return .open
             case .typed, .submitted, .cleared, .dismissed, .socketWriteDelivered, .agentPromptClosed:
-                // The person's first key (or a delivered write) answers the prompt; keys after
-                // it count as a draft again.
+                // The person's first key (or a delivered write) answers an approval box drawn over
+                // the input box; a draft typed before it is still theirs.
                 return draft.map { .drafting($0) } ?? .open
             case .expired:
                 return .promptShowing(kind, since: since, draft: nil)
