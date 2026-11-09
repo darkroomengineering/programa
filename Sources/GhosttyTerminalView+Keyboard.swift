@@ -619,8 +619,9 @@ extension GhosttyNSView {
                 "ign=\(programaScalarHex(event.charactersIgnoringModifiers)) mods=\(event.modifierFlags.rawValue)"
             )
 #endif
-            // Ctrl+C and Ctrl+U discard the line the person was typing.
-            if text == "c" || text == "u" {
+            // Ctrl+C and Ctrl+U discard the line the person was typing. AppKit may
+            // report either the letter or the control character (ETX / NAK).
+            if text == "c" || text == "u" || text == "\u{03}" || text == "\u{15}" {
                 terminalSurface?.noteDraftEvent(.cleared)
             }
             // If Ghostty handled the key (action/encoding), we're done.
