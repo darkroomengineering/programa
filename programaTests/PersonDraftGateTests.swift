@@ -83,10 +83,23 @@ final class PersonDraftGateTransitionTests: XCTestCase {
         for kind in allKinds {
             for event in answers {
                 XCTAssertEqual(next(prompt(kind), event), .open, "promptShowing(\(String(describing: kind))) + \(event)")
-                XCTAssertEqual(next(prompt(kind, draft: draft), event), drafting,
+                let submitsTheDraft = !PersonDraftGate.refusesWrites(kind) && (event == .submitted || event == .cleared)
+                XCTAssertEqual(next(prompt(kind, draft: draft), event), submitsTheDraft ? .open : drafting,
                                "promptShowing(\(String(describing: kind)), draft) + \(event)")
             }
         }
+    }
+
+    /// At a question or kindless prompt the agent's input box is the prompt, so Return sends the
+    /// draft and Ctrl+C/Ctrl+U clears it; nothing stays held. An approval box sits over the input
+    /// box instead, so answering it leaves the draft in place.
+    func testSubmittingAtAQuestionPromptEndsTheDraft() {
+        for kind in [nil, ProgramStatusKind.question] {
+            XCTAssertEqual(next(prompt(kind, draft: draft), .submitted), .open)
+            XCTAssertEqual(next(prompt(kind, draft: draft), .cleared), .open)
+        }
+        XCTAssertEqual(next(prompt(.permission, draft: draft), .submitted), drafting)
+        XCTAssertEqual(next(prompt(.auth, draft: draft), .cleared), drafting)
     }
 
     func testKeysAfterTheAnsweringKeyStartADraft() {
