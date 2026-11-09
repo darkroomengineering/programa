@@ -51,6 +51,7 @@ enum V2MethodNames {
     static let debugPortalStats = "debug.portal.stats"
     static let debugSamplesReset = "debug.samples.reset"
     static let debugSamplesStats = "debug.samples.stats"
+    static let debugSettle = "debug.settle"
     static let debugShortcutSet = "debug.shortcut.set"
     static let debugShortcutSimulate = "debug.shortcut.simulate"
     static let debugSidebarVisible = "debug.sidebar.visible"

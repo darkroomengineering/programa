@@ -8,7 +8,6 @@ workspace produces a layout with the wrong pane count.
 import json
 import os
 import sys
-import time
 import uuid
 from pathlib import Path
 
@@ -40,13 +39,13 @@ def main() -> int:
             target = c.new_workspace()
             created.append(target)
             c.select_workspace(target)
-            time.sleep(0.3)
+            c.settle()
             c.new_split("right")
-            time.sleep(0.3)
+            c.settle()
             selected = c.new_workspace()
             created.append(selected)
             c.select_workspace(selected)
-            time.sleep(0.3)
+            c.settle()
             _must(c.current_workspace() == selected, "fixture: selected workspace not selected")
 
             res = c._call("layout.save", {"name": name, "workspace_id": target, "force": True}, timeout_s=15.0) or {}

@@ -32,9 +32,9 @@ def main() -> int:
         try:
             ws = a.new_workspace()
             a.select_workspace(ws)
-            time.sleep(0.4)
+            a.settle()
             surface = a.new_split("right")
-            time.sleep(0.4)
+            a.settle()
 
             def _close_later() -> None:
                 try:

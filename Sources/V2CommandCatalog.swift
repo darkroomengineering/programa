@@ -169,6 +169,7 @@ enum V2CommandCatalog {
         "debug.portal.stats",
         "debug.samples.reset",
         "debug.samples.stats",
+        "debug.settle",
         "debug.shortcut.set",
         "debug.shortcut.simulate",
         "debug.sidebar.visible",

@@ -388,6 +388,15 @@ class ProgramaClient:
         res = self._call("system.ping")
         return bool((res or {}).get("pong"))
 
+    def settle(self, passes: int = 3, timeout_ms: int = 5000) -> dict:
+        """Wait for UI work queued by earlier commands to run (Debug builds only).
+
+        Use instead of a fixed sleep after a command whose effect lands on a later main
+        run loop turn. It does not wait for shell output; use surface.wait for that.
+        """
+        params = {"passes": passes, "timeout_ms": timeout_ms}
+        return dict(self._call("debug.settle", params, timeout_s=timeout_ms / 1000.0 + 5.0) or {})
+
     def capabilities(self) -> dict:
         return dict(self._call("system.capabilities") or {})
 

@@ -85,13 +85,13 @@ def _echo_marker(c: ProgramaClient, surface_id: str, marker: str) -> None:
 def main() -> int:
     with ProgramaClient(SOCKET_PATH) as c:
         c.activate_app()
-        time.sleep(0.2)
+        c.settle()
 
         workspace_id = c.new_workspace()
         created_workspace_id = workspace_id
         try:
             c.select_workspace(workspace_id)
-            time.sleep(0.2)
+            c.settle()
 
             # A fresh workspace starts with exactly one terminal surface. Add a second
             # so closing one doesn't hit the "cannot close the last surface" guard.
@@ -113,7 +113,7 @@ def main() -> int:
 
             # --- Restore within the grace period via the unified Cmd+Shift+T handler ---
             c.activate_app()
-            time.sleep(0.2)
+            c.settle()
             c.simulate_shortcut("cmd+shift+t")
 
             restored = _wait_for_surface_count(c, workspace_id, 2, timeout_s=8.0)

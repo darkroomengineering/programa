@@ -122,7 +122,7 @@ def main() -> int:
         ws = c.new_workspace()
         c.select_workspace(ws)
         _ = c.new_split("right")
-        time.sleep(0.2)
+        c.settle()
 
         panes = [pid for _pidx, pid, _count, _focused in c.list_panes()]
         _must(len(panes) >= 2, f"Expected >=2 panes, got {panes}")
@@ -253,7 +253,7 @@ def main() -> int:
         current_panes = [pid for _pidx, pid, _count, _focused in c.list_panes()]
         if len(current_panes) < 2:
             _ = c.new_split("right")
-            time.sleep(0.2)
+            c.settle()
             current_panes = [pid for _pidx, pid, _count, _focused in c.list_panes()]
         _must(len(current_panes) >= 2, f"Expected >=2 panes after break/join, got {current_panes}")
         lp_source, lp_target = current_panes[0], current_panes[1]
