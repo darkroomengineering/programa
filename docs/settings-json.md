@@ -21,6 +21,7 @@ General app preferences from Settings > App.
 | `newWorkspacePlacement` | string | `"afterCurrent"` | Where new workspaces are inserted in the sidebar. One of: `top`, `afterCurrent`, `end`. |
 | `minimalMode` | boolean | `false` | Hide the workspace title bar and move controls into the sidebar. |
 | `warnBeforeQuit` | boolean | `true` | Show a confirmation before quitting Programa. |
+| `confirmCloseLastPane` | boolean | `true` | Ask before closing a workspace's last tab closes the workspace, or the window when it is the last workspace. When off, an idle last tab closes without asking; a running process still asks. Shell `exit` never asks. |
 | `autoResumeAgents` | boolean | `true` | Resume Claude Code, Codex and OpenCode sessions that were running at quit when their pane is restored. |
 | `reapLeftoverAgentProcesses` | boolean | `true` | When a Claude Code session exits, stop the processes it started and left running (MCP servers, dev servers, debug binaries). Processes started with `nohup` are kept. See [Processes an agent leaves behind](workspace-interface.md#processes-an-agent-leaves-behind). |
 | `commandPaletteSearchesAllSurfaces` | boolean | `false` | Search every surface in the command palette switcher instead of only the active workspace. |

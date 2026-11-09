@@ -51,6 +51,8 @@ struct SettingsView: View {
     @AppStorage(NotificationSoundSettings.key) private var notificationSound = NotificationSoundSettings.defaultValue
     @AppStorage(MenuBarExtraSettings.showInMenuBarKey) private var showMenuBarExtra = MenuBarExtraSettings.defaultShowInMenuBar
     @AppStorage(QuitWarningSettings.warnBeforeQuitKey) private var warnBeforeQuitShortcut = QuitWarningSettings.defaultWarnBeforeQuit
+    @AppStorage(LastPaneCloseWarningSettings.confirmCloseLastPaneKey)
+    private var confirmCloseLastPane = LastPaneCloseWarningSettings.defaultConfirmCloseLastPane
     @AppStorage(ScrollbackPersistenceSettings.persistScrollbackKey) private var sessionPersistScrollback = ScrollbackPersistenceSettings.defaultPersistScrollback
     @AppStorage(ScrollbackPersistenceSettings.failureKey) private var scrollbackPersistenceFailure: String?
     @AppStorage(AgentAutoResumeSettings.autoResumeAgentsKey) private var sessionAutoResumeAgents = AgentAutoResumeSettings.defaultAutoResumeAgents
@@ -425,6 +427,26 @@ struct SettingsView: View {
                     .controlSize(.small)
             }
             .managedBySettingsFile(settingsFileStatus.isManaged(QuitWarningSettings.warnBeforeQuitKey))
+
+            SettingsCardDivider()
+
+            SettingsCardRow(
+                String(localized: "settings.app.confirmCloseLastPane", defaultValue: "Confirm Closing Last Tab"),
+                subtitle: confirmCloseLastPane
+                    ? String(
+                        localized: "settings.app.confirmCloseLastPane.subtitleOn",
+                        defaultValue: "Ask before closing the last tab closes its workspace or window."
+                    )
+                    : String(
+                        localized: "settings.app.confirmCloseLastPane.subtitleOff",
+                        defaultValue: "Closing the last tab closes its workspace without asking, unless something is running."
+                    )
+            ) {
+                Toggle("", isOn: $confirmCloseLastPane)
+                    .labelsHidden()
+                    .controlSize(.small)
+            }
+            .managedBySettingsFile(settingsFileStatus.isManaged(LastPaneCloseWarningSettings.confirmCloseLastPaneKey))
 
             SettingsCardDivider()
 
@@ -933,6 +955,7 @@ struct SettingsView: View {
         notificationSound = NotificationSoundSettings.defaultValue
         showMenuBarExtra = MenuBarExtraSettings.defaultShowInMenuBar
         warnBeforeQuitShortcut = QuitWarningSettings.defaultWarnBeforeQuit
+        confirmCloseLastPane = LastPaneCloseWarningSettings.defaultConfirmCloseLastPane
         ScrollbackPersistenceSettings.setEnabled(ScrollbackPersistenceSettings.defaultPersistScrollback)
         sessionAutoResumeAgents = AgentAutoResumeSettings.defaultAutoResumeAgents
         reapLeftoverAgentProcesses = LeftoverProcessReaperSettings.defaultReapLeftoverAgentProcesses

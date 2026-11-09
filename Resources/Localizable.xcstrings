@@ -7489,6 +7489,74 @@
         }
       }
     },
+    "dialog.closeLastPane.window.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is the last tab in this window. Closing it will close the window."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "これはこのウインドウの最後のタブです。閉じるとウインドウも閉じられます。"
+          }
+        }
+      }
+    },
+    "dialog.closeLastPane.window.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close window?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ウインドウを閉じますか？"
+          }
+        }
+      }
+    },
+    "dialog.closeLastPane.workspace.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is the last tab in this workspace. Closing it will close the workspace."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "これはこのワークスペースの最後のタブです。閉じるとワークスペースも閉じられます。"
+          }
+        }
+      }
+    },
+    "dialog.closeLastPane.workspace.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close workspace?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ワークスペースを閉じますか？"
+          }
+        }
+      }
+    },
     "dialog.closeOtherTabs.title": {
       "extractionState": "manual",
       "localizations": {
@@ -9967,6 +10035,57 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cmd+Pは、ワークスペース全体のターミナル、ブラウザ、Markdownサーフェスにも一致します。"
+          }
+        }
+      }
+    },
+    "settings.app.confirmCloseLastPane": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm Closing Last Tab"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最後のタブを閉じる前に確認"
+          }
+        }
+      }
+    },
+    "settings.app.confirmCloseLastPane.subtitleOff": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Closing the last tab closes its workspace without asking, unless something is running."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "実行中のものがなければ、最後のタブを閉じると確認なしでワークスペースが閉じます。"
+          }
+        }
+      }
+    },
+    "settings.app.confirmCloseLastPane.subtitleOn": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask before closing the last tab closes its workspace or window."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最後のタブを閉じてワークスペースやウインドウが閉じる前に確認します。"
           }
         }
       }

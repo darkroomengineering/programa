@@ -977,6 +977,7 @@ final class TabManagerCloseCurrentPanelTests: XCTestCase {
         XCTAssertEqual(manager.selectedTabId, secondWorkspace.id)
         XCTAssertEqual(secondWorkspace.panels.count, 1)
 
+        manager.confirmCloseHandler = { _, _, _ in true }
         manager.closeCurrentPanelWithConfirmation()
         drainMainQueue()
         drainMainQueue()
@@ -1013,6 +1014,7 @@ final class TabManagerCloseCurrentPanelTests: XCTestCase {
             return
         }
 
+        manager.confirmCloseHandler = { _, _, _ in true }
         manager.closeCurrentPanelWithConfirmation()
         drainMainQueue()
         drainMainQueue()
@@ -1111,6 +1113,7 @@ final class TabManagerCloseCurrentPanelTests: XCTestCase {
             return
         }
 
+        manager.confirmCloseHandler = { _, _, _ in true }
         secondWorkspace.markExplicitClose(surfaceId: secondSurfaceId)
         XCTAssertFalse(secondWorkspace.closePanel(secondPanelId))
         drainMainQueue()
@@ -1190,11 +1193,226 @@ final class TabManagerCloseCurrentPanelTests: XCTestCase {
         )
         XCTAssertTrue(store.hasUnreadNotification(forTabId: workspace.id, surfaceId: initialPanelId))
 
+        manager.confirmCloseHandler = { _, _, _ in true }
         manager.closeCurrentPanelWithConfirmation()
         drainMainQueue()
         drainMainQueue()
 
         XCTAssertFalse(store.hasUnreadNotification(forTabId: workspace.id, surfaceId: initialPanelId))
+    }
+}
+
+@MainActor
+final class TabManagerLastPaneCloseConfirmationTests: XCTestCase {
+    private var settingWasEnabled = LastPaneCloseWarningSettings.defaultConfirmCloseLastPane
+
+    override func setUp() {
+        super.setUp()
+        settingWasEnabled = LastPaneCloseWarningSettings.isEnabled()
+    }
+
+    override func tearDown() {
+        LastPaneCloseWarningSettings.setEnabled(settingWasEnabled)
+        super.tearDown()
+    }
+
+    private func makeIdleSecondWorkspace(
+        _ manager: TabManager
+    ) throws -> (first: Workspace, second: Workspace, panelId: UUID) {
+        let first = manager.tabs[0]
+        let second = manager.addWorkspace()
+        manager.selectWorkspace(second)
+        let panelId = try XCTUnwrap(second.focusedPanelId)
+        second.updatePanelShellActivityState(panelId: panelId, state: .promptIdle)
+        XCTAssertEqual(second.panels.count, 1)
+        return (first, second, panelId)
+    }
+
+    func testCancellingLastPanePromptKeepsSurfaceNotifications() throws {
+        LastPaneCloseWarningSettings.setEnabled(true)
+        let appDelegate = AppDelegate.shared ?? AppDelegate()
+        let manager = TabManager()
+        let store = TerminalNotificationStore.shared
+        let originalTabManager = appDelegate.tabManager
+        let originalNotificationStore = appDelegate.notificationStore
+        store.replaceNotificationsForTesting([])
+        store.configureNotificationDeliveryHandlerForTesting { _, _ in }
+        appDelegate.tabManager = manager
+        appDelegate.notificationStore = store
+        defer {
+            store.replaceNotificationsForTesting([])
+            store.resetNotificationDeliveryHandlerForTesting()
+            appDelegate.tabManager = originalTabManager
+            appDelegate.notificationStore = originalNotificationStore
+        }
+
+        let (_, second, panelId) = try makeIdleSecondWorkspace(manager)
+        store.addNotification(tabId: second.id, surfaceId: panelId, title: "Unread", subtitle: "", body: "")
+
+        manager.confirmCloseHandler = { _, _, _ in false }
+        manager.closeCurrentPanelWithConfirmation()
+        drainMainQueue()
+        drainMainQueue()
+
+        XCTAssertTrue(manager.tabs.contains { $0.id == second.id })
+        // Refocusing the surface after the cancel may mark it read; the notification must still exist.
+        XCTAssertTrue(store.notifications.contains { $0.tabId == second.id && $0.surfaceId == panelId })
+    }
+
+    func testIdleLastPanePromptsAndCancelKeepsWorkspace() throws {
+        LastPaneCloseWarningSettings.setEnabled(true)
+        let manager = TabManager()
+        let (_, second, panelId) = try makeIdleSecondWorkspace(manager)
+
+        var prompts: [(title: String, message: String, acceptCmdD: Bool)] = []
+        manager.confirmCloseHandler = { title, message, acceptCmdD in
+            prompts.append((title, message, acceptCmdD))
+            return false
+        }
+
+        manager.closeCurrentPanelWithConfirmation()
+        drainMainQueue()
+        drainMainQueue()
+
+        XCTAssertEqual(prompts.count, 1)
+        XCTAssertEqual(
+            prompts.first?.title,
+            String(localized: "dialog.closeLastPane.workspace.title", defaultValue: "Close workspace?")
+        )
+        XCTAssertEqual(
+            prompts.first?.message,
+            String(
+                localized: "dialog.closeLastPane.workspace.message",
+                defaultValue: "This is the last tab in this workspace. Closing it will close the workspace."
+            )
+        )
+        XCTAssertEqual(prompts.first?.acceptCmdD, false)
+        XCTAssertEqual(manager.tabs.count, 2)
+        XCTAssertEqual(manager.selectedTabId, second.id)
+        XCTAssertNotNil(second.panels[panelId], "Cancel must keep the last tab open")
+    }
+
+    func testIdleLastPaneClosesWorkspaceAfterConfirmation() throws {
+        LastPaneCloseWarningSettings.setEnabled(true)
+        let manager = TabManager()
+        let (first, second, panelId) = try makeIdleSecondWorkspace(manager)
+
+        var promptCount = 0
+        manager.confirmCloseHandler = { _, _, _ in
+            promptCount += 1
+            return true
+        }
+
+        manager.closeCurrentPanelWithConfirmation()
+        drainMainQueue()
+        drainMainQueue()
+
+        XCTAssertEqual(promptCount, 1)
+        XCTAssertEqual(manager.tabs.map(\.id), [first.id])
+        XCTAssertNil(second.panels[panelId])
+    }
+
+    func testIdleLastPaneOfLastWorkspaceAsksAboutTheWindow() throws {
+        LastPaneCloseWarningSettings.setEnabled(true)
+        let manager = TabManager()
+        let workspace = try XCTUnwrap(manager.selectedWorkspace)
+        let panelId = try XCTUnwrap(workspace.focusedPanelId)
+        workspace.updatePanelShellActivityState(panelId: panelId, state: .promptIdle)
+
+        var prompts: [(title: String, message: String, acceptCmdD: Bool)] = []
+        manager.confirmCloseHandler = { title, message, acceptCmdD in
+            prompts.append((title, message, acceptCmdD))
+            return false
+        }
+
+        manager.closeCurrentPanelWithConfirmation()
+        drainMainQueue()
+        drainMainQueue()
+
+        XCTAssertEqual(prompts.count, 1)
+        XCTAssertEqual(
+            prompts.first?.title,
+            String(localized: "dialog.closeLastPane.window.title", defaultValue: "Close window?")
+        )
+        XCTAssertEqual(
+            prompts.first?.message,
+            String(
+                localized: "dialog.closeLastPane.window.message",
+                defaultValue: "This is the last tab in this window. Closing it will close the window."
+            )
+        )
+        XCTAssertEqual(prompts.first?.acceptCmdD, true)
+        XCTAssertEqual(manager.tabs.map(\.id), [workspace.id])
+        XCTAssertNotNil(workspace.panels[panelId])
+    }
+
+    func testIdleLastPaneClosesWithoutPromptWhenSettingIsOff() throws {
+        LastPaneCloseWarningSettings.setEnabled(false)
+        let manager = TabManager()
+        let (first, second, panelId) = try makeIdleSecondWorkspace(manager)
+
+        var promptCount = 0
+        manager.confirmCloseHandler = { _, _, _ in
+            promptCount += 1
+            return false
+        }
+
+        manager.closeCurrentPanelWithConfirmation()
+        drainMainQueue()
+        drainMainQueue()
+
+        XCTAssertEqual(promptCount, 0)
+        XCTAssertEqual(manager.tabs.map(\.id), [first.id])
+        XCTAssertNil(second.panels[panelId])
+    }
+
+    func testRunningLastPaneShowsOnlyTheRunningProcessPrompt() throws {
+        LastPaneCloseWarningSettings.setEnabled(true)
+        let manager = TabManager()
+        let (_, second, panelId) = try makeIdleSecondWorkspace(manager)
+        let terminal = try XCTUnwrap(second.terminalPanel(for: panelId))
+        terminal.surface.setNeedsConfirmCloseOverrideForTesting(false)
+        second.updatePanelShellActivityState(panelId: panelId, state: .commandRunning)
+
+        var titles: [String] = []
+        var messages: [String] = []
+        manager.confirmCloseHandler = { title, message, _ in
+            titles.append(title)
+            messages.append(message)
+            return false
+        }
+
+        manager.closeCurrentPanelWithConfirmation()
+        drainMainQueue()
+        drainMainQueue()
+
+        XCTAssertEqual(
+            titles,
+            [String(localized: "dialog.closeWorkspace.title", defaultValue: "Close workspace?")]
+        )
+        XCTAssertEqual(
+            messages,
+            [String(localized: "dialog.closeWorkspace.message", defaultValue: "This will close the workspace and all of its panels.")]
+        )
+        XCTAssertEqual(manager.tabs.count, 2)
+        XCTAssertNotNil(second.panels[panelId])
+    }
+
+    func testExplicitCloseWorkspaceOfIdleWorkspaceDoesNotAsk() throws {
+        LastPaneCloseWarningSettings.setEnabled(true)
+        let manager = TabManager()
+        let (first, second, _) = try makeIdleSecondWorkspace(manager)
+
+        var promptCount = 0
+        manager.confirmCloseHandler = { _, _, _ in
+            promptCount += 1
+            return false
+        }
+
+        XCTAssertTrue(manager.closeWorkspaceWithConfirmation(second))
+
+        XCTAssertEqual(promptCount, 0, "Close Workspace is already an explicit request to close the workspace")
+        XCTAssertEqual(manager.tabs.map(\.id), [first.id])
     }
 }
 

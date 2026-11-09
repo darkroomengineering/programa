@@ -450,7 +450,7 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         }
 
         if explicitUserClose && shouldCloseWorkspaceOnLastSurface(for: tab.id) {
-            owningTabManager?.closeWorkspaceWithConfirmation(self)
+            owningTabManager?.closeWorkspaceFromLastPaneWithConfirmation(self)
             return false
         }
 
