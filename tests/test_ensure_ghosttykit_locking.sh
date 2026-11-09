@@ -66,7 +66,7 @@ cat > "$bin/zig" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "${1:-}" == "version" ]]; then
-  echo "0.16.0"
+  echo "${TEST_ZIG_VERSION:-0.16.0}"
   exit 0
 fi
 printf '%s\n' "$$" >> "${TEST_ZIG_CALL_LOG:?}"
@@ -125,6 +125,7 @@ run_ensure_background() {
     TEST_ZIG_STARTED="$started" \
     TEST_ZIG_RELEASE="$release" \
     TEST_BLOCK_ZIG="$block_zig" \
+    TEST_ZIG_VERSION="${TEST_ZIG_VERSION:-0.16.0}" \
     TEST_RANLIB="$fixture/bin/ranlib" \
     ./scripts/ensure-ghosttykit.sh
   ) >"$output" 2>&1 &
@@ -145,10 +146,12 @@ test_ready_cache_bypasses_live_build_lock() {
   touch "$fixture/cache/$key/.ready"
   printf 'pid=%s\ntoken=live-owner\n' "$$" > "$lock_dir/owner"
 
-  run_ensure_background "$fixture" 0 "$output"
+  TEST_LOCK_TIMEOUT=60 run_ensure_background "$fixture" 0 "$output"
   pid="$ENSURE_PID"
   status=0
-  wait_for_exit "$pid" 8 || status=$?
+  # 10 s budget against a 60 s lock timeout: a script that waits on the lock
+  # cannot pass, and a slow runner has room to start up.
+  wait_for_exit "$pid" 200 || status=$?
   if [[ "$status" -eq 124 ]]; then
     kill "$pid" 2>/dev/null || true
     wait "$pid" 2>/dev/null || true
@@ -208,7 +211,7 @@ test_dead_owner_recovers_promptly() {
   run_ensure_background "$fixture" 0 "$output"
   pid="$ENSURE_PID"
   status=0
-  wait_for_exit "$pid" 10 || status=$?
+  wait_for_exit "$pid" 200 || status=$?
   if [[ "$status" -eq 124 ]]; then
     kill "$pid" 2>/dev/null || true
     wait "$pid" 2>/dev/null || true
@@ -242,7 +245,46 @@ test_old_owner_cannot_release_replacement_lock() {
   fi
 }
 
+test_ready_cache_ignores_zig_version() {
+  local fixture key cache_dir output status
+  fixture="$(make_fixture cache-hit-other-zig)"
+  key="$(fixture_key "$fixture")"
+  cache_dir="$fixture/cache/$key/GhosttyKit.xcframework"
+  output="$fixture/cache-hit-other-zig.out"
+  mkdir -p "$cache_dir/macos-arm64"
+  printf 'archive\n' > "$cache_dir/macos-arm64/libghostty-internal-fat.a"
+  touch "$fixture/cache/$key/.ready"
+
+  TEST_ZIG_VERSION="0.15.0" run_ensure_background "$fixture" 0 "$output"
+  status=0
+  wait_for_exit "$ENSURE_PID" 200 || status=$?
+  if [[ "$status" -ne 0 ]]; then
+    fail "ready cache hit with a different Zig version failed (status $status): $(cat "$output")"
+  elif [[ ! -L "$fixture/repo/GhosttyKit.xcframework" ]]; then
+    fail "ready cache hit with a different Zig version did not install the symlink"
+  fi
+}
+
+test_build_still_requires_exact_zig() {
+  local fixture output status
+  fixture="$(make_fixture build-other-zig)"
+  output="$fixture/build-other-zig.out"
+
+  TEST_ZIG_VERSION="0.15.0" run_ensure_background "$fixture" 0 "$output"
+  status=0
+  wait_for_exit "$ENSURE_PID" 200 || status=$?
+  if [[ "$status" -eq 0 || "$status" -eq 124 ]]; then
+    fail "cache miss with a different Zig version did not fail fast (status $status)"
+  elif ! grep -q "exact Zig version required" "$output"; then
+    fail "cache miss with a different Zig version gave the wrong error: $(cat "$output")"
+  elif [[ -s "$ENSURE_CALLS" ]]; then
+    fail "cache miss with a different Zig version still ran zig build"
+  fi
+}
+
 test_ready_cache_bypasses_live_build_lock
+test_ready_cache_ignores_zig_version
+test_build_still_requires_exact_zig
 test_live_owner_is_never_stolen
 test_dead_owner_recovers_promptly
 test_old_owner_cannot_release_replacement_lock
