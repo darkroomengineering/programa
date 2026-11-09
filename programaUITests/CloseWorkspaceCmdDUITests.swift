@@ -32,6 +32,8 @@ final class CloseWorkspaceCmdDUITests: XCTestCase {
         let keyequivPath = "/tmp/programa-ui-test-keyequiv-\(UUID().uuidString).json"
         try? FileManager.default.removeItem(atPath: keyequivPath)
         app.launchEnvironment["PROGRAMA_UI_TEST_KEYEQUIV_PATH"] = keyequivPath
+        // This test covers the Close tab? path; the idle last-tab prompt has its own unit tests.
+        app.launchArguments += ["-confirmCloseLastPane", "NO"]
         app.launch()
         app.activate()
 

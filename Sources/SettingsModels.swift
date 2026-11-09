@@ -90,6 +90,20 @@ enum QuitWarningSettings {
     }
 }
 
+enum LastPaneCloseWarningSettings {
+    static let confirmCloseLastPaneKey = "confirmCloseLastPane"
+    static let defaultConfirmCloseLastPane = true
+    private static let flag = UserDefaultsFlag(key: confirmCloseLastPaneKey, defaultValue: defaultConfirmCloseLastPane)
+
+    static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
+        flag.isEnabled(defaults: defaults)
+    }
+
+    static func setEnabled(_ isEnabled: Bool, defaults: UserDefaults = .standard) {
+        flag.setEnabled(isEnabled, defaults: defaults)
+    }
+}
+
 enum AgentAutoResumeSettings {
     static let autoResumeAgentsKey = "sessionAutoResumeAgents"
     static let defaultAutoResumeAgents = true

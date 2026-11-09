@@ -99,6 +99,11 @@
           "default": true,
           "description": "Show a confirmation before quitting Programa."
         },
+        "confirmCloseLastPane": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ask before closing a workspace's last tab closes the workspace, or the window when it is the last workspace. Running processes always ask."
+        },
         "autoResumeAgents": {
           "type": "boolean",
           "default": true,

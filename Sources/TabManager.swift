@@ -1945,6 +1945,33 @@ class TabManager: ObservableObject {
         return true
     }
 
+    /// Closing a workspace's last tab (Cmd+W, the tab close button) escalates here. Unlike the
+    /// explicit Close Workspace actions, an idle workspace still asks first, because the user
+    /// asked to close a tab, not the workspace or window around it.
+    func closeWorkspaceFromLastPaneWithConfirmation(_ workspace: Workspace) {
+        guard !workspace.isPinned,
+              !workspaceNeedsConfirmClose(workspace),
+              LastPaneCloseWarningSettings.isEnabled() else {
+            closeWorkspaceWithConfirmation(workspace)
+            return
+        }
+        let willCloseWindow = tabs.count <= 1
+        let title = willCloseWindow
+            ? String(localized: "dialog.closeLastPane.window.title", defaultValue: "Close window?")
+            : String(localized: "dialog.closeLastPane.workspace.title", defaultValue: "Close workspace?")
+        let message = willCloseWindow
+            ? String(
+                localized: "dialog.closeLastPane.window.message",
+                defaultValue: "This is the last tab in this window. Closing it will close the window."
+            )
+            : String(
+                localized: "dialog.closeLastPane.workspace.message",
+                defaultValue: "This is the last tab in this workspace. Closing it will close the workspace."
+            )
+        guard confirmClose(title: title, message: message, acceptCmdD: willCloseWindow) else { return }
+        closeWorkspaceIfRunningProcess(workspace, requiresConfirmation: false)
+    }
+
     @discardableResult
     func closeWorkspaceWithConfirmation(tabId: UUID) -> Bool {
         guard let workspace = workspace(withId: tabId) else { return false }
@@ -2207,7 +2234,7 @@ class TabManager: ObservableObject {
 #endif
         // Clear unconditionally, matching closeRuntimeSurfaceWithConfirmation/closeRuntimeSurface:
         // when this is the workspace's last surface, bonsplit's shouldCloseTab delegate escalates
-        // to owningTabManager.closeWorkspaceWithConfirmation(...) and returns false here (the panel
+        // to owningTabManager.closeWorkspaceFromLastPaneWithConfirmation(...) and returns false here (the panel
         // itself isn't closed via this call), so gating on `closed` would leave the notification
         // for an explicitly-closed surface stuck as unread.
         AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: tab.id, surfaceId: panelId)
