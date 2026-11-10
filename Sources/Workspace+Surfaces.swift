@@ -30,11 +30,11 @@ extension Workspace {
     /// source terminal at send time (same lookup as `installReviewPanelSubscription`) rather
     /// than capturing the creating or restoring workspace, so comments keep delivering after
     /// either panel moves. Falls back to this workspace when the source can't be located.
-    func makeReviewSendClosure(for reviewPanel: ReviewPanel) -> (String) -> Bool {
+    func makeReviewSendClosure(for reviewPanel: ReviewPanel) -> (String) -> ReviewCommentDelivery {
         { [weak self, weak reviewPanel] text in
-            guard let reviewPanel else { return false }
+            guard let reviewPanel else { return .failed(.sourceUnavailable) }
             guard let owningWorkspace = Workspace.workspaceOwning(surfaceId: reviewPanel.sourceSurfaceId) ?? self else {
-                return false
+                return .failed(.sourceUnavailable)
             }
             return owningWorkspace.sendReviewComments(sourceSurfaceId: reviewPanel.sourceSurfaceId, text: text)
         }

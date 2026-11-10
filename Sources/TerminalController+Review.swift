@@ -133,7 +133,7 @@ private struct ReviewCommentWireValue: Sendable {
 }
 
 private struct ReviewSendResult: Sendable {
-    let sentCount: Int?
+    let delivery: Result<Int, ReviewCommentDeliveryFailure>
     let sourceSurfaceId: UUID
     let windowId: UUID?
 }
@@ -548,9 +548,9 @@ extension TerminalController {
             }
             let sourceSurfaceId = panel.sourceSurfaceId
             // Sending zero comments is a no-op, not a failure.
-            let sentCount = panel.sendPendingComments(preamble: preamble)
+            let delivery = panel.sendPendingComments(preamble: preamble)
             return .value(ReviewSendResult(
-                sentCount: sentCount,
+                delivery: delivery,
                 sourceSurfaceId: sourceSurfaceId,
                 windowId: AppDelegate.shared?.windowId(for: tabManager)
             ))
@@ -564,8 +564,24 @@ extension TerminalController {
         case .panelNotFound:
             return .err(code: "not_found", message: "Review panel not found", data: nil)
         case .value(let sent):
-            guard let sentCount = sent.sentCount else {
+            let sentCount: Int
+            switch sent.delivery {
+            case .success(let count):
+                sentCount = count
+            case .failure(.sourceUnavailable):
                 return .err(code: "unavailable", message: "Review source terminal is unavailable. Pending comments were retained.", data: nil)
+            case .failure(.awaitingApproval(let hold)):
+                let surfaceRef = (v2Ref(kind: .surface, uuid: sent.sourceSurfaceId) as? String) ?? sent.sourceSurfaceId.uuidString
+                return .err(
+                    code: "agent_awaiting_approval",
+                    message: "\(surfaceRef) is waiting on an approval prompt; nothing was sent and the review comments were kept. Answer the prompt in the agent's pane, then send again.",
+                    data: [
+                        "surface_id": sent.sourceSurfaceId.uuidString,
+                        "surface_ref": surfaceRef,
+                        "prompt_kind": hold.kind.rawValue,
+                        "prompt_age_ms": hold.ageMs
+                    ]
+                )
             }
             return .ok([
                 "sent_count": sentCount,

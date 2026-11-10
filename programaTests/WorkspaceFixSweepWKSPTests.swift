@@ -120,7 +120,7 @@ final class WorkspaceFixSweepWKSPTests: XCTestCase {
             workspaceId: workspace.id, sourceSurfaceId: UUID(),
             directory: "/tmp", mode: .uncommitted, baseBranch: "main"
         )
-        XCTAssertFalse(workspace.makeReviewSendClosure(for: review)("comment"))
+        XCTAssertEqual(workspace.makeReviewSendClosure(for: review)("comment"), .failed(.sourceUnavailable))
     }
 
     func testReviewSendClosureDeliversWhenSourceTerminalIsInCreatingWorkspace() throws {
@@ -131,7 +131,7 @@ final class WorkspaceFixSweepWKSPTests: XCTestCase {
             workspaceId: workspace.id, sourceSurfaceId: source,
             directory: "/tmp", mode: .uncommitted, baseBranch: "main"
         )
-        XCTAssertTrue(workspace.makeReviewSendClosure(for: review)("comment"))
+        XCTAssertEqual(workspace.makeReviewSendClosure(for: review)("comment"), .sent)
     }
 
     // MARK: 08 manifest pattern validation and sample cap

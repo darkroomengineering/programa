@@ -95,7 +95,7 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertEqual(restoredPanel.comments.first?.startLine, 4)
         XCTAssertEqual(restoredPanel.comments.first?.endLine, 6)
         XCTAssertNotNil(restored.terminalPanel(for: restoredPanel.sourceSurfaceId), "Source routing must remap with the restored terminal")
-        XCTAssertFalse(restored.sendReviewComments(sourceSurfaceId: UUID(), text: "Missing source"))
+        XCTAssertEqual(restored.sendReviewComments(sourceSurfaceId: UUID(), text: "Missing source"), .failed(.sourceUnavailable))
     }
 
     @MainActor

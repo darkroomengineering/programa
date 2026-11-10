@@ -162,6 +162,8 @@ Retry after they submit or clear it, or pass `force: true` (`--force` in the CLI
 It is also refused, with `agent_awaiting_approval`, while the agent in that pane waits on a
 permission or sign-in prompt, so the tools cannot answer it for the person. Ask the user, and pass
 `answer_prompt: true` (`--answer-prompt` in the CLI) only when they told you to answer it.
+`review_send_comments` is refused the same way and keeps the comments; it has no
+`answer_prompt`, so ask the user to answer the prompt, then send again.
 
 ## Resources
 

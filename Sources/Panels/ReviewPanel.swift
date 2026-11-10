@@ -1,6 +1,18 @@
 import Foundation
 import Bonsplit
 
+/// Why review comments were not delivered. They stay pending in every case.
+enum ReviewCommentDeliveryFailure: Error, Equatable {
+    case sourceUnavailable
+    /// The source agent waits on a permission or sign-in prompt, so a paste could answer it.
+    case awaitingApproval(PersonPromptHold)
+}
+
+enum ReviewCommentDelivery: Equatable {
+    case sent
+    case failed(ReviewCommentDeliveryFailure)
+}
+
 /// A panel that shows the git diff for another terminal surface ("the agent's pane"), with
 /// line comments that can be sent back into that surface's input. Modeled directly on
 /// `MarkdownPanel.swift`: never mutates the index or branches, and touches worktree files only
@@ -52,7 +64,7 @@ final class ReviewPanel: Panel, ObservableObject {
     /// Raw `git diff` text behind `files`, served to the Pierre diff viewer (debug spike).
     var rawDiff: String { diffOperation.value?.rawDiff ?? "" }
     @Published private(set) var comments: [ReviewComment] = []
-    @Published private(set) var commentDeliveryFailed = false
+    @Published private(set) var commentDeliveryFailure: ReviewCommentDeliveryFailure?
     @Published private var diffOperation: Operation<ReviewDiffSnapshot?> = .settled(generation: 0, value: nil)
     var isRefreshing: Bool { diffOperation.isRunning }
     var lastError: ReviewDiffError? { diffOperation.value?.error }
@@ -95,7 +107,7 @@ final class ReviewPanel: Panel, ObservableObject {
     /// into the reviewed terminal surface via the same path `surface.send_text` uses, then
     /// submits Enter (mirrors `agent.prompt`'s "type the prompt, press Enter" semantics). `nil`
     /// only in contexts where the panel was constructed without a live workspace.
-    var sendToSourceSurface: ((String) -> Bool)?
+    var sendToSourceSurface: ((String) -> ReviewCommentDelivery)?
 
     init(workspaceId: UUID, sourceSurfaceId: UUID, directory: String, mode: ReviewDiffMode, baseBranch: String) {
         self.id = UUID()
@@ -367,19 +379,22 @@ final class ReviewPanel: Panel, ObservableObject {
     }
 
     /// Serializes and delivers all pending comments into the source surface via
-    /// `sendToSourceSurface`, clearing only after dispatch. Nil means the route was unavailable;
-    /// zero is a no-op. Dispatch does not acknowledge that the agent processed the input.
+    /// `sendToSourceSurface`, clearing only after dispatch, and returns how many were sent. A
+    /// failure keeps every comment; zero is a no-op. Dispatch does not acknowledge that the agent
+    /// processed the input.
     @discardableResult
-    func sendPendingComments(preamble: String? = nil) -> Int? {
+    func sendPendingComments(preamble: String? = nil) -> Result<Int, ReviewCommentDeliveryFailure> {
         let pendingCount = comments.count
         let serialized = serializedPendingComments(preamble: preamble)
-        commentDeliveryFailed = false
-        guard !serialized.isEmpty else { return 0 }
-        guard sendToSourceSurface?(serialized) == true else {
-            commentDeliveryFailed = true
-            return nil
+        commentDeliveryFailure = nil
+        guard !serialized.isEmpty else { return .success(0) }
+        switch sendToSourceSurface?(serialized) ?? .failed(.sourceUnavailable) {
+        case .sent:
+            clearSentComments()
+            return .success(pendingCount)
+        case .failed(let failure):
+            commentDeliveryFailure = failure
+            return .failure(failure)
         }
-        clearSentComments()
-        return pendingCount
     }
 }

@@ -2002,7 +2002,7 @@ extension ProgramaCLI {
     programa review send --preamble "Fix these before I merge:"
     ```
 
-    `review open` reviews the terminal given by `--surface`, or the focused terminal of the target workspace. `--mode` is `uncommitted` (default) or `branch`; `--base-branch` defaults to `origin/main`. Pass the same `--workspace`/`--surface` to `comment` and `send` so they reach the same panel. `review refresh` reloads the diff after more edits.
+    `review open` reviews the terminal given by `--surface`, or the focused terminal of the target workspace. `--mode` is `uncommitted` (default) or `branch`; `--base-branch` defaults to `origin/main`. Pass the same `--workspace`/`--surface` to `comment` and `send` so they reach the same panel. `review refresh` reloads the diff after more edits. While the agent there waits on a permission or sign-in prompt, `review send` fails with `agent_awaiting_approval` and keeps the comments; tell the user, and send again after they answer it in that pane.
 
     Programa checkpoints the repo's files at the start of every agent turn (`refs/programa/checkpoints/...`); the user can revert a turn's file changes from the review panel, which does not rewind your conversation, so re-read files after a revert.
 

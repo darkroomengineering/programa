@@ -37,24 +37,29 @@ final class ReviewPanelRowPlannerTests: XCTestCase {
         let panel = ReviewPanel(workspaceId: UUID(), sourceSurfaceId: UUID(), directory: "/tmp", mode: .uncommitted, baseBranch: "main")
         let comment = try panel.addComment(filePath: "App.swift", startLine: 1, text: "Please fix this")
 
-        XCTAssertNil(panel.sendPendingComments(), "A missing callback must not discard comments")
+        XCTAssertEqual(panel.sendPendingComments(), .failure(.sourceUnavailable), "A missing callback must not discard comments")
         XCTAssertEqual(panel.comments, [comment])
-        XCTAssertTrue(panel.commentDeliveryFailed)
-        panel.sendToSourceSurface = { _ in false }
-        XCTAssertNil(panel.sendPendingComments())
+        XCTAssertEqual(panel.commentDeliveryFailure, .sourceUnavailable)
+        panel.sendToSourceSurface = { _ in .failed(.sourceUnavailable) }
+        XCTAssertEqual(panel.sendPendingComments(), .failure(.sourceUnavailable))
         XCTAssertEqual(panel.comments, [comment])
+        let hold = PersonPromptHold(kind: .permission, ageMs: 1_200)
+        panel.sendToSourceSurface = { _ in .failed(.awaitingApproval(hold)) }
+        XCTAssertEqual(panel.sendPendingComments(), .failure(.awaitingApproval(hold)))
+        XCTAssertEqual(panel.comments, [comment])
+        XCTAssertEqual(panel.commentDeliveryFailure, .awaitingApproval(hold))
 
         var dispatchedText = ""
         panel.sendToSourceSurface = { text in
             dispatchedText = text
-            return true
+            return .sent
         }
-        XCTAssertEqual(panel.sendPendingComments(), 1)
+        XCTAssertEqual(panel.sendPendingComments(), .success(1))
         XCTAssertTrue(dispatchedText.contains(comment.text))
         XCTAssertTrue(panel.comments.isEmpty)
-        XCTAssertFalse(panel.commentDeliveryFailed)
+        XCTAssertNil(panel.commentDeliveryFailure)
         panel.sendToSourceSurface = nil
-        XCTAssertEqual(panel.sendPendingComments(), 0, "Empty review remains a successful no-op")
+        XCTAssertEqual(panel.sendPendingComments(), .success(0), "Empty review remains a successful no-op")
     }
 
     func testCommentsStayPendingWhileTheSourceAgentWaitsOnAnApprovalPrompt() throws {
@@ -74,12 +79,16 @@ final class ReviewPanelRowPlannerTests: XCTestCase {
         let comment = try panel.addComment(filePath: "App.swift", startLine: 1, text: "Please fix this")
         try XCTUnwrap(workspace.terminalPanel(for: source)).surface.noteAgentPrompt(.permission, isBlocked: true)
 
-        XCTAssertNil(panel.sendPendingComments(), "Comments must not be pasted into an approval prompt")
+        guard case .failure(.awaitingApproval(let hold)) = panel.sendPendingComments() else {
+            return XCTFail("Comments must not be pasted into an approval prompt")
+        }
+        XCTAssertEqual(hold.kind, .permission)
         XCTAssertEqual(panel.comments, [comment])
-        XCTAssertTrue(panel.commentDeliveryFailed)
+        XCTAssertEqual(panel.commentDeliveryFailure, .awaitingApproval(hold))
 
         defaults.set(false, forKey: ApprovalGuardSettings.enabledKey)
-        XCTAssertEqual(panel.sendPendingComments(), 1, "With the protection off, delivery proceeds as before")
+        XCTAssertEqual(panel.sendPendingComments(), .success(1), "With the protection off, delivery proceeds as before")
+        XCTAssertNil(panel.commentDeliveryFailure)
         XCTAssertTrue(panel.comments.isEmpty)
     }
 
