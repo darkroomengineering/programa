@@ -319,7 +319,9 @@ extension Workspace {
             inferredAgent: resolvedInferredAgent,
             programState: programState
         )
-        if state == .blocked || current?.state == .blocked {
+        // `current == nil` covers a prompt kept armed across a sidebar reset: the agent's next
+        // report after that reset is what tells us the box closed.
+        if state == .blocked || current?.state == .blocked || current == nil {
             (panels[panelId] as? TerminalPanel)?.surface.noteAgentPrompt(promptKind, isBlocked: state == .blocked)
         }
         noteReviewNudgeTurnEdge(panelId: panelId, previous: current?.state, next: state)
@@ -515,8 +517,13 @@ extension Workspace {
             }
         }
         let clearedAgentSurfaceIds = Array(panelAgentPresence.keys)
+        // A showing permission or sign-in prompt stays armed: any client can reset the sidebar,
+        // and the box is still on screen. The person's key, an `answer_prompt` write or the
+        // agent's next report ends it.
         for (panelId, presence) in panelAgentPresence where presence.state == .blocked {
-            (panels[panelId] as? TerminalPanel)?.surface.noteAgentPrompt(nil, isBlocked: false)
+            guard let surface = (panels[panelId] as? TerminalPanel)?.surface,
+                  surface.activePromptHold() == nil else { continue }
+            surface.noteAgentPrompt(nil, isBlocked: false)
         }
         panelAgentPresence.removeAll()
         for surfaceId in clearedAgentSurfaceIds {
