@@ -16,7 +16,8 @@
 // (never to run regex or mutate state) -- see `runRecognitionScanOnce`'s doc comment for why this
 // engine can't just call `TerminalController.v2MainSync` the way the output-poll loop does. All
 // classification/hysteresis work happens back on the background thread, and only
-// `DispatchQueue.main.async` hops to main when a surface's *reported* state actually changes.
+// `DispatchQueue.main.async` hops to main when a surface's *reported* state actually changes or a
+// new approval box replaces the one last reported blocked.
 import AppKit
 import Foundation
 
@@ -66,6 +67,10 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
         var dwell: DwellState
         var lastAnyMatchAt: Date
         var lastReportedState: AgentActivityState?
+        /// The box behind the last blocked report. The state stays `.blocked` across back-to-back
+        /// approval boxes, so a new fingerprint is what re-reports (and re-arms the person-input
+        /// gate the person's answer lifted). Nil after any non-blocked sample.
+        var lastReportedBlockedFingerprint: Int?
     }
 
     private let lock = NSLock()
@@ -135,7 +140,8 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
                 lastClassification: nil,
                 dwell: .idle,
                 lastAnyMatchAt: now(),
-                lastReportedState: nil
+                lastReportedState: nil,
+                lastReportedBlockedFingerprint: nil
             )
         }
         lock.unlock()
@@ -283,7 +289,8 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
 
     /// Classifies one freshly-read sample against `manifest` and resolves hysteresis. Runs
     /// entirely off-main. Only dispatches to main (to actually mutate `Workspace.panelAgentStates`)
-    /// when the resolved state differs from what was last reported for this surface.
+    /// when the resolved state differs from what was last reported for this surface, or when a
+    /// different approval box replaces the one last reported blocked.
     ///
     /// Hysteresis counts *sampling ticks*, not distinct text observations: a tick whose text is
     /// byte-identical to the previous one reuses the cached classification (skipping regex work,
@@ -340,6 +347,9 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
         if let resolvedState {
             current.lastReportedState = resolvedState
         }
+        let blockedFingerprint = resolvedState == .blocked ? classification?.blockedFingerprint : nil
+        let isNewBlockedBox = resolvedState == .blocked && blockedFingerprint != current.lastReportedBlockedFingerprint
+        current.lastReportedBlockedFingerprint = blockedFingerprint
         candidates[surfaceId] = current
         lock.unlock()
 
@@ -348,7 +358,7 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
             return
         }
 
-        guard let resolvedState, resolvedState != previousReportedState else { return }
+        guard let resolvedState, resolvedState != previousReportedState || isNewBlockedBox else { return }
 
         let generation = current.generation
         DispatchQueue.main.async {
