@@ -505,6 +505,15 @@ final class ApprovalPromptGuardTests: XCTestCase {
         XCTAssertEqual(fields["stale"] as? Bool, true)
     }
 
+    /// `workspace.reset_sidebar` is a cleanup call any client can make; it must not double as a
+    /// way to lift a refusal, including for program-owned prompts nothing else can close.
+    func testSidebarResetKeepsAPermissionRefusal() {
+        block(.permission)
+        workspace.resetSidebarContext(reason: "test")
+        XCTAssertEqual(code(rejection()), "agent_awaiting_approval")
+        XCTAssertNil(rejection(["answer_prompt": true]))
+    }
+
     func testQuestionAndKindlessPromptsDoNotRefuse() {
         block(.question)
         XCTAssertNil(rejection(), "Claude's idle prompt reads as a question; prompt-agent must still reach it")
