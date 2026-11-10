@@ -654,13 +654,15 @@ extension ProgramaCLI {
     /// `sendV2` for a write the server refuses while a person has unsent typed input in the
     /// target (`draft_in_progress`) or while its agent waits on an approval prompt
     /// (`agent_awaiting_approval`), with the refusal turned into one line for the person.
-    /// `approvalHint` replaces the `--answer-prompt` advice for a command without that flag.
+    /// `approvalHint` and `draftHint` replace the `--answer-prompt` and `--force` advice for a
+    /// command without those flags.
     func sendDraftGuardedV2(
         _ client: SocketClient,
         method: String,
         params: [String: Any],
         minimumReceiveTimeout: TimeInterval? = nil,
-        approvalHint: String = "Answer it in the pane, or pass --answer-prompt only if the person asked you to."
+        approvalHint: String = "Answer it in the pane, or pass --answer-prompt only if the person asked you to.",
+        draftHint: String? = nil
     ) throws -> [String: Any] {
         let draftPrefix = "draft_in_progress: "
         let approvalPrefix = "agent_awaiting_approval: "
@@ -668,9 +670,9 @@ extension ProgramaCLI {
             return try client.sendV2(method: method, params: params, minimumReceiveTimeout: minimumReceiveTimeout)
         } catch let error as CLIError where error.message.hasPrefix(draftPrefix) {
             // agent.prompt already waited out its --timeout, so "retry later" is the wrong advice.
-            let hint = method == V2MethodNames.agentPrompt
+            let hint = draftHint ?? (method == V2MethodNames.agentPrompt
                 ? "Pass a longer --timeout, or --force to send now."
-                : "Retry after it is submitted or cleared, or pass --force."
+                : "Retry after it is submitted or cleared, or pass --force.")
             throw CLIError(message: "\(error.message.dropFirst(draftPrefix.count)). \(hint)")
         } catch let error as CLIError where error.message.hasPrefix(approvalPrefix) {
             throw CLIError(message: "\(error.message.dropFirst(approvalPrefix.count)). \(approvalHint)")

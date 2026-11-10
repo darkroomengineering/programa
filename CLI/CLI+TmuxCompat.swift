@@ -951,6 +951,18 @@ extension ProgramaCLI {
         "up": "up", "down": "down", "left": "left", "right": "right", "home": "home", "end": "end",
     ]
 
+    /// tmux commands take no `--force` or `--answer-prompt`, so a refused write points at the
+    /// `programa` commands that do.
+    func tmuxSendGuardedV2(_ client: SocketClient, method: String, params: [String: Any]) throws -> [String: Any] {
+        try sendDraftGuardedV2(
+            client,
+            method: method,
+            params: params,
+            approvalHint: "Ask the person to answer it in that pane. Only if they asked you to answer for them, use `programa send --answer-prompt` or `programa send-key --answer-prompt`.",
+            draftHint: "Retry after the person submits or clears it. Only if they asked you to send anyway, use `programa send --force` or `programa send-key --force`."
+        )
+    }
+
     func tmuxSendKeysSegments(from tokens: [String], literal: Bool) -> [TmuxSendKeysSegment] {
         if literal {
             let text = tokens.joined(separator: " ")
@@ -1352,10 +1364,10 @@ extension ProgramaCLI {
                 switch segment {
                 case .text(let text):
                     params["text"] = text
-                    _ = try client.sendV2(method: V2MethodNames.surfaceSendText, params: params)
+                    _ = try tmuxSendGuardedV2(client, method: V2MethodNames.surfaceSendText, params: params)
                 case .key(let key):
                     params["key"] = key
-                    _ = try client.sendV2(method: V2MethodNames.surfaceSendKey, params: params)
+                    _ = try tmuxSendGuardedV2(client, method: V2MethodNames.surfaceSendKey, params: params)
                 }
             }
 
@@ -2191,7 +2203,7 @@ extension ProgramaCLI {
             if let wsId { params["workspace_id"] = wsId }
             let sfId = try normalizeSurfaceHandle(surfaceArg, client: client, workspaceHandle: wsId, allowFocused: true)
             if let sfId { params["surface_id"] = sfId }
-            let payload = try client.sendV2(method: V2MethodNames.surfaceSendText, params: params)
+            let payload = try tmuxSendGuardedV2(client, method: V2MethodNames.surfaceSendText, params: params)
             printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: "OK")
 
         case "respawn-pane":
@@ -2205,7 +2217,7 @@ extension ProgramaCLI {
             if let wsId { params["workspace_id"] = wsId }
             let sfId = try normalizeSurfaceHandle(surfaceArg, client: client, workspaceHandle: wsId, allowFocused: true)
             if let sfId { params["surface_id"] = sfId }
-            let payload = try client.sendV2(method: V2MethodNames.surfaceSendText, params: params)
+            let payload = try tmuxSendGuardedV2(client, method: V2MethodNames.surfaceSendText, params: params)
             printV2Payload(payload, jsonOutput: jsonOutput, idFormat: idFormat, fallbackText: "OK")
 
         case "display-message":
