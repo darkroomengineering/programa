@@ -598,7 +598,8 @@ When a person has typed into a terminal and not submitted it, Programa refuses t
 there, so agent text never mixes into that half-typed line or submits it. `surface.send_text`,
 `surface.send_key`, `surface.send_paste` and `surface.send_if_unchanged` return
 `draft_in_progress` and send nothing. `programa send`, `send-key`, `send-panel`, `send-key-panel`
-and `handoff` print one line saying so and exit non-zero. `agent.prompt` (`programa prompt-agent`)
+and `handoff` print one line saying so and exit non-zero, as do the tmux shim's `send-keys`,
+`paste-buffer` and `respawn-pane`, which point at `programa send --force` since tmux has no such flag. `agent.prompt` (`programa prompt-agent`)
 waits for the draft to end instead, within its own `timeout_ms`, and returns `draft_in_progress`
 only when that budget runs out first (see "`agent.prompt` (#166)").
 
@@ -632,7 +633,8 @@ is refused, not only writes that submit. `surface.send_text`, `surface.send_key`
 `surface.send_paste`, `surface.send_if_unchanged` and `agent.prompt` return
 `agent_awaiting_approval` and send nothing. `agent.prompt` fails at once instead of waiting.
 `programa send`, `send-key`, `send-panel`, `send-key-panel`, `prompt-agent` and `handoff` print one
-line saying so and exit non-zero.
+line saying so and exit non-zero, as do the tmux shim's `send-keys`, `paste-buffer` and
+`respawn-pane`, which point at `programa send --answer-prompt` since tmux has no such flag.
 
 - The kind of prompt comes from the agent's report. `agent.needs_input` with `kind: "permission"`,
   `agent.event` `request.opened`, an OSC 7501 root `blocked` record with `kind=permission` or
