@@ -645,6 +645,13 @@ line saying so and exit non-zero.
   (Return, Escape, Ctrl+C, or any typed key), when a write with `answer_prompt` is delivered,
   when `surface.clear_agent_state` runs or the agent's process exits, and while the setting below
   is off. There is no timer: a prompt left alone for an hour still needs the person.
+  `workspace.reset_sidebar` clears the badge but keeps a showing permission or sign-in prompt
+  refused until one of the events above.
+- A later `question` or kindless `blocked` report does not replace a showing permission or
+  sign-in prompt.
+- Any socket client can still lift the refusal by reporting the agent as `working` or `idle`, or
+  by calling `surface.clear_agent_state`. The refusal stops agents that respect the error; it is
+  not a boundary between clients of the same socket.
 - A new `blocked` report re-arms it, so a second permission request in the same turn is
   protected again.
 
