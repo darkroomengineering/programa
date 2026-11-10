@@ -57,6 +57,32 @@ final class ReviewPanelRowPlannerTests: XCTestCase {
         XCTAssertEqual(panel.sendPendingComments(), 0, "Empty review remains a successful no-op")
     }
 
+    func testCommentsStayPendingWhileTheSourceAgentWaitsOnAnApprovalPrompt() throws {
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: ApprovalGuardSettings.enabledKey)
+        defer {
+            if let previous { defaults.set(previous, forKey: ApprovalGuardSettings.enabledKey) }
+            else { defaults.removeObject(forKey: ApprovalGuardSettings.enabledKey) }
+        }
+        defaults.set(true, forKey: ApprovalGuardSettings.enabledKey)
+
+        let workspace = Workspace()
+        defer { workspace.teardownAllPanels() }
+        let source = try XCTUnwrap(workspace.focusedPanelId)
+        let panel = ReviewPanel(workspaceId: workspace.id, sourceSurfaceId: source, directory: "/tmp", mode: .uncommitted, baseBranch: "main")
+        panel.sendToSourceSurface = workspace.makeReviewSendClosure(for: panel)
+        let comment = try panel.addComment(filePath: "App.swift", startLine: 1, text: "Please fix this")
+        try XCTUnwrap(workspace.terminalPanel(for: source)).surface.noteAgentPrompt(.permission, isBlocked: true)
+
+        XCTAssertNil(panel.sendPendingComments(), "Comments must not be pasted into an approval prompt")
+        XCTAssertEqual(panel.comments, [comment])
+        XCTAssertTrue(panel.commentDeliveryFailed)
+
+        defaults.set(false, forKey: ApprovalGuardSettings.enabledKey)
+        XCTAssertEqual(panel.sendPendingComments(), 1, "With the protection off, delivery proceeds as before")
+        XCTAssertTrue(panel.comments.isEmpty)
+    }
+
     func testRestoredCommentsSurviveFreshDiffAndRevalidateAnchors() throws {
         let comment = ReviewComment(filePath: "App.swift", startLine: 1, text: "Keep this draft")
         let snapshot = SessionReviewPanelSnapshot(sourceSurfaceId: UUID(), mode: "uncommitted", baseBranch: "main", comments: [comment])
