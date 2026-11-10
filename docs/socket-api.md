@@ -599,8 +599,8 @@ there, so agent text never mixes into that half-typed line or submits it. `surfa
 `surface.send_key`, `surface.send_paste` and `surface.send_if_unchanged` return
 `draft_in_progress` and send nothing. `programa send`, `send-key`, `send-panel`, `send-key-panel`
 and `handoff` print one line saying so and exit non-zero, as do the tmux shim's `send-keys`,
-`paste-buffer` and `respawn-pane`, which point at `programa send --force` since tmux has no such flag. `agent.prompt` (`programa prompt-agent`)
-waits for the draft to end instead, within its own `timeout_ms`, and returns `draft_in_progress`
+`paste-buffer` and `respawn-pane`, which point at `programa send --force` since tmux has no such
+flag. `agent.prompt` (`programa prompt-agent`) waits for the draft to end instead, within its own `timeout_ms`, and returns `draft_in_progress`
 only when that budget runs out first (see "`agent.prompt` (#166)").
 
 - A draft starts when the person types, pastes, drops a file, or commits IME or dictation text in
