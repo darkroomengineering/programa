@@ -535,12 +535,14 @@ inside the paste; otherwise they become spaces, so a shell gets one line and run
 |---|---|---|---|
 | `text` | string | yes | Must not be empty. |
 | `force` | boolean | no | Paste even while a person has unsent typed input in the terminal. See "Text delivery: `draft_in_progress`". |
+| `answer_prompt` | boolean | no | Paste even while the terminal's agent waits on a permission or sign-in prompt. See "Approval prompts: `agent_awaiting_approval`". |
 | `surface_id` | string | no | Target terminal; defaults to the focused surface of the resolved workspace. |
 | `workspace_id` / `window_id` / `tab_id` | string | no | Same resolution as `surface.send_text`. |
 
 Returns `{"workspace_id", "workspace_ref", "surface_id", "surface_ref", "window_id", "window_ref"}`
 plus `"queued": true` when the terminal was not attached yet. Errors: `invalid_params` for missing
 or empty `text` or a non-terminal surface, `not_found` for an unknown workspace or surface,
+`agent_awaiting_approval` when the terminal's agent waits on a permission or sign-in prompt,
 `draft_in_progress` when a person has unsent typed input in the terminal. Runs on main like
 `surface.send_text` and changes no focus or selection.
 
@@ -560,6 +562,7 @@ command or terminal update runs between the check and the input.
 | `keys` | array of string | no | Key names `surface.send_key` accepts, sent in order after `text`. |
 | `lines` / `scrollback` | integer / boolean | no | Same meaning and bounds as `surface.read_text`; use the values from the read that produced the fingerprint. |
 | `force` | boolean | no | Send even while a person has unsent typed input in the terminal. |
+| `answer_prompt` | boolean | no | Send even while the terminal's agent waits on a permission or sign-in prompt. |
 | `surface_id` | string | no | Target terminal; defaults to the focused surface of the resolved workspace. |
 | `workspace_id` / `window_id` / `tab_id` | string | no | Same resolution as `surface.send_text`. |
 
@@ -569,6 +572,9 @@ At least one of a non-empty `text` or a non-empty `keys` is required. Returns
 
 - `mismatch`: the screen changed. Nothing was sent. `data` is `{"current_fingerprint", "surface_id"}`;
   read again before deciding what to send.
+- `agent_awaiting_approval`: the fingerprint matched, but the terminal's agent waits on a permission
+  or sign-in prompt. Nothing was sent. Checked after `mismatch` and before `draft_in_progress`. See
+  "Approval prompts: `agent_awaiting_approval`".
 - `draft_in_progress`: the fingerprint matched, but a person has unsent typed input in the terminal.
   Nothing was sent. A draft typed before the read still matches the fingerprint, so this is checked
   after `mismatch`. See "Text delivery: `draft_in_progress`".
@@ -601,7 +607,9 @@ only when that budget runs out first (see "`agent.prompt` (#166)").
 - It ends when the person presses Return, Ctrl+C or Ctrl+U, or 60 seconds after their last
   keystroke there. Shift+Return and Option+Return insert a newline in agent prompts, so they do not
   end it, and an Enter that only confirms an IME conversion does not end it either.
-- Keys typed while the surface's agent is `blocked` answer its prompt and never start a draft.
+- While the surface's agent shows a prompt (it reported `blocked`), the person's first key answers
+  the prompt and does not start a draft; keys after it do. Escape answers a prompt too and never
+  ends a draft. A draft typed before the prompt appeared is still held once the prompt closes.
 - Terminal replies (cursor reports, color queries, focus reports) and socket writes never count as
   typing. Each terminal has its own draft, so a draft in one pane never blocks another.
 
@@ -614,6 +622,53 @@ key, submits the person's text along with it, so the terminal stops holding writ
 Settings toggle Agents > Protect Unsent Typing (`automation.holdAgentTextWhileTyping` in
 [settings.json](settings-json.md)) turns the check off; drafts are still tracked while it is off.
 The check and the write run in one main-thread pass, and a refusal changes no focus or selection.
+
+## Approval prompts: `agent_awaiting_approval`
+
+While the agent in a terminal waits on a permission or sign-in prompt, Programa refuses socket
+writes there, so a script or another agent cannot answer it for the person. A single key answers
+such a prompt (a digit or Enter picks an option, `y`/`n` or Escape and Ctrl+C deny), so every write
+is refused, not only writes that submit. `surface.send_text`, `surface.send_key`,
+`surface.send_paste`, `surface.send_if_unchanged` and `agent.prompt` return
+`agent_awaiting_approval` and send nothing. `agent.prompt` fails at once instead of waiting.
+`programa send`, `send-key`, `send-panel`, `send-key-panel`, `prompt-agent` and `handoff` print one
+line saying so and exit non-zero.
+
+- The kind of prompt comes from the agent's report. `agent.needs_input` with `kind: "permission"`,
+  `agent.event` `request.opened`, an OSC 7501 root `blocked` record with `kind=permission` or
+  `kind=auth`, and a blocked screen match from screen-based agent detection are refused.
+- Questions are not refused: `agent.needs_input` with `kind: "question"` or no kind,
+  `agent.event` `user-input.requested`, OSC 7501 `kind=question` or no kind, and
+  `surface.report_agent_state` `blocked`. Claude Code's idle prompt reports as a question, so
+  `agent.prompt` to an idle helper still sends.
+- The refusal lifts when the agent leaves `blocked`, when the person presses a key at the prompt
+  (Return, Escape, Ctrl+C, or any typed key), when a write with `answer_prompt` is delivered,
+  when `surface.clear_agent_state` runs or the agent's process exits, and while the setting below
+  is off. There is no timer: a prompt left alone for an hour still needs the person.
+  `workspace.reset_sidebar` clears the badge but keeps a showing permission or sign-in prompt
+  refused until one of the events above.
+- A later `question` or kindless `blocked` report does not replace a showing permission or
+  sign-in prompt.
+- Any socket client can still lift the refusal by reporting the agent as `working` or `idle`, or
+  by calling `surface.clear_agent_state`. The refusal stops agents that respect the error; it is
+  not a boundary between clients of the same socket.
+- A new `blocked` report re-arms it, so a second permission request in the same turn is
+  protected again.
+
+`data` is `{"surface_id", "surface_ref", "prompt_kind", "prompt_age_ms", "agent_state_source",
+"stale"}`. `prompt_kind` is `"permission"` or `"auth"`. `prompt_age_ms` is how long the prompt has
+shown. `agent_state_source` is the surface's `agent_state_source` (`hooks`, `inferred`, `program`,
+or null), and `stale` is true when that report is old enough for the sidebar to dim it. The
+message names the surface, for example `surface:3 is waiting on an approval prompt; nothing was
+sent`.
+
+Pass `"answer_prompt": true` (`--answer-prompt` in the CLI) to write anyway, and only when the
+person asked for it. `force` does not answer a prompt: a write that meets both a prompt and a draft
+needs both flags, and the prompt is checked first. `surface.send_if_unchanged` checks `mismatch`
+before both. The Settings toggle Agents > Protect Approval Prompts
+(`automation.protectApprovalPrompts` in [settings.json](settings-json.md)) turns the check off;
+prompts are still tracked while it is off. This is a floor, not a guarantee: an agent that reports
+no state, or a prompt Programa does not hear about (for example inside tmux), is not protected.
 
 ## `agent.prompt` (#166)
 
@@ -630,6 +685,7 @@ Request params:
 | `timeout_ms` | int | no | Overall budget for the agent to finish. Default `120000`. Also accepts `timeout`. |
 | `working_grace_ms` | int | no | How long to wait for the agent to report it started working before giving up on observing that transition, capped by the remaining overall `timeout_ms` budget. Default `3000`. |
 | `force` | boolean | no | Send right away even while a person has unsent typed input in the surface. Without it the call waits for that input to be submitted or cleared first (step 0 below; see "Text delivery: `draft_in_progress`"). |
+| `answer_prompt` | boolean | no | Send even while the agent waits on a permission or sign-in prompt. Without it the call fails at once with `agent_awaiting_approval` (step A below). |
 
 Response (`ok: true`):
 
@@ -657,6 +713,10 @@ first. Both are absent when the prompt was sent right away.
 
 ### Semantics (phased, event-driven except the draft hold)
 
+A. **Refuse at an approval prompt.** If the agent waits on a permission or sign-in prompt, the
+   call fails at once with `agent_awaiting_approval` and nothing is sent; it never holds for a
+   prompt. Each main-thread hop of step 0 checks this before it reads the draft, so a prompt that
+   appears while the call holds or settles refuses it too. `answer_prompt: true` skips this step.
 0. **Hold for a person's draft.** If a person has unsent typed input in the surface, nothing is
    sent yet. The app re-reads the draft every 100 ms on the request's own connection thread. A
    closed surface resolves with `outcome: "closed"`, and a disconnected client ends the wait.
@@ -672,8 +732,8 @@ first. Both are absent when the prompt was sent right away.
    - Then one main-thread hop re-reads the draft. If the person started typing again, the call
      goes back to holding; otherwise step 1 runs in that same hop, on the remaining budget.
 
-   `draft_in_progress` always means nothing was sent, and `timeout` always means the prompt was
-   sent. `force: true` skips this step.
+   `draft_in_progress` and `agent_awaiting_approval` always mean nothing was sent, and `timeout`
+   always means the prompt was sent. `force: true` skips this step.
 1. **Send + register, atomically.** The text is sent via the exact same path
    `surface.send_text` uses, and — inside that *same* main-thread hop — the surface's
    `agent_state` at that instant is captured and a watcher for the next `working` transition is

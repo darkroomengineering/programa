@@ -9937,6 +9937,57 @@
         }
       }
     },
+    "settings.agents.protectApprovalPrompts": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Protect Approval Prompts"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "承認プロンプトを保護"
+          }
+        }
+      }
+    },
+    "settings.agents.protectApprovalPrompts.subtitleOff": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scripts can answer an agent's approval prompt."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "スクリプトがエージェントの承認プロンプトに応答できます。"
+          }
+        }
+      }
+    },
+    "settings.agents.protectApprovalPrompts.subtitleOn": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agents and scripts can't answer an approval prompt for you."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "エージェントやスクリプトが代わりに承認プロンプトに応答することはできません。"
+          }
+        }
+      }
+    },
     "settings.app.autoResumeAgents": {
       "extractionState": "manual",
       "localizations": {

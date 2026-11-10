@@ -1818,7 +1818,7 @@ extension ProgramaCLI {
     | The user asks for the same pane arrangement again | `programa layout save` / `layout apply` |
     | You need output from another pane | `read-screen --surface <ref>` |
     | Need another pane's output in your prompt | `programa handoff --from <pane>` |
-    | Hand text to another agent's prompt without submitting it | MCP `surface_send_paste`: one paste, Return is never pressed. `send` and `surface_send_text` turn each newline into Return. The write is refused with `draft_in_progress` while the person has unsent input in that pane. Retry after they submit or clear it, or pass `force: true` (`--force` in the CLI) only when the user asked for it. |
+    | Hand text to another agent's prompt without submitting it | MCP `surface_send_paste`: one paste, Return is never pressed. `send` and `surface_send_text` turn each newline into Return. The write is refused with `draft_in_progress` while the person has unsent input in that pane. Retry after they submit or clear it, or pass `force: true` (`--force` in the CLI) only when the user asked for it. While the agent there waits on a permission or sign-in prompt, every write is refused with `agent_awaiting_approval`: ask the user, and pass `answer_prompt: true` (`--answer-prompt`) only when they told you to answer it. |
     | An agent in a pane exited, or Programa restarted, and its work should continue | `programa resume --surface <ref>` types its resume command at that pane's shell prompt |
     | The user asks for a recap of a change | write `.programa/recaps/<slug>.md`, then `programa recap open <slug>` |
 
@@ -1932,8 +1932,10 @@ extension ProgramaCLI {
     handle=$(echo "$result" | awk '{print $2}')
     programa send --surface "$handle" "claude 'fix the failing test in foo_test.go'\n"   # launch the helper
     programa read-screen --surface "$handle" --scrollback --lines 100                  # check on it later
-    programa send --surface "$handle" "yes\n"                                           # answer it if it's waiting
+    programa send --surface "$handle" --answer-prompt "y"                              # approve, only when the user told you to
     ```
+
+    If the helper waits on a permission or sign-in prompt, `send` and `prompt-agent` are refused with `agent_awaiting_approval` and send nothing. Tell the user what the helper is asking and let them answer it in that pane. Pass `--answer-prompt` only when the user told you to approve it for them.
 
     Surface status through the sidebar and native notifications rather than only printing to your own pane:
 
@@ -1986,7 +1988,7 @@ extension ProgramaCLI {
     programa prompt-agent --surface "$handle" --timeout 300 "fix the failing test in foo_test.go"
     ```
 
-    It sends the text, waits briefly for the helper to report it started working, then waits for it to go idle again. If the helper never reports any activity, the JSON response carries a `warning` that its hooks may not be installed — check that field if `prompt-agent` returns suspiciously fast.
+    It sends the text, waits briefly for the helper to report it started working, then waits for it to go idle again. If the helper never reports any activity, the JSON response carries a `warning` that its hooks may not be installed — check that field if `prompt-agent` returns suspiciously fast. A helper waiting on a permission prompt refuses it with `agent_awaiting_approval` (see above); a helper that is idle or asking a question does not.
 
     ## Reviewing a diff
 

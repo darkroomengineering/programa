@@ -2,64 +2,110 @@ import Foundation
 import Bonsplit
 
 // Keeps socket writes (`surface.send_*`, `agent.prompt`, `programa handoff`) out of a terminal
-// while a person has typed input there that they have not submitted (INC-687).
+// while a person has typed input there that they have not submitted (INC-687), and while the
+// agent in it waits on a permission or sign-in prompt the person has not answered (INC-695).
 //
-// Only person input moves the gate: keyDown, paste, IME/dictation commits and drag-drop in
-// `GhosttyNSView`. Terminal replies (DA1, DSR, OSC 11, focus reports) and socket writes reach
-// the PTY without passing through those sites, so they can never look like typing.
+// Only person input moves the draft side of the gate: keyDown, paste, IME/dictation commits and
+// drag-drop in `GhosttyNSView`. Terminal replies (DA1, DSR, OSC 11, focus reports) and socket
+// writes reach the PTY without passing through those sites, so they can never look like typing.
+// The prompt side moves on agent-state reports (`Workspace.updatePanelAgentState`).
 
-/// Whether a person has unsent typed input in one terminal surface.
+/// Unsent person input. Times are `systemUptime` seconds, the clock `NSEvent.timestamp` uses.
+struct PersonDraft: Equatable {
+    var since: TimeInterval
+    var lastKeyAt: TimeInterval
+
+    /// True while this draft holds socket writes at `now`.
+    func isHolding(now: TimeInterval) -> Bool {
+        now - lastKeyAt < PersonDraftGate.idleExpiry
+    }
+}
+
+/// Whether a person has unsent typed input in one terminal surface, and whether the agent in it
+/// is showing a prompt the person has not answered yet.
 enum PersonDraftGate: Equatable {
-    /// No unsent person input.
+    /// No unsent person input and no open prompt.
     case open
-    /// The agent is blocked on an approval prompt: keys typed now answer it, not start a draft.
-    case answeringPrompt
-    /// Times are `systemUptime` seconds, the clock `NSEvent.timestamp` uses.
-    case drafting(since: TimeInterval, lastKeyAt: TimeInterval)
+    case drafting(PersonDraft)
+    /// The agent reported a prompt (nil kind: the reporter did not say which). `since` is
+    /// `systemUptime` seconds. `draft` is input the person typed before the prompt appeared;
+    /// it is still theirs once the prompt closes.
+    case promptShowing(ProgramStatusKind?, since: TimeInterval, draft: PersonDraft?)
 
     /// A draft left alone this long stops holding writes. Without it, text typed and then
     /// erased with Backspace (DEL is not counted as typing) would hold the pane forever.
     static let idleExpiry: TimeInterval = 60
 
+    /// Kinds whose prompt refuses socket writes. A question, or a prompt of unknown kind, does
+    /// not: Claude's idle prompt reads as a question, and refusing it would break `prompt-agent`.
+    static func refusesWrites(_ kind: ProgramStatusKind?) -> Bool {
+        kind == .permission || kind == .auth
+    }
+
     static func next(_ state: PersonDraftGate, _ event: PersonDraftEvent) -> PersonDraftGate {
         switch state {
         case .open:
             switch event {
-            case .typed(let at): return .drafting(since: at, lastKeyAt: at)
-            case .agentBlocked: return .answeringPrompt
-            case .submitted, .cleared, .agentUnblocked, .forcedSubmitDelivered, .expired: return .open
+            case .typed(let at): return .drafting(PersonDraft(since: at, lastKeyAt: at))
+            case .agentPrompt(let kind, let at): return .promptShowing(kind, since: at, draft: nil)
+            case .submitted, .cleared, .dismissed, .socketWriteDelivered, .agentPromptClosed, .expired: return .open
             }
-        case .answeringPrompt:
-            if case .agentUnblocked = event { return .open }
-            return .answeringPrompt
-        case .drafting(let since, let lastKeyAt):
+        case .drafting(let draft):
             switch event {
             case .typed(let at):
                 // A keystroke after an expired draft starts a new one.
-                return .drafting(since: at - lastKeyAt >= idleExpiry ? at : since, lastKeyAt: at)
-            case .submitted, .cleared, .forcedSubmitDelivered, .expired:
+                let since = at - draft.lastKeyAt >= idleExpiry ? at : draft.since
+                return .drafting(PersonDraft(since: since, lastKeyAt: at))
+            case .submitted, .cleared, .expired:
                 return .open
-            case .agentBlocked, .agentUnblocked:
-                // A draft typed before an approval prompt is still the person's text.
+            case .agentPrompt(let kind, let at):
+                return .promptShowing(kind, since: at, draft: draft)
+            case .dismissed, .socketWriteDelivered, .agentPromptClosed:
                 return state
             }
+        case .promptShowing(let kind, let since, let draft):
+            switch event {
+            case .submitted where !refusesWrites(kind), .cleared where !refusesWrites(kind):
+                // At a question or kindless prompt the input box is the prompt, so Return sends
+                // the draft and Ctrl+C/Ctrl+U clears it.
+                return .open
+            case .typed, .submitted, .cleared, .dismissed, .socketWriteDelivered, .agentPromptClosed:
+                // The person's first key (or a delivered write) answers an approval box drawn over
+                // the input box; a draft typed before it is still theirs.
+                return draft.map { .drafting($0) } ?? .open
+            case .expired:
+                return .promptShowing(kind, since: since, draft: nil)
+            case .agentPrompt(let newKind, let at):
+                // Reporters repeat the same prompt; keep its age unless the kind changed. Any
+                // client can report `blocked` or `question`, so a kind that refuses writes is
+                // never replaced by one that doesn't; only an answer or a close ends it.
+                let resolved = PersonDraftGate.refusesWrites(kind) ? (newKind.flatMap { PersonDraftGate.refusesWrites($0) ? $0 : nil } ?? kind) : (newKind ?? kind)
+                return .promptShowing(resolved, since: resolved == kind ? since : at, draft: draft)
+            }
+        }
+    }
+
+    /// The person's unsent draft, whether or not a prompt shows over it.
+    var draft: PersonDraft? {
+        switch self {
+        case .open: return nil
+        case .drafting(let draft): return draft
+        case .promptShowing(_, _, let draft): return draft
         }
     }
 
     /// True while a draft holds socket writes at `now`.
     func isHolding(now: TimeInterval) -> Bool {
-        guard case .drafting(_, let lastKeyAt) = self else { return false }
-        return now - lastKeyAt < Self.idleExpiry
+        draft?.isHolding(now: now) ?? false
     }
 
-    var isDrafting: Bool {
-        if case .drafting = self { return true }
-        return false
-    }
+    var isDrafting: Bool { draft != nil }
 
     fileprivate func isSameCase(as other: PersonDraftGate) -> Bool {
         switch (self, other) {
-        case (.open, .open), (.answeringPrompt, .answeringPrompt), (.drafting, .drafting): return true
+        case (.open, .open), (.drafting, .drafting): return true
+        case (.promptShowing(let kind, _, let draft), .promptShowing(let otherKind, _, let otherDraft)):
+            return kind == otherKind && (draft == nil) == (otherDraft == nil)
         default: return false
         }
     }
@@ -67,21 +113,27 @@ enum PersonDraftGate: Equatable {
     fileprivate var caseName: String {
         switch self {
         case .open: return "open"
-        case .answeringPrompt: return "answeringPrompt"
         case .drafting: return "drafting"
+        case .promptShowing(let kind, _, let draft):
+            return "promptShowing(\(kind?.rawValue ?? "unknown")\(draft == nil ? "" : ",draft"))"
         }
     }
 }
 
 enum PersonDraftEvent: Equatable {
     case typed(at: TimeInterval)
+    /// The person pressed Return, or a delivered socket write contained a submit (CR/LF, or
+    /// the Enter key).
     case submitted
     case cleared
-    case agentBlocked
-    case agentUnblocked
-    /// A forced socket write that contained a submit (CR/LF, or the Enter key) went through,
-    /// so the person's draft was submitted with it.
-    case forcedSubmitDelivered
+    /// The person pressed Escape.
+    case dismissed
+    /// Any socket write went through. Posted after `submitted`/`cleared` for the same write.
+    case socketWriteDelivered
+    /// The agent reported a prompt (`blocked`). `at` is `systemUptime` seconds.
+    case agentPrompt(ProgramStatusKind?, at: TimeInterval)
+    /// The agent left `blocked`, or its state was cleared.
+    case agentPromptClosed
     /// The draft went `PersonDraftGate.idleExpiry` seconds without a keystroke.
     case expired
 }
@@ -98,28 +150,58 @@ enum DraftGuardSettings {
     }
 }
 
+/// Kill switch for the approval refusal (`automation.protectApprovalPrompts`). Prompt tracking
+/// keeps running while it is off, so turning it back on protects a prompt already showing.
+enum ApprovalGuardSettings {
+    static let enabledKey = "protectApprovalPrompts"
+    static let defaultEnabled = true
+    private static let flag = UserDefaultsFlag(key: enabledKey, defaultValue: defaultEnabled)
+
+    static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
+        flag.isEnabled(defaults: defaults)
+    }
+}
+
 /// A draft that is holding writes, as reported in the `draft_in_progress` error.
 struct PersonDraftHold: Equatable {
     let ageMs: Int
     let expiresInMs: Int
 }
 
+/// A prompt that is refusing writes, as reported in the `agent_awaiting_approval` error.
+struct PersonPromptHold: Equatable {
+    let kind: ProgramStatusKind
+    let ageMs: Int
+}
+
 extension TerminalSurface {
-    /// The draft holding socket writes at `now`, or nil. Moves an idle draft to `.open` first,
-    /// in the caller's main hop, so the check and the write that follows see one state.
+    /// The draft holding socket writes at `now`, or nil. Drops an idle draft first, in the
+    /// caller's main hop, so the check and the write that follows see one state.
     func activeDraftHold(now: TimeInterval = ProcessInfo.processInfo.systemUptime) -> PersonDraftHold? {
         expireIdleDraft(now: now)
-        guard case .drafting(let since, let lastKeyAt) = draftGate else { return nil }
+        guard let draft = draftGate.draft else { return nil }
         return PersonDraftHold(
-            ageMs: max(0, Int(((now - since) * 1000).rounded())),
-            expiresInMs: max(0, Int(((lastKeyAt + PersonDraftGate.idleExpiry - now) * 1000).rounded()))
+            ageMs: max(0, Int(((now - draft.since) * 1000).rounded())),
+            expiresInMs: max(0, Int(((draft.lastKeyAt + PersonDraftGate.idleExpiry - now) * 1000).rounded()))
         )
     }
 
-    /// Agent-state hook: the agent started or stopped waiting on an approval prompt.
-    func noteAgentBlockedChange(isBlocked: Bool, now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+    /// The permission or sign-in prompt refusing socket writes at `now`, or nil.
+    func activePromptHold(now: TimeInterval = ProcessInfo.processInfo.systemUptime) -> PersonPromptHold? {
+        guard case .promptShowing(let kind?, let since, _) = draftGate,
+              PersonDraftGate.refusesWrites(kind) else { return nil }
+        return PersonPromptHold(kind: kind, ageMs: max(0, Int(((now - since) * 1000).rounded())))
+    }
+
+    /// Agent-state hook: the agent reported a prompt of `kind` (every `blocked` report, so a
+    /// repeated report re-arms a prompt the person already answered), or stopped waiting on one.
+    func noteAgentPrompt(
+        _ kind: ProgramStatusKind?,
+        isBlocked: Bool,
+        now: TimeInterval = ProcessInfo.processInfo.systemUptime
+    ) {
         expireIdleDraft(now: now)
-        noteDraftEvent(isBlocked ? .agentBlocked : .agentUnblocked)
+        noteDraftEvent(isBlocked ? .agentPrompt(kind, at: now) : .agentPromptClosed)
     }
 
     private func expireIdleDraft(now: TimeInterval) {

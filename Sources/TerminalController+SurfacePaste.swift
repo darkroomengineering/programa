@@ -28,12 +28,13 @@ extension TerminalController {
             case .resolved(let target):
                 (ws, surfaceId, terminalPanel) = target
             }
-            if let rejection = v2DraftGuardRejection(params: params, surfaceId: surfaceId, terminalPanel: terminalPanel) {
+            if let rejection = v2SocketWriteRejection(params: params, surfaceId: surfaceId, terminalPanel: terminalPanel, workspace: ws) {
                 return rejection
             }
 
             let queued = terminalPanel.surface.surface == nil
             terminalPanel.surface.sendPaste(text)
+            terminalPanel.surface.noteDraftEvent(.socketWriteDelivered)
             if !queued {
                 terminalPanel.surface.forceRefresh(reason: "terminalController.v2SurfaceSendPaste")
             }

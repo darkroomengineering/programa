@@ -64,8 +64,9 @@ extension TerminalController {
                 )
             }
 
-            // After the fingerprint check, so `mismatch` keeps priority over `draft_in_progress`.
-            if let rejection = v2DraftGuardRejection(params: params, surfaceId: surfaceId, terminalPanel: terminalPanel) {
+            // After the fingerprint check, so `mismatch` keeps priority over
+            // `agent_awaiting_approval` and `draft_in_progress`.
+            if let rejection = v2SocketWriteRejection(params: params, surfaceId: surfaceId, terminalPanel: terminalPanel, workspace: ws) {
                 return rejection
             }
 

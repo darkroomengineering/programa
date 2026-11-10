@@ -168,7 +168,8 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
                 surfaceId: key.surfaceId,
                 state: root.state.legacyAgentState,
                 source: .program,
-                programState: root.state
+                programState: root.state,
+                promptKind: root.kind
             )
         } else {
             manager.clearSurfaceAgentState(tabId: key.tabId, surfaceId: key.surfaceId, source: .program)

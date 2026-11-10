@@ -6,6 +6,9 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 
 ## [Unreleased]
 
+### Added
+- Scripts and other agents can no longer answer an agent's permission or sign-in prompt for you. While a pane shows one, `programa send`, `send-key`, `prompt-agent`, `handoff` and the matching socket and MCP calls send nothing and fail with `agent_awaiting_approval`. Questions and idle prompts are not affected. Pressing a key at the prompt lifts the refusal, `--answer-prompt` (`answer_prompt` over the socket) sends anyway, and Settings > Agents > Protect Approval Prompts (`automation.protectApprovalPrompts`) turns it off. See `docs/socket-api.md`.
+
 ## [0.6.0] - 2026-11-07
 
 ### Added

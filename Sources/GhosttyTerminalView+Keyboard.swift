@@ -930,13 +930,17 @@ extension GhosttyNSView {
         // Shift/Option+Return insert a newline in agent TUIs, so only a bare Return submits; an
         // Enter that only confirms a Japanese/Chinese conversion (marked text before, no Korean
         // confirm key sent) is not a submit either. Command, Control and function-key events are
-        // bindings and navigation, not typing.
+        // bindings and navigation, not typing. A bare Escape outside an IME composition answers
+        // (denies) an agent's prompt; it leaves a draft alone.
         if event.keyCode == 36 || event.keyCode == 76,
            flags.isDisjoint(with: [.shift, .option, .command, .control]),
            !markedTextBefore || sentCommittedIMEConfirmKey {
             terminalSurface?.noteDraftEvent(.submitted)
         } else if shouldRefreshAfterTextInput, flags.isDisjoint(with: [.command, .control, .function]) {
             terminalSurface?.noteDraftEvent(.typed(at: event.timestamp))
+        } else if event.keyCode == 53, !markedTextBefore,
+                  flags.isDisjoint(with: [.shift, .option, .command, .control]) {
+            terminalSurface?.noteDraftEvent(.dismissed)
         }
 
         if shouldRefreshAfterTextInput {

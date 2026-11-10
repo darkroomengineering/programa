@@ -48,6 +48,8 @@ struct SettingsView: View {
     private var agentScreenDetectionEnabled = AgentScreenDetectionSettings.defaultEnabled
     @AppStorage(DraftGuardSettings.enabledKey)
     private var holdAgentTextWhileTyping = DraftGuardSettings.defaultEnabled
+    @AppStorage(ApprovalGuardSettings.enabledKey)
+    private var protectApprovalPrompts = ApprovalGuardSettings.defaultEnabled
     @AppStorage(NotificationSoundSettings.key) private var notificationSound = NotificationSoundSettings.defaultValue
     @AppStorage(MenuBarExtraSettings.showInMenuBarKey) private var showMenuBarExtra = MenuBarExtraSettings.defaultShowInMenuBar
     @AppStorage(QuitWarningSettings.warnBeforeQuitKey) private var warnBeforeQuitShortcut = QuitWarningSettings.defaultWarnBeforeQuit
@@ -832,6 +834,21 @@ struct SettingsView: View {
             SettingsCardDivider()
 
             SettingsCardRow(
+                String(localized: "settings.agents.protectApprovalPrompts", defaultValue: "Protect Approval Prompts"),
+                subtitle: protectApprovalPrompts
+                    ? String(localized: "settings.agents.protectApprovalPrompts.subtitleOn", defaultValue: "Agents and scripts can't answer an approval prompt for you.")
+                    : String(localized: "settings.agents.protectApprovalPrompts.subtitleOff", defaultValue: "Scripts can answer an agent's approval prompt.")
+            ) {
+                Toggle("", isOn: $protectApprovalPrompts)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .accessibilityIdentifier("SettingsProtectApprovalPromptsToggle")
+            }
+            .managedBySettingsFile(settingsFileStatus.isManaged(ApprovalGuardSettings.enabledKey))
+
+            SettingsCardDivider()
+
+            SettingsCardRow(
                 String(localized: "settings.automation.agentScreenDetection", defaultValue: "Screen-Based Agent Detection"),
                 subtitle: agentScreenDetectionEnabled
                     ? String(localized: "settings.automation.agentScreenDetection.subtitleOn", defaultValue: "Infers working/blocked/idle status for agent CLIs without an installed integration by reading the terminal screen.")
@@ -952,6 +969,7 @@ struct SettingsView: View {
         claudeCodeHooksEnabled = ClaudeCodeIntegrationSettings.defaultHooksEnabled
         agentScreenDetectionEnabled = AgentScreenDetectionSettings.defaultEnabled
         holdAgentTextWhileTyping = DraftGuardSettings.defaultEnabled
+        protectApprovalPrompts = ApprovalGuardSettings.defaultEnabled
         notificationSound = NotificationSoundSettings.defaultValue
         showMenuBarExtra = MenuBarExtraSettings.defaultShowInMenuBar
         warnBeforeQuitShortcut = QuitWarningSettings.defaultWarnBeforeQuit
