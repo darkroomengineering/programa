@@ -145,6 +145,109 @@ final class InferredAgentCleanupTests: XCTestCase {
     }
 }
 
+/// A screen-detected agent stays `.blocked` across back-to-back approval boxes, so the engine
+/// must re-report each new box to re-arm the socket-write refusal the person's answer lifted.
+@MainActor
+final class ScreenDetectedApprovalBoxTests: XCTestCase {
+    private var workspace: Workspace!
+    private var panelId: UUID!
+    private var surface: TerminalSurface!
+    private var engine: AgentScreenDetectionEngine!
+    private var manifest: AgentManifest!
+
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        let workspace = Workspace()
+        self.workspace = workspace
+        panelId = try XCTUnwrap(workspace.focusedPanelId)
+        surface = try XCTUnwrap(workspace.panels[panelId] as? TerminalPanel).surface
+        engine = AgentScreenDetectionEngine(resolveWorkspace: { _, _ in workspace })
+        manifest = try JSONDecoder().decode(AgentManifest.self, from: Data("""
+        {"version":1,"agent":"test","display_name":"Test","recognize":{"process_names":[],"screen_patterns":["WORK"]},
+         "states":[
+          {"bucket":"blocked","priority":100,"anchor_last_n_lines":12,"patterns":["Apply edit\\\\?","Do you want to .*\\\\?","\\\\(y/n\\\\)"],"confidence":"high","source_notes":"fixture"},
+          {"bucket":"working","priority":50,"anchor_last_n_lines":6,"patterns":["WORK"],"confidence":"high","source_notes":"fixture"}]}
+        """.utf8))
+        engine.promoteCandidate(surfaceId: panelId, workspaceId: workspace.id, manifest: manifest)
+    }
+
+    override func tearDown() {
+        workspace?.teardownAllPanels()
+        workspace = nil
+        surface = nil
+        engine = nil
+        super.tearDown()
+    }
+
+    private func show(_ text: String) async {
+        engine.processSample(surfaceId: panelId, workspaceId: workspace.id, manifest: manifest, text: text)
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+    }
+
+    private var refusesWrites: Bool { surface.activePromptHold() != nil }
+
+    private func answer(file: StaticString = #filePath, line: UInt = #line) {
+        surface.noteDraftEvent(.typed(at: ProcessInfo.processInfo.systemUptime))
+        XCTAssertFalse(refusesWrites, "the person's key answers the box", file: file, line: line)
+    }
+
+    func testSecondBoxAfterAnsweredFirstReArmsTheRefusal() async {
+        await show("Edit a.swift\nApply edit? (y/n)")
+        XCTAssertEqual(workspace.panelAgentStates[panelId], .blocked)
+        XCTAssertTrue(refusesWrites)
+        answer()
+        await show("Edit a.swift\nApply edit? (y/n) y\nEdit b.swift\nApply edit? (y/n)")
+        XCTAssertTrue(refusesWrites, "a second box must refuse socket writes again")
+    }
+
+    func testTypingAfterTheBoxDoesNotReArm() async {
+        await show("Edit a.swift\nApply edit? (y/n)")
+        answer()
+        await show("Edit a.swift\nApply edit? (y/n) y")
+        XCTAssertFalse(refusesWrites, "the typed answer echo is not a new box")
+    }
+
+    func testTextTypedBelowTheQuestionDoesNotReArm() async {
+        await show("Do you want to proceed?\n> ")
+        XCTAssertTrue(refusesWrites)
+        answer()
+        await show("Do you want to proceed?\n> hello")
+        await show("Do you want to proceed?\n> hello\n  there")
+        XCTAssertFalse(refusesWrites, "text typed below the question is not a new box")
+    }
+
+    func testNewBoxBelowAStaleAnsweredBoxIsDetected() async {
+        await show("Apply edit? (y/n)")
+        answer()
+        await show("Apply edit? (y/n) y\nApply edit? (y/n)")
+        XCTAssertTrue(refusesWrites, "the bottom-most box is the one waiting")
+    }
+
+    func testIdenticalBoxAfterANonBlockedSampleIsReportedAgain() async {
+        await show("Edit a.swift\nApply edit? (y/n)")
+        answer()
+        await show("ordinary output")
+        XCTAssertEqual(workspace.panelAgentStates[panelId], .blocked, "one unmatched sample keeps the reported state")
+        await show("Edit a.swift\nApply edit? (y/n)")
+        XCTAssertTrue(refusesWrites, "a box that went away and came back must refuse again")
+    }
+
+    func testAnsweredBoxScrollingUpDoesNotReArm() async {
+        let context = (1...10).map { "context \($0)" }
+        await show((context + ["Apply edit? (y/n)"]).joined(separator: "\n"))
+        answer()
+        var lines = context + ["Apply edit? (y/n) y"]
+        for step in 1...11 {
+            lines.append("applying \(step)")
+            await show(lines.suffix(20).joined(separator: "\n"))
+            XCTAssertEqual(workspace.panelAgentStates[panelId], .blocked)
+            XCTAssertFalse(refusesWrites, "output below an answered box is not a new box (step \(step))")
+        }
+    }
+}
+
 #if canImport(Programa_DEV)
 @testable import Programa_DEV
 #elseif canImport(Programa)

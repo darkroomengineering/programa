@@ -76,7 +76,12 @@ extension AgentManifest {
     struct ClassificationResult: Equatable, Sendable {
         let bucket: String
         let matchedPattern: String
+        /// Identifies which approval box a `blocked` match is: a hash of the lines ending at the
+        /// bottom-most blocked match. Nil for every other bucket.
+        var blockedFingerprint: Int? = nil
     }
+
+    private static let blockedFingerprintLines = 5
 
     /// Classifies `text` (typically the last ~60 lines of a terminal surface's visible screen +
     /// scrollback, per `AgentScreenDetectionEngine`'s Phase B sample) against this manifest's
@@ -93,6 +98,12 @@ extension AgentManifest {
             let anchoredText = Self.tailLines(cappedText, maxLines: stateRule.anchorLastNLines)
             guard !anchoredText.isEmpty else { continue }
             let range = NSRange(anchoredText.startIndex..<anchoredText.endIndex, in: anchoredText)
+            if stateRule.bucket == "blocked" {
+                if let result = Self.classifyBlocked(stateRule, anchoredText: anchoredText, range: range, sample: cappedText) {
+                    return result
+                }
+                continue
+            }
             for pattern in stateRule.patterns {
                 guard let regex = Self.compiledRegex(pattern) else { continue }
                 if regex.firstMatch(in: anchoredText, options: [], range: range) != nil {
@@ -101,6 +112,32 @@ extension AgentManifest {
             }
         }
         return nil
+    }
+
+    /// A blocked rule's result, fingerprinted from its bottom-most match across all patterns: an
+    /// answered box still on screen above a new one must not identify the new one. Text after the
+    /// match end (typed answer, input field, selection cursor) stays out, so typing never changes
+    /// it. The lines come from the whole sample rather than the anchored window, so a box drifting
+    /// up toward the window's top edge keeps its context and its fingerprint.
+    private static func classifyBlocked(_ rule: StateRule, anchoredText: String, range: NSRange, sample: String) -> ClassificationResult? {
+        var firstMatchedPattern: String?
+        var bottomMostEnd = -1
+        for pattern in rule.patterns {
+            guard let regex = compiledRegex(pattern),
+                  let last = regex.matches(in: anchoredText, options: [], range: range).last else { continue }
+            if firstMatchedPattern == nil { firstMatchedPattern = pattern }
+            bottomMostEnd = max(bottomMostEnd, NSMaxRange(last.range))
+        }
+        guard let firstMatchedPattern else { return nil }
+        // `anchoredText` is a suffix of `sample`, so its UTF-16 offsets shift by the length difference.
+        let endOffset = sample.utf16.count - anchoredText.utf16.count + bottomMostEnd
+        let end = String.Index(utf16Offset: endOffset, in: sample)
+        let lines = sample[..<end].split(separator: "\n", omittingEmptySubsequences: false).suffix(blockedFingerprintLines)
+        return ClassificationResult(
+            bucket: rule.bucket,
+            matchedPattern: firstMatchedPattern,
+            blockedFingerprint: lines.joined(separator: "\n").hashValue
+        )
     }
 
     /// True when any `recognize.screenPatterns` entry matches `text` (Phase A recognition).

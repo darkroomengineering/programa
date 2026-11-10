@@ -59,7 +59,7 @@ enum ReviewTools {
         ProgramaTool(
             name: "review_send_comments",
             socketMethod: V2MethodNames.reviewSendComments,
-            description: "Sends all pending review comments to the review panel's source surface (e.g. as text into the terminal that started the review), then clears them. Sending zero comments is a no-op, not an error.",
+            description: "Sends all pending review comments to the review panel's source surface (e.g. as text into the terminal that started the review), then clears them. Sending zero comments is a no-op, not an error. While the agent there waits on a permission or sign-in prompt, it fails with agent_awaiting_approval, sends nothing and keeps the comments: ask the user to answer the prompt in that pane, then send again.",
             inputSchema: ProgramaToolSchema.object(properties: [
                 "preamble": ProgramaToolSchema.string("Optional text to prepend before the formatted comments."),
                 "surface_id": ProgramaToolSchema.string("Review panel's surface UUID or short ref. If omitted, uses the workspace's focused review panel, or its only review panel."),

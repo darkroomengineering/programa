@@ -2547,6 +2547,7 @@
       "debug_only": false,
       "description": "Code review panel and comments. (send comments).",
       "errors": [
+        "agent_awaiting_approval",
         "invalid_params",
         "not_found",
         "unavailable"

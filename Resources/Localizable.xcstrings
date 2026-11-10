@@ -1114,6 +1114,23 @@
         }
       }
     },
+    "review.delivery.awaitingApproval": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent is waiting on an approval prompt. Answer it in its pane, then send again. Your comments are saved here."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "エージェントが承認プロンプトの応答を待っています。そのペインで応答してから、もう一度送信してください。コメントはここに保持されています。"
+          }
+        }
+      }
+    },
     "review.delivery.unavailable": {
       "extractionState": "manual",
       "localizations": {

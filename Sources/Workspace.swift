@@ -793,10 +793,15 @@ final class Workspace: Identifiable, ObservableObject {
         terminalPanel.surface.forceRefresh(reason: "workspace.deliverTextToAgent")
     }
 
-    func sendReviewComments(sourceSurfaceId: UUID, text: String) -> Bool {
-        guard let terminalPanel = terminalPanel(for: sourceSurfaceId) else { return false }
+    /// Same approval check as the socket write guard (`v2ApprovalGuardRejection`), made in the
+    /// same main hop as the paste so no prompt report lands between them.
+    func sendReviewComments(sourceSurfaceId: UUID, text: String) -> ReviewCommentDelivery {
+        guard let terminalPanel = terminalPanel(for: sourceSurfaceId) else { return .failed(.sourceUnavailable) }
+        if ApprovalGuardSettings.isEnabled(), let hold = terminalPanel.surface.activePromptHold() {
+            return .failed(.awaitingApproval(hold))
+        }
         deliverTextToAgent(text, terminalPanel: terminalPanel)
-        return true
+        return .sent
     }
 
     // MARK: - Panel Access

@@ -598,8 +598,9 @@ When a person has typed into a terminal and not submitted it, Programa refuses t
 there, so agent text never mixes into that half-typed line or submits it. `surface.send_text`,
 `surface.send_key`, `surface.send_paste` and `surface.send_if_unchanged` return
 `draft_in_progress` and send nothing. `programa send`, `send-key`, `send-panel`, `send-key-panel`
-and `handoff` print one line saying so and exit non-zero. `agent.prompt` (`programa prompt-agent`)
-waits for the draft to end instead, within its own `timeout_ms`, and returns `draft_in_progress`
+and `handoff` print one line saying so and exit non-zero, as do the tmux shim's `send-keys`,
+`paste-buffer` and `respawn-pane`, which point at `programa send --force` since tmux has no such
+flag. `agent.prompt` (`programa prompt-agent`) waits for the draft to end instead, within its own `timeout_ms`, and returns `draft_in_progress`
 only when that budget runs out first (see "`agent.prompt` (#166)").
 
 - A draft starts when the person types, pastes, drops a file, or commits IME or dictation text in
@@ -629,10 +630,12 @@ While the agent in a terminal waits on a permission or sign-in prompt, Programa 
 writes there, so a script or another agent cannot answer it for the person. A single key answers
 such a prompt (a digit or Enter picks an option, `y`/`n` or Escape and Ctrl+C deny), so every write
 is refused, not only writes that submit. `surface.send_text`, `surface.send_key`,
-`surface.send_paste`, `surface.send_if_unchanged` and `agent.prompt` return
-`agent_awaiting_approval` and send nothing. `agent.prompt` fails at once instead of waiting.
+`surface.send_paste`, `surface.send_if_unchanged`, `agent.prompt` and `review.send_comments` return
+`agent_awaiting_approval` and send nothing. `agent.prompt` fails at once instead of waiting, and
+`review.send_comments` keeps the comments pending.
 `programa send`, `send-key`, `send-panel`, `send-key-panel`, `prompt-agent` and `handoff` print one
-line saying so and exit non-zero.
+line saying so and exit non-zero, as do the tmux shim's `send-keys`, `paste-buffer` and
+`respawn-pane`, which point at `programa send --answer-prompt` since tmux has no such flag.
 
 - The kind of prompt comes from the agent's report. `agent.needs_input` with `kind: "permission"`,
   `agent.event` `request.opened`, an OSC 7501 root `blocked` record with `kind=permission` or
@@ -660,7 +663,8 @@ line saying so and exit non-zero.
 shown. `agent_state_source` is the surface's `agent_state_source` (`hooks`, `inferred`, `program`,
 or null), and `stale` is true when that report is old enough for the sidebar to dim it. The
 message names the surface, for example `surface:3 is waiting on an approval prompt; nothing was
-sent`.
+sent`. `review.send_comments` carries only the first four fields, for its source terminal, and has no
+`answer_prompt`.
 
 Pass `"answer_prompt": true` (`--answer-prompt` in the CLI) to write anyway, and only when the
 person asked for it. `force` does not answer a prompt: a write that meets both a prompt and a draft
@@ -813,6 +817,14 @@ Enter submitted after, like `agent.prompt`), then clears the sent comments.
 
 Response (`ok: true`): `{"sent_count": N, "target_surface_id"/"_ref": "..."}`. Sending zero
 pending comments is a no-op (`sent_count: 0`), not an error.
+
+While the source terminal's agent waits on a permission or sign-in prompt, the call fails with
+`agent_awaiting_approval`, sends nothing and keeps every comment pending. `data` is
+`{"surface_id", "surface_ref", "prompt_kind", "prompt_age_ms"}` for the source terminal. There is
+no `answer_prompt` here: the person answers the prompt in that pane, then the comments are sent
+again. The panel's Send to agent button refuses the same way and says why. The
+`automation.protectApprovalPrompts` setting turns this off too. See "Approval prompts:
+`agent_awaiting_approval`".
 
 ## Socket Event Subscriptions (#167)
 

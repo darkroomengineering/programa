@@ -859,8 +859,8 @@ struct ReviewPanelView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            if panel.commentDeliveryFailed {
-                Text(String(localized: "review.delivery.unavailable", defaultValue: "The source terminal is unavailable. Your comments are saved here; retry when it is ready or copy them."))
+            if let failure = panel.commentDeliveryFailure {
+                Text(deliveryFailureMessage(failure))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -911,5 +911,14 @@ struct ReviewPanelView: View {
 
     private func sendComments() {
         panel.sendPendingComments()
+    }
+
+    private func deliveryFailureMessage(_ failure: ReviewCommentDeliveryFailure) -> String {
+        switch failure {
+        case .sourceUnavailable:
+            return String(localized: "review.delivery.unavailable", defaultValue: "The source terminal is unavailable. Your comments are saved here; retry when it is ready or copy them.")
+        case .awaitingApproval:
+            return String(localized: "review.delivery.awaitingApproval", defaultValue: "The agent is waiting on an approval prompt. Answer it in its pane, then send again. Your comments are saved here.")
+        }
     }
 }
