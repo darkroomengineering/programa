@@ -258,6 +258,12 @@ def main():
             require(escrow_pid in child_ancestors,
                     f"Escrow identity {escrow_pid} is not an ancestor of the actual child {child_pid} (ancestors {child_ancestors})")
             require(metadata.get("escrowSocketPath") == str(holder_socket), "Escrow escaped the fixture's tagged socket")
+            # Panes run as their own launchd jobs, so the shell is not a descendant
+            # of the app. The escrow check above proves this login belongs to our
+            # pane; track from the user-owned process right below it, because
+            # login is root-owned and cleanup cannot signal it.
+            below_login = ([child_pid] + child_ancestors)[child_ancestors.index(escrow_pid)]
+            owned[below_login] = table[below_login][1]
             remember_descendants()
             require(child_pid in owned, "Cannot establish child process ownership")
             send(surface, "public")
