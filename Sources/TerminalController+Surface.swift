@@ -919,6 +919,7 @@ extension TerminalController {
                     "terminal_object_ptr": objectPointerString(terminalSurface),
                     "ghostty_surface_ptr": ghosttyPointerString(terminalSurface.surface),
                     "runtime_surface_ready": terminalSurface.surface != nil,
+                    "child_pid": terminalSurface.surface.map { ghostty_surface_child_pid($0) } ?? -1,
                     "hosted_view_ptr": objectPointerString(hostedView),
                     "hosted_view_class": className(hostedView) ?? "nil",
                     "hosted_view_in_window": hostedView.window != nil,

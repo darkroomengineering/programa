@@ -3019,6 +3019,7 @@ struct ProgramaCLI {
 @main
 struct ProgramaMain {
     static func main() {
+        PaneJob.runIfRequested(CommandLine.arguments)
         // CLI tools should ignore SIGPIPE so closed stdout pipes do not terminate the process.
         _ = signal(SIGPIPE, SIG_IGN)
         let cli = ProgramaCLI(args: CommandLine.arguments)

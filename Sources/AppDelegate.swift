@@ -395,6 +395,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         let isRunningUnderXCTest = isRunningUnderXCTest(env)
         Self.removeLegacyPersistedWindowGeometry()
         AgentInterruptionTracker.install()
+        PaneLaunchdSpawner.sweepStaleJobs()
 
         DistributedNotificationCenter.default().addObserver(
             self,

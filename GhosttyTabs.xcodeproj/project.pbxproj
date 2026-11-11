@@ -313,6 +313,8 @@
 		7501C0000000000000000001 /* CLI+ProgramStatusEmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7501C0000000000000000002 /* CLI+ProgramStatusEmitter.swift */; };
 		H1HC0002 /* CLI+HookCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1HC0001 /* CLI+HookCommands.swift */; };
 		H1CL0002 /* CLICommandDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1CL0001 /* CLICommandDispatcher.swift */; };
+		830B00000000000000000001 /* PaneJob.swift in Sources */ = {isa = PBXBuildFile; fileRef = 830B00000000000000000002 /* PaneJob.swift */; };
+		830B00000000000000000003 /* PaneLaunchdSpawner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 830B00000000000000000004 /* PaneLaunchdSpawner.swift */; };
 		830B00000000000000000005 /* PaneLaunchdSpawnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 830B00000000000000000006 /* PaneLaunchdSpawnerTests.swift */; };
 		A3CL00000000000000000002 /* CLIArgumentParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3CL00000000000000000001 /* CLIArgumentParser.swift */; };
 		H1HK0002 /* HookInstallationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = H1HK0001 /* HookInstallationCoordinator.swift */; };
@@ -783,6 +785,8 @@
 		7501C0000000000000000002 /* CLI+ProgramStatusEmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+ProgramStatusEmitter.swift"; sourceTree = "<group>"; };
 		H1HC0001 /* CLI+HookCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+HookCommands.swift"; sourceTree = "<group>"; };
 		H1CL0001 /* CLICommandDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLICommandDispatcher.swift; sourceTree = "<group>"; };
+		830B00000000000000000002 /* PaneJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneJob.swift; sourceTree = "<group>"; };
+		830B00000000000000000004 /* PaneLaunchdSpawner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneLaunchdSpawner.swift; sourceTree = "<group>"; };
 		830B00000000000000000006 /* PaneLaunchdSpawnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneLaunchdSpawnerTests.swift; sourceTree = "<group>"; };
 		A3CL00000000000000000001 /* CLIArgumentParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIArgumentParser.swift; sourceTree = "<group>"; };
 		H1HK0001 /* HookInstallationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookInstallationCoordinator.swift; sourceTree = "<group>"; };
@@ -1047,6 +1051,7 @@
 					NRSP0057A1B2C3D4E5F60719 /* V2CommandCatalog.swift */,
 					NRSP0055A1B2C3D4E5F60719 /* TerminalWindowPortalRegistry.swift */,
 					NRSP0053A1B2C3D4E5F60719 /* TerminalSurface.swift */,
+					830B00000000000000000004 /* PaneLaunchdSpawner.swift */,
 					A1D00000000000000000000C /* TerminalSurface+DraftGate.swift */,
 					WALS000002 /* SessionWALStore.swift */,
 					ESCH000002 /* SessionEscrow.swift */,
@@ -1262,6 +1267,7 @@
 				7501C0000000000000000002 /* CLI+ProgramStatusEmitter.swift */,
 				H1HC0001 /* CLI+HookCommands.swift */,
 				H1CL0001 /* CLICommandDispatcher.swift */,
+				830B00000000000000000002 /* PaneJob.swift */,
 				A3CL00000000000000000001 /* CLIArgumentParser.swift */,
 				C7A10001 /* V2MethodNames.swift */,
 				H1HK0001 /* HookInstallationCoordinator.swift */,
@@ -1654,6 +1660,7 @@
 					NRSP0058A1B2C3D4E5F60719 /* V2CommandCatalog.swift in Sources */,
 					NRSP0056A1B2C3D4E5F60719 /* TerminalWindowPortalRegistry.swift in Sources */,
 					NRSP0054A1B2C3D4E5F60719 /* TerminalSurface.swift in Sources */,
+					830B00000000000000000003 /* PaneLaunchdSpawner.swift in Sources */,
 					A1D00000000000000000000D /* TerminalSurface+DraftGate.swift in Sources */,
 					WALS000001 /* SessionWALStore.swift in Sources */,
 					ESCH000001 /* SessionEscrow.swift in Sources */,
@@ -1982,6 +1989,7 @@
 				7501C0000000000000000001 /* CLI+ProgramStatusEmitter.swift in Sources */,
 				H1HC0002 /* CLI+HookCommands.swift in Sources */,
 				H1CL0002 /* CLICommandDispatcher.swift in Sources */,
+				830B00000000000000000001 /* PaneJob.swift in Sources */,
 				A3CL00000000000000000002 /* CLIArgumentParser.swift in Sources */,
 				C7A10002 /* V2MethodNames.swift in Sources */,
 				H1HK0002 /* HookInstallationCoordinator.swift in Sources */,

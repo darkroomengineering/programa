@@ -330,6 +330,15 @@ final class TerminalSurface: Identifiable, ObservableObject {
     private var pendingReviveWinchPGID: pid_t?
     private var pendingReviveWinchChildPID: Int64?
 
+    private static func isSessionLeader(_ pid: pid_t) -> Bool {
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        guard sysctl(&mib, u_int(mib.count), &info, &size, nil, 0) == 0, size > 0 else { return false }
+        // EPROC_SLEADER from <sys/sysctl.h>.
+        return info.kp_eproc.e_flag & 0x2 != 0
+    }
+
     /// Serial queue the revive-replay chunk loop runs on, off the main
     /// thread. See the 0.4.231 app-mailbox deadlock documented on
     /// `seedRevivedScrollbackIfPending` for why this cannot run on main.
@@ -1299,6 +1308,10 @@ final class TerminalSurface: Identifiable, ObservableObject {
         let callbackContext = Unmanaged.passRetained(GhosttySurfaceCallbackContext(surfaceId: id))
         GhosttySurfaceUserdataRegistry.register(callbackContext.toOpaque(), surfaceId: id, tabId: tabId)
         surfaceConfig.userdata = callbackContext.toOpaque()
+        surfaceConfig.spawn_cb = { userdata, argv, envp, cwd, tty in
+            PaneLaunchdSpawner.spawn(userdata: userdata, argv: argv, envp: envp, cwd: cwd, tty: tty)
+        }
+        surfaceConfig.spawn_userdata = callbackContext.toOpaque()
         GhosttySurfaceUserdataRegistry.release(surfaceCallbackContext)
         surfaceCallbackContext = callbackContext
         surfaceConfig.scale_factor = scaleFactors.layer
@@ -1537,7 +1550,10 @@ final class TerminalSurface: Identifiable, ObservableObject {
             // No answer (closed fd, no foreground group): prefer a usable
             // prompt over a TUI's mouse, since the prompt is the common case.
             guard foregroundGroup >= 0 else { return true }
+            // A pane started as a launchd job records its job leader, not the
+            // tty's session leader, so match on the session-leader flag too.
             return Int64(foregroundGroup) == consumedReviveDescriptor.childPID
+                || Self.isSessionLeader(foregroundGroup)
         }()
 
         // restore-replay-residuals: snapshot the same foreground-group read's
@@ -1562,6 +1578,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
                 let root = pid_t(consumedReviveDescriptor.childPID)
                 authorizedRevivedRootPID = root
                 TerminalController.registerRevivedRoot(root)
+                PaneLaunchdSpawner.monitorRevivedRoot(root, surfaceID: id)
             }
         }
 
