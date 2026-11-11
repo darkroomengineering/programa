@@ -543,17 +543,18 @@ extension Workspace {
             )
             let preparedSeedText = (SessionFreshSpawnScrollbackSeed.preparedText(for: scrollbackText) ?? "")
                 + "\r\n" + recoveryNotice + "\r\n"
+            // Fresh spawn only: a reattached pane (above) still has its agent running.
+            let resumeInput = Self.autoResumeInput(
+                for: snapshot,
+                paneDirectory: workingDirectory,
+                isEnabled: AgentAutoResumeSettings.isEnabled()
+            )
             guard let terminalPanel = newTerminalSurface(
                 inPane: paneId,
                 focus: false,
                 workingDirectory: workingDirectory,
                 pendingScrollbackSeedText: preparedSeedText,
-                // Fresh spawn only: a reattached pane (above) still has its agent running.
-                initialInput: Self.autoResumeInput(
-                    for: snapshot,
-                    paneDirectory: workingDirectory,
-                    isEnabled: AgentAutoResumeSettings.isEnabled()
-                )
+                initialInput: resumeInput
             ) else {
                 return nil
             }
@@ -564,6 +565,9 @@ extension Workspace {
                 restoredTerminalScrollbackByPanelId.removeValue(forKey: terminalPanel.id)
             }
             applySessionPanelMetadata(snapshot, toPanelId: terminalPanel.id)
+            if resumeInput != nil {
+                restoreRunningAgentPresence(snapshot, toPanelId: terminalPanel.id)
+            }
             // This old session's WAL has now been given its one chance to be
             // read as a restore fallback; the new panel above has its own fresh
             // WAL directory going forward, so the old one is dead weight.
@@ -657,6 +661,7 @@ extension Workspace {
             return nil
         }
         applySessionPanelMetadata(snapshot, toPanelId: panelId)
+        restoreRunningAgentPresence(snapshot, toPanelId: panelId)
         // A revived shell reported its tty to the previous app instance and never
         // reports it again, so the port scanner must learn it here. Fresh-spawn
         // fallbacks skip this: their snapshot tty may now belong to another terminal.
@@ -753,6 +758,16 @@ extension Workspace {
         }
         dilog("escrow.reattach", "session=\(oldSessionId.prefix(8)) outcome=revived newPanel=\(terminalPanel.id.uuidString.prefix(8))")
         return terminalPanel.id
+    }
+
+    /// Only for a pane whose agent is alive (reattached) or is being resumed by typed input: the
+    /// presence has no pid, so nothing marks it stale, and it is what keeps the pane on child exit.
+    func restoreRunningAgentPresence(_ snapshot: SessionPanelSnapshot, toPanelId panelId: UUID) {
+        guard snapshot.type == .terminal, snapshot.agentWasRunning == true, let agentResume = snapshot.agentResume else { return }
+        updatePanelAgentState(
+            panelId: panelId, state: .idle,
+            sessionKey: AgentSessionKey(provider: agentResume.provider, sessionId: agentResume.sessionId, pid: nil)
+        )
     }
 
     private func applySessionPanelMetadata(_ snapshot: SessionPanelSnapshot, toPanelId panelId: UUID) {

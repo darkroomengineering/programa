@@ -463,7 +463,7 @@ extension TerminalController {
                 }
                 let workspace = tabManager.addWorkspace(
                     workingDirectory: parentWorkspace.currentDirectory,
-                    initialTerminalCommand: initialCommand,
+                    initialTerminalInput: initialCommand.map { $0 + "\n" },
                     initialTerminalEnvironment: initialEnv,
                     select: false,
                     eagerLoadTerminal: true,

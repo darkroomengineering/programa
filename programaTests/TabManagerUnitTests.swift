@@ -156,6 +156,12 @@ final class TabManagerChildExitCloseTests: XCTestCase {
         let panelId = try XCTUnwrap(workspace.focusedPanelId)
         defer { AgentResumeStore.shared.forget(panelId: panelId) }
         XCTAssertEqual(AgentResumeStore.shared.target(panelId: panelId), target)
+        // A fresh shell that was not handed a resume command has no live agent.
+        XCTAssertNil(workspace.panelAgentPresence[panelId])
+
+        // What the reattach path does for a shell whose agent is still alive.
+        let restoredPanel = try XCTUnwrap(snapshot.panels.first)
+        workspace.restoreRunningAgentPresence(restoredPanel, toPanelId: panelId)
         XCTAssertEqual(workspace.panelAgentPresence[panelId]?.state, .idle)
         XCTAssertNil(workspace.panelAgentPresence[panelId]?.sessionKey?.pid)
 

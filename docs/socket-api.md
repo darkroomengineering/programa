@@ -201,6 +201,9 @@ returns `not_found`. The method never falls back to the focused workspace, pane 
 case; only an omitted target means "the focused one". `workspace.create` returns `invalid_params`
 when `cwd` is not an existing directory.
 
+`workspace.create` runs `initial_command` as input in the user's login shell, with the shell's
+startup configuration and PATH. The pane stays open after the command exits.
+
 ### Units
 
 `pane.resize` takes `amount` in layout points along the resize axis. The handler defaults `amount` to 1

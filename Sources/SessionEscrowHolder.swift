@@ -139,6 +139,8 @@ enum SessionEscrowHolder {
     /// the reaper alongside `registry.isEmpty` to decide whether the
     /// holder has nothing left to hold. Guarded by `registryLock`.
     private static var activeConnectionCount = 0
+    /// Guarded by `registryLock`; a connected app always clears this deadline.
+    private static var disconnectedSinceSystemUptime: TimeInterval? = ProcessInfo.processInfo.systemUptime
     /// The moment the holder first observed `registry.isEmpty &&
     /// activeConnectionCount == 0`, or nil if it isn't currently idle.
     /// Reset the instant either becomes non-empty/non-zero. Only ever
@@ -244,11 +246,15 @@ enum SessionEscrowHolder {
                 continue
             }
             activeConnectionCount += 1
+            disconnectedSinceSystemUptime = nil
             registryLock.unlock()
             Thread.detachNewThread {
                 defer {
                     registryLock.lock()
                     activeConnectionCount -= 1
+                    if activeConnectionCount == 0 {
+                        disconnectedSinceSystemUptime = ProcessInfo.processInfo.systemUptime
+                    }
                     registryLock.unlock()
                 }
                 serve(connectionFD: clientFD, peerPID: peerPID)
@@ -646,6 +652,21 @@ enum SessionEscrowHolder {
     }
 
     private static func reaperTick() {
+        registryLock.lock()
+        if activeConnectionCount == 0,
+           let disconnectedSinceSystemUptime,
+           SessionEscrowPolicy.shouldExitDisconnectedHolder(
+               disconnectedFor: ProcessInfo.processInfo.systemUptime - disconnectedSinceSystemUptime,
+               isNonProduction: SessionEscrowPolicy.isNonProductionHolder(socketPath: holderSocketPath)
+           ) {
+            shuttingDown = true
+            registryLock.unlock()
+            dilog("escrow.holder", "exit reason=non_production_disconnected")
+            // Process exit closes every held fd together, without racing a
+            // drain thread's reads against descriptor reuse in this process.
+            Darwin.exit(0)
+        }
+        registryLock.unlock()
         retireExpiredSessions()
 
         // Snapshot-then-decide is intentionally split into two lock

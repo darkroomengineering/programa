@@ -129,7 +129,7 @@ extension TerminalController {
             let ws = tabManager.addWorkspace(
                 title: title,
                 workingDirectory: cwd,
-                initialTerminalCommand: initialCommand,
+                initialTerminalInput: initialCommand.map { $0 + "\n" },
                 initialTerminalEnvironment: initialEnv,
                 select: shouldFocus,
                 eagerLoadTerminal: !shouldFocus,

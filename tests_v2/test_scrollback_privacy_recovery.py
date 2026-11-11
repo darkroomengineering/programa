@@ -229,11 +229,8 @@ def main():
             first_policy = launch(True)
             snapshot_title = "Privacy snapshot " + nonce
             created = rpc(control, "workspace.create", {
-                # No leading `exec`: Ghostty already wraps shell commands as
-                # `bash -c "exec -l <command>"`, so a user-supplied `exec` becomes
-                # `exec -l exec ...` and fails with "exec: not found". The PTY child
-                # recorded by escrow is that login/bash wrapper; the Python child is
-                # its direct descendant, which is what the checks below verify.
+                # Keep the login shell as the PTY child; the Python process is
+                # its direct descendant, which the escrow checks below verify.
                 "initial_command": shlex.join([sys.executable, "-u", str(child_script), str(root), nonce]),
                 "working_directory": str(root), "title": snapshot_title,
             })

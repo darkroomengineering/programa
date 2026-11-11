@@ -4752,6 +4752,7 @@
             "type": "string"
           },
           "initial_command": {
+            "description": "Command entered into the user's login shell after startup. The pane stays open after the command exits.",
             "type": "string"
           },
           "initial_env": {
