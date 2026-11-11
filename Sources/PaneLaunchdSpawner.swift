@@ -64,7 +64,8 @@ enum PaneLaunchdSpawner {
             try FileManager.default.removeItem(at: plistURL)
             guard status == 0 else { throw SpawnError.bootstrap(status) }
             bootstrappedLabel = label
-            // The leader's first exec of the bundled CLI after launch can take seconds (code-signing checks).
+            // Each exec of the bundled CLI can take seconds: code-signing checks on first launch,
+            // and over a second apiece on a saturated machine. The leader and its child each get 5 s.
             guard let root = waitForPID(at: dir.appendingPathComponent("leader"), timeout: 5) else { throw SpawnError.handshake }
             // The handshake folder is writable by any same-user process, so trust only the pid launchd reports for this job.
             guard launchdPID(label: label, scratch: dir) == root else { throw SpawnError.handshake }
@@ -72,7 +73,7 @@ enum PaneLaunchdSpawner {
             do {
                 guard watchExit(pid: root, label: label, directory: dir) else { throw SpawnError.handshake }
                 try publishGate(at: dir.appendingPathComponent("prepare"))
-                guard waitForPID(at: dir.appendingPathComponent("ready"), timeout: 2) == root else { throw SpawnError.handshake }
+                guard waitForPID(at: dir.appendingPathComponent("ready"), timeout: 5) == root else { throw SpawnError.handshake }
                 try publishGate(at: dir.appendingPathComponent("go"))
             } catch {
                 TerminalController.unregisterRevivedRoot(root)
