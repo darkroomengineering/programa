@@ -1257,14 +1257,6 @@ struct SidebarSurface<Content: View>: View {
     @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
     @Environment(\.colorScheme) private var colorScheme
     @State private var terminalScheme: ColorScheme = SidebarTerminalAppearance.colorScheme()
-    #if DEBUG
-    // Makes the sidebar panel's corner radius re-render live when the Density
-    // Debug window's sliders change (see WindowChrome.swift ChromeDensity).
-    @ObservedObject private var densityStore = ChromeDensityStore.shared
-    #endif
-
-    private var standaloneCornerRadius: CGFloat { WindowGlassEffect.sidebarPanelCornerRadius }
-
     var body: some View {
         Group {
             if usesLocalNativeGlass {
@@ -1285,7 +1277,6 @@ struct SidebarSurface<Content: View>: View {
                         content
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: standaloneCornerRadius, style: .continuous))
             }
         }
         // Subscribed outside the glass branch so the scheme stays current while
@@ -1312,7 +1303,7 @@ struct SidebarSurface<Content: View>: View {
 /// the toolbar controls that sit right after them.
 final class TitlebarLeadingInsetPassthroughView: NSView {
     var onInsetChange: ((CGFloat) -> Void)?
-    private var toolbarObserver: NSObjectProtocol?
+    private var toolbarObservers: [NSObjectProtocol] = []
     private var settleGeneration = 0
 
     override var mouseDownCanMoveWindow: Bool { false }
@@ -1320,17 +1311,23 @@ final class TitlebarLeadingInsetPassthroughView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if let toolbarObserver {
-            NotificationCenter.default.removeObserver(toolbarObserver)
-            self.toolbarObserver = nil
-        }
+        toolbarObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        toolbarObservers = []
         guard let window else { return }
-        toolbarObserver = NotificationCenter.default.addObserver(
-            forName: .programaMainWindowToolbarDidChange,
-            object: window,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.measureWhenSettled() }
+        // Full screen has no traffic lights, so the controls move with each transition.
+        let names: [Notification.Name] = [
+            .programaMainWindowToolbarDidChange,
+            NSWindow.didEnterFullScreenNotification,
+            NSWindow.didExitFullScreenNotification,
+        ]
+        toolbarObservers = names.map { name in
+            NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.measureWhenSettled() }
+            }
+        }
+        if !window.styleMask.contains(.fullScreen),
+           let expectedEdge = MainWindowToolbar.expectedCollapsedControlsTrailingEdge() {
+            measure(controlsEdge: expectedEdge)
         }
         measureWhenSettled()
     }
@@ -1365,15 +1362,13 @@ final class TitlebarLeadingInsetPassthroughView: NSView {
     }
 
     deinit {
-        if let toolbarObserver {
-            NotificationCenter.default.removeObserver(toolbarObserver)
-        }
+        toolbarObservers.forEach { NotificationCenter.default.removeObserver($0) }
     }
 
     private func measure(controlsEdge: CGFloat?) {
         guard let window else { return }
         if let controlsEdge {
-            onInsetChange?(controlsEdge + TitlebarControlsMetrics.gapAfterToolbarControls)
+            onInsetChange?(controlsEdge + MainWindowToolbar.controlsTrailingGap)
             return
         }
         // No main window toolbar: start past the traffic lights.

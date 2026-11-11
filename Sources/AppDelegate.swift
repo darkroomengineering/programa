@@ -167,13 +167,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     weak var tabManager: TabManager?
     weak var notificationStore: TerminalNotificationStore?
     weak var sidebarState: SidebarState?
-    weak var fullscreenControlsViewModel: TitlebarControlsViewModel?
     weak var sidebarSelectionState: SidebarSelectionState?
     var shortcutLayoutCharacterProvider: (UInt16, NSEvent.ModifierFlags) -> String? = KeyboardLayout.character(forKeyCode:modifierFlags:)
     private var lifecycleSnapshotObservers: [NSObjectProtocol] = []
     private let themeReloadCoalescer = ThemeReloadCoalescer()
     private var windowKeyObserver: NSObjectProtocol?
-    private var mainWindowFullScreenToolbarObservers: [NSObjectProtocol] = []
     private var shortcutMonitor: Any?
     private var shortcutDefaultsObserver: NSObjectProtocol?
     private var menuBarVisibilityObserver: NSObjectProtocol?
@@ -416,7 +414,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             updateController.startUpdaterIfNeeded()
         }
         installMainWindowKeyObserver()
-        installMainWindowFullScreenToolbarObservers()
         refreshGhosttyGotoSplitShortcuts()
         installGhosttyConfigObserver()
         installWindowResponderSwizzles()
@@ -3949,8 +3946,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     /// `window` picks the window whose toolbar bell anchors the popover; without it the key
     /// main window does.
-    func toggleNotificationsPopover(animated: Bool = true, anchorView: NSView? = nil, window: NSWindow? = nil) {
-        notificationsPopoverController.toggle(animated: animated, anchorView: anchorView, window: window)
+    func toggleNotificationsPopover(animated: Bool = true, window: NSWindow? = nil) {
+        notificationsPopoverController.toggle(animated: animated, window: window)
     }
 
     @discardableResult
@@ -5013,38 +5010,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     /// Height of the titlebar and toolbar above the main window's content layout rect.
     static func titlebarPadding(for window: NSWindow) -> CGFloat {
         max(28, min(72, window.frame.height - window.contentLayoutRect.height))
-    }
-
-    /// Native full screen has no traffic lights, and AppKit renders a visible toolbar
-    /// there as an opaque strip that covers the sidebar header and the tab strip. Hide
-    /// the toolbar for the duration of full screen and restore it on the way out, so the
-    /// content keeps the windowed layout edge to edge.
-    static func syncMainWindowToolbarVisibility(_ window: NSWindow, inFullScreen: Bool) {
-        guard let toolbar = window.toolbar,
-              MainWindowToolbar.isMainWindowToolbar(toolbar) else { return }
-        let shouldBeVisible = !inFullScreen
-        if toolbar.isVisible != shouldBeVisible {
-            toolbar.isVisible = shouldBeVisible
-        }
-    }
-
-    private func installMainWindowFullScreenToolbarObservers() {
-        guard mainWindowFullScreenToolbarObservers.isEmpty else { return }
-        // `willEnter` fires before the style mask gains `.fullScreen` and
-        // `willExit` before it loses it, so pass the target state explicitly
-        // instead of reading the mask.
-        let transitions: [(Notification.Name, Bool)] = [
-            (NSWindow.willEnterFullScreenNotification, true),
-            (NSWindow.willExitFullScreenNotification, false),
-        ]
-        mainWindowFullScreenToolbarObservers = transitions.map { name, inFullScreen in
-            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { note in
-                MainActor.assumeIsolated {
-                    guard let window = note.object as? NSWindow else { return }
-                    Self.syncMainWindowToolbarVisibility(window, inFullScreen: inFullScreen)
-                }
-            }
-        }
     }
 
     private func installMainWindowKeyObserver() {

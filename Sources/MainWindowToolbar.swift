@@ -16,14 +16,24 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
     static let newTabID = NSToolbarItem.Identifier("titlebarControl.newTab")
     static let toggleID = NSToolbarItem.Identifier("titlebarControl.toggleSidebar")
     static let trackingID = NSToolbarItem.Identifier("titlebarControl.sidebarTracking")
+    /// Gap between the collapsed-sidebar controls and the content after them.
+    static let controlsTrailingGap: CGFloat = 12
     private nonisolated static let identifierPrefix = "programa.main.titlebar."
     private static var associationKey: UInt8 = 0
 
     private weak var window: NSWindow?
     private weak var splitView: NSSplitView?
     private weak var notificationsItem: NSToolbarItem?
+    private var buttonItems: [NSToolbarItem.Identifier: NSToolbarItem] = [:]
     private var unreadCancellable: AnyCancellable?
+    private var shortcutObserver: NSObjectProtocol?
     private var showsUnreadImage: Bool?
+
+    deinit {
+        if let shortcutObserver {
+            NotificationCenter.default.removeObserver(shortcutObserver)
+        }
+    }
 
     /// Toolbars that share an identifier sync item removals across windows, so every main
     /// window gets its own.
@@ -58,7 +68,12 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
             window.titleVisibility = .hidden
         }
         setSidebarCollapsed(controller.isSidebarCollapsed, in: window)
-        AppDelegate.syncMainWindowToolbarVisibility(window, inFullScreen: window.styleMask.contains(.fullScreen))
+        if let themeFrame = window.contentView?.superview {
+            let router = MainWindowToolbarHitView(frame: themeFrame.bounds)
+            router.contentHost = controller.contentHost
+            router.autoresizingMask = [.width, .height]
+            themeFrame.addSubview(router, positioned: .above, relativeTo: nil)
+        }
     }
 
     /// With the sidebar collapsed the group and toggle sit right after the traffic lights.
@@ -133,6 +148,43 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
         return trailingEdge
     }
 
+    private static var cachedCollapsedTrailingEdge: CGFloat?
+
+    /// Where the collapsed-sidebar controls end in a windowed main window. Every main window
+    /// shares the traffic lights and toolbar, so the first reading is measured once in an
+    /// offscreen window with the collapsed item set; a window that has not collapsed yet uses
+    /// it so its first collapse does not start from a stale inset.
+    static func expectedCollapsedControlsTrailingEdge() -> CGFloat? {
+        if let cachedCollapsedTrailingEdge { return cachedCollapsedTrailingEdge }
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 900, height: 450),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: true
+        )
+        window.isReleasedWhenClosed = false
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        let delegate = MainWindowToolbar()
+        delegate.window = window
+        let toolbar = NSToolbar(identifier: makeIdentifier())
+        toolbar.delegate = delegate
+        toolbar.allowsUserCustomization = false
+        toolbar.autosavesConfiguration = false
+        toolbar.displayMode = .iconOnly
+        window.toolbar = toolbar
+        window.toolbarStyle = .unified
+        for index in toolbar.items.indices.reversed()
+        where [.flexibleSpace, trackingID].contains(toolbar.items[index].itemIdentifier) {
+            toolbar.removeItem(at: index)
+        }
+        let edge = collapsedControlsTrailingEdge(in: window)
+        window.toolbar = nil
+        window.close()
+        cachedCollapsedTrailingEdge = edge
+        return edge
+    }
+
     /// The bell of `window`'s toolbar while the toolbar is showing; the notifications
     /// popover anchors to it.
     static func notificationsItem(in window: NSWindow) -> NSToolbarItem? {
@@ -172,18 +224,12 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
                 Self.notificationsID,
                 symbol: "bell",
                 label: String(localized: "titlebar.notifications.accessibilityLabel", defaultValue: "Notifications"),
-                toolTip: KeyboardShortcutSettings.Action.showNotifications.tooltip(
-                    String(localized: "titlebar.notifications.tooltip", defaultValue: "Show notifications")
-                ),
                 action: #selector(showNotifications(_:))
             )
             let newTab = makeItem(
                 Self.newTabID,
                 symbol: "plus",
                 label: String(localized: "titlebar.newWorkspace.accessibilityLabel", defaultValue: "New Workspace"),
-                toolTip: KeyboardShortcutSettings.Action.newTab.tooltip(
-                    String(localized: "titlebar.newWorkspace.tooltip", defaultValue: "New workspace")
-                ),
                 action: #selector(newTab(_:))
             )
             let group = NSToolbarItemGroup(itemIdentifier: itemIdentifier)
@@ -196,9 +242,6 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
                 Self.toggleID,
                 symbol: "sidebar.left",
                 label: String(localized: "titlebar.sidebar.accessibilityLabel", defaultValue: "Toggle Sidebar"),
-                toolTip: KeyboardShortcutSettings.Action.toggleSidebar.tooltip(
-                    String(localized: "titlebar.sidebar.tooltip", defaultValue: "Show or hide the sidebar")
-                ),
                 action: #selector(toggleSidebar(_:))
             )
         default:
@@ -210,20 +253,62 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
         _ identifier: NSToolbarItem.Identifier,
         symbol: String,
         label: String,
-        toolTip: String,
         action: Selector
     ) -> NSToolbarItem {
         let item = NSToolbarItem(itemIdentifier: identifier)
         item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
         item.label = label
         item.paletteLabel = label
-        item.toolTip = toolTip
+        item.toolTip = Self.toolTip(for: identifier)
         item.isBordered = true
         // Explicit target: the focused terminal lives in a portal outside the split view
         // controller's responder chain, so a nil-targeted action could miss.
         item.target = self
         item.action = action
+        buttonItems[identifier] = item
+        observeShortcutChanges()
         return item
+    }
+
+    /// The tooltip names the item's current shortcut, so it is rebuilt on every rebinding.
+    private static func toolTip(for identifier: NSToolbarItem.Identifier) -> String? {
+        switch identifier {
+        case notificationsID:
+            return KeyboardShortcutSettings.Action.showNotifications.tooltip(
+                String(localized: "titlebar.notifications.tooltip", defaultValue: "Show notifications")
+            )
+        case newTabID:
+            return KeyboardShortcutSettings.Action.newTab.tooltip(
+                String(localized: "titlebar.newWorkspace.tooltip", defaultValue: "New workspace")
+            )
+        case toggleID:
+            return KeyboardShortcutSettings.Action.toggleSidebar.tooltip(
+                String(localized: "titlebar.sidebar.tooltip", defaultValue: "Show or hide the sidebar")
+            )
+        default:
+            return nil
+        }
+    }
+
+    private func observeShortcutChanges() {
+        guard shortcutObserver == nil else { return }
+        shortcutObserver = NotificationCenter.default.addObserver(
+            forName: KeyboardShortcutSettings.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                for (identifier, item) in self.buttonItems {
+                    item.toolTip = Self.toolTip(for: identifier)
+                }
+            }
+        }
+    }
+
+    /// Tooltip of `window`'s toolbar item, for the debug socket.
+    static func toolTip(of identifier: NSToolbarItem.Identifier, in window: NSWindow) -> String? {
+        (window.toolbar?.delegate as? MainWindowToolbar)?.buttonItems[identifier]?.toolTip
     }
 
     /// Unread notifications swap the bell for a filled bell in the accent color.
@@ -266,5 +351,44 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
 
     @objc private func toggleSidebar(_ sender: Any?) {
         _ = AppDelegate.shared?.toggleSidebarForWindow(window)
+    }
+}
+
+/// The transparent toolbar overlaps minimal-mode pane chrome. Route background hits
+/// through the theme frame so AppKit retains normal mouse tracking and accessibility hits.
+private final class MainWindowToolbarHitView: NSView {
+    weak var contentHost: NSView?
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        switch NSApp.currentEvent?.type {
+        case .keyDown, .keyUp, .flagsChanged:
+            return nil
+        default:
+            break
+        }
+        guard let window, let themeFrame = superview,
+              window.toolbar?.isVisible == true,
+              !window.styleMask.contains(.fullScreen),
+              WorkspacePresentationModeSettings.isMinimal(),
+              frame.contains(point),
+              let titlebar = window.standardWindowButton(.closeButton)?.superview else { return nil }
+        let windowPoint = themeFrame.convert(point, to: nil)
+        guard windowPoint.y >= window.contentLayoutRect.maxY else { return nil }
+        let container = titlebar.superview ?? titlebar
+        guard let containerParent = container.superview,
+              let titlebarHit = container.hitTest(containerParent.convert(windowPoint, from: nil)) else { return nil }
+        var ancestor: NSView? = titlebarHit
+        while let view = ancestor {
+            if view is NSControl { return nil }
+            ancestor = view.superview
+        }
+        for sibling in themeFrame.subviews.reversed() where sibling !== self && sibling !== container {
+            guard !sibling.isHiddenOrHasHiddenAncestor,
+                  let hit = sibling.hitTest(point) else { continue }
+            if hit === window.contentView { continue }
+            if hit is MainWindowHostingViewMarker, hit !== contentHost { continue }
+            return hit
+        }
+        return nil
     }
 }
