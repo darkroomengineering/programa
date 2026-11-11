@@ -2078,6 +2078,8 @@ class TerminalController {
             return v2Result(id: id, self.v2DebugCommandPaletteRenameInputDeleteBackward(params: params))
         case "debug.command_palette.rename_input.selection":
             return v2Result(id: id, self.v2DebugCommandPaletteRenameInputSelection(params: params))
+        case "debug.sidebar.set":
+            return v2Result(id: id, self.v2DebugSidebarSet(params: params))
         case "debug.sidebar.visible":
             return v2Result(id: id, self.v2DebugSidebarVisible(params: params))
         case "debug.tab.tear_off":

@@ -1223,6 +1223,43 @@
       },
       "threading": "off_main"
     },
+    "debug.sidebar.set": {
+      "auth_required": true,
+      "debug_only": true,
+      "description": "DEBUG-build-only introspection and simulation. (set). Sets a window's sidebar visibility and/or persisted width through SidebarState, as the menu toggle and session restore do, and returns the resulting split view geometry.",
+      "errors": [
+        "invalid_params",
+        "not_found"
+      ],
+      "focus_intent": false,
+      "handler": "v2DebugSidebarSet",
+      "params": {
+        "additionalProperties": false,
+        "properties": {
+          "window_id": {
+            "format": "window:N",
+            "type": "string"
+          },
+          "visible": {
+            "type": "boolean"
+          },
+          "width": {
+            "type": "number"
+          },
+          "animated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "window_id"
+        ],
+        "type": "object"
+      },
+      "result": {
+        "type": "object"
+      },
+      "threading": "main"
+    },
     "debug.sidebar.visible": {
       "auth_required": true,
       "debug_only": true,

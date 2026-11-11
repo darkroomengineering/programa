@@ -24,10 +24,6 @@ final class WindowTerminalHostView: NSView {
     }
 
     override var isOpaque: Bool { false }
-    private static let sidebarLeadingEdgeEpsilon: CGFloat = 1
-    private static let minimumVisibleLeadingContentWidth: CGFloat = 24
-    private var cachedSidebarDividerX: CGFloat?
-    private var sidebarDividerMissCount = 0
     private var trackingArea: NSTrackingArea?
     private var activeDividerCursorKind: DividerCursorKind?
     // PERF: Cache split-divider regions to avoid recursive view-tree walk on every
@@ -139,11 +135,6 @@ final class WindowTerminalHostView: NSView {
             break
         }
 
-        if shouldPassThroughToSidebarResizer(at: point) {
-            clearActiveDividerCursor(restoreArrow: false)
-            return nil
-        }
-
         // Compute divider hit once and reuse for both cursor update and pass-through.
         if let kind = splitDividerCursorKind(at: point) {
             activeDividerCursorKind = kind
@@ -212,65 +203,7 @@ final class WindowTerminalHostView: NSView {
         return hitView === self ? nil : hitView
     }
 
-    private func shouldPassThroughToSidebarResizer(at point: NSPoint) -> Bool {
-        // The sidebar resizer handle is implemented in SwiftUI. When terminals
-        // are portal-hosted, this AppKit host can otherwise sit above the handle
-        // and steal hover/mouse events.
-        let visibleHostedViews = subviews.compactMap { $0 as? GhosttySurfaceScrollView }
-            .filter { !$0.isHidden && $0.window != nil && $0.frame.width > 1 && $0.frame.height > 1 }
-
-        // If content is flush to the leading edge, sidebar is effectively hidden.
-        // In that state, treating any internal split edge as a sidebar divider
-        // steals split-divider cursor/drag behavior.
-        let hasLeadingContent = visibleHostedViews.contains {
-            $0.frame.minX <= Self.sidebarLeadingEdgeEpsilon
-                && $0.frame.maxX > Self.minimumVisibleLeadingContentWidth
-        }
-        if hasLeadingContent {
-            if cachedSidebarDividerX != nil {
-                sidebarDividerMissCount += 1
-                if sidebarDividerMissCount >= 2 {
-                    cachedSidebarDividerX = nil
-                    sidebarDividerMissCount = 0
-                }
-            }
-            return false
-        }
-
-        // Ignore transient 0-origin hosts while layouts churn (e.g. workspace
-        // creation/switching). They can temporarily report minX=0 and would
-        // otherwise clear divider pass-through, causing hover flicker.
-        let dividerCandidates = visibleHostedViews
-            .map(\.frame.minX)
-            .filter { $0 > Self.sidebarLeadingEdgeEpsilon }
-        if let leftMostEdge = dividerCandidates.min() {
-            cachedSidebarDividerX = leftMostEdge
-            sidebarDividerMissCount = 0
-        } else if cachedSidebarDividerX != nil {
-            // Keep cache briefly for layout churn, but clear if we miss repeatedly
-            // so stale divider positions don't steal pointer routing.
-            sidebarDividerMissCount += 1
-            if sidebarDividerMissCount >= 4 {
-                cachedSidebarDividerX = nil
-                sidebarDividerMissCount = 0
-            }
-        }
-
-        guard let dividerX = cachedSidebarDividerX else {
-            return false
-        }
-
-        let regionMinX = dividerX - SidebarResizeInteraction.sidebarSideHitWidth
-        let regionMaxX = dividerX + SidebarResizeInteraction.contentSideHitWidth
-        return point.x >= regionMinX && point.x <= regionMaxX
-    }
-
     private func updateDividerCursor(at point: NSPoint) {
-        if shouldPassThroughToSidebarResizer(at: point) {
-            clearActiveDividerCursor(restoreArrow: false)
-            return
-        }
-
         guard let nextKind = splitDividerCursorKind(at: point) else {
             clearActiveDividerCursor(restoreArrow: true)
             return
@@ -327,8 +260,7 @@ final class WindowTerminalHostView: NSView {
     }
 
     private static let defaultDividerExpansion: CGFloat = 5
-    // Matches SidebarResizeInteraction.contentSideHitWidth's rationale: keep a
-    // minimal overlap on whichever side of a divider is actually covered by
+    // Keep a minimal overlap on whichever side of a divider is actually covered by
     // portal-hosted terminal content, so column-0 text selection isn't stolen by
     // the divider's drag handle. The non-hosted side keeps the full generous
     // defaultDividerExpansion grab area.
@@ -368,7 +300,7 @@ final class WindowTerminalHostView: NSView {
     private static func dividerCursorKind(at windowPoint: NSPoint, in view: NSView) -> DividerCursorKind? {
         guard !view.isHidden else { return nil }
 
-        if let splitView = view as? NSSplitView {
+        if let splitView = view as? NSSplitView, !(splitView is MainSidebarSplitViewMarker) {
             let pointInSplit = splitView.convert(windowPoint, from: nil)
             if splitView.bounds.contains(pointInSplit) {
                 // Keep divider interactions reliable even when portal-hosted terminal frames
@@ -423,7 +355,7 @@ final class WindowTerminalHostView: NSView {
     private static func collectSplitDividerRegions(in view: NSView, into result: inout [DividerRegion]) {
         guard !view.isHidden else { return }
 
-        if let splitView = view as? NSSplitView {
+        if let splitView = view as? NSSplitView, !(splitView is MainSidebarSplitViewMarker) {
             let dividerCount = max(0, splitView.arrangedSubviews.count - 1)
             for dividerIndex in 0..<dividerCount {
                 let first = splitView.arrangedSubviews[dividerIndex].frame
@@ -559,7 +491,7 @@ final class SplitDividerOverlayView: NSView {
     private func collectDividerSegments(in view: NSView, into result: inout [DividerSegment]) {
         guard !view.isHidden else { return }
 
-        if let splitView = view as? NSSplitView {
+        if let splitView = view as? NSSplitView, !(splitView is MainSidebarSplitViewMarker) {
             let dividerCount = max(0, splitView.arrangedSubviews.count - 1)
             let dividerColor = overlayDividerColor(for: splitView)
             for dividerIndex in 0..<dividerCount {

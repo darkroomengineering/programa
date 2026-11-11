@@ -172,6 +172,7 @@ enum V2CommandCatalog {
         "debug.settle",
         "debug.shortcut.set",
         "debug.shortcut.simulate",
+        "debug.sidebar.set",
         "debug.sidebar.visible",
         "debug.tab.tear_off",
         "debug.terminal.is_focused",

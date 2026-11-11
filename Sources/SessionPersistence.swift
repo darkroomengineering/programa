@@ -8,12 +8,11 @@ enum SessionSnapshotSchema {
 }
 
 enum SessionPersistencePolicy {
-    static let defaultSidebarWidth: Double = 224
-    // The header row needs ~221pt: traffic lights end ~79pt from the window
-    // edge, then a 16pt gap, the bell/+ glass capsule and the sidebar-toggle
-    // circle (~118pt with their 7pt gap), and an 8pt trailing inset. Below
-    // this the capsule overlaps the zoom button.
-    static let minimumSidebarWidth: Double = 224
+    static let defaultSidebarWidth: Double = 238
+    // The toolbar row over the sidebar needs 238pt on macOS 27: below it the
+    // sidebar toggle is squeezed against the notifications/new-tab group or
+    // moves into the toolbar overflow menu at launch.
+    static let minimumSidebarWidth: Double = 238
     static let maximumSidebarWidth: Double = 600
     static let minimumWindowWidth: Double = 300
     static let minimumWindowHeight: Double = 200

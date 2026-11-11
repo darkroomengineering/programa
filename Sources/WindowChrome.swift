@@ -192,13 +192,9 @@ enum WindowGlassEffect {
     /// Concentric with the window corner at the panel inset.
     static var sidebarPanelCornerRadius: CGFloat { windowCornerRadius - sidebarPanelInset }
     /// Height of the sidebar header row shared by the traffic lights and controls.
-    /// On the glass path the main window's toolbar (`AppDelegate.configureMainWindow` /
-    /// `MainWindowToolbarDelegate`) holds one system space item. An empty `NSToolbar`
-    /// and a `.top`-attribute `NSTitlebarAccessoryViewController` both leave the
-    /// titlebar height unchanged; the space item grows it so AppKit re-centers the
-    /// traffic lights on the header row's midline (measured center 26pt
-    /// against the 26pt target). Off the glass path no toolbar is installed, so the
-    /// 38pt height applies.
+    /// On the glass path the main window's toolbar (`MainWindowToolbar`) sets the
+    /// titlebar height and AppKit centers the traffic lights in it. Off the glass path
+    /// no toolbar is installed, so the 38pt height applies.
     static var sidebarHeaderHeight: CGFloat { isAvailable ? 40 : 38 }
 
     /// Inverted (Aside-style) layout: the window backdrop is the sidebar's
