@@ -718,7 +718,7 @@ extension CommandPaletteView {
             let trimmedCwd = tabManager.selectedWorkspace?.currentDirectory
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             let workingDirectory = (trimmedCwd?.isEmpty ?? true) ? nil : trimmedCwd
-            tabManager.addWorkspace(workingDirectory: workingDirectory, initialTerminalCommand: "claude")
+            tabManager.addWorkspace(workingDirectory: workingDirectory, initialTerminalInput: "claude\n")
         }
         registry.register(commandId: "palette.openFolder") {
             // Defer so the command palette dismisses before the modal sheet appears.

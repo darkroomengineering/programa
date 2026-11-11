@@ -135,6 +135,48 @@ private func runGit(
 
 @MainActor
 final class TabManagerChildExitCloseTests: XCTestCase {
+    func testRestoredRunningAgentIsKeptOnChildExitBeforeAnyHook() throws {
+        let transcriptURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("programa-restored-agent-\(UUID().uuidString).jsonl")
+        try Data("{}\n".utf8).write(to: transcriptURL)
+        defer { try? FileManager.default.removeItem(at: transcriptURL) }
+
+        let manager = TabManager()
+        let workspace = manager.addWorkspace()
+        var snapshot = workspace.sessionSnapshot(includeScrollback: false)
+        let target = AgentResumeTarget(
+            provider: "claude-code", sessionId: "restored-session", cwd: nil,
+            transcriptPath: transcriptURL.path
+        )
+        let snapshotIndex = try XCTUnwrap(snapshot.panels.indices.first)
+        snapshot.panels[snapshotIndex].agentWasRunning = true
+        snapshot.panels[snapshotIndex].agentResume = target
+
+        // With auto-resume on, the restore types the resume command and sets presence itself.
+        let autoResumeWasEnabled = AgentAutoResumeSettings.isEnabled()
+        AgentAutoResumeSettings.setEnabled(false)
+        defer { AgentAutoResumeSettings.setEnabled(autoResumeWasEnabled) }
+
+        workspace.restoreSessionSnapshot(snapshot)
+        let panelId = try XCTUnwrap(workspace.focusedPanelId)
+        defer { AgentResumeStore.shared.forget(panelId: panelId) }
+        XCTAssertEqual(AgentResumeStore.shared.target(panelId: panelId), target)
+        // A fresh shell that was not handed a resume command has no live agent.
+        XCTAssertNil(workspace.panelAgentPresence[panelId])
+
+        // What the reattach path does for a shell whose agent is still alive.
+        let restoredPanel = try XCTUnwrap(snapshot.panels.first)
+        workspace.restoreRunningAgentPresence(restoredPanel, toPanelId: panelId)
+        XCTAssertEqual(workspace.panelAgentPresence[panelId]?.state, .idle)
+        XCTAssertNil(workspace.panelAgentPresence[panelId]?.sessionKey?.pid)
+
+        manager.closePanelAfterChildExited(tabId: workspace.id, surfaceId: panelId)
+
+        XCTAssertEqual(workspace.interruptedAgentPanels[panelId], .paneDead)
+        XCTAssertNotNil(workspace.panels[panelId])
+        XCTAssertTrue(manager.tabs.contains { $0.id == workspace.id })
+    }
+
     func testChildExitOnLastPanelClosesSelectedWorkspaceAndKeepsIndexStable() {
         let manager = TabManager()
         let first = manager.tabs[0]

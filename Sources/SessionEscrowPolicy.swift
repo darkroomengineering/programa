@@ -7,6 +7,25 @@ enum SessionEscrowPolicy {
     static let heartbeatInterval: TimeInterval = 2.0
     static let heartbeatStaleAfter: TimeInterval = 6.0
     static let recvTimeoutSeconds: Int = 3
+    static let nonProductionDisconnectedExitAfter: TimeInterval = 30 * 60
+
+    #if DEBUG
+    private static let isDebugBuild = true
+    #else
+    private static let isDebugBuild = false
+    #endif
+
+    static func isNonProductionHolder(isDebugBuild: Bool = isDebugBuild, socketPath: String) -> Bool {
+        let name = URL(fileURLWithPath: socketPath).lastPathComponent
+        return isDebugBuild || name.hasPrefix("programa-debug-") || name.hasPrefix("programa-smoke-")
+    }
+
+    static func shouldExitDisconnectedHolder(
+        disconnectedFor: TimeInterval,
+        isNonProduction: Bool
+    ) -> Bool {
+        isNonProduction && disconnectedFor >= nonProductionDisconnectedExitAfter
+    }
 
     /// Whether a gap since the last successfully-read frame counts as a dead
     /// connection. Takes both timestamps as `ProcessInfo.systemUptime`

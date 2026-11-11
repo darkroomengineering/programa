@@ -17,6 +17,35 @@ import XCTest
 /// `SessionEscrowPolicy.isConnectionStale`), not the real socket read loop,
 /// which needs a live holder process to drive.
 final class SessionEscrowWakeRecoveryTests: XCTestCase {
+    func testDisconnectedNonProductionHolderExpiresAtIdleLimit() {
+        let limit = SessionEscrowPolicy.nonProductionDisconnectedExitAfter
+        XCTAssertFalse(SessionEscrowPolicy.shouldExitDisconnectedHolder(
+            disconnectedFor: limit - 0.01, isNonProduction: true
+        ))
+        XCTAssertTrue(SessionEscrowPolicy.shouldExitDisconnectedHolder(
+            disconnectedFor: limit, isNonProduction: true
+        ))
+        XCTAssertFalse(SessionEscrowPolicy.shouldExitDisconnectedHolder(
+            disconnectedFor: limit * 100, isNonProduction: false
+        ))
+    }
+
+    func testHolderBuildKindUsesDebugBuildOrTaggedSmokeSocket() {
+        XCTAssertTrue(SessionEscrowPolicy.isNonProductionHolder(
+            isDebugBuild: true, socketPath: "/tmp/programa-escrow-v2.sock"
+        ))
+        for name in ["programa-debug-escrow-v2.sock", "programa-debug-inc-830-a-escrow-v2.sock", "programa-smoke-ci-escrow-v2.sock"] {
+            XCTAssertTrue(SessionEscrowPolicy.isNonProductionHolder(
+                isDebugBuild: false, socketPath: "/private/tmp/\(name)"
+            ))
+        }
+        for name in ["programa-escrow-v2.sock", "programa-501-escrow-v2.sock", "programa-staging-escrow-v2.sock"] {
+            XCTAssertFalse(SessionEscrowPolicy.isNonProductionHolder(
+                isDebugBuild: false, socketPath: "/private/tmp/\(name)"
+            ))
+        }
+    }
+
     /// A long *wall-clock* gap that only reflects elapsed sleep time must
     /// NOT be seen as staleness once measured on the sleep-pausing clock:
     /// the two systemUptime readings here are only 1s apart, standing in

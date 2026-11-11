@@ -2342,7 +2342,7 @@ class TabManager: ObservableObject {
         let resumable = AgentResumeStore.shared.target(panelId: surfaceId).map {
             AgentResumeCommand.canResume($0) && !AgentResumeCommand.claudeTranscriptIsMissing(for: $0)
         } == true
-        dilog("surface", "childExited panel=\(surfaceId.uuidString.prefix(8)) kept=\(keep && resumable) rootPid=\(rootPid)")
+        dilog("surface", "childExited panel=\(surfaceId.uuidString.prefix(8)) kept=\(keep && resumable) rootPid=\(rootPid) presence=\(tab.panelAgentPresence[surfaceId] != nil ? 1 : 0) resumable=\(resumable ? 1 : 0)")
         if keep, resumable {
             tab.interruptedAgentPanels[surfaceId] = .paneDead
             tab.clearPanelAgentState(panelId: surfaceId, force: true)
