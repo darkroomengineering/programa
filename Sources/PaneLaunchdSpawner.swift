@@ -84,7 +84,7 @@ enum PaneLaunchdSpawner {
             // No job stage touches the tty before `go`, so removing the job lets Ghostty spawn directly.
             if let directory { try? FileManager.default.removeItem(at: directory) }
             if let bootstrappedLabel { _ = launchctl(["bootout", "gui/\(getuid())/\(bootstrappedLabel)"]) }
-            dilog("pane-launchd", "fallback error=\(error)")
+            dilog("pane-launchd", "fallback error=\(error) dir=\(directory?.path ?? "none")")
             return -1
         }
     }
@@ -133,9 +133,15 @@ enum PaneLaunchdSpawner {
     }
 
     private static func privateDirectory() throws -> URL {
-        var template = Array((NSTemporaryDirectory() + "programa-pane-job.XXXXXX").utf8CString)
-        guard let path = mkdtemp(&template) else { throw SpawnError.posix(errno) }
-        return URL(fileURLWithPath: String(cString: path), isDirectory: true)
+        let parent = NSTemporaryDirectory()
+        var template = Array((parent + "programa-pane-job.XXXXXX").utf8CString)
+        // Read the name back from `template`, not mkdtemp's return value: that pointer
+        // aliases the array, which the optimizer may free once it is no longer used.
+        let created = template.withUnsafeMutableBufferPointer { mkdtemp($0.baseAddress!) != nil }
+        guard created else { throw SpawnError.posix(errno) }
+        let path = String(cString: template)
+        guard path.hasPrefix(parent), path.count > parent.count else { throw SpawnError.handshake }
+        return URL(fileURLWithPath: path, isDirectory: true)
     }
 
     private static func writePrivate(_ data: Data, to url: URL) throws {
