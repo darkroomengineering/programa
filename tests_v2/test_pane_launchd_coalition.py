@@ -21,7 +21,8 @@ def coalition(pid):
     info.restype = ctypes.c_int
     ids = (ctypes.c_uint64 * 6)()
     count = info(pid, 20, 0, ctypes.byref(ids), ctypes.sizeof(ids))
-    if count != ctypes.sizeof(ids):
+    # The struct is 40 bytes on macOS 15 and 48 on later releases; only the first two ids are read.
+    if count < 2 * ctypes.sizeof(ctypes.c_uint64):
         raise RuntimeError(f"proc_pidinfo({pid}) returned {count}, errno={ctypes.get_errno()}")
     assert ids[1] != 0, f"No jetsam coalition for PID {pid}"
     return ids[1]
