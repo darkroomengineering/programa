@@ -16,9 +16,9 @@ final class PaneLaunchdSpawnerTests: XCTestCase {
     }
 
     func testEnvironmentPreservesEmptyValuesAndEqualsInValues() {
-        let strings = ["EMPTY=", "TOKEN=a=b=c", "UNICODE=日本語", "INVALID"].map { strdup($0)! }
+        let strings = ["EMPTY=", "TOKEN=a=b=c", "UNICODE=日本語", "INVALID"].map { value in value.withCString { strdup($0)! } }
         defer { strings.forEach { free($0) } }
-        let pointers: [UnsafePointer<CChar>?] = strings.map { UnsafePointer($0) } + [nil]
+        let pointers: [UnsafePointer<CChar>?] = strings.map { UnsafePointer<CChar>($0) } + [nil]
         pointers.withUnsafeBufferPointer { buffer in
             XCTAssertEqual(PaneLaunchdSpawner.environmentDictionary(buffer.baseAddress!), [
                 "EMPTY": "", "TOKEN": "a=b=c", "UNICODE": "日本語",
