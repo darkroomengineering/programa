@@ -20,6 +20,7 @@ carries eleven patch groups: display-link restart, resize stale-frame mitigation
 notification dispatch, color scheme mode 2031, keyboard copy mode selection API, layer-background
 flag, occluded-surface throttle, offscreen renderer realization, session introspection and revival
 APIs (which include the PTY tee), the OSC 7501 apprt action, and the macOS responsibility disclaim.
+The embedder subprocess spawn hook is described in section 12.
 
 ### 1) macOS display link restart on display changes
 
@@ -168,6 +169,24 @@ tend to conflict together during rebases.
   - Keep both `execve` call sites in `startPosix` routed through `ExecAttr.exec`, and keep
     `ExecAttr.init` before `fork`.
 
+### 12) Embedder subprocess spawn hook
+
+- Files: `include/ghostty.h`, `src/Command.zig`, `src/Surface.zig`, `src/apprt/embedded.zig`,
+  `src/termio/Exec.zig`, `src/pty.zig`, `src/pty.c`
+- Summary:
+  - Surface configuration accepts `spawn_cb` and `spawn_userdata`. On macOS, the callback runs
+    on the IO thread after PTY creation and cwd resolution, with the complete command argv,
+    environment, cwd and slave tty path. Strings and arrays are borrowed for the call.
+  - A positive PID attaches the existing non-child process watcher to the returned process.
+    Returning `-1` leaves spawning to Ghostty's normal fork/exec path. The successful-start
+    cleanup closes the slave descriptor and frees the environment in either case.
+  - The macOS PTY allocator opens the slave with `O_NOCTTY`, allowing an external session
+    leader to claim it with `TIOCSCTTY` without making it the host app's controlling terminal.
+- Conflict notes:
+  - Keep the C surface configuration layout aligned with the embedded Zig options.
+  - Preserve the callback on the IO thread and the non-owned `attached` process semantics.
+  - Keep the macOS slave open explicit: libc `openpty` does not supply `O_NOCTTY`.
+
 ## Upstreamed fork changes
 
 ### cursor-click-to-move respects OSC 133 click-to-move
@@ -216,6 +235,7 @@ These files change frequently upstream; be careful when rebasing the fork:
   - Preserve the child/PTY accessors and revival configuration described in section 9.
     If upstream changes subprocess ownership or watcher semantics, revived processes must
     remain non-owned: Programa may observe their exit but Ghostty must never signal them.
+  - Preserve the spawn callback and macOS `O_NOCTTY` slave allocation in section 12.
   - Prefer the current PTY tee callback over reintroducing the retired output-tap API.
 
 - `src/renderer/generic.zig`
