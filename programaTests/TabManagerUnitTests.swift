@@ -152,6 +152,11 @@ final class TabManagerChildExitCloseTests: XCTestCase {
         snapshot.panels[snapshotIndex].agentWasRunning = true
         snapshot.panels[snapshotIndex].agentResume = target
 
+        // With auto-resume on, the restore types the resume command and sets presence itself.
+        let autoResumeWasEnabled = AgentAutoResumeSettings.isEnabled()
+        AgentAutoResumeSettings.setEnabled(false)
+        defer { AgentAutoResumeSettings.setEnabled(autoResumeWasEnabled) }
+
         workspace.restoreSessionSnapshot(snapshot)
         let panelId = try XCTUnwrap(workspace.focusedPanelId)
         defer { AgentResumeStore.shared.forget(panelId: panelId) }

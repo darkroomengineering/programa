@@ -229,8 +229,8 @@ def main():
             first_policy = launch(True)
             snapshot_title = "Privacy snapshot " + nonce
             created = rpc(control, "workspace.create", {
-                # Keep the login shell as the PTY child; the Python process is
-                # its direct descendant, which the escrow checks below verify.
+                # The login shell stays the PTY child; the Python process runs
+                # under it, which the escrow checks below verify.
                 "initial_command": shlex.join([sys.executable, "-u", str(child_script), str(root), nonce]),
                 "working_directory": str(root), "title": snapshot_title,
             })
@@ -239,8 +239,13 @@ def main():
             owned_surface_ids = {surface.lower()}
             value = eventually("real child heartbeat", heartbeat)
             child_pid = value["pid"]
-            child_parent_pid = processes().get(child_pid, (None, None))[0]
-            require(child_parent_pid is not None, "Cannot read the child's parent process")
+            table = processes()
+            require(child_pid in table, "Cannot read the child's parent process")
+            child_ancestors = []
+            ancestor = table[child_pid][0]
+            while ancestor > 1 and ancestor not in child_ancestors:
+                child_ancestors.append(ancestor)
+                ancestor = table.get(ancestor, (1, None))[0]
             require(value["nonce"] == nonce, "Wrong child heartbeat")
             session = support / "sessions" / surface
             def escrow_metadata():
@@ -248,8 +253,10 @@ def main():
                 return value if value.get("escrowed") and value.get("escrowSocketPath") else None
             metadata = eventually("PTY escrow metadata", escrow_metadata)
             escrow_pid = metadata.get("childPID")
-            require(escrow_pid == child_parent_pid,
-                    f"Escrow identity {escrow_pid} is not the parent of the actual child {child_pid} (parent {child_parent_pid})")
+            # initial_command is typed into the login shell, so the escrowed PTY
+            # child is an ancestor of the Python process, not its parent.
+            require(escrow_pid in child_ancestors,
+                    f"Escrow identity {escrow_pid} is not an ancestor of the actual child {child_pid} (ancestors {child_ancestors})")
             require(metadata.get("escrowSocketPath") == str(holder_socket), "Escrow escaped the fixture's tagged socket")
             remember_descendants()
             require(child_pid in owned, "Cannot establish child process ownership")
