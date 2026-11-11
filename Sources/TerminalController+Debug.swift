@@ -227,12 +227,15 @@ extension TerminalController {
         }
         let visible = v2Bool(params, "visible")
         let width = v2Double(params, "width")
+        if let width, !width.isFinite {
+            return v2InvalidParam("width")
+        }
         let animated = v2Bool(params, "animated") ?? false
         return v2MainSync {
             guard let snapshot = AppDelegate.shared?.debugSetSidebar(
                 windowId: windowId,
                 visible: visible,
-                width: width.map { CGFloat($0) },
+                width: width.map { CGFloat(SessionPersistencePolicy.sanitizedSidebarWidth($0)) },
                 animated: animated
             ) else {
                 return .err(

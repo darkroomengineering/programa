@@ -79,7 +79,8 @@ struct ContentView: View {
             onSendFeedback: presentFeedbackComposer,
             selection: $sidebarSelectionState.selection,
             selectedTabIds: $selectedTabIds,
-            lastSidebarSelectionIndex: $lastSidebarSelectionIndex
+            lastSidebarSelectionIndex: $lastSidebarSelectionIndex,
+            titlebarHeight: titlebarPadding
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -160,6 +161,12 @@ struct ContentView: View {
                 .accessibilityHidden(sidebarSelectionState.selection != .notifications)
         }
         .padding(.top, effectiveTitlebarPadding)
+        .background(alignment: .topLeading) {
+            // Mounted in both presentation modes: minimal mode's tab strip uses the inset too.
+            TitlebarLeadingInsetReader(inset: $titlebarLeadingInset)
+                .frame(width: 0, height: 0)
+                .allowsHitTesting(false)
+        }
         .overlay(alignment: .top) {
             if !isMinimalMode {
                 // Titlebar overlay is only over terminal content, not the sidebar.
@@ -215,9 +222,6 @@ struct ContentView: View {
             // view draggable (which breaks drag gestures like tab reordering).
             WindowDragHandleView()
 
-            TitlebarLeadingInsetReader(inset: $titlebarLeadingInset)
-                .allowsHitTesting(false)
-
             HStack(spacing: 8) {
                 if isFullScreen && !sidebarState.isVisible {
                     fullscreenControls
@@ -264,7 +268,7 @@ struct ContentView: View {
 
     private func syncTrafficLightInset() {
         let inset: CGFloat = (isMinimalMode && !sidebarState.isVisible && !isFullScreen)
-            ? TitlebarControlsMetrics.collapsedStripLeadingInset : 0
+            ? titlebarLeadingInset : 0
         for tab in tabManager.tabs {
             if tab.bonsplitController.configuration.appearance.tabBarLeadingInset != inset {
                 tab.bonsplitController.configuration.appearance.tabBarLeadingInset = inset
@@ -388,6 +392,7 @@ struct ContentView: View {
         let selection: SidebarSelection
         let selectedTabIds: Set<UUID>
         let lastSidebarSelectionIndex: Int?
+        let titlebarPadding: CGFloat
     }
 
     private var contentAndSidebarLayout: some View {
@@ -396,7 +401,8 @@ struct ContentView: View {
             sidebarInputs: SidebarColumnInputs(
                 selection: sidebarSelectionState.selection,
                 selectedTabIds: selectedTabIds,
-                lastSidebarSelectionIndex: lastSidebarSelectionIndex
+                lastSidebarSelectionIndex: lastSidebarSelectionIndex,
+                titlebarPadding: titlebarPadding
             ),
             content: splitColumn(terminalContentWithSidebarDropOverlay),
             contentInputs: ContentColumnInputs(
@@ -726,6 +732,9 @@ struct ContentView: View {
             .onChange(of: isMinimalMode) { _, _ in
                 syncTrafficLightInset()
             }
+            .onChange(of: titlebarLeadingInset) { _, _ in
+                syncTrafficLightInset()
+            }
     }
 
     @ViewBuilder
@@ -768,6 +777,18 @@ struct ContentView: View {
                     }
                 }
             })
+            // The toolbar can install after the accessor last ran (the sidebar split reaches
+            // the window later), which grows the titlebar to the toolbar's height.
+            .onReceive(NotificationCenter.default.publisher(for: .programaMainWindowToolbarDidChange)) { notification in
+                guard let window = notification.object as? NSWindow,
+                      window.identifier?.rawValue == windowIdentifier else { return }
+                DispatchQueue.main.async {
+                    let nextPadding = AppDelegate.titlebarPadding(for: window)
+                    if abs(titlebarPadding - nextPadding) > 0.5 {
+                        titlebarPadding = nextPadding
+                    }
+                }
+            }
     }
 
     func reconcileMountedWorkspaceIds(tabs: [Workspace]? = nil, selectedId: UUID? = nil) {

@@ -2314,7 +2314,7 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         )
     }
 
-    func testAttachUpdateAccessoryRemovesTitlebarAccessoryWhenMinimalModeEnabled() {
+    func testMainWindowCarriesToolbarControlsInsteadOfTitlebarAccessory() {
         guard let appDelegate = AppDelegate.shared else {
             XCTFail("Expected AppDelegate.shared")
             return
@@ -2335,22 +2335,24 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
             return
         }
 
-        let hasTitlebarAccessory: () -> Bool = {
-            window.titlebarAccessoryViewControllers.contains {
-                $0.view.identifier?.rawValue == "programa.titlebarControls"
-            }
+        let toolbarItemIds: () -> [String] = {
+            window.toolbar?.items.map(\.itemIdentifier.rawValue) ?? []
+        }
+        waitUntil(description: "the main window toolbar to install") {
+            toolbarItemIds().contains(MainWindowToolbar.groupID.rawValue)
         }
 
-        XCTAssertTrue(hasTitlebarAccessory(), "Expected visible-titlebar mode to attach the titlebar accessory")
+        XCTAssertTrue(toolbarItemIds().contains(MainWindowToolbar.groupID.rawValue), "toolbar=\(toolbarItemIds())")
+        XCTAssertTrue(toolbarItemIds().contains(MainWindowToolbar.toggleID.rawValue), "toolbar=\(toolbarItemIds())")
+        XCTAssertNotNil(MainWindowToolbar.notificationsItem(in: window), "Expected the notifications popover anchor")
+        XCTAssertTrue(
+            window.titlebarAccessoryViewControllers.isEmpty,
+            "The toolbar replaces the titlebar controls accessory"
+        )
 
         defaults.set(WorkspacePresentationModeSettings.Mode.minimal.rawValue, forKey: WorkspacePresentationModeSettings.modeKey)
-        appDelegate.attachUpdateAccessory(to: window)
-        waitUntil(description: "minimal mode to remove the titlebar accessory") { !hasTitlebarAccessory() }
-
-        XCTAssertFalse(
-            hasTitlebarAccessory(),
-            "Minimal mode should remove the titlebar accessory instead of keeping a hidden controller attached"
-        )
+        XCTAssertTrue(toolbarItemIds().contains(MainWindowToolbar.groupID.rawValue), "toolbar=\(toolbarItemIds())")
+        XCTAssertTrue(window.titlebarAccessoryViewControllers.isEmpty)
     }
 
     func testWorkspaceMinimalModeDefaultsToMinimalPresentation() {

@@ -203,8 +203,9 @@ enum ProgramaGlassSettings {
     /// Registers platform defaults without overwriting an explicit user choice. Only surfaces
     /// that have passed their independent gate are enabled here; later phases extend this map.
     static func platformDefaults(nativeGlassAvailable: Bool) -> [String: Any] {
+        // The window backdrop (windowEnabledKey) stays opt-in everywhere; see
+        // programaShouldApplyWindowGlass.
         [
-            windowEnabledKey: nativeGlassAvailable,
             tabBarEnabledKey: nativeGlassAvailable,
             overlaysEnabledKey: nativeGlassAvailable,
         ]

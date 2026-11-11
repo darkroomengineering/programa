@@ -195,7 +195,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     var ghosttyGotoSplitUpShortcut: StoredShortcut?
     var ghosttyGotoSplitDownShortcut: StoredShortcut?
     private let updateController = UpdateController()
-    private lazy var titlebarAccessoryController = UpdateTitlebarAccessoryController(viewModel: updateViewModel)
+    private let notificationsPopoverController = NotificationsPopoverController()
     private var menuBarExtraController: MenuBarExtraController?
     private static let serviceErrorNoPath = NSString(string: String(localized: "error.clipboardFolderPath", defaultValue: "Could not load any folder path from the clipboard."))
     private static let didInstallWindowKeyEquivalentSwizzle: Void = {
@@ -415,7 +415,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
             syncMenuBarExtraVisibility()
             updateController.startUpdaterIfNeeded()
         }
-        titlebarAccessoryController.start()
         installMainWindowKeyObserver()
         installMainWindowFullScreenToolbarObservers()
         refreshGhosttyGotoSplitShortcuts()
@@ -3552,9 +3551,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
         window.contentView = MainWindowHostingView(rootView: root)
 
-        // Apply shared window styling.
-        attachUpdateAccessory(to: window)
-
         // Keep a strong reference so the window isn't deallocated.
         let controller = MainWindowController(window: window)
         controller.onClose = { [weak self, weak controller] in
@@ -3848,7 +3844,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            self?.titlebarAccessoryController.showNotificationsPopover(animated: false)
+            self?.notificationsPopoverController.show(animated: false)
         }
     }
 
@@ -3951,22 +3947,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     let debugStressSurfaceLoadTimeoutSeconds: TimeInterval = 10.0
 #endif
 
-    func attachUpdateAccessory(to window: NSWindow) {
-        titlebarAccessoryController.start()
-        titlebarAccessoryController.attach(to: window)
-    }
-
-    func toggleNotificationsPopover(animated: Bool = true, anchorView: NSView? = nil) {
-        titlebarAccessoryController.toggleNotificationsPopover(animated: animated, anchorView: anchorView)
+    /// `window` picks the window whose toolbar bell anchors the popover; without it the key
+    /// main window does.
+    func toggleNotificationsPopover(animated: Bool = true, anchorView: NSView? = nil, window: NSWindow? = nil) {
+        notificationsPopoverController.toggle(animated: animated, anchorView: anchorView, window: window)
     }
 
     @discardableResult
     func dismissNotificationsPopoverIfShown() -> Bool {
-        titlebarAccessoryController.dismissNotificationsPopoverIfShown()
+        notificationsPopoverController.dismissIfShown()
     }
 
     func isNotificationsPopoverShown() -> Bool {
-        titlebarAccessoryController.isNotificationsPopoverShown()
+        notificationsPopoverController.isShown
     }
 
     // MARK: - Agent status badges
@@ -4722,14 +4715,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         }
 
         // When the notifications popover is open, Escape should dismiss it immediately.
-        if flags.isEmpty, event.keyCode == 53, titlebarAccessoryController.dismissNotificationsPopoverIfShown() {
+        if flags.isEmpty, event.keyCode == 53, notificationsPopoverController.dismissIfShown() {
             return true
         }
 
         // When the notifications popover is showing an empty state, consume plain typing
         // so key presses do not leak through into the focused terminal.
         if flags.isDisjoint(with: [.command, .control, .option]),
-           titlebarAccessoryController.isNotificationsPopoverShown(),
+           notificationsPopoverController.isShown,
            (notificationStore?.notifications.isEmpty ?? false) {
             return true
         }
@@ -5015,6 +5008,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         case .ignore:
             break
         }
+    }
+
+    /// Height of the titlebar and toolbar above the main window's content layout rect.
+    static func titlebarPadding(for window: NSWindow) -> CGFloat {
+        max(28, min(72, window.frame.height - window.contentLayoutRect.height))
     }
 
     /// Native full screen has no traffic lights, and AppKit renders a visible toolbar
@@ -5326,6 +5324,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         if !window.titlebarAppearsTransparent {
             window.titlebarAppearsTransparent = true
         }
+        // The toolbar shares the titlebar row; the WindowGroup launch window would
+        // otherwise show its title until the toolbar installs.
+        if window.titleVisibility != .hidden {
+            window.titleVisibility = .hidden
+        }
         // isMovableByWindowBackground=true breaks sidebar tab reordering, so
         // drag-to-move goes through WindowDragHandleView's performDrag. The
         // window itself stays movable (see createMainWindow) so the Window menu
@@ -5344,8 +5347,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
         // Keep content below the titlebar so drags on Bonsplit's tab bar don't
         // get interpreted as window drags.
-        let computedTitlebarHeight = window.frame.height - window.contentLayoutRect.height
-        let nextTitlebarPadding = max(28, min(72, computedTitlebarHeight))
+        let nextTitlebarPadding = Self.titlebarPadding(for: window)
 #if DEBUG
         if ProcessInfo.processInfo.environment["PROGRAMA_UI_TEST_MODE"] == "1" {
             UpdateLogStore.shared.append("ui test window accessor: id=\(windowIdentifier) visible=\(window.isVisible)")
@@ -5355,10 +5357,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         // NSGlassEffectView path vs the older NSVisualEffectView fallback is chosen
         // inside WindowGlassEffect.apply.
         let currentThemeBackground = GhosttyBackgroundTheme.currentColor()
-        let shouldApplyWindowGlass = programaShouldApplyWindowGlass(
-            bgGlassEnabled: bgGlassEnabled,
-            glassEffectAvailable: WindowGlassEffect.isAvailable
-        )
+        let shouldApplyWindowGlass = programaShouldApplyWindowGlass(bgGlassEnabled: bgGlassEnabled)
         let shouldForceTransparentHosting =
             shouldApplyWindowGlass || currentThemeBackground.alphaComponent < 0.999
 
@@ -5395,7 +5394,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         } else {
             WindowGlassEffect.remove(from: window)
         }
-        AppDelegate.shared?.attachUpdateAccessory(to: window)
         AppDelegate.shared?.registerMainWindow(
             window,
             windowId: windowId,
