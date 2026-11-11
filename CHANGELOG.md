@@ -6,10 +6,18 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-11
+
 ### Added
+- The main window has a real macOS toolbar with the sidebar toggle, notifications and new tab buttons. It stays in full screen, and toolbar tooltips name each button's shortcut.
+- The sidebar is a system sidebar. macOS draws its divider and collapse animation, and the width you drag it to is remembered per window across relaunches. It can be at most a third of the window.
 - Scripts and other agents can no longer answer an agent's permission or sign-in prompt for you. While a pane shows one, `programa send`, `send-key`, `prompt-agent`, `handoff` and the matching socket and MCP calls send nothing and fail with `agent_awaiting_approval`. Questions and idle prompts are not affected. Pressing a key at the prompt lifts the refusal, `--answer-prompt` (`answer_prompt` over the socket) sends anyway, and Settings > Agents > Protect Approval Prompts (`automation.protectApprovalPrompts`) turns it off. See `docs/socket-api.md`.
 
 ### Fixed
+- Force quitting an app you started from a terminal, such as a test browser, no longer kills other terminals. Each terminal now runs as its own launchd job, so a force quit only reaches the app and the terminal it came from. Terminals that were already open before you update stay exposed until you restart them.
+- When an agent pane's shell dies, Programa keeps the workspace and types `claude --resume` back into a fresh shell, pinned or not. Unpinned workspaces used to close and lose the session.
+- `workspace_create` with an `initial_command` such as `claude --resume <id>` runs the command in your login shell, so it finds `claude` on your PATH and the workspace stays open.
+- Debug and smoke builds stop their session escrow helper after 30 minutes with no app connected, instead of leaving it running.
 - Sending review comments no longer pastes them into an agent's permission or sign-in prompt. The Send to agent button and `programa review send` (`review.send_comments`) now send nothing while that prompt shows, keep your comments, and say to answer the prompt first.
 
 ## [0.6.0] - 2026-11-07
