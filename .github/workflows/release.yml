@@ -12,6 +12,8 @@ name: Release desktop apps
 # - A run whose commit is no longer main's head ends successfully with a notice, both
 #     before the builds start and after they finish.
 # - workflow_dispatch: dry-run build that uploads an artifact instead of publishing.
+# - ship-ci runs `ship ci mac` from shipit on the same commit as a dry run, beside the jobs
+#     above; it publishes nothing and gates nothing.
 #
 # Milestone marketing-version bumps (`scripts/bump-version.sh` + `git tag vX.Y.Z`) are git
 # tags only; they do not create a GitHub release. See CLAUDE.md "Release".
@@ -158,6 +160,54 @@ jobs:
           echo "Marketing version: ${MARKETING_VERSION} (effective: ${EFFECTIVE_MARKETING_VERSION})"
           echo "Effective build: ${EFFECTIVE_BUILD}"
           echo "Release tag: ${RELEASE_TAG}"
+
+  # `ship ci mac` (shipit, ship.json) on the same commit, alongside the jobs that ship. It
+  # runs the mac lane as a dry run: shipit does not publish from `ship ci` yet, so the
+  # rolling release, the appcast and installed apps are untouched. Nothing depends on this
+  # job and continue-on-error keeps a ship bug from turning a good release red. Move the
+  # release onto it once a ship release has updated real installs (docs/release.md).
+  ship-ci:
+    needs: [release-identity]
+    if: >-
+      always() &&
+      needs.release-identity.result == 'success' &&
+      needs.release-identity.outputs.superseded != 'true' &&
+      (github.event_name == 'workflow_run' || github.ref == 'refs/heads/main')
+    runs-on: macos-15
+    timeout-minutes: 30
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout release revision
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.release-identity.outputs.target_sha }}
+          path: app
+          # ship reads tags and main's history for the build tag and notes.
+          fetch-depth: 0
+
+      - name: Checkout shipit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: darkroomengineering/shipit
+          ref: ab6747cf4bb751c4210d77062abbcbda5bdb41b2
+          path: shipit
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.4
+
+      - name: Install shipit
+        working-directory: shipit
+        run: bun install --frozen-lockfile
+
+      - name: ship ci mac
+        working-directory: app
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun ../shipit/src/cli.ts ci mac
 
   build-sign-notarize:
     needs: [release-identity]

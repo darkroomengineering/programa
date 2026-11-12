@@ -19,7 +19,9 @@ app.
   development default only. Shipping ignores it.
 - **Injection.** Both values are written into `Info.plist` at build time and never committed.
 - **The `rolling` release.** Each ship overwrites a single GitHub release named `rolling`
-  (titled with the effective version) and marks it "latest". The releases page shows exactly
+  (titled `Programa <effective version>`, for example `Programa 0.7.573`) and marks it
+  "latest". Its notes are the CHANGELOG.md section for the current major.minor above the
+  generated list of merged PRs. The releases page shows exactly
   one entry, and `releases/latest/download/*` always resolves to the newest green build.
 - **Candidates.** Each ship also seals a `rolling-candidate-<build>` **draft** release that
   holds the versioned DMG and EXE and the dSYMs. Drafts are invisible on the public releases
@@ -36,6 +38,31 @@ macOS ships independently of the Windows build. The macOS release does not wait 
 The Windows executable, `programa-windows.exe`, is attached to `rolling` when its build
 passes. Windows signing is described in [windows-signing.md](windows-signing.md) and the
 Windows smoke test in [windows-testing.md](windows-testing.md).
+
+## ship (shipit)
+
+`ship.json` at the repository root describes Programa for
+[shipit](https://github.com/darkroomengineering/shipit), the release tool every Incubator
+app is moving to. The release still publishes through the scripts above. shipit runs beside
+them until a release made by `ship` has updated real installs:
+
+- **`ship-ci` job in `release.yml`.** On the same green-main trigger and the same commit,
+  it runs `ship ci mac`: the gates and the mac lane as a dry run (preflight, then the
+  archive, sign, verify, notarize, DMG, appcast and upload plan, printed and not run).
+  shipit's `ship ci` does not publish yet, so it changes nothing users see. Nothing waits
+  on it, and a failure does not fail the release.
+- **`.github/workflows/ship-windows.yml`.** Builds the Windows app as a Velopack installer
+  (`Programa-x64-setup.exe`) with an update feed (`releases.win.json`) through shipit's
+  `windows-lane.yml`. It runs only by hand from the Actions tab (tick `dry-run` to build and
+  pack without uploading) or when `ship beta windows` dispatches it. It is unsigned until
+  `windows.signing` is added to `ship.json` after Azure Artifact Signing is set up
+  ([windows-signing.md](windows-signing.md)); the lane warns about that on every run.
+
+`ship.json` carries the same feed URL and Sparkle public key as the app; never change
+either. Until shipit covers the rest, these checks stay only in `release.yml` and the
+publish scripts: the run-number patch version, the CLI version memory guard, the embedded
+Sparkle version and provisioning profile checks, dSYMs, build attestations, the sealed
+candidate drafts and the reconciler's high-water and CI-provenance checks.
 
 ## What `rolling` carries
 

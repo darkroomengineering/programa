@@ -262,7 +262,8 @@ single `rolling` GitHub release by `.github/workflows/release.yml`. There is no 
 beta channel; fix broken ships forward on `main`. The build number comes from the workflow
 run id, not from the committed `CURRENT_PROJECT_VERSION`. Milestone bumps use
 `./scripts/bump-version.sh` and a `CHANGELOG.md` entry. macOS ships independently of the
-Windows build.
+Windows build. `ship.json` describes the app for shipit; the `ship-ci` job in `release.yml`
+runs it as a dry run beside the real release. Never change its feed URL or Sparkle key.
 
 Full details, the required secrets and the release asset layout are in
 [docs/release.md](docs/release.md).
