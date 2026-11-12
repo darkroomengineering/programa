@@ -31,7 +31,9 @@ enum PaneJob {
         } catch {
             fail("handshake ready", EIO)
         }
-        let deadline = DispatchTime.now().uptimeNanoseconds + 5_000_000_000
+        // Longer than any app-side step between our report and its gate, which can include a
+        // `launchctl print` on a loaded machine. The app cancels sooner by deleting the folder.
+        let deadline = DispatchTime.now().uptimeNanoseconds + 20_000_000_000
         while DispatchTime.now().uptimeNanoseconds < deadline {
             guard FileManager.default.fileExists(atPath: directory) else { fail("handshake cancelled", ECANCELED) }
             if FileManager.default.fileExists(atPath: root.appendingPathComponent(gate).path) { return }
