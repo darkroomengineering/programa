@@ -44,6 +44,8 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.4.0" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
     <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
+    <!-- Keep equal to windows.vpk in ship.json. -->
+    <PackageReference Include="Velopack" Version="1.2.161" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(ProgramaNativeDirectory)' != ''">

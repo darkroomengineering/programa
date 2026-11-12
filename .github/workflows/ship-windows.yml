@@ -1,0 +1,40 @@
+name: ship-windows
+
+# The Velopack installer and update feed for Windows, built by shipit's windows lane
+# (ship.json `windows`). Manual only for now: release.yml still ships programa-windows.exe
+# through the rolling reconciler. `ship beta windows` on a Mac dispatches this workflow with
+# version, build, commit and dispatch_id; run by hand with no inputs it is a whole
+# `ship beta windows` on the runner, and with dry-run it is `ship ci windows`, which builds
+# and packs unsigned and uploads nothing. dry-run defaults to false because the dispatch
+# from ship does not pass it, so tick it when trying the lane from the Actions tab.
+#
+# Signing: ship.json has no `windows.signing` block yet, so the lane ships unsigned and
+# warns on every run. Once Azure Artifact Signing exists (docs/windows-signing.md), add the
+# block; the AZURE_* repository variables below are already passed for the OIDC login.
+run-name: ship windows ${{ inputs.dispatch_id || github.sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version: { type: string, default: "" }
+      build: { type: string, default: "" }
+      commit: { type: string, default: "" }
+      dispatch_id: { type: string, default: "" }
+      dry-run: { type: boolean, default: false }
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  windows:
+    uses: darkroomengineering/shipit/.github/workflows/windows-lane.yml@ab6747cf4bb751c4210d77062abbcbda5bdb41b2
+    with:
+      version: ${{ inputs.version }}
+      build: ${{ inputs.build }}
+      commit: ${{ inputs.commit }}
+      dry-run: ${{ inputs.dry-run }}
+      shipit-ref: ab6747cf4bb751c4210d77062abbcbda5bdb41b2
+      azure-client-id: ${{ vars.AZURE_CLIENT_ID }}
+      azure-tenant-id: ${{ vars.AZURE_TENANT_ID }}
+      azure-subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}

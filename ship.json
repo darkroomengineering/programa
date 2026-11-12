@@ -1,0 +1,48 @@
+{
+  "name": "Programa",
+  "version": { "file": "GhosttyTabs.xcodeproj/project.pbxproj", "regex": "MARKETING_VERSION = ([0-9.]+);" },
+  "changelog": "CHANGELOG.md",
+  "buildNumber": "githubRun",
+  "mac": {
+    "scheme": "programa",
+    "bundleId": "com.darkroom.programa",
+    "app": "Programa.app",
+    "architectures": ["arm64"],
+    "feedUrl": "https://github.com/darkroomengineering/programa/releases/latest/download/appcast.xml",
+    "publicKey": "K4pw6WgryZqN0NI9t/FaNdroYWdSSuy2gejC3utPCQQ=",
+    "entitlements": "programa.entitlements",
+    "sign": [
+      "Contents/PlugIns/ProgramaDockTilePlugin.plugin",
+      "Contents/Resources/bin/programa",
+      "Contents/Resources/bin/programa-mcp"
+    ],
+    "requiredEntitlements": [
+      "com.apple.security.cs.allow-jit",
+      "com.apple.security.device.camera",
+      "com.apple.security.device.audio-input",
+      "com.apple.security.automation.apple-events"
+    ],
+    "forbiddenEntitlements": [
+      "com.apple.security.cs.disable-library-validation",
+      "com.apple.security.cs.allow-unsigned-executable-memory"
+    ],
+    "binaries": ["Contents/Resources/bin/programa"],
+    "dmg": "programa-macos.dmg",
+    "hosting": { "type": "github", "repo": "darkroomengineering/programa", "tag": "rolling" },
+    "checks": ["git submodule update --init --recursive", "./scripts/download-prebuilt-ghosttykit.sh"]
+  },
+  "windows": {
+    "dir": "windows",
+    "publish": "& ../scripts/build-windows.ps1 -Version $env:SHIP_VERSION -Build $env:SHIP_BUILD_NUMBER -Commit $env:SHIP_COMMIT -OutputDirectory exe -PublishDirectory publish",
+    "publishDir": "publish",
+    "packId": "Programa",
+    "packTitle": "Programa",
+    "mainExe": "programa.exe",
+    "runtime": "win-x64",
+    "channel": "win",
+    "vpk": "1.2.161",
+    "workflow": "ship-windows.yml",
+    "release": { "repo": "darkroomengineering/programa", "tag": "rolling" },
+    "signing": null
+  }
+}

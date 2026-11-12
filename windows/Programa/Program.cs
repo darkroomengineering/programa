@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Velopack;
 using WinRT;
 
 namespace Programa;
@@ -11,6 +12,10 @@ public static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        // Must run before anything else, --version included: Velopack's install, update and
+        // uninstall hooks start the app with arguments that are handled and exit here.
+        VelopackApp.Build().Run();
+
         if (args.Any(argument => argument is "--version" or "-V"))
         {
             Console.WriteLine(BuildIdentity.Value);

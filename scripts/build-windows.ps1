@@ -8,7 +8,10 @@ param(
     # argument (for example a wrapper around `dotnet sign code artifact-signing`). Optional:
     # falls back to $env:PROGRAMA_WINDOWS_SIGN_SCRIPT, and the build ships unsigned when
     # neither is set. See docs/windows-signing.md.
-    [string]$SignScript = $env:PROGRAMA_WINDOWS_SIGN_SCRIPT
+    [string]$SignScript = $env:PROGRAMA_WINDOWS_SIGN_SCRIPT,
+    # Optional fresh or empty folder that receives the whole published app, for packers such
+    # as Velopack (ship.json windows.publish) that need the folder rather than the exe copies.
+    [string]$PublishDirectory = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -28,6 +31,14 @@ $ResolvedOutput = [System.IO.Path]::GetFullPath($OutputDirectory)
 if (Test-Path -LiteralPath $ResolvedOutput) {
     if ((Get-ChildItem -LiteralPath $ResolvedOutput -Force | Measure-Object).Count -ne 0) { throw "OutputDirectory must be fresh and empty: $ResolvedOutput" }
 } else { New-Item -ItemType Directory -Path $ResolvedOutput | Out-Null }
+$ResolvedPublish = ''
+if (-not [string]::IsNullOrWhiteSpace($PublishDirectory)) {
+    $ResolvedPublish = [System.IO.Path]::GetFullPath($PublishDirectory)
+    if ($ResolvedPublish -eq $ResolvedOutput) { throw 'PublishDirectory must differ from OutputDirectory.' }
+    if (Test-Path -LiteralPath $ResolvedPublish) {
+        if ((Get-ChildItem -LiteralPath $ResolvedPublish -Force | Measure-Object).Count -ne 0) { throw "PublishDirectory must be fresh and empty: $ResolvedPublish" }
+    } else { New-Item -ItemType Directory -Path $ResolvedPublish | Out-Null }
+}
 
 $BuildRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("programa-windows-build-" + [Guid]::NewGuid().ToString('N'))
 $NativeRoot = Join-Path $BuildRoot 'native'
@@ -163,6 +174,11 @@ try {
     Write-Output "Windows executable: $RollingExecutable"
     Write-Output "Archived executable: $ArchivedExecutable"
     Write-Output "SHA-256: $RollingHash"
+
+    if ($ResolvedPublish) {
+        Copy-Item -Path (Join-Path $PublishRoot '*') -Destination $ResolvedPublish -Recurse
+        Write-Output "Published app folder: $ResolvedPublish"
+    }
 } finally {
     $env:RUSTFLAGS = $PreviousRustFlags
     if (Test-Path -LiteralPath $BuildRoot) { Remove-Item -LiteralPath $BuildRoot -Recurse -Force }
