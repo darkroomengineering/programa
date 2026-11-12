@@ -181,9 +181,16 @@ struct ReviewDiffProber {
             // error instead of returning a partial (or empty) file list.
             return ReviewDiffSnapshot(files: [], repositoryRoot: repoRoot, resolvedBaseBranch: nil, error: error)
         case .success(let diff):
-            var files = diff.files
-            files.append(contentsOf: untrackedFileDiffs(repoRoot: repoRoot))
-            return ReviewDiffSnapshot(files: files, repositoryRoot: repoRoot, resolvedBaseBranch: nil, error: nil, viewerPatch: diff.viewerPatch)
+            let untracked = untrackedFileDiffs(repoRoot: repoRoot)
+            // Every untracked file carries a `notDiffableReason`, so the viewer gets its header only.
+            let viewerPatch = diff.viewerPatch + untracked.map { newFileHeader(path: $0.displayPath) }.joined()
+            return ReviewDiffSnapshot(
+                files: diff.files + untracked,
+                repositoryRoot: repoRoot,
+                resolvedBaseBranch: nil,
+                error: nil,
+                viewerPatch: viewerPatch
+            )
         }
     }
 
@@ -333,6 +340,36 @@ struct ReviewDiffProber {
             return ReviewFileDiff(oldPath: nil, newPath: path, status: .added, hunks: [], notDiffableReason: .binary)
         }
         return ReviewFileDiff(oldPath: nil, newPath: path, status: .added, hunks: [], notDiffableReason: .newUntrackedFile)
+    }
+
+    /// The header `git diff` would write for a new file, with no hunks.
+    private nonisolated static func newFileHeader(path: String) -> String {
+        let newPath = gitQuotedPath("b/" + path)
+        return "diff --git \(gitQuotedPath("a/" + path)) \(newPath)\nnew file mode 100644\n--- /dev/null\n+++ \(newPath)\n"
+    }
+
+    /// Quotes a path the way git does with `core.quotePath=false`, so a quote, backslash or
+    /// control character (a newline above all) cannot break the patch into extra lines.
+    private nonisolated static func gitQuotedPath(_ path: String) -> String {
+        let needsQuoting = path.unicodeScalars.contains { $0 == "\"" || $0 == "\\" || $0.value < 0x20 || $0.value == 0x7f }
+        guard needsQuoting else { return path }
+        var quoted = "\""
+        for scalar in path.unicodeScalars {
+            switch scalar {
+            case "\"": quoted += "\\\""
+            case "\\": quoted += "\\\\"
+            case "\t": quoted += "\\t"
+            case "\n": quoted += "\\n"
+            case "\r": quoted += "\\r"
+            default:
+                if scalar.value < 0x20 || scalar.value == 0x7f {
+                    quoted += String(format: "\\%03o", scalar.value)
+                } else {
+                    quoted.unicodeScalars.append(scalar)
+                }
+            }
+        }
+        return quoted + "\""
     }
 
     private nonisolated static func isLikelyBinary(fullPath: String) -> Bool {
