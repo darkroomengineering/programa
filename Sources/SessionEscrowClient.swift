@@ -27,9 +27,36 @@ final class SessionEscrowClient {
     // arrives. Keep the release capability independently from durable success.
     private var sentClaimsBySurfaceId: [String: String] = [:]
     private var acknowledgementBuffer = Data()
-    private lazy var socketPath = Self.escrowSocketPath()
+    private lazy var socketPath = socketPathProvider()
 
-    private init() {}
+    private let isEnabled: Bool
+    private let heartbeatInterval: TimeInterval
+    private let socketPathProvider: () -> String
+    private let connectToHolder: (String) -> Int32?
+    /// Asked to re-escrow the given surfaces once a replacement holder
+    /// answers. Called on `queue`; must not block it.
+    private let resendLiveSessions: (Set<String>) -> Void
+
+    /// Tests inject a transport and a resend hook; `shared` uses the real
+    /// holder and stays disabled under XCTest.
+    init(
+        isEnabled: Bool = !SessionMachineryGate.isUnitTesting,
+        heartbeatInterval: TimeInterval = SessionEscrowPolicy.heartbeatInterval,
+        socketPath: @escaping () -> String = { SessionEscrowClient.escrowSocketPath() },
+        connectToHolder: @escaping (String) -> Int32? = SessionEscrowClient.connectSpawningHolderIfNeeded,
+        resendLiveSessions: @escaping (Set<String>) -> Void = { _ in }
+    ) {
+        self.isEnabled = isEnabled
+        self.heartbeatInterval = heartbeatInterval
+        self.socketPathProvider = socketPath
+        self.connectToHolder = connectToHolder
+        self.resendLiveSessions = resendLiveSessions
+    }
+
+    deinit {
+        heartbeatTimer?.cancel()
+        if let connectionFD { close(connectionFD) }
+    }
 
     /// Escrows one surface's already-dup'd master fd. `dupedMasterFD` is
     /// ALWAYS closed by this method (success or failure) -- callers must
@@ -43,7 +70,7 @@ final class SessionEscrowClient {
         childPID: Int32,
         completion: @escaping (Result?) -> Void
     ) {
-        guard !SessionMachineryGate.isUnitTesting else {
+        guard isEnabled else {
             close(dupedMasterFD)
             completion(nil)
             return
@@ -125,7 +152,7 @@ final class SessionEscrowClient {
     /// Callers must only use this once the close is final (past the undo
     /// grace period) and never during app termination.
     func release(surfaceId: String) {
-        guard !SessionMachineryGate.isUnitTesting else { return }
+        guard isEnabled else { return }
         queue.async { [weak self] in
             guard let self else { return }
             // Nothing to release if we never escrowed it, and dropping the id
@@ -161,17 +188,23 @@ final class SessionEscrowClient {
     }
 
     /// `queue`-confined. Returns the existing connection if live, otherwise
-    /// attempts to connect, spawning the holder once (on the first failed
-    /// attempt only) if nothing answers. Bounded by
-    /// `SessionEscrowPolicy.connectRetryCount` short retries; never
-    /// blocks indefinitely.
+    /// attempts to connect through `connectToHolder`.
     private func ensureConnection() -> Int32? {
         if let connectionFD { return connectionFD }
+        guard let fd = connectToHolder(socketPath) else { return nil }
+        connectionFD = fd
+        startHeartbeat(fd: fd)
+        return fd
+    }
+
+    /// Connects to the holder at `socketPath`, spawning it once (on the
+    /// first failed attempt only) if nothing answers. Bounded by
+    /// `SessionEscrowPolicy.connectRetryCount` short retries; never
+    /// blocks indefinitely.
+    static func connectSpawningHolderIfNeeded(socketPath: String) -> Int32? {
         var spawnedHolder = false
         for attempt in 0..<SessionEscrowPolicy.connectRetryCount {
             if let fd = UnixDomainFDPassing.connect(to: socketPath) {
-                connectionFD = fd
-                startHeartbeat(fd: fd)
                 #if DEBUG
                 dlog("session.escrow.client.connected attempt=\(attempt) socket=\(socketPath)")
                 #endif
@@ -179,7 +212,7 @@ final class SessionEscrowClient {
             }
             if !spawnedHolder {
                 spawnedHolder = true
-                Self.spawnHolderIfNeeded(socketPath: socketPath)
+                spawnHolderIfNeeded(socketPath: socketPath)
             }
             if attempt < SessionEscrowPolicy.connectRetryCount - 1 {
                 Thread.sleep(forTimeInterval: SessionEscrowPolicy.connectRetryDelay)
@@ -195,8 +228,8 @@ final class SessionEscrowClient {
         heartbeatTimer?.cancel()
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(
-            deadline: .now() + SessionEscrowPolicy.heartbeatInterval,
-            repeating: SessionEscrowPolicy.heartbeatInterval,
+            deadline: .now() + heartbeatInterval,
+            repeating: heartbeatInterval,
             leeway: .milliseconds(500)
         )
         timer.setEventHandler { [weak self] in
@@ -229,7 +262,7 @@ final class SessionEscrowClient {
     /// write to a stale fd. Never blocks the caller (main actor): the send
     /// itself is dispatched onto `queue`.
     func notifySystemDidWake() {
-        guard !SessionMachineryGate.isUnitTesting else { return }
+        guard isEnabled else { return }
         queue.async { [weak self] in
             guard let self, let fd = self.connectionFD else {
                 dilog("escrow.client", "wake reconnect=skipped reason=no_connection")
