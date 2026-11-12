@@ -87,8 +87,8 @@ extension ProgramaCLI {
 
             Subcommands:
               session-start   Register an OpenCode session (plugin boot)
-              prompt-submit   Set Running status on user prompt (chat.message)
-              stop            Send completion notification, set Idle (session.idle)
+              prompt-submit   Set Running status when a turn starts (v1 chat.message, v2 session.execution.started)
+              stop            Send completion notification, set Idle (v1 session.idle, v2 session.execution.succeeded/failed/interrupted)
               notification    Send an attention notification, set Needs input (permission.asked)
               session-end     Final cleanup when the OpenCode plugin disposes
 

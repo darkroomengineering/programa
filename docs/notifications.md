@@ -119,6 +119,13 @@ add your own lines inside the Codex `# BEGIN programa` block.
 The hooks fail open: when the agent runs outside Programa, or Programa is not reachable,
 the hook answers the agent with its normal acknowledgement and the agent carries on.
 
+The OpenCode plugin works with OpenCode 1.3.4 and later, including 2.x. OpenCode 2 runs plugins in one
+background service shared by every terminal, which cannot tell which pane a session belongs
+to, so there the plugin only reports when OpenCode runs its own private server:
+`opencode --standalone`, or `opencode service set disabled true`. Subagent sessions never
+change the pane's status or the session `programa resume` reopens; a subagent's permission
+prompt is reported on its parent session.
+
 ## Other agents
 
 ### GitHub Copilot CLI
