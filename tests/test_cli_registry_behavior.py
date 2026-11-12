@@ -624,6 +624,8 @@ def main() -> int:
         (["list-workspaces"], "workspace.list"),
         (["current-workspace"], "workspace.current"),
         (["new-workspace"], "workspace.create"),
+        (["current-window"], "window.current"),
+        (["tree"], "system.tree"),
     ]:
         for handle in (WINDOW_ID, "window:1"):
             with tempfile.TemporaryDirectory(prefix="pcli-window-", dir="/tmp") as directory:
