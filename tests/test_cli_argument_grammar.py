@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """Behavioral contract for `CLIArgumentGrammar`-driven commands.
 
-Issue #187 (CLI half): a batch of `.registered` commands were migrated off
-the hand-written `validateRegisteredArguments` switch onto a typed
-`CLIArgumentGrammar` declared directly on their `CommandDescriptor`, so
-validation is generated from the same source that documents the command
-instead of being restated by hand.
+Every `.registered` command declares a typed `CLIArgumentGrammar` on its
+`CommandDescriptor`, so validation is generated from the same source that
+documents the command.
 
-This is table-driven over exactly the commands that were migrated. For each
-one it asserts, against the real built CLI binary talking to a fake
+This is table-driven over one command per grammar shape. For each one it
+asserts, against the real built CLI binary talking to a fake
 unix-socket server (mirroring `test_cli_registry_behavior.py`'s harness):
 
   - a valid invocation is accepted (it reaches the socket -- one accepted
@@ -49,11 +47,8 @@ class Case(NamedTuple):
     unknown_flag_args: list[str]
 
 
-# One representative command per grammar shape that was migrated off the
-# switch. Names that share a grammar arm (aliases, or multiple case labels
-# pointing at one `parse(...)` call) are covered once here since they are
-# validated identically; the conversion itself touched every alias's
-# descriptor, not just the one tested below.
+# One representative command per grammar shape. Aliases that share one
+# descriptor grammar are validated identically, so each is covered once.
 CASES: list[Case] = [
     Case(
         "capabilities (no-arg command)",
@@ -264,6 +259,79 @@ CASES: list[Case] = [
         "unexpected",
         ["respawn-pane", "--bogus"],
     ),
+    Case(
+        "tree (values + boolean)",
+        ["tree", "--all"],
+        ["tree", "extra"],
+        "unexpected",
+        ["tree", "--bogus"],
+    ),
+    Case(
+        "capture-pane (values + boolean)",
+        ["capture-pane", "--workspace", WORKSPACE_ID, "--scrollback", "--lines", "5"],
+        ["capture-pane", "extra"],
+        "unexpected",
+        ["capture-pane", "--bogus"],
+    ),
+    Case(
+        "resize-pane (required option + direction short flag)",
+        ["resize-pane", "--pane", "pane1", "-L", "--amount", "2"],
+        ["resize-pane", "-L"],
+        "--pane is required",
+        ["resize-pane", "--pane", "pane1", "-L", "--bogus"],
+    ),
+    Case(
+        "pipe-pane (command as option or trailing words)",
+        ["pipe-pane", "--command", "cat >/dev/null"],
+        ["pipe-pane", "--workspace", WORKSPACE_ID],
+        "requires --command",
+        ["pipe-pane", "--bogus", "--command", "true"],
+    ),
+    Case(
+        "wait-for (-S short flag + one name)",
+        ["wait-for", "-S", "pcli-grammar-token"],
+        ["wait-for"],
+        "missing",
+        ["wait-for", "--bogus", "name"],
+    ),
+    Case(
+        "set-hook (--list, --unset, or event + command)",
+        ["set-hook", "--list"],
+        ["set-hook", "after-new-window"],
+        "requires <event> <command>",
+        ["set-hook", "--bogus"],
+    ),
+    Case(
+        "display-message (-p is not the text)",
+        ["display-message", "-p", "hello"],
+        ["display-message", "-p"],
+        "requires text",
+        ["display-message", "--bogus", "hello"],
+    ),
+]
+
+# Semantic rules beyond the flag schema, each rejected before any socket
+# connection with the message the user sees.
+SEMANTIC_REJECTIONS: list[tuple[list[str], str]] = [
+    (["capture-pane", "--lines", "0"], "--lines must be greater than 0"),
+    (["resize-pane", "--pane", "pane1", "left"], "requires -L, -R, -U, or -D"),
+    (["resize-pane", "--pane", "pane1"], "missing required argument"),
+    (["resize-pane", "--pane", "pane1", "-L", "--amount", "0"], "--amount must be greater than 0"),
+    (["wait-for", "-S"], "requires one name"),
+    (["wait-for", "one", "two"], "requires one name"),
+    (["wait-for", "name", "--timeout", "inf"], "--timeout must be finite and nonnegative"),
+]
+
+# Agent hooks run with the env an agent inherits inside a Programa surface.
+HOOK_ENV = {"PROGRAMA_WORKSPACE_ID": WORKSPACE_ID, "PROGRAMA_SURFACE_ID": SURFACE_ID}
+HOOK_REJECTIONS: list[tuple[list[str], str]] = [
+    (["claude-hook", "bogus-event"], "claude-hook: unknown event bogus-event"),
+    (["claude-hook", "--bogus"], "unknown option"),
+    (["claude-hook", "stop", "extra"], "unexpected"),
+    (["codex-hook", "pre-tool-use"], "codex-hook: unknown event pre-tool-use"),
+    (["codex-hook", "--cwd", "/tmp", "stop"], "unknown option"),
+    (["opencode-hook", "bogus-event", "--cwd", "/tmp"], "opencode-hook: unknown event bogus-event"),
+    (["opencode-hook", "--bogus"], "unknown option"),
 ]
 
 
@@ -348,6 +416,34 @@ def main() -> int:
                 f"{case.name}: unknown flag output missing 'unknown option': {output!r}",
             )
 
+    for args, needle in SEMANTIC_REJECTIONS:
+        with tempfile.TemporaryDirectory(prefix="pcli-grammar-", dir="/tmp") as directory:
+            with SocketRecorder(directory) as recorder:
+                process = run_cli(recorder.path, args)
+            output = merged_output(process)
+            check(process.returncode != 0 and recorder.accept_count == 0,
+                  f"invalid {args!r} must fail before connection: {output!r}")
+            check(needle.lower() in output.lower(), f"invalid {args!r} output missing {needle!r}: {output!r}")
+
+    for args, needle in HOOK_REJECTIONS:
+        with tempfile.TemporaryDirectory(prefix="pcli-grammar-", dir="/tmp") as directory:
+            with SocketRecorder(directory) as recorder:
+                process = run_cli(recorder.path, args, env_overrides=HOOK_ENV, input_text="")
+            output = merged_output(process)
+            check(process.returncode != 0 and recorder.accept_count == 0,
+                  f"invalid hook {args!r} must fail before connection: {output!r}")
+            check(needle.lower() in output.lower(), f"invalid hook {args!r} output missing {needle!r}: {output!r}")
+
+    # Outside a Programa surface, Codex and OpenCode hooks no-op with `{}` and
+    # never validate their arguments, so a stray global hook cannot fail.
+    for hook_command in ("codex-hook", "opencode-hook"):
+        with tempfile.TemporaryDirectory(prefix="pcli-grammar-", dir="/tmp") as directory:
+            with SocketRecorder(directory) as recorder:
+                process = run_cli(recorder.path, [hook_command, "bogus-event", "--bogus"], input_text="")
+            check(process.returncode == 0 and process.stdout.strip() == "{}" and recorder.accept_count == 0,
+                  f"{hook_command} outside a surface must no-op: rc={process.returncode} "
+                  f"output={merged_output(process)!r} accept_count={recorder.accept_count}")
+
     for args, method in [
         (["snapshot", "list"], "snapshot.list"),
         (["snapshot", "restore"], "snapshot.restore"),
@@ -396,7 +492,7 @@ def main() -> int:
             print(f"- {failure}")
         return 1
 
-    print("PASS: grammar-driven commands validate identically to the switch they replaced")
+    print("PASS: grammar-driven commands validate before any socket connection")
     return 0
 
 

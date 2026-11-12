@@ -103,6 +103,23 @@ extension ProgramaCLI {
         }
     }
 
+    /// One optional event positional, matched case-insensitively. Codex and
+    /// OpenCode hooks no-op outside a Programa surface (`CLICommandDispatcher`
+    /// prints `{}`), so there their arguments must not be rejected either.
+    private static func agentHookGrammar(valueOptions: Set<String>, events: Set<String>, onlyInsideSurface: Bool) -> CLIArgumentGrammar {
+        let events = events.union(["help", "--help", "-h"])
+        return CLIArgumentGrammar(
+            valueOptions: valueOptions,
+            maxPositionals: 1,
+            validate: { command, parsed in
+                if let event = parsed.positional.first?.lowercased(), !events.contains(event) {
+                    throw CLIError(message: "\(command): unknown event \(event)")
+                }
+            },
+            isEnforced: onlyInsideSurface ? { ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] != nil } : nil
+        )
+    }
+
     /// Hook command descriptors live beside their help text while hook-provider
     /// state and installation remain in CLI+Hooks.
     func hooksDescriptors() -> [CommandDescriptor] {
@@ -110,6 +127,11 @@ extension ProgramaCLI {
             CommandDescriptor(
                 names: ["claude-hook"],
                 helpLines: ["claude-hook <session-start|stop|session-end|notification|prompt-submit|pre-tool-use|subagent-start|subagent-stop> [--workspace <id|ref>] [--surface <id|ref>]"],
+                grammar: Self.agentHookGrammar(
+                    valueOptions: ["workspace", "surface"],
+                    events: ["session-start", "active", "stop", "idle", "prompt-submit", "notification", "notify", "session-end", "pre-tool-use", "subagent-start", "subagent-stop"],
+                    onlyInsideSurface: false
+                ),
                 execute: { ctx in
                     try self.runClaudeHook(commandArgs: ctx.commandArgs, client: ctx.client)
                 }
@@ -117,6 +139,11 @@ extension ProgramaCLI {
             CommandDescriptor(
                 names: ["codex-hook"],
                 helpLines: [],
+                grammar: Self.agentHookGrammar(
+                    valueOptions: ["workspace", "surface"],
+                    events: ["session-start", "prompt-submit", "stop", "notification", "notify", "session-end"],
+                    onlyInsideSurface: true
+                ),
                 execute: { ctx in
                     try self.runCodexHook(commandArgs: ctx.commandArgs, client: ctx.client)
                 }
@@ -124,6 +151,11 @@ extension ProgramaCLI {
             CommandDescriptor(
                 names: ["opencode-hook"],
                 helpLines: [],
+                grammar: Self.agentHookGrammar(
+                    valueOptions: ["workspace", "surface", "cwd", "session"],
+                    events: ["session-start", "prompt-submit", "stop", "notification", "notify", "session-end"],
+                    onlyInsideSurface: true
+                ),
                 execute: { ctx in
                     try self.runOpenCodeHook(commandArgs: ctx.commandArgs, client: ctx.client)
                 }

@@ -1,7 +1,8 @@
 import Foundation
 
-/// Owns provider selection and the install/uninstall transaction boundary. Provider-specific
-/// mutation code remains beside each provider's filesystem format in CLI+Hooks.swift.
+/// Owns provider selection and the install/uninstall transaction boundary. Mutation code sits
+/// beside each provider's format: Codex in CLI+CodexConfig.swift and CLI+CodexMCP.swift,
+/// Claude in CLI+HookSettingsIO.swift, OpenCode in CLI+Hooks.swift.
 struct HookInstallationCoordinator {
     enum Provider: String, Equatable { case codex, claude, opencode }
     enum Action: Equatable { case install, uninstall }

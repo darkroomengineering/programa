@@ -309,6 +309,7 @@ extension ProgramaCLI {
             CommandDescriptor(
                 names: ["tree"],
                 helpLines: ["tree [--all] [--workspace <id|ref>]"],
+                grammar: CLIArgumentGrammar(valueOptions: ["workspace"], booleanOptions: ["all"]),
                 execute: { ctx in
                     try self.runTreeCommand(commandArgs: ctx.commandArgs, client: ctx.client, jsonOutput: ctx.jsonOutput, idFormat: ctx.idFormat)
                 }

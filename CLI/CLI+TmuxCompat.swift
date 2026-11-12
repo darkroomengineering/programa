@@ -10,10 +10,10 @@ extension ProgramaCLI {
         runTmuxCompatCommand: @escaping (CommandContext) throws -> Void
     ) -> [CommandDescriptor] {
         [
-            CommandDescriptor(names: ["capture-pane"], helpLines: ["capture-pane [--workspace <id|ref>] [--surface <id|ref>] [--scrollback] [--lines <n>]"], execute: runTmuxCompatCommand),
-            CommandDescriptor(names: ["resize-pane"], helpLines: ["resize-pane --pane <id|ref> [--workspace <id|ref>] (-L|-R|-U|-D) [--amount <cells>]"], execute: runTmuxCompatCommand),
-            CommandDescriptor(names: ["pipe-pane"], helpLines: ["pipe-pane --command <shell-command> [--workspace <id|ref>] [--surface <id|ref>]"], execute: runTmuxCompatCommand),
-            CommandDescriptor(names: ["wait-for"], helpLines: ["wait-for [-S|--signal] <name> [--timeout <seconds>]"], execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["capture-pane"], helpLines: ["capture-pane [--workspace <id|ref>] [--surface <id|ref>] [--scrollback] [--lines <n>]"], grammar: capturePaneGrammar, execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["resize-pane"], helpLines: ["resize-pane --pane <id|ref> [--workspace <id|ref>] (-L|-R|-U|-D) [--amount <cells>]"], grammar: resizePaneGrammar, execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["pipe-pane"], helpLines: ["pipe-pane --command <shell-command> [--workspace <id|ref>] [--surface <id|ref>]"], grammar: pipePaneGrammar, execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["wait-for"], helpLines: ["wait-for [-S|--signal] <name> [--timeout <seconds>]"], grammar: waitForGrammar, execute: runTmuxCompatCommand),
             CommandDescriptor(names: ["swap-pane"], helpLines: ["swap-pane --pane <id|ref> --target-pane <id|ref> [--workspace <id|ref>]"], grammar: CLIArgumentGrammar(valueOptions: ["pane", "target-pane", "workspace"], requiredOptions: ["pane", "target-pane"]), execute: runTmuxCompatCommand),
             CommandDescriptor(names: ["break-pane"], helpLines: ["break-pane [--workspace <id|ref>] [--pane <id|ref>] [--surface <id|ref>] [--no-focus]"], grammar: CLIArgumentGrammar(valueOptions: ["workspace", "pane", "surface"], booleanOptions: ["no-focus"]), execute: runTmuxCompatCommand),
             CommandDescriptor(names: ["join-pane"], helpLines: ["join-pane --target-pane <id|ref> [--workspace <id|ref>] [--pane <id|ref>] [--surface <id|ref>] [--no-focus]"], grammar: CLIArgumentGrammar(valueOptions: ["target-pane", "workspace", "pane", "surface"], booleanOptions: ["no-focus"], requiredOptions: ["target-pane"]), execute: runTmuxCompatCommand),
@@ -21,13 +21,74 @@ extension ProgramaCLI {
             CommandDescriptor(names: ["last-pane"], helpLines: ["last-pane [--workspace <id|ref>]"], grammar: CLIArgumentGrammar(valueOptions: ["workspace"]), execute: runTmuxCompatCommand),
             CommandDescriptor(names: ["find-window"], helpLines: ["find-window [--content] [--select] <query>"], grammar: CLIArgumentGrammar(booleanOptions: ["content", "select"], minPositionals: 1, maxPositionals: nil), execute: runTmuxCompatCommand),
             CommandDescriptor(names: ["clear-history"], helpLines: ["clear-history [--workspace <id|ref>] [--surface <id|ref>]"], grammar: CLIArgumentGrammar(valueOptions: ["workspace", "surface"]), execute: runTmuxCompatCommand),
-            CommandDescriptor(names: ["set-hook"], helpLines: ["set-hook [--list] [--unset <event>] | <event> <command>"], execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["set-hook"], helpLines: ["set-hook [--list] [--unset <event>] | <event> <command>"], grammar: setHookGrammar, execute: runTmuxCompatCommand),
             CommandDescriptor(names: ["set-buffer"], helpLines: ["set-buffer [--name <name>] <text>"], grammar: CLIArgumentGrammar(valueOptions: ["name"], minPositionals: 1, maxPositionals: nil), execute: runTmuxCompatCommand),
             CommandDescriptor(names: ["list-buffers"], helpLines: ["list-buffers"], grammar: CLIArgumentGrammar(), execute: runTmuxCompatCommand),
             CommandDescriptor(names: ["paste-buffer"], helpLines: ["paste-buffer [--name <name>] [--workspace <id|ref>] [--surface <id|ref>]"], grammar: CLIArgumentGrammar(valueOptions: ["name", "workspace", "surface"]), execute: runTmuxCompatCommand),
             CommandDescriptor(names: ["respawn-pane"], helpLines: ["respawn-pane [--workspace <id|ref>] [--surface <id|ref>] [--command <cmd>]"], grammar: CLIArgumentGrammar(valueOptions: ["workspace", "surface", "command"]), execute: runTmuxCompatCommand),
-            CommandDescriptor(names: ["display-message"], helpLines: ["display-message [-p|--print] <text>"], execute: runTmuxCompatCommand),
+            CommandDescriptor(names: ["display-message"], helpLines: ["display-message [-p|--print] <text>"], grammar: displayMessageGrammar, execute: runTmuxCompatCommand),
         ]
+    }
+
+    private static var capturePaneGrammar: CLIArgumentGrammar {
+        CLIArgumentGrammar(valueOptions: ["workspace", "surface", "lines"], booleanOptions: ["scrollback"], validate: { _, parsed in
+            if let lines = parsed.options["lines"], (Int(lines) ?? 0) <= 0 {
+                throw CLIError(message: "capture-pane: --lines must be greater than 0")
+            }
+        })
+    }
+
+    /// The direction is a tmux-style single-dash token, so it arrives as the one positional.
+    private static var resizePaneGrammar: CLIArgumentGrammar {
+        let directions: Set<String> = ["-L", "-R", "-U", "-D"]
+        return CLIArgumentGrammar(valueOptions: ["pane", "workspace", "amount"], requiredOptions: ["pane"], minPositionals: 1, maxPositionals: 1, shortFlags: directions, validate: { _, parsed in
+            guard directions.contains(parsed.positional[0]) else {
+                throw CLIError(message: "resize-pane requires -L, -R, -U, or -D")
+            }
+            if let amount = parsed.options["amount"], (Int(amount) ?? 0) <= 0 {
+                throw CLIError(message: "resize-pane: --amount must be greater than 0")
+            }
+        })
+    }
+
+    /// The shell command may be given as `--command` or as trailing words.
+    private static var pipePaneGrammar: CLIArgumentGrammar {
+        CLIArgumentGrammar(valueOptions: ["command", "workspace", "surface"], maxPositionals: nil, validate: { _, parsed in
+            guard parsed.options["command"] != nil || !parsed.positional.isEmpty else {
+                throw CLIError(message: "pipe-pane requires --command <shell-command>")
+            }
+        })
+    }
+
+    /// `-S` (tmux spelling of `--signal`) arrives as a positional beside the name.
+    private static var waitForGrammar: CLIArgumentGrammar {
+        CLIArgumentGrammar(valueOptions: ["timeout"], booleanOptions: ["signal"], minPositionals: 1, maxPositionals: 2, shortFlags: ["-S"], validate: { _, parsed in
+            guard parsed.positional.filter({ $0 != "-S" }).count == 1 else {
+                throw CLIError(message: "wait-for requires one name")
+            }
+            if let timeout = parsed.options["timeout"] {
+                guard let seconds = Double(timeout), seconds.isFinite, seconds >= 0 else {
+                    throw CLIError(message: "wait-for: --timeout must be finite and nonnegative")
+                }
+            }
+        })
+    }
+
+    private static var setHookGrammar: CLIArgumentGrammar {
+        CLIArgumentGrammar(valueOptions: ["unset"], booleanOptions: ["list"], maxPositionals: nil, validate: { _, parsed in
+            if parsed.options["list"] == nil, parsed.options["unset"] == nil, parsed.positional.count < 2 {
+                throw CLIError(message: "set-hook requires <event> <command>")
+            }
+        })
+    }
+
+    /// Positionals are free text here, so `-p` arrives as a word and is not the message.
+    private static var displayMessageGrammar: CLIArgumentGrammar {
+        CLIArgumentGrammar(booleanOptions: ["print"], minPositionals: 1, maxPositionals: nil, validate: { _, parsed in
+            guard parsed.positional.contains(where: { $0 != "-p" }) else {
+                throw CLIError(message: "display-message requires text")
+            }
+        })
     }
 
     private struct TmuxParsedArguments {
