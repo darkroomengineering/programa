@@ -34,6 +34,8 @@ class SocketRecorder:
         workspace_items: list[dict[str, Any]] | None = None,
         agents_by_workspace: dict[str, list[dict[str, Any]]] | None = None,
         surface_items: list[dict[str, Any]] | None = None,
+        listed_workspace_id: str | None = None,
+        identify_caller: dict[str, Any] | None = None,
         required_password: str | None = None,
     ):
         self.path = os.path.join(directory, "programa.sock")
@@ -51,6 +53,8 @@ class SocketRecorder:
         ]
         self.agents_by_workspace = agents_by_workspace or {}
         self.surface_items = surface_items
+        self.listed_workspace_id = listed_workspace_id
+        self.identify_caller = identify_caller
         self.required_password = required_password
 
     def __enter__(self) -> SocketRecorder:
@@ -128,9 +132,14 @@ class SocketRecorder:
         if method == "agent.task.list":
             agents = self.agents_by_workspace.get(str(params.get("workspace_id")), [])
             return {"agents": agents, "count": len(agents)}
+        if method == "system.identify" and self.identify_caller is not None:
+            return {"caller": self.identify_caller}
         if method == "surface.list":
             if self.surface_items is not None:
-                return {"surfaces": self.surface_items}
+                listed: dict[str, Any] = {"surfaces": self.surface_items}
+                if self.listed_workspace_id is not None:
+                    listed["workspace_id"] = self.listed_workspace_id
+                return listed
             return {
                 "surfaces": [{
                     "id": SURFACE_ID,
@@ -931,6 +940,43 @@ def main() -> int:
         check(not any(frame.get("method") in ("surface.focus", "pane.focus", "workspace.select", "window.focus")
                       for frame in recorder.frames), f"global origin changed focus: {recorder.frames!r}")
         check(not recorder.errors, f"global origin fixture: {recorder.errors}")
+
+    # A shell reattached after a relaunch keeps its spawn-time ids, which the
+    # listing no longer contains; the server resolves them to the restored pane.
+    restored_surface = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+    restored_workspace = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+    reattached_cases = [
+        ("aliased surface", None, restored_surface, restored_surface,
+         {"workspace_id": WORKSPACE_ID, "surface_id": restored_surface}),
+        ("aliased workspace", restored_workspace, restored_surface, restored_surface,
+         {"workspace_id": restored_workspace, "surface_id": restored_surface}),
+        ("gone origin", None, restored_surface, None,
+         {"workspace_id": WORKSPACE_ID, "surface_id": None}),
+    ]
+    for name, listed_workspace, listed_surface, expected_surface, caller in reattached_cases:
+        surfaces = [
+            {"id": listed_surface, "ref": "surface:1", "selected": False, "focused": False},
+            {"id": other_surface, "ref": "surface:2", "selected": True, "focused": True},
+        ]
+        with tempfile.TemporaryDirectory(prefix="pcli-reattached-", dir="/tmp") as directory:
+            with SocketRecorder(directory, surface_items=surfaces, listed_workspace_id=listed_workspace,
+                                identify_caller=caller) as recorder:
+                process = run_cli(recorder.path, ["send", "origin text"], env_overrides={
+                    "PROGRAMA_WORKSPACE_ID": WORKSPACE_ID, "PROGRAMA_SURFACE_ID": SURFACE_ID,
+                })
+        check(process.returncode == 0, f"{name}: send failed: {merged_output(process)}")
+        identifies = [frame for frame in recorder.frames if frame.get("method") == "system.identify"]
+        check(len(identifies) == 1 and identifies[0].get("params", {}).get("caller")
+              == {"workspace_id": WORKSPACE_ID, "surface_id": SURFACE_ID},
+              f"{name}: origin ids were not sent for server resolution: {recorder.frames!r}")
+        sends = [frame for frame in recorder.frames if frame.get("method") == "surface.send_text"]
+        check(len(sends) == 1, f"{name}: missing send: {recorder.frames!r}")
+        if sends:
+            check(sends[0].get("params", {}).get("surface_id") == expected_surface,
+                  f"{name}: send targeted the wrong surface: {sends!r}")
+        check(not any(frame.get("method") in ("surface.focus", "pane.focus", "workspace.select", "window.focus")
+                      for frame in recorder.frames), f"{name}: changed focus: {recorder.frames!r}")
+        check(not recorder.errors, f"{name} fixture: {recorder.errors}")
 
     # Malformed membership data cannot establish that a short-ref origin is
     # absent: falling back here could close a different, focused terminal.
