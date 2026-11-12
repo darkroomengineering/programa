@@ -1909,7 +1909,7 @@ struct TabItemView: View, Equatable {
                 if let existing = GitWorktreeManager.worktreeCheckedOut(branch: branch, repoRoot: repoRoot) {
                     return SidebarWorktreeCreationResult.branchCheckedOut(path: existing.path)
                 }
-                let baseDirectory = ProgramaWorktreeSettings.resolvedDirectory()
+                let baseDirectory = StorageSettings.read().directory
                 let path = (baseDirectory as NSString)
                     .appendingPathComponent(GitWorktreeManager.repoName(forRepoRoot: repoRoot))
                     .appending("/" + GitWorktreeManager.branchSlug(branch))

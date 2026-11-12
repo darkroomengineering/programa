@@ -48,7 +48,8 @@ final class StorageLowDiskMonitor: @unchecked Sendable {
         timer.schedule(deadline: .now() + 60, repeating: 15 * 60, leeway: .seconds(60))
         timer.setEventHandler { [weak self] in
             guard let self, let capacity = StorageVolumeCapacity.read() else { return }
-            self.state.check(availableBytes: capacity.availableBytes, thresholdGB: ProgramaStorageSettings.lowDiskWarningGB()) {
+            let settings = StorageSettings.read()
+            self.state.check(availableBytes: capacity.availableBytes, thresholdGB: settings.lowDiskWarningGB) {
                 notify(capacity)
             }
         }

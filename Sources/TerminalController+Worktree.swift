@@ -34,7 +34,7 @@ extension TerminalController {
             ])
         }
 
-        let worktreeBaseDirectory = v2MainSync { ProgramaWorktreeSettings.resolvedDirectory() }
+        let worktreeBaseDirectory = v2MainSync { StorageSettings.read().directory }
         let path = v2ResolveWorktreePath(
             params: params,
             repoRoot: repoRoot,

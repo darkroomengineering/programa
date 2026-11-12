@@ -58,10 +58,11 @@ enum StorageCategories {
     /// Blocking; call off the main thread.
     static func scan(
         categories: [StorageCategoryID] = StorageCategoryID.allCases,
-        sizeWalkTimeout: TimeInterval = 20
+        sizeWalkTimeout: TimeInterval = 20,
+        settings: StorageSettings = .read()
     ) -> [StorageCacheItem] {
         guard !categories.isEmpty else { return [] }
-        return scan(categories: categories, sizeWalkTimeout: sizeWalkTimeout, context: .live())
+        return scan(categories: categories, sizeWalkTimeout: sizeWalkTimeout, context: .live(settings: settings))
     }
 
     /// Blocking; call off the main thread. Rechecks each item's blocker right before removing it.
@@ -70,10 +71,11 @@ enum StorageCategories {
         items: [StorageCacheItem],
         automaticOnly: Bool,
         dryRun: Bool,
-        now: Date = Date()
+        now: Date = Date(),
+        settings: StorageSettings = .read()
     ) -> StorageCacheCleanOutcome {
         guard !items.isEmpty else { return StorageCacheCleanOutcome() }
-        return clean(items: items, automaticOnly: automaticOnly, dryRun: dryRun, now: now, context: .live())
+        return clean(items: items, automaticOnly: automaticOnly, dryRun: dryRun, now: now, context: .live(settings: settings))
     }
 
     static func scan(
