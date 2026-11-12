@@ -40,6 +40,9 @@ final class SessionEscrowClient {
         // A successful send can transfer the descriptor before its acknowledgement
         // arrives. Keep the release capability independently from durable success.
         var claimsBySurfaceId: [String: String] = [:]
+        /// Surfaces a lost holder held that this connection has not received
+        /// yet. Carried to the next holder if this one is lost too.
+        var pendingResendSurfaceIds: Set<String> = []
         var acknowledgementBuffer = Data()
 
         init(fd: Int32, heartbeat: DispatchSourceTimer) {
@@ -151,6 +154,7 @@ final class SessionEscrowClient {
                 return
             }
             connection.claimsBySurfaceId[surfaceId] = tokenHex
+            connection.pendingResendSurfaceIds.remove(surfaceId)
             let acknowledged = Self.receiveEscrowAcknowledgement(
                 over: fd, sessionId: surfaceId, buffer: &connection.acknowledgementBuffer
             )
@@ -190,6 +194,7 @@ final class SessionEscrowClient {
                 unsentSurfaceIds.remove(surfaceId)
                 self.state = unsentSurfaceIds.isEmpty ? .disconnected : .holderLost(unsentSurfaceIds: unsentSurfaceIds)
             case .connected(let connection):
+                connection.pendingResendSurfaceIds.remove(surfaceId)
                 // Nothing to release if we never escrowed it, and dropping the id
                 // here keeps a later re-escrow of the same surface id working.
                 guard let tokenHex = connection.claimsBySurfaceId.removeValue(forKey: surfaceId),
@@ -230,6 +235,7 @@ final class SessionEscrowClient {
         }
         guard let fd = connectToHolder(socketPath) else { return nil }
         let connection = HolderConnection(fd: fd, heartbeat: makeHeartbeat(fd: fd))
+        connection.pendingResendSurfaceIds = unsentSurfaceIds
         state = .connected(connection)
         if !unsentSurfaceIds.isEmpty {
             dilog("escrow.client", "holder_reconnected resending=\(unsentSurfaceIds.count) connFD=\(fd)")
@@ -246,7 +252,7 @@ final class SessionEscrowClient {
         guard case .connected(let connection) = state else { return }
         connection.heartbeat.cancel()
         close(connection.fd)
-        let unsentSurfaceIds = Set(connection.claimsBySurfaceId.keys)
+        let unsentSurfaceIds = Set(connection.claimsBySurfaceId.keys).union(connection.pendingResendSurfaceIds)
         guard !unsentSurfaceIds.isEmpty else {
             state = .disconnected
             return
