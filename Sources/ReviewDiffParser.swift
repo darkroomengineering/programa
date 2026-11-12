@@ -106,10 +106,10 @@ enum ReviewDiffParser {
             } else if line.hasPrefix("+++ ") {
                 newPath = pathFromMarkerLine(line, marker: "+++ ")
             } else if line.hasPrefix("rename from ") {
-                oldPath = String(line.dropFirst("rename from ".count))
+                oldPath = pathFromRenameLine(line, prefix: "rename from ")
                 isRename = true
             } else if line.hasPrefix("rename to ") {
-                newPath = String(line.dropFirst("rename to ".count))
+                newPath = pathFromRenameLine(line, prefix: "rename to ")
                 isRename = true
             } else if line.hasPrefix("new file mode") {
                 status = .added
@@ -156,19 +156,84 @@ enum ReviewDiffParser {
 
     /// Fallback path extraction from the `diff --git a/<old> b/<new>` line itself, used when
     /// there are no `---`/`+++` marker lines at all (e.g. a binary-file diff has neither).
+    /// Either path may be C-quoted (`"a/tab\tname"`); both keep their `a/`/`b/` prefix.
     private static func pathsFromGitDiffLine(_ line: String) -> (String?, String?) {
-        let prefix = "diff --git a/"
+        let prefix = "diff --git "
         guard line.hasPrefix(prefix) else { return (nil, nil) }
         let rest = line.dropFirst(prefix.count)
-        guard let separatorRange = rest.range(of: " b/") else { return (nil, nil) }
-        let old = String(rest[rest.startIndex..<separatorRange.lowerBound])
-        let new = String(rest[separatorRange.upperBound...])
-        return (old, new)
+        let old: String
+        let afterOld: Substring
+        if let quoted = quotedPathPrefix(rest) {
+            old = quoted.path
+            afterOld = quoted.rest
+        } else {
+            // An unquoted path holds no `"`, so a quoted new path starts at the first ` "b/`.
+            guard let separator = rest.range(of: " \"b/") ?? rest.range(of: " b/") else { return (nil, nil) }
+            old = String(rest[..<separator.lowerBound])
+            afterOld = rest[separator.lowerBound...]
+        }
+        guard afterOld.first == " " else { return (nil, nil) }
+        let newToken = afterOld.dropFirst()
+        return (old, quotedPathPrefix(newToken)?.path ?? String(newToken))
     }
 
     private static func pathFromMarkerLine(_ line: String, marker: String) -> String? {
-        let path = String(line.dropFirst(marker.count))
+        let token = line.dropFirst(marker.count)
+        if let quoted = quotedPathPrefix(token) {
+            return quoted.path
+        }
+        // git ends an unquoted marker name that contains a space with a tab.
+        let path = String(token.hasSuffix("\t") ? token.dropLast() : token)
         return path == "/dev/null" ? nil : path
+    }
+
+    private static func pathFromRenameLine(_ line: String, prefix: String) -> String {
+        let token = line.dropFirst(prefix.count)
+        return quotedPathPrefix(token)?.path ?? String(token)
+    }
+
+    private static let quotedPathEscapes: [UInt8: UInt8] = [
+        UInt8(ascii: "a"): 0x07, UInt8(ascii: "b"): 0x08, UInt8(ascii: "t"): 0x09, UInt8(ascii: "n"): 0x0A,
+        UInt8(ascii: "v"): 0x0B, UInt8(ascii: "f"): 0x0C, UInt8(ascii: "r"): 0x0D,
+    ]
+
+    /// Decodes the C-quoted path git writes when a name holds a quote, backslash or control
+    /// character (`"a/qu\"ote\tname"`, octal `\303\251` for raw bytes) and returns it with the text
+    /// after the closing quote. `nil` when `text` does not start with a complete quoted path.
+    private static func quotedPathPrefix(_ text: Substring) -> (path: String, rest: Substring)? {
+        let utf8 = text.utf8
+        guard utf8.first == UInt8(ascii: "\"") else { return nil }
+        let octalDigits = UInt8(ascii: "0")...UInt8(ascii: "7")
+        var bytes: [UInt8] = []
+        var index = utf8.index(after: utf8.startIndex)
+        while index < utf8.endIndex {
+            let byte = utf8[index]
+            index = utf8.index(after: index)
+            if byte == UInt8(ascii: "\"") {
+                return (String(decoding: bytes, as: UTF8.self), text[index...])
+            }
+            guard byte == UInt8(ascii: "\\") else {
+                bytes.append(byte)
+                continue
+            }
+            guard index < utf8.endIndex else { return nil }
+            let escape = utf8[index]
+            index = utf8.index(after: index)
+            if let decoded = quotedPathEscapes[escape] {
+                bytes.append(decoded)
+            } else if octalDigits.contains(escape) {
+                var value = Int(escape - UInt8(ascii: "0"))
+                for _ in 0..<2 {
+                    guard index < utf8.endIndex, octalDigits.contains(utf8[index]) else { break }
+                    value = value * 8 + Int(utf8[index] - UInt8(ascii: "0"))
+                    index = utf8.index(after: index)
+                }
+                bytes.append(UInt8(truncatingIfNeeded: value))
+            } else {
+                bytes.append(escape)
+            }
+        }
+        return nil
     }
 
     private static func normalizedGitPath(_ rawPath: String?) -> String? {
