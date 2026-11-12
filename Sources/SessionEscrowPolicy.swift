@@ -6,6 +6,10 @@ import Bonsplit
 enum SessionEscrowPolicy {
     static let heartbeatInterval: TimeInterval = 2.0
     static let heartbeatStaleAfter: TimeInterval = 6.0
+    /// How long a holder connection must have lived before losing it makes the
+    /// client spawn a replacement on its own. A holder that dies right after
+    /// accepting would otherwise turn re-escrow into a respawn loop.
+    static let holderLossAutoReconnectMinimumAge: TimeInterval = 30
     static let recvTimeoutSeconds: Int = 3
     static let nonProductionDisconnectedExitAfter: TimeInterval = 30 * 60
 
