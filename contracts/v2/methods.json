@@ -4297,6 +4297,7 @@
       "debug_only": false,
       "description": "Server/process introspection and identification. (tree).",
       "errors": [
+        "invalid_params",
         "not_found"
       ],
       "focus_intent": false,
@@ -4308,6 +4309,10 @@
             "type": "boolean"
           },
           "caller": {},
+          "window_id": {
+            "format": "window:N",
+            "type": "string"
+          },
           "workspace_id": {
             "format": "workspace:N",
             "type": "string"
@@ -4449,7 +4454,12 @@
       "handler": "v2WindowCurrent",
       "params": {
         "additionalProperties": false,
-        "properties": {},
+        "properties": {
+          "window_id": {
+            "format": "window:N",
+            "type": "string"
+          }
+        },
         "required": [],
         "type": "object"
       },

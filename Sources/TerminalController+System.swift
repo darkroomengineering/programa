@@ -96,9 +96,21 @@ extension TerminalController {
         if params["workspace_id"] != nil && workspaceFilter == nil {
             return v2InvalidParam("workspace_id")
         }
+        var windowParams: [String: Any] = [:]
+        if v2HasNonNullParam(params, "window_id") {
+            let windowId = v2MainSync { () -> UUID? in
+                let tabManager = self.v2ResolveTabManager(params: params)
+                return tabManager.flatMap { AppDelegate.shared?.windowId(for: $0) }
+            }
+            // A nil here carries a recorded selector failure that v2Result reports as not_found/invalid_params.
+            guard let windowId else {
+                return .err(code: "unavailable", message: "TabManager not available", data: nil)
+            }
+            windowParams["window_id"] = windowId.uuidString
+        }
         let includeAllWindows = v2Bool(params, "all_windows") ?? false
         let caller = params["caller"] as? [String: Any]
-        let identifyInput = v2SystemIdentifyInput(caller: caller?.isEmpty == false ? caller : nil)
+        let identifyInput = v2SystemIdentifyInput(params: windowParams, caller: caller?.isEmpty == false ? caller : nil)
         let snapshot = v2MainSync {
             self.v2SystemTreeSnapshot(input: SystemTreeInput(
                 workspaceFilter: workspaceFilter,

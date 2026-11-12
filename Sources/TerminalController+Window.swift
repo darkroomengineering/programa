@@ -24,14 +24,16 @@ extension TerminalController {
         return .ok(["windows": payload])
     }
 
-    nonisolated func v2WindowCurrent(params _: [String: Any]) -> V2CallResult {
+    nonisolated func v2WindowCurrent(params: [String: Any]) -> V2CallResult {
         enum Resolution {
             case unavailable
             case notFound
             case found(UUID)
         }
+        let scoped = v2HasNonNullParam(params, "window_id")
         let resolution: Resolution = v2MainSync {
-            guard let tabManager = self.tabManager else { return .unavailable }
+            let tabManager = scoped ? self.v2ResolveTabManager(params: params) : self.tabManager
+            guard let tabManager else { return .unavailable }
             guard let windowId = self.v2ResolveWindowId(tabManager: tabManager) else { return .notFound }
             return .found(windowId)
         }

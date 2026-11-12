@@ -49,6 +49,31 @@ def main() -> int:
         if w2 not in ids1:
             raise ProgramaClientError(f"Expected new window id in window.list (w2={w2}, ids={sorted(ids1)})")
 
+        # window.current and system.tree answer for an explicit window_id that is not the
+        # current window, and leave the current window as it was (read-only, focus-neutral).
+        current = c.current_window()
+        other = w1 if current != w1 else w2
+        scoped = c._call("window.current", {"window_id": other}) or {}
+        if str(scoped.get("window_id")) != other:
+            raise ProgramaClientError(f"window.current ignored window_id (want {other}, got {scoped})")
+        tree = c._call("system.tree", {"window_id": other}) or {}
+        tree_ids = [str(w.get("id")) for w in tree.get("windows") or []]
+        if tree_ids != [other]:
+            raise ProgramaClientError(f"system.tree ignored window_id (want [{other}], got {tree_ids})")
+        active = tree.get("active") or {}
+        if str(active.get("window_id")) != other:
+            raise ProgramaClientError(f"system.tree active is not the window_id window (want {other}, got {active})")
+        if c.current_window() != current:
+            raise ProgramaClientError("window-scoped window.current/system.tree changed the current window")
+        for method in ("window.current", "system.tree"):
+            try:
+                c._call(method, {"window_id": "window:999"})
+            except ProgramaClientError as e:
+                if not str(e).startswith("not_found"):
+                    raise ProgramaClientError(f"{method} unknown window_id: want not_found, got {e}")
+            else:
+                raise ProgramaClientError(f"{method} accepted an unknown window_id")
+
         # Create a workspace in w1, ensure it has at least 2 surfaces, then move it to w2.
         ws = c.new_workspace(window_id=w1)
         c.select_workspace(ws)
