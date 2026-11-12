@@ -671,6 +671,7 @@ final class Workspace: Identifiable, ObservableObject {
                     workspaceId: sourceWorkspaceId,
                     surfaceId: panelId,
                     state: nil,
+                    previousState: agentPresence?.state,
                     source: nil
                 )
             }

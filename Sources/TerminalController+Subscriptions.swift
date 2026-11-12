@@ -371,11 +371,16 @@ final class EventSubscription: @unchecked Sendable {
     }
 }
 
-/// Fan-out hub for #167 socket event subscriptions. `publish*` methods are safe to call from any
-/// thread and are cheap when there are no subscribers (the common case) -- callers on hot paths
+/// Fan-out hub for #167 socket event subscriptions and the event-route tap. `publish*` methods are
+/// safe to call from any thread and are cheap when there are no subscribers and no route wants the
+/// class (the common case) -- callers on hot paths
 /// (agent-state mutation, output polling) call them unconditionally rather than checking first.
 final class SocketEventBroadcaster: @unchecked Sendable {
     static let shared = SocketEventBroadcaster()
+
+    /// The in-process consumer: event routes see the frames socket clients get, whether or not a
+    /// client subscribes. `output` frames are not tapped (no `surface` topics in v1).
+    let routeTap = RouteTap()
 
     private let lock = NSLock()
     private var subscriptions: [UUID: EventSubscription] = [:]
@@ -422,11 +427,13 @@ final class SocketEventBroadcaster: @unchecked Sendable {
         workspaceId: UUID,
         surfaceId: UUID,
         state: AgentActivityState?,
+        previousState: AgentActivityState?,
         source: AgentStateSource? = nil,
         programStatus: [String: Any]? = nil
     ) {
         let subs = subscribers(for: .agentState)
-        guard !subs.isEmpty else { return }
+        let tapped = routeTap.wants(.agentState)
+        guard !subs.isEmpty || tapped else { return }
         var frame: [String: Any] = [
             "event": "agent_state",
             "workspace_id": workspaceId.uuidString,
@@ -437,6 +444,8 @@ final class SocketEventBroadcaster: @unchecked Sendable {
         ]
         if let programStatus { frame["program_status"] = programStatus }
         for sub in subs { sub.enqueue(frame) }
+        // `previous_state` is a route field only; the wire frame does not carry it.
+        if tapped { routeTap.ingest(frame, previousState: previousState) }
     }
 
     /// Published on every `agent.needs_input` call, independent of whether the agent-state write
@@ -444,18 +453,21 @@ final class SocketEventBroadcaster: @unchecked Sendable {
     /// owns the surface's presence. `payload` must never carry OSC 7501 record contents.
     func publishNeedsInput(workspaceId: UUID, surfaceId: UUID, payload: [String: String]) {
         let subs = subscribers(for: .needsInput)
-        guard !subs.isEmpty else { return }
+        let tapped = routeTap.wants(.needsInput)
+        guard !subs.isEmpty || tapped else { return }
         var frame: [String: Any] = payload.filter { !$0.value.isEmpty }
         frame["event"] = "needs_input"
         frame["workspace_id"] = workspaceId.uuidString
         frame["surface_id"] = surfaceId.uuidString
         frame["ts"] = Date().timeIntervalSince1970
         for sub in subs { sub.enqueue(frame) }
+        if tapped { routeTap.ingest(frame) }
     }
 
     func publishWorkspaceLifecycle(kind: String, workspaceId: UUID, title: String?) {
         let subs = subscribers(for: .workspaceLifecycle)
-        guard !subs.isEmpty else { return }
+        let tapped = routeTap.wants(.workspaceLifecycle)
+        guard !subs.isEmpty || tapped else { return }
         let frame: [String: Any] = [
             "event": "workspace_lifecycle",
             "kind": kind,
@@ -464,6 +476,7 @@ final class SocketEventBroadcaster: @unchecked Sendable {
             "ts": Date().timeIntervalSince1970
         ]
         for sub in subs { sub.enqueue(frame) }
+        if tapped { routeTap.ingest(frame) }
     }
 
     /// Diffs `fullText` against the last-seen length for `surfaceId` and, only for subscriptions

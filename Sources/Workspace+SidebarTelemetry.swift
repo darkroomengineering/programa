@@ -334,6 +334,7 @@ extension Workspace {
             workspaceId: id,
             surfaceId: panelId,
             state: state,
+            previousState: current?.state,
             source: source,
             programStatus: source == .program
                 ? (panels[panelId] as? TerminalPanel)?.programStatus.root?.wirePayload
@@ -358,7 +359,9 @@ extension Workspace {
             (panels[panelId] as? TerminalPanel)?.surface.noteAgentPrompt(nil, isBlocked: false)
         }
         AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil, source: nil)
-        SocketEventBroadcaster.shared.publishAgentState(workspaceId: id, surfaceId: panelId, state: nil, source: nil)
+        SocketEventBroadcaster.shared.publishAgentState(
+            workspaceId: id, surfaceId: panelId, state: nil, previousState: current.state, source: nil
+        )
 #if DEBUG
         dlog("surface.agentState.clear workspace=\(id.uuidString.prefix(5)) panel=\(panelId.uuidString.prefix(5))")
 #endif
@@ -516,7 +519,7 @@ extension Workspace {
                 ProgramStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil)
             }
         }
-        let clearedAgentSurfaceIds = Array(panelAgentPresence.keys)
+        let clearedAgentStates = panelAgentPresence.mapValues(\.state)
         // A showing permission or sign-in prompt stays armed: any client can reset the sidebar,
         // and the box is still on screen. The person's key, an `answer_prompt` write or the
         // agent's next report ends it.
@@ -526,9 +529,11 @@ extension Workspace {
             surface.noteAgentPrompt(nil, isBlocked: false)
         }
         panelAgentPresence.removeAll()
-        for surfaceId in clearedAgentSurfaceIds {
+        for (surfaceId, previousState) in clearedAgentStates {
             AgentStateWaitRegistry.shared.notify(surfaceId: surfaceId, newState: nil, source: nil)
-            SocketEventBroadcaster.shared.publishAgentState(workspaceId: id, surfaceId: surfaceId, state: nil, source: nil)
+            SocketEventBroadcaster.shared.publishAgentState(
+                workspaceId: id, surfaceId: surfaceId, state: nil, previousState: previousState, source: nil
+            )
         }
         surfaceListeningPorts.removeAll()
         listeningPorts.removeAll()

@@ -362,6 +362,7 @@ final class ProgramaRouteStoreLoadingTests: XCTestCase {
         { "routes": [{ "name": "r", "on": "agent/+/state/idle", "throttleMs": 1000, "review": {} }] }
         """, to: "global.json")
         let store = ProgramaConfigStore()
+        store.routeEngine = RouteEngine()
         store.localConfigPath = nil
         store.globalConfigPath = global.path
         store.loadAll()
@@ -389,6 +390,7 @@ final class ProgramaRouteStoreLoadingTests: XCTestCase {
         { "routes": [{ "name": "bad", "on": "agent/#/x", "review": {} }] }
         """, to: "global.json")
         let store = ProgramaConfigStore()
+        store.routeEngine = RouteEngine()
         store.localConfigPath = nil
         store.globalConfigPath = global.path
         store.loadAll()
@@ -403,6 +405,7 @@ final class ProgramaRouteStoreLoadingTests: XCTestCase {
           "routes": [{ "name": "local-route", "on": "agent/#", "review": {} }] }
         """, to: "local.json")
         let store = ProgramaConfigStore()
+        store.routeEngine = RouteEngine()
         store.localConfigPath = local.path
         store.globalConfigPath = tempRoot.appendingPathComponent("missing.json").path
         store.loadAll()
