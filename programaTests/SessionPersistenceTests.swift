@@ -2973,9 +2973,9 @@ final class SessionEscrowReattachRegressionTests: XCTestCase {
                             payload: responseFrame(granted: true, denyReasonByte: 0),
                             over: conn
                         )
-                        // Mirror the production holder's "never close the
-                        // escrowed fd" grant path: closing the sender's
-                        // copy right after sendmsg races the receiver's
+                        // This fake escrows a socketpair end, and for a
+                        // socket fd, closing the sender's copy right
+                        // after sendmsg races the receiver's
                         // recvmsg externalization of the in-flight
                         // SCM_RIGHTS fd on loaded hosts (observed as a
                         // defunct/EOF-empty fd at the client in CI).
@@ -3061,9 +3061,10 @@ final class SessionEscrowReattachRegressionTests: XCTestCase {
                 }
                 close(grantPair[1])
                 _ = UnixDomainFDPassing.send(fd: grantPair[0], payload: frame, over: conn)
-                // Mirror the production holder's "never close the escrowed
-                // fd" grant path -- see the race test's grant branch for
-                // the full rationale. The client closes the control
+                // The escrowed fd here is a socket, so the sender keeps it
+                // open -- see the race test's grant branch for the full
+                // rationale. The real holder sends PTY masters, which the
+                // race does not affect. The client closes the control
                 // connection only after its recvmsg completed, so waiting
                 // for conn EOF removes the sender-close vs receiver-
                 // externalization race entirely.
