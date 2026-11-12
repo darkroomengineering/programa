@@ -48,7 +48,7 @@ final class StorageHubTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let settingsURL = directory.appendingPathComponent("settings.json")
 
-        XCTAssertEqual(ProgramaStorageSettings.lowDiskWarningGB(settingsURL: settingsURL), 20)
+        XCTAssertEqual(StorageSettings.read(settingsURL: settingsURL).lowDiskWarningGB, 20)
         for contents in [
             "", "not JSON", "[]", "{}", "{\"storage\":{}}",
             "{\"storage\":{\"lowDiskWarningGB\":true}}",
@@ -57,7 +57,7 @@ final class StorageHubTests: XCTestCase {
             "{\"storage\":{\"lowDiskWarningGB\":1e999}}"
         ] {
             try contents.write(to: settingsURL, atomically: true, encoding: .utf8)
-            XCTAssertEqual(ProgramaStorageSettings.lowDiskWarningGB(settingsURL: settingsURL), 20, contents)
+            XCTAssertEqual(StorageSettings.read(settingsURL: settingsURL).lowDiskWarningGB, 20, contents)
         }
     }
 
@@ -68,11 +68,11 @@ final class StorageHubTests: XCTestCase {
         let settingsURL = directory.appendingPathComponent("settings.json")
 
         try "{\"storage\":{\"lowDiskWarningGB\":0}}".write(to: settingsURL, atomically: true, encoding: .utf8)
-        XCTAssertEqual(ProgramaStorageSettings.lowDiskWarningGB(settingsURL: settingsURL), 0)
+        XCTAssertEqual(StorageSettings.read(settingsURL: settingsURL).lowDiskWarningGB, 0)
         try "{ /* custom threshold */ \"storage\": {\"lowDiskWarningGB\": 12.5,},}".write(
             to: settingsURL, atomically: true, encoding: .utf8
         )
-        XCTAssertEqual(ProgramaStorageSettings.lowDiskWarningGB(settingsURL: settingsURL), 12.5)
+        XCTAssertEqual(StorageSettings.read(settingsURL: settingsURL).lowDiskWarningGB, 12.5)
     }
 
     func testConfirmationListsOnlyDryRunRemovalCandidatesAndTheirCombinedSize() {

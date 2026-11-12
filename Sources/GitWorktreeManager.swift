@@ -402,29 +402,55 @@ struct GitWorktreeManager {
     }
 }
 
-// MARK: - ProgramaWorktreeSettings
-//
-// Reads `worktrees.directory` (Resources/settings.schema.json) directly from settings.json
-// rather than through `ProgramaSettingsFileStore`'s full managed-UserDefaults pipeline: that
-// pipeline exists to map settings onto live-reactive feature toggles (appearance, shortcuts,
-// etc.), which `worktrees.directory` is not -- it is read once per `worktree.create` call to
-// compute a default path, with no UI surface that needs to react to it changing live. A
-// direct, self-contained read keeps this addition isolated to the new worktree subsystem
-// instead of touching ProgramaSettingsFileStore.swift's many existing call sites.
-enum ProgramaWorktreeSettings {
-    static let defaultDirectory: String = {
+// MARK: - StorageSettings
+
+struct StorageSettings: Sendable {
+    let directory: String
+    let autoRemoveMerged: Bool
+    let autoRemoveAfterHours: Double
+    let autoCleanCaches: Bool
+    let lowDiskWarningGB: Double
+
+    private static let defaultDirectory: String = {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return (home as NSString).appendingPathComponent(".programa/worktrees")
     }()
 
-    /// Resolves the configured `worktrees.directory`, expanding `~` and falling back to
-    /// `defaultDirectory` when unset, blank, or the settings file can't be read/parsed.
-    static func resolvedDirectory() -> String {
-        guard let root = readSettingsRoot(),
-              let worktreesSection = root["worktrees"] as? [String: Any],
-              let raw = worktreesSection["directory"] as? String else {
-            return defaultDirectory
+    private static let settingsFileURL = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".config/programa/settings.json")
+
+    static func read(settingsURL: URL = settingsFileURL) -> Self {
+        guard let data = FileManager.default.contents(atPath: settingsURL.path), !data.isEmpty,
+              let sanitized = try? JSONCParser.preprocess(data: data),
+              let root = try? JSONSerialization.jsonObject(with: sanitized, options: []) as? [String: Any] else {
+            return Self(root: [:])
         }
+        return Self(root: root)
+    }
+
+    private init(root: [String: Any]) {
+        let worktrees = root["worktrees"] as? [String: Any]
+        let storage = root["storage"] as? [String: Any]
+        directory = Self.resolvedDirectory(worktrees?["directory"] as? String)
+        autoRemoveMerged = worktrees?["autoRemoveMerged"] as? Bool ?? true
+        autoCleanCaches = storage?["autoCleanCaches"] as? Bool ?? true
+        if let number = worktrees?["autoRemoveAfterHours"] as? NSNumber,
+           CFGetTypeID(number) != CFBooleanGetTypeID(), number.doubleValue.isFinite {
+            autoRemoveAfterHours = max(1, number.doubleValue)
+        } else {
+            autoRemoveAfterHours = 24
+        }
+        if let number = storage?["lowDiskWarningGB"] as? NSNumber,
+           CFGetTypeID(number) != CFBooleanGetTypeID(),
+           number.doubleValue.isFinite, number.doubleValue >= 0 {
+            lowDiskWarningGB = number.doubleValue
+        } else {
+            lowDiskWarningGB = 20
+        }
+    }
+
+    private static func resolvedDirectory(_ raw: String?) -> String {
+        guard let raw else { return defaultDirectory }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return defaultDirectory }
         if trimmed.hasPrefix("~/") || trimmed == "~" {
@@ -432,64 +458,5 @@ enum ProgramaWorktreeSettings {
             return trimmed == "~" ? home : (home as NSString).appendingPathComponent(String(trimmed.dropFirst(2)))
         }
         return trimmed
-    }
-
-    static let defaultAutoRemoveMerged = true
-    static let defaultAutoRemoveAfterHours: Double = 24
-    static let minimumAutoRemoveAfterHours: Double = 1
-
-    /// `worktrees.autoRemoveMerged`: whether the background monitor removes merged, idle
-    /// Programa-created worktrees.
-    static func autoRemoveMerged(settingsURL: URL = settingsFileURL) -> Bool {
-        (readSettingsRoot(settingsURL: settingsURL)?["worktrees"] as? [String: Any])?["autoRemoveMerged"] as? Bool
-            ?? defaultAutoRemoveMerged
-    }
-
-    /// `worktrees.autoRemoveAfterHours`, clamped to at least one hour.
-    static func autoRemoveAfterHours(settingsURL: URL = settingsFileURL) -> Double {
-        guard let section = readSettingsRoot(settingsURL: settingsURL)?["worktrees"] as? [String: Any],
-              let number = section["autoRemoveAfterHours"] as? NSNumber,
-              CFGetTypeID(number) != CFBooleanGetTypeID(),
-              number.doubleValue.isFinite else {
-            return defaultAutoRemoveAfterHours
-        }
-        return max(minimumAutoRemoveAfterHours, number.doubleValue)
-    }
-
-    static let settingsFileURL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".config/programa/settings.json")
-
-    static func readSettingsRoot(settingsURL: URL = settingsFileURL) -> [String: Any]? {
-        guard let data = FileManager.default.contents(atPath: settingsURL.path), !data.isEmpty else { return nil }
-        guard let sanitized = try? JSONCParser.preprocess(data: data),
-              let object = try? JSONSerialization.jsonObject(with: sanitized, options: []) else {
-            return nil
-        }
-        return object as? [String: Any]
-    }
-}
-
-enum ProgramaStorageSettings {
-    static let defaultAutoCleanCaches = true
-
-    static func autoCleanCaches(settingsURL: URL = ProgramaWorktreeSettings.settingsFileURL) -> Bool {
-        (ProgramaWorktreeSettings.readSettingsRoot(settingsURL: settingsURL)?["storage"] as? [String: Any])?["autoCleanCaches"]
-            as? Bool ?? defaultAutoCleanCaches
-    }
-
-    static let defaultLowDiskWarningGB: Double = 20
-
-    static func lowDiskWarningGB(settingsURL: URL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".config/programa/settings.json")) -> Double {
-        guard let data = try? Data(contentsOf: settingsURL),
-              let sanitized = try? JSONCParser.preprocess(data: data),
-              let root = try? JSONSerialization.jsonObject(with: sanitized) as? [String: Any],
-              let storage = root["storage"] as? [String: Any],
-              let number = storage["lowDiskWarningGB"] as? NSNumber,
-              CFGetTypeID(number) != CFBooleanGetTypeID(),
-              number.doubleValue.isFinite, number.doubleValue >= 0 else {
-            return defaultLowDiskWarningGB
-        }
-        return number.doubleValue
     }
 }

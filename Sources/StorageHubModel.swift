@@ -266,14 +266,16 @@ final class StorageHubModel: ObservableObject {
         let openDirectories = WorktreeStorage.openWorkspaceDirectories()
         queue.async {
             WorktreeStorage.passLock.lock()
-            let worktreeEntries = category == nil ? WorktreeStorage.scanAll(openDirectories: openDirectories) : []
-            let cacheItems = category.map { StorageCategories.scan(categories: [$0]) } ?? []
+            let settings = StorageSettings.read()
+            let worktreeEntries = category == nil
+                ? WorktreeStorage.scanAll(openDirectories: openDirectories, programaDirectory: settings.directory) : []
+            let cacheItems = category.map { StorageCategories.scan(categories: [$0], settings: settings) } ?? []
             let prepared = StorageCleanPreview(
                 worktrees: WorktreeStorage.clean(
                     entries: worktreeEntries, policy: Self.manualPolicy, now: Date(), dryRun: true,
                     openDirectories: { openDirectories }, processCwds: WorktreeStorage.processWorkingDirectories
                 ),
-                caches: StorageCategories.clean(items: cacheItems, automaticOnly: false, dryRun: true)
+                caches: StorageCategories.clean(items: cacheItems, automaticOnly: false, dryRun: true, settings: settings)
             )
             WorktreeStorage.passLock.unlock()
             DispatchQueue.main.async {
@@ -303,10 +305,11 @@ final class StorageHubModel: ObservableObject {
         operation = .cleaning(token)
         queue.async {
             WorktreeStorage.passLock.lock()
+            let settings = StorageSettings.read()
             // Reclassify only the confirmed worktrees, retaining the exact path and HEAD allowlist.
             let refreshed = preview.worktrees.removed.isEmpty ? [] : WorktreeStorage.scan(
                 repositories: WorktreeStorage.discoverRepositories(candidateDirectories: preview.worktrees.removed.map(\.repoRoot)),
-                programaDirectory: ProgramaWorktreeSettings.resolvedDirectory(),
+                programaDirectory: settings.directory,
                 openDirectories: Self.currentOpenDirectories(), processCwds: WorktreeStorage.processWorkingDirectories()
             ).filter { entry in
                 preview.worktrees.removed.contains { $0.path == entry.path && $0.headSHA == entry.headSHA }
@@ -319,7 +322,7 @@ final class StorageHubModel: ObservableObject {
             for entry in preview.worktrees.removed where !refreshed.contains(where: { $0.path == entry.path }) {
                 worktreeOutcome.kept.append(WorktreeStorage.KeptWorktree(entry: entry, reason: .blocker(.statusUnknown)))
             }
-            var cacheOutcome = StorageCategories.clean(items: preview.caches.removed, automaticOnly: false, dryRun: false)
+            var cacheOutcome = StorageCategories.clean(items: preview.caches.removed, automaticOnly: false, dryRun: false, settings: settings)
             cacheOutcome.kept += preview.caches.kept
             let outcome = StorageCleanPreview(worktrees: worktreeOutcome, caches: cacheOutcome)
             WorktreeStorage.passLock.unlock()
@@ -341,9 +344,10 @@ final class StorageHubModel: ObservableObject {
     nonisolated private static func scan(openDirectories: [String]) -> StorageHubSnapshot {
         WorktreeStorage.passLock.lock()
         defer { WorktreeStorage.passLock.unlock() }
-        let entries = WorktreeStorage.scanAll(openDirectories: openDirectories)
+        let settings = StorageSettings.read()
+        let entries = WorktreeStorage.scanAll(openDirectories: openDirectories, programaDirectory: settings.directory)
         return StorageHubSnapshot(
-            scannedAt: Date(), worktrees: entries, caches: StorageCategories.scan(),
+            scannedAt: Date(), worktrees: entries, caches: StorageCategories.scan(settings: settings),
             worktreePreview: WorktreeStorage.clean(
                 entries: entries, policy: manualPolicy, now: Date(), dryRun: true,
                 openDirectories: { openDirectories }, processCwds: WorktreeStorage.processWorkingDirectories

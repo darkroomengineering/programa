@@ -25,14 +25,14 @@ struct StorageCacheContext {
         self.now = now
     }
 
-    static func live() -> Self {
+    static func live(settings: StorageSettings = .read()) -> Self {
         let directories: [String]
         if Thread.isMainThread {
             directories = MainActor.assumeIsolated { WorktreeStorage.openWorkspaceDirectories() }
         } else {
             directories = DispatchQueue.main.sync { WorktreeStorage.openWorkspaceDirectories() }
         }
-        let candidates = directories + WorktreeStorage.programaWorktreeCandidates(in: ProgramaWorktreeSettings.resolvedDirectory())
+        let candidates = directories + WorktreeStorage.programaWorktreeCandidates(in: settings.directory)
         let projects = WorktreeStorage.discoverRepositories(candidateDirectories: candidates)
             .flatMap { $0.worktrees.filter { !$0.isBare }.map(\.path) }
         var environment = ProcessInfo.processInfo.environment

@@ -10,9 +10,10 @@ private enum StorageTimestamp {
 
 extension TerminalController {
     nonisolated func v2StorageScan(params: [String: Any]) -> V2CallResult {
+        let settings = StorageSettings.read()
         let openDirectories = v2MainSync { WorktreeStorage.openWorkspaceDirectories() }
-        let entries = WorktreeStorage.scanAll(openDirectories: openDirectories)
-        let policy = WorktreeRemovalPolicy.automatic(gracePeriodHours: ProgramaWorktreeSettings.autoRemoveAfterHours())
+        let entries = WorktreeStorage.scanAll(openDirectories: openDirectories, programaDirectory: settings.directory)
+        let policy = WorktreeRemovalPolicy.automatic(gracePeriodHours: settings.autoRemoveAfterHours)
         let now = Date()
 
         var payloads: [[String: Any]] = []
@@ -41,7 +42,7 @@ extension TerminalController {
                 "blocker": v2OrNull(blocker?.rawValue),
             ])
         }
-        let caches = StorageCategories.scan()
+        let caches = StorageCategories.scan(settings: settings)
         var cacheTotals: [String: Any] = [:]
         for category in StorageCategoryID.allCases {
             let items = caches.filter { $0.category == category }
@@ -75,15 +76,17 @@ extension TerminalController {
         let dryRun = v2Bool(params, "dry_run") ?? true
         let includeExternal = v2Bool(params, "include_external") ?? false
         let ignoreGracePeriod = v2Bool(params, "ignore_grace_period") ?? false
+        WorktreeStorage.passLock.lock()
+        defer { WorktreeStorage.passLock.unlock() }
+        let settings = StorageSettings.read()
         let policy = WorktreeRemovalPolicy(
-            gracePeriod: ignoreGracePeriod ? nil : ProgramaWorktreeSettings.autoRemoveAfterHours() * 3600,
+            gracePeriod: ignoreGracePeriod ? nil : settings.autoRemoveAfterHours * 3600,
             includeExternal: includeExternal
         )
 
-        WorktreeStorage.passLock.lock()
-        defer { WorktreeStorage.passLock.unlock() }
         let entries = WorktreeStorage.scanAll(
-            openDirectories: v2MainSync { WorktreeStorage.openWorkspaceDirectories() }
+            openDirectories: v2MainSync { WorktreeStorage.openWorkspaceDirectories() },
+            programaDirectory: settings.directory
         ).filter { entry in
             paths.isEmpty || paths.contains { WorktreeStorage.isPath(WorktreeStorage.resolvedPath(entry.path), equalToOrInside: $0, caseInsensitive: false) }
         }
@@ -104,10 +107,10 @@ extension TerminalController {
             return payload
         }
         let cacheCategories = categories.isEmpty && !itemIDs.isEmpty ? StorageCategoryID.allCases : categories
-        let cacheItems = StorageCategories.scan(categories: cacheCategories).filter {
+        let cacheItems = StorageCategories.scan(categories: cacheCategories, settings: settings).filter {
             itemIDs.isEmpty || itemIDs.contains($0.id)
         }
-        let cacheOutcome = StorageCategories.clean(items: cacheItems, automaticOnly: false, dryRun: dryRun)
+        let cacheOutcome = StorageCategories.clean(items: cacheItems, automaticOnly: false, dryRun: dryRun, settings: settings)
         return .ok([
             "removed": outcome.removed.map(\.path),
             "kept": kept,

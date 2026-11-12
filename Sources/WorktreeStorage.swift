@@ -154,7 +154,7 @@ enum WorktreeStorage {
     /// Scans every repo reachable from `openDirectories` or `worktrees.directory`.
     static func scanAll(
         openDirectories: [String],
-        programaDirectory: String = ProgramaWorktreeSettings.resolvedDirectory(),
+        programaDirectory: String = StorageSettings.read().directory,
         sizeWalkTimeout: TimeInterval = defaultSizeWalkTimeout,
         removalFilter: RemovalFilter? = nil
     ) -> [WorktreeStorageEntry] {
@@ -550,11 +550,13 @@ final class WorktreeStorageMonitor: @unchecked Sendable {
             return
         }
         defer { WorktreeStorage.passLock.unlock() }
-        if ProgramaWorktreeSettings.autoRemoveMerged() {
-            let policy = WorktreeRemovalPolicy.automatic(gracePeriodHours: ProgramaWorktreeSettings.autoRemoveAfterHours())
+        let settings = StorageSettings.read()
+        if settings.autoRemoveMerged {
+            let policy = WorktreeRemovalPolicy.automatic(gracePeriodHours: settings.autoRemoveAfterHours)
             let now = Date()
             let entries = WorktreeStorage.scanAll(
                 openDirectories: Self.openDirectoriesFromMain(),
+                programaDirectory: settings.directory,
                 removalFilter: WorktreeStorage.RemovalFilter(policy: policy, now: now)
             )
             let outcome = WorktreeStorage.clean(
@@ -575,9 +577,9 @@ final class WorktreeStorageMonitor: @unchecked Sendable {
             }
             logger.info("Worktree cleanup probed \(entries.count, privacy: .public) unblocked candidates, removed \(outcome.removed.count, privacy: .public), reclaimed \(outcome.reclaimedBytes, privacy: .public) bytes")
         }
-        if ProgramaStorageSettings.autoCleanCaches() {
-            let items = StorageCategories.scan()
-            let outcome = StorageCategories.clean(items: items, automaticOnly: true, dryRun: false)
+        if settings.autoCleanCaches {
+            let items = StorageCategories.scan(settings: settings)
+            let outcome = StorageCategories.clean(items: items, automaticOnly: true, dryRun: false, settings: settings)
             logger.info("Cache cleanup scanned \(items.count, privacy: .public), removed \(outcome.removed.count, privacy: .public), kept \(outcome.kept.count, privacy: .public), reclaimed \(outcome.reclaimedBytes, privacy: .public) bytes")
         }
     }

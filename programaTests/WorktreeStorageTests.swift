@@ -630,9 +630,9 @@ final class WorktreeAutoRemoveSettingsTests: XCTestCase {
     }
 
     func testMissingOrUnusableSettingsFallBackToDefaults() throws {
-        XCTAssertTrue(ProgramaWorktreeSettings.autoRemoveMerged(settingsURL: settingsURL))
-        XCTAssertEqual(ProgramaWorktreeSettings.autoRemoveAfterHours(settingsURL: settingsURL), 24)
-        XCTAssertTrue(ProgramaStorageSettings.autoCleanCaches(settingsURL: settingsURL))
+        XCTAssertTrue(StorageSettings.read(settingsURL: settingsURL).autoRemoveMerged)
+        XCTAssertEqual(StorageSettings.read(settingsURL: settingsURL).autoRemoveAfterHours, 24)
+        XCTAssertTrue(StorageSettings.read(settingsURL: settingsURL).autoCleanCaches)
 
         for contents in [
             "", "not JSON", "[]", "{}", "{\"worktrees\":{},\"storage\":{}}",
@@ -641,9 +641,9 @@ final class WorktreeAutoRemoveSettingsTests: XCTestCase {
             "{\"worktrees\":{\"autoRemoveMerged\":null,\"autoRemoveAfterHours\":null},\"storage\":{\"autoCleanCaches\":null}}",
         ] {
             try writeSettings(contents)
-            XCTAssertTrue(ProgramaWorktreeSettings.autoRemoveMerged(settingsURL: settingsURL), contents)
-            XCTAssertEqual(ProgramaWorktreeSettings.autoRemoveAfterHours(settingsURL: settingsURL), 24, contents)
-            XCTAssertTrue(ProgramaStorageSettings.autoCleanCaches(settingsURL: settingsURL), contents)
+            XCTAssertTrue(StorageSettings.read(settingsURL: settingsURL).autoRemoveMerged, contents)
+            XCTAssertEqual(StorageSettings.read(settingsURL: settingsURL).autoRemoveAfterHours, 24, contents)
+            XCTAssertTrue(StorageSettings.read(settingsURL: settingsURL).autoCleanCaches, contents)
         }
     }
 
@@ -655,8 +655,8 @@ final class WorktreeAutoRemoveSettingsTests: XCTestCase {
           "storage": { "autoCleanCaches": false },
         }
         """)
-        XCTAssertFalse(ProgramaWorktreeSettings.autoRemoveMerged(settingsURL: settingsURL))
-        XCTAssertFalse(ProgramaStorageSettings.autoCleanCaches(settingsURL: settingsURL))
+        XCTAssertFalse(StorageSettings.read(settingsURL: settingsURL).autoRemoveMerged)
+        XCTAssertFalse(StorageSettings.read(settingsURL: settingsURL).autoCleanCaches)
     }
 
     func testGracePeriodIsClampedToAtLeastOneHour() throws {
@@ -666,7 +666,7 @@ final class WorktreeAutoRemoveSettingsTests: XCTestCase {
         ]
         for (json, hours) in cases {
             try writeSettings("{\"worktrees\":{\"autoRemoveAfterHours\":\(json)}}")
-            XCTAssertEqual(ProgramaWorktreeSettings.autoRemoveAfterHours(settingsURL: settingsURL), hours, json)
+            XCTAssertEqual(StorageSettings.read(settingsURL: settingsURL).autoRemoveAfterHours, hours, json)
         }
     }
 }
