@@ -1,4 +1,4 @@
-import { cloudflare } from "@visio/cloudflare";
+import { vercel } from "@visio/vercel";
 import { visio } from "visio";
 import { defineConfig } from "vite";
 
@@ -18,7 +18,7 @@ export default defineConfig({
           alt: "The Programa app icon next to the name and the line Run many coding agents at once and always know which one needs you",
         },
       },
-      deploy: cloudflare(),
+      deploy: vercel(),
     }),
   ],
   server: {
