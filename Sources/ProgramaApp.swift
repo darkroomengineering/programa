@@ -1614,6 +1614,7 @@ private struct AboutPanelView: View {
 
     private let githubURL = URL(string: "https://github.com/darkroomengineering/programa")
     private let docsURL = URL(string: "https://github.com/darkroomengineering/programa/tree/main/docs")
+    private let incubatorURL = URL(string: "https://darkroom.engineering/incubator")
 
     private var version: String? { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String }
     private var build: String? { Bundle.main.infoDictionary?["CFBundleVersion"] as? String }
@@ -1677,6 +1678,12 @@ private struct AboutPanelView: View {
                     Button(String(localized: "about.licenses", defaultValue: "Licenses")) {
                         AcknowledgmentsWindowController.shared.show()
                     }
+                }
+
+                if let url = incubatorURL {
+                    Link(String(localized: "about.incubatorCredit", defaultValue: "A sidequest by Darkroom Engineering Incubator"), destination: url)
+                        .font(.caption)
+                        .multilineTextAlignment(.center)
                 }
 
                 if let copy = copyright, !copy.isEmpty {

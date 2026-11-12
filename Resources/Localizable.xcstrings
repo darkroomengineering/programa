@@ -3171,6 +3171,23 @@
         }
       }
     },
+    "about.incubatorCredit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A sidequest by Darkroom Engineering Incubator"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A sidequest by Darkroom Engineering Incubator"
+          }
+        }
+      }
+    },
     "about.licenses": {
       "extractionState": "manual",
       "localizations": {

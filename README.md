@@ -14,6 +14,8 @@
   <a href="https://github.com/darkroomengineering/programa"><img src="https://img.shields.io/github/stars/darkroomengineering/programa?style=flat&logo=github&label=stars&color=4c71f2" alt="GitHub stars" /></a>
 </p>
 
+<p align="center"><a href="https://darkroom.engineering/incubator">A sidequest by Darkroom Engineering Incubator</a></p>
+
 <p align="center">
   <img src="./docs/assets/main-first-image.png" alt="Programa: workspace sidebar with agent status, a Claude Code session waiting for input" width="900" />
 </p>
