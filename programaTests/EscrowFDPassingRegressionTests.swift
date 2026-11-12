@@ -12,8 +12,9 @@ import Darwin
 /// peer that attaches several fds must not leak the extras into this process.
 ///
 /// Every test closes every fd it opens. The sender side of a socketpair stays open until the
-/// receive has completed (closing it right after sendmsg can hand the receiver a defunct fd
-/// under load).
+/// receive has completed: when the in-flight fd is a socket, closing it right after sendmsg can
+/// hand the receiver a socket with its buffered bytes flushed under load. PTY masters and pipes
+/// are not affected.
 final class EscrowFDPassingRegressionTests: XCTestCase {
     private var openedFDs: [Int32] = []
 
