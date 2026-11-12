@@ -248,6 +248,41 @@ final class TabManagerChildExitCloseTests: XCTestCase {
 }
 
 @MainActor
+final class InterruptedAgentBannerShellStateTests: XCTestCase {
+    func testShellAliveBannerClearsWhenTheShellRunsACommand() throws {
+        let manager = TabManager()
+        let workspace = try XCTUnwrap(manager.selectedWorkspace)
+        let panelId = try XCTUnwrap(workspace.focusedPanelId)
+        // The killed agent was the shell's running command when the banner went up.
+        workspace.updatePanelShellActivityState(panelId: panelId, state: .commandRunning)
+        workspace.interruptedAgentPanels[panelId] = .shellAlive
+
+        workspace.updatePanelShellActivityState(panelId: panelId, state: .promptIdle)
+        XCTAssertEqual(
+            workspace.interruptedAgentPanels[panelId], .shellAlive,
+            "The shell returning to its prompt after the agent died must keep the banner"
+        )
+
+        workspace.updatePanelShellActivityState(panelId: panelId, state: .commandRunning)
+        XCTAssertNil(
+            workspace.interruptedAgentPanels[panelId],
+            "Running a command at the prompt must clear the banner, whose Resume needs the prompt"
+        )
+    }
+
+    func testPaneDeadBannerSurvivesShellStateReports() throws {
+        let manager = TabManager()
+        let workspace = try XCTUnwrap(manager.selectedWorkspace)
+        let panelId = try XCTUnwrap(workspace.focusedPanelId)
+        workspace.updatePanelShellActivityState(panelId: panelId, state: .promptIdle)
+        workspace.interruptedAgentPanels[panelId] = .paneDead
+
+        workspace.updatePanelShellActivityState(panelId: panelId, state: .commandRunning)
+        XCTAssertEqual(workspace.interruptedAgentPanels[panelId], .paneDead)
+    }
+}
+
+@MainActor
 final class TabManagerWorkspaceOwnershipTests: XCTestCase {
     func testCloseWorkspaceIgnoresWorkspaceNotOwnedByManager() {
         let manager = TabManager()

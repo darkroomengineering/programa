@@ -66,6 +66,12 @@ extension Workspace {
         let previousState = panelShellActivityStates[panelId] ?? .unknown
         guard previousState != state else { return false }
         panelShellActivityStates[panelId] = state
+        // The shell left its prompt, so the banner's Resume could no longer type its line.
+        // Only on entering `.commandRunning`: the agent's exit can land while the shell still
+        // reports the agent itself as running, before its prompt report.
+        if state == .commandRunning, interruptedAgentPanels[panelId] == .shellAlive {
+            interruptedAgentPanels.removeValue(forKey: panelId)
+        }
 #if DEBUG
         dlog(
             "surface.shellState workspace=\(id.uuidString.prefix(5)) " +
