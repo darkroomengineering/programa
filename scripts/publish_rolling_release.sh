@@ -670,7 +670,7 @@ if [[ "${ROLLING_PUBLISHED_AT_START}" == "true" && "${STARTING_REF}" == "${SELEC
   "${GH_BIN}" release view "${ROLLING_TAG}" \
     --repo "${REPOSITORY}" --json body --template '{{.body}}' > "${PUBLISHED_BODY}" || \
     fail "could not read published rolling notes"
-  [[ "${published_title}" == "Rolling ${SELECTED_VERSION}" ]] || \
+  [[ "${published_title}" == "Programa ${SELECTED_VERSION}" ]] || \
     fail "published rolling title conflicts with the selected candidate"
   [[ "${published_draft}" == "false" ]] || fail "published rolling release is still a draft"
   [[ "${published_prerelease}" == "false" ]] || fail "published rolling release is a prerelease"
@@ -750,7 +750,7 @@ if [[ "${PRESERVE_PUBLISHED_METADATA}" != "true" ]]; then
   stop_quietly_if_main_moved "post-notes release metadata publication gate"
   "${GH_BIN}" release edit "${ROLLING_TAG}" \
     --repo "${REPOSITORY}" \
-    --title "Rolling ${SELECTED_VERSION}" \
+    --title "Programa ${SELECTED_VERSION}" \
     --notes-file "${NOTES_FILE}" \
     --draft=false \
     --latest
@@ -789,7 +789,7 @@ IFS=$'\t' read -r \
 FINAL_BODY="${TEMP_DIR}/final-body.md"
 "${GH_BIN}" release view "${ROLLING_TAG}" --repo "${REPOSITORY}" --json body --template '{{.body}}' > "${FINAL_BODY}"
 FINAL_REF="$("${GH_BIN}" api "repos/${REPOSITORY}/git/ref/tags/${ROLLING_TAG}" --jq .object.sha)"
-[[ "${FINAL_TITLE}" == "Rolling ${SELECTED_VERSION}" ]] || fail "rolling release title did not converge"
+[[ "${FINAL_TITLE}" == "Programa ${SELECTED_VERSION}" ]] || fail "rolling release title did not converge"
 [[ "${final_tag}" == "${ROLLING_TAG}" ]] || fail "rolling release resolved to an unexpected tag"
 [[ "${FINAL_DRAFT}" == "false" ]] || fail "rolling release is still a draft"
 [[ "${FINAL_PRERELEASE}" == "false" ]] || fail "rolling release is still a prerelease"

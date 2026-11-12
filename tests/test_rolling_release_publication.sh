@@ -624,7 +624,7 @@ stage_archive_candidate() {
 
 seed_rolling() {
   local build="$1" draft="${2:-false}" latest="${3:-true}" role path
-  write_release rolling "$(target_sha_for "${build}")" "${draft}" "${latest}" "Rolling 0.64.73" "notes-${build}"
+  write_release rolling "$(target_sha_for "${build}")" "${draft}" "${latest}" "Programa 0.64.73" "notes-${build}"
   printf '42\n' > "$(release_dir rolling)/id"
   while IFS='=' read -r role path; do write_asset rolling "$(basename "${path}")" "${path}"; done < <(fixture_roles "${build}")
 }
@@ -944,7 +944,7 @@ done
 # Lower candidates cannot regress rolling's high-water build.
 reset_state
 seed_sealed_candidate 103; seed_rolling 200; : > "${STATE_DIR}/operations.log"; invoke_rolling; assert_rolling_converged 200
-assert_file_equals "$(release_dir rolling)/title" 'Rolling 0.64.73'
+assert_file_equals "$(release_dir rolling)/title" 'Programa 0.64.73'
 assert_file_equals "$(release_dir rolling)/body" 'notes-200'
 ! grep -Eq 'mutation (upload-asset|delete-asset|move-ref) rolling ' "${STATE_DIR}/operations.log" || fail "older candidate mutated newer rolling"
 
@@ -1167,7 +1167,7 @@ seed_sealed_candidate 103; seed_rolling 102; seed_milestone 101; : > "${STATE_DI
 FAKE_GH_EXPOSE_MILESTONE_BEFORE_METADATA="${FIXTURE_DIR}/104/appcast.xml" invoke_rolling || final_race_status=$?
 [[ "${final_race_status:-0}" -ne 0 ]] || fail "pre-publication milestone race did not stop reconciliation"
 grep -Fq 'milestone-appcast-advanced-before-metadata' "${STATE_DIR}/operations.log" || fail "pre-publication race hook was not reached"
-assert_file_equals "$(release_dir rolling)/title" 'Rolling 0.64.73'
+assert_file_equals "$(release_dir rolling)/title" 'Programa 0.64.73'
 assert_file_equals "$(release_dir rolling)/body" 'notes-102'
 assert_file_equals "$(release_dir rolling)/latest" true
 assert_file_equals "$(release_dir rolling)/target_sha" "$(target_sha_for 102)"
@@ -1189,7 +1189,7 @@ FAKE_GH_ADVANCE_MAIN_BEFORE_METADATA="$(target_sha_for 104)" invoke_rolling || f
 grep -Fq "main-advanced-before-metadata $(target_sha_for 104)" "${STATE_DIR}/operations.log" || fail "pre-metadata main race hook was not reached"
 assert_asset_equals rolling appcast.xml "${FIXTURE_DIR}/103/appcast.xml"
 assert_asset_equals rolling programa-macos.dmg "${FIXTURE_DIR}/103/programa-macos.dmg"
-assert_file_equals "$(release_dir rolling)/title" 'Rolling 0.64.73'
+assert_file_equals "$(release_dir rolling)/title" 'Programa 0.64.73'
 assert_file_equals "$(release_dir rolling)/body" 'notes-102'
 assert_file_equals "$(release_dir rolling)/latest" true
 assert_file_equals "$(release_dir rolling)/target_sha" "$(target_sha_for 102)"
@@ -1208,7 +1208,7 @@ unset notes_main_race_status
 FAKE_GH_ADVANCE_MAIN_DURING_NOTES="$(target_sha_for 104)" invoke_rolling || notes_main_race_status=$?
 [[ "${notes_main_race_status:-0}" -eq 0 ]] || fail "main advancement during notes after public uploads ended the run red"
 grep -Fq "main-advanced-during-notes $(target_sha_for 104)" "${STATE_DIR}/operations.log" || fail "notes main-race hook was not reached"
-assert_file_equals "$(release_dir rolling)/title" 'Rolling 0.64.73'
+assert_file_equals "$(release_dir rolling)/title" 'Programa 0.64.73'
 assert_file_equals "$(release_dir rolling)/body" 'notes-102'
 assert_file_equals "$(release_dir rolling)/target_sha" "$(target_sha_for 102)"
 assert_release_exists rolling-candidate-103
