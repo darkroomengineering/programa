@@ -516,18 +516,24 @@ extension TerminalController {
             )
 
             let resolvedTitle = TerminalController.v2ResolveNotificationTitle(title: title, workspace: tab, surfaceId: sid)
+            let payload = needsInputFields.merging(["title": resolvedTitle]) { $1 }
+            // A matching `notify` route owns this call's banner, throttled or not; the entry
+            // still reaches the list, sidebar and Dock badge.
+            let routeOwnsBanner = RouteEvent(
+                frame: SocketEventBroadcaster.needsInputFrame(workspaceId: workspaceId, surfaceId: sid, payload: payload)
+            ).map(RouteEngine.shared.hasNotifyRoute(matching:)) ?? false
             TerminalNotificationStore.shared.addNotification(
                 tabId: tab.id,
                 surfaceId: sid,
                 title: resolvedTitle,
                 subtitle: subtitle,
                 body: body,
-                deliversBanner: !NotificationBannerClaims.shared.isClaimed(.needsInput)
+                deliversBanner: !NotificationBannerClaims.shared.isClaimed(.needsInput) && !routeOwnsBanner
             )
             SocketEventBroadcaster.shared.publishNeedsInput(
                 workspaceId: workspaceId,
                 surfaceId: sid,
-                payload: needsInputFields.merging(["title": resolvedTitle]) { $1 }
+                payload: payload
             )
 
             _ = try? AgentSupervisionRegistry.shared.updateActiveSurface(

@@ -40,13 +40,18 @@ private final class ManualClock {
 private final class RecordingExecutor: RouteActionExecutor {
     var fires: [RouteFire] = []
     var cancelled: [String] = []
+    var issueReports: [[ProgramaRouteIssue]] = []
 
-    func execute(_ fire: RouteFire) {
+    func execute(_ fire: RouteFire, engine: RouteEngine) {
         fires.append(fire)
     }
 
-    func cancel(routeName: String, key: String) {
-        cancelled.append("\(routeName) \(key)")
+    func cancel(_ fire: RouteFire) {
+        cancelled.append("\(fire.route.name) \(fire.key)")
+    }
+
+    func reportLoadIssues(_ issues: [ProgramaRouteIssue]) {
+        issueReports.append(issues)
     }
 }
 
@@ -287,6 +292,49 @@ final class RouteEngineTests: XCTestCase {
         XCTAssertEqual(executor.cancelled, ["test agent/S1/state/idle"])
     }
 
+    func testALateEndFromAnExpiredDeliveryDoesNotEndTheNextOne() throws {
+        let executor = RecordingExecutor()
+        let engine = makeEngine()
+        engine.executor = executor
+        try install(#"{ "name": "test", "on": "agent/+/state/idle", "run": { "command": "true", "timeoutMs": "4s" } }"#, on: engine)
+
+        engine.ingest(agentState(surface: "S1", state: "idle"))
+        clock.advance(by: 4)
+        let expired = try XCTUnwrap(executor.fires.first)
+        XCTAssertEqual(executor.cancelled, ["test agent/S1/state/idle"])
+
+        engine.ingest(agentState(surface: "S1", state: "idle"))
+        let current = try XCTUnwrap(executor.fires.last)
+        XCTAssertNotEqual(expired.id, current.id)
+
+        engine.endDelivery(expired, error: "timed out after 4 s")
+        engine.ingest(agentState(surface: "S1", state: "idle"))
+        XCTAssertEqual(
+            counters(engine, "test"),
+            RouteCounters(matched: 3, fired: 2, busy: 1, expired: 1),
+            "the cancelled fire's end must not release the newer delivery"
+        )
+        XCTAssertEqual(engine.snapshot().routes.first?.lastError, "timed out after 4 s", "its error is still kept")
+
+        engine.endDelivery(current)
+        engine.ingest(agentState(surface: "S1", state: "idle"))
+        XCTAssertEqual(counters(engine, "test")?.fired, 3)
+    }
+
+    func testFireIdsAreUniqueAcrossKeysAndInstalls() throws {
+        let executor = RecordingExecutor()
+        let engine = makeEngine()
+        engine.executor = executor
+        let route = #"{ "name": "ask", "on": "agent/#", "notify": { "title": "t" } }"#
+        try install(route, on: engine, source: .file(digest: "d1"))
+        engine.ingest(needsInput(surface: "S1"))
+        engine.ingest(needsInput(surface: "S2"))
+        try install(route, on: engine, source: .file(digest: "d2"))
+        engine.ingest(needsInput(surface: "S1"))
+
+        XCTAssertEqual(Set(executor.fires.map(\.id)).count, 3)
+    }
+
     func testReinstallCancelsDeliveriesAndIgnoresTheirLateEnd() throws {
         let executor = RecordingExecutor()
         let engine = makeEngine()
@@ -340,6 +388,54 @@ final class RouteEngineTests: XCTestCase {
         XCTAssertEqual(engine.snapshot().source, .file(digest: "b"))
         XCTAssertEqual(engine.snapshot().routes.map(\.name), ["file-b"])
         XCTAssertEqual(engine.snapshot().issues, [])
+    }
+
+    func testLoadIssuesAreReportedOncePerChangedFile() throws {
+        let executor = RecordingExecutor()
+        let engine = makeEngine()
+        engine.executor = executor
+        let broken = try config(#"{ "name": "broken", "on": "agent/#/x", "notify": { "title": "t" } }"#)
+
+        engine.install(routes: broken.routes, issues: broken.routeIssues, source: .file(digest: "d1"))
+        engine.install(routes: broken.routes, issues: broken.routeIssues, source: .file(digest: "d1"))
+        XCTAssertEqual(executor.issueReports.map { $0.map(\.name) }, [["broken"]], "an unchanged file reports nothing")
+
+        engine.install(routes: [], issues: [], source: .file(digest: "d2"))
+        engine.install(routes: broken.routes, issues: broken.routeIssues, source: .debugOverride)
+        XCTAssertEqual(executor.issueReports.count, 1, "a clean file and a debug override report nothing")
+
+        engine.install(routes: broken.routes, issues: broken.routeIssues, source: .file(digest: "d3"))
+        XCTAssertEqual(executor.issueReports.count, 2, "a changed file reports even while an override masks it")
+    }
+
+    // MARK: - Banner query
+
+    func testNotifyRouteOwnsTheBannerForEveryCallItMatches() throws {
+        let engine = makeEngine { _ in ["worktree": "true"] }
+        try install(#"""
+        { "name": "ask", "on": "agent/+/needs_input/question", "when": { "worktree": "true" },
+          "throttleMs": "5m", "notify": { "title": "t" } },
+        { "name": "review", "on": "agent/+/needs_input/permission", "review": {} }
+        """#, on: engine)
+
+        XCTAssertTrue(engine.hasNotifyRoute(matching: needsInput(surface: "S1")))
+        engine.ingest(needsInput(surface: "S1"))
+        engine.ingest(needsInput(surface: "S1"))
+        XCTAssertEqual(counters(engine, "ask")?.throttled, 1)
+        XCTAssertTrue(engine.hasNotifyRoute(matching: needsInput(surface: "S1")), "a throttled call still shows no built-in banner")
+
+        XCTAssertFalse(
+            engine.hasNotifyRoute(matching: needsInput(surface: "S1", kind: "permission")),
+            "a permission call that only a review route matches keeps its banner"
+        )
+        XCTAssertFalse(engine.hasNotifyRoute(matching: agentState(surface: "S1", state: "idle")))
+    }
+
+    func testBannerQueryChecksWhenAgainstModelFields() throws {
+        let engine = makeEngine { _ in ["worktree": "false"] }
+        try install(#"{ "name": "ask", "on": "agent/+/needs_input/#", "when": { "worktree": "true" }, "notify": { "title": "t" } }"#, on: engine)
+
+        XCTAssertFalse(engine.hasNotifyRoute(matching: needsInput(surface: "S1")))
     }
 
     func testInstallTellsTheTapWhichClassesToBuild() throws {

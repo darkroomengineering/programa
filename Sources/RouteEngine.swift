@@ -42,8 +42,10 @@ struct RouteEngineSnapshot: Sendable, Equatable {
     var issues: [ProgramaRouteIssue]
 }
 
-/// One action the gate let through. `generation` ties it to the route set that fired it.
+/// One action the gate let through. `id` is unique for the app's lifetime; `generation` ties the
+/// fire to the route set that fired it.
 struct RouteFire: Sendable, Equatable {
+    let id: UInt64
     let route: CompiledRoute
     let key: String
     let event: RouteEvent
@@ -54,18 +56,26 @@ struct RouteFire: Sendable, Equatable {
 @MainActor
 protocol RouteActionExecutor: AnyObject {
     /// Runs `fire`'s action. When the route holds for a delivery (`fire.route.deliveryTimeout` is
-    /// set), call `RouteEngine.endDelivery(_:error:)` once it ends, however it ends.
-    func execute(_ fire: RouteFire)
-    /// The delivery for this route and key expired, or the route set changed under it: stop it.
-    func cancel(routeName: String, key: String)
+    /// set), call `engine.endDelivery(_:error:)` once it ends, however it ends.
+    func execute(_ fire: RouteFire, engine: RouteEngine)
+    /// `fire`'s delivery expired, or the route set changed under it: stop it. The engine has
+    /// already released the route, so no `endDelivery` follows; a late one is ignored, and only
+    /// its error is kept.
+    func cancel(_ fire: RouteFire)
+    /// A changed global file installed with route issues. Called once per file digest.
+    func reportLoadIssues(_ issues: [ProgramaRouteIssue])
 }
 
 @MainActor
 final class RouteEngine {
-    static let shared = RouteEngine(tap: SocketEventBroadcaster.shared.routeTap)
+    static let shared: RouteEngine = {
+        let engine = RouteEngine(tap: SocketEventBroadcaster.shared.routeTap)
+        engine.executor = RouteActions.shared
+        return engine
+    }()
 
-    /// Nil until the action executor exists. Without one a fire is only counted, and a delivery
-    /// ends at once so the route does not read as busy until it expires.
+    /// Weak: `RouteActions.shared` owns the production executor. Without one a fire is only
+    /// counted, and a delivery ends at once so the route does not read as busy until it expires.
     weak var executor: RouteActionExecutor?
 
     private struct GateKey: Hashable {
@@ -96,6 +106,10 @@ final class RouteEngine {
     private var routes: [InstalledRoute] = []
     private var issues: [ProgramaRouteIssue] = []
     private var gates: [GateKey: RouteGateState] = [:]
+    /// The fire behind each gate in `.delivering`, and only those: `apply` keeps the two in step.
+    /// A late `endDelivery` from an expired fire must not end the newer delivery on its key.
+    private var deliveries: [GateKey: RouteFire] = [:]
+    private var lastFireId: UInt64 = 0
     /// Bumped on every install, so wakes and delivery ends from an older route set are ignored.
     private var generation: UInt64 = 0
 
@@ -121,6 +135,9 @@ final class RouteEngine {
         if case .file = source {
             guard source != fileSet.source else { return }
             fileSet = set
+            if !issues.isEmpty {
+                executor?.reportLoadIssues(issues)
+            }
             guard self.source != .debugOverride else { return }
         }
         activate(set)
@@ -150,17 +167,17 @@ final class RouteEngine {
 
     /// A route change cancels every delivery in flight and forgets every gate.
     private func activate(_ set: RouteSet) {
-        for (gateKey, state) in gates {
-            if case .delivering = state {
-                executor?.cancel(routeName: gateKey.route, key: gateKey.key)
-            }
-        }
+        let cancelled = Array(deliveries.values)
+        deliveries = [:]
         gates = [:]
         generation &+= 1
         source = set.source
         routes = set.routes.map { InstalledRoute(compiled: CompiledRoute($0)) }
         issues = set.issues
         tap?.setWantedClasses(Self.eventClasses(for: set.routes.map(\.on)))
+        for fire in cancelled {
+            executor?.cancel(fire)
+        }
     }
 
     // MARK: - Events
@@ -168,10 +185,7 @@ final class RouteEngine {
     func ingest(_ tapped: RouteEvent) {
         let candidates = routes.indices.filter { routes[$0].compiled.definition.on.matches(topic: tapped.topic) }
         guard !candidates.isEmpty else { return }
-        let event = RouteEvent(
-            topic: tapped.topic,
-            fields: tapped.fields.merging(modelFields(tapped)) { frame, _ in frame }
-        )
+        let event = resolved(tapped)
         let values = event.values
         let at = now()
         for index in candidates where routes[index].compiled.definition.matches(event) {
@@ -182,13 +196,40 @@ final class RouteEngine {
         }
     }
 
-    /// Reports that `fire`'s delivery ended. `error` becomes the route's last error.
-    func endDelivery(_ fire: RouteFire, error: String? = nil) {
-        guard fire.generation == generation else { return }
-        if let error, let index = routes.firstIndex(where: { $0.compiled.name == fire.route.name }) {
-            routes[index].lastError = error
+    /// Whether a `notify` route matches `tapped` on topic and `when`, whatever its gate would do:
+    /// the built-in `needs_input` banner gives way to the route for every call the route matches,
+    /// including the ones its throttle drops. Synchronous, so the caller can ask before it posts.
+    func hasNotifyRoute(matching tapped: RouteEvent) -> Bool {
+        let candidates = routes.map(\.compiled.definition).filter { definition in
+            guard case .notify = definition.action else { return false }
+            return definition.on.matches(topic: tapped.topic)
         }
-        apply(.deliveryEnded(now: now()), to: GateKey(route: fire.route.name, key: fire.key))
+        guard !candidates.isEmpty else { return false }
+        let event = resolved(tapped)
+        return candidates.contains { $0.matches(event) }
+    }
+
+    /// The tapped event plus the fields the model adds. Frame fields win.
+    private func resolved(_ tapped: RouteEvent) -> RouteEvent {
+        RouteEvent(topic: tapped.topic, fields: tapped.fields.merging(modelFields(tapped)) { frame, _ in frame })
+    }
+
+    /// Reports that `fire`'s delivery ended. `error` becomes the route's last error even when the
+    /// delivery already expired; the gate moves only for the delivery the route still holds.
+    func endDelivery(_ fire: RouteFire, error: String? = nil) {
+        if let error {
+            recordError(error, for: fire)
+        }
+        let gateKey = GateKey(route: fire.route.name, key: fire.key)
+        guard deliveries[gateKey]?.id == fire.id else { return }
+        apply(.deliveryEnded(now: now()), to: gateKey)
+    }
+
+    /// Sets the route's last error, unless the route set that fired has been replaced.
+    func recordError(_ message: String, for fire: RouteFire) {
+        guard fire.generation == generation,
+              let index = routes.firstIndex(where: { $0.compiled.name == fire.route.name }) else { return }
+        routes[index].lastError = message
     }
 
     private func apply(_ input: RouteGateInput, to gateKey: GateKey) {
@@ -196,28 +237,38 @@ final class RouteEngine {
         let route = routes[index].compiled
         let (next, effects) = RouteGate.reduce(gates[gateKey], input, route: route)
         gates[gateKey] = next
+        let heldDelivery = deliveries.removeValue(forKey: gateKey)
 
         var fires: [RouteFire] = []
         for effect in effects {
             switch effect {
             case .fire(let event):
-                fires.append(RouteFire(route: route, key: gateKey.key, event: event, generation: generation))
+                lastFireId &+= 1
+                fires.append(RouteFire(
+                    id: lastFireId, route: route, key: gateKey.key, event: event, generation: generation
+                ))
             case .wake(let date):
                 let scheduledGeneration = generation
                 scheduleWake(date) { [weak self] in
                     self?.wake(gateKey, at: date, generation: scheduledGeneration)
                 }
             case .cancelDelivery:
-                executor?.cancel(routeName: gateKey.route, key: gateKey.key)
+                if let heldDelivery {
+                    executor?.cancel(heldDelivery)
+                }
             case .count(let counter):
                 routes[index].counters.record(counter)
             }
         }
-        // After the gate state and counters are stored, so a delivery that ends inside `execute`
-        // reaches the state the fire left.
+        if case .delivering = next {
+            // The fire that started the delivery, or the one already holding it.
+            deliveries[gateKey] = fires.last ?? heldDelivery
+        }
+        // After the gate state, deliveries and counters are stored, so a delivery that ends
+        // inside `execute` reaches the state the fire left.
         for fire in fires {
             if let executor {
-                executor.execute(fire)
+                executor.execute(fire, engine: self)
             } else if route.deliveryTimeout != nil {
                 endDelivery(fire)
             }

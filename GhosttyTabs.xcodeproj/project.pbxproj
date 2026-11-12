@@ -407,6 +407,7 @@
 					EVRT0000000000000000000E /* ProgramaRouteDecodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EVRT0000000000000000000D /* ProgramaRouteDecodingTests.swift */; };
 					EVRT00000000000000000010 /* RouteGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EVRT0000000000000000000F /* RouteGateTests.swift */; };
 					EVRT00000000000000000012 /* RouteEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EVRT00000000000000000011 /* RouteEngineTests.swift */; };
+					EVRT00000000000000000014 /* RouteActionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EVRT00000000000000000013 /* RouteActionsTests.swift */; };
 					9EAF4699346282F2171FCDB7 /* ProgramaDirectoryTrustTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CA3597273B50CC0592C0164 /* ProgramaDirectoryTrustTests.swift */; };
 		C7A10002 /* V2MethodNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A10001 /* V2MethodNames.swift */; };
 		B0F65D90C522CCE8ECCBE4AF /* V2MethodNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A10001 /* V2MethodNames.swift */; };
@@ -882,6 +883,7 @@
 				EVRT0000000000000000000D /* ProgramaRouteDecodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaRouteDecodingTests.swift; sourceTree = "<group>"; };
 				EVRT0000000000000000000F /* RouteGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteGateTests.swift; sourceTree = "<group>"; };
 				EVRT00000000000000000011 /* RouteEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteEngineTests.swift; sourceTree = "<group>"; };
+				EVRT00000000000000000013 /* RouteActionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteActionsTests.swift; sourceTree = "<group>"; };
 		3CA3597273B50CC0592C0164 /* ProgramaDirectoryTrustTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaDirectoryTrustTests.swift; sourceTree = "<group>"; };
 		C7A10001 /* V2MethodNames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V2MethodNames.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -1472,6 +1474,7 @@
 					EVRT0000000000000000000D /* ProgramaRouteDecodingTests.swift */,
 					EVRT0000000000000000000F /* RouteGateTests.swift */,
 					EVRT00000000000000000011 /* RouteEngineTests.swift */,
+					EVRT00000000000000000013 /* RouteActionsTests.swift */,
 					3CA3597273B50CC0592C0164 /* ProgramaDirectoryTrustTests.swift */,
 					A9A8BC17CBD749D48C344001 /* MCPSocketBridgeTests.swift */,
 				);
@@ -1978,6 +1981,7 @@
 					EVRT0000000000000000000E /* ProgramaRouteDecodingTests.swift in Sources */,
 					EVRT00000000000000000010 /* RouteGateTests.swift in Sources */,
 					EVRT00000000000000000012 /* RouteEngineTests.swift in Sources */,
+					EVRT00000000000000000014 /* RouteActionsTests.swift in Sources */,
 					9EAF4699346282F2171FCDB7 /* ProgramaDirectoryTrustTests.swift in Sources */,
 					F6D8BDB710C64A444F3DE4F0 /* MCPSocketBridgeTests.swift in Sources */,
 					386AE1E1270DD8B6AA427C61 /* SocketPathResolution.swift in Sources */,

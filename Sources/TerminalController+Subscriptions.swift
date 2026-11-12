@@ -455,13 +455,20 @@ final class SocketEventBroadcaster: @unchecked Sendable {
         let subs = subscribers(for: .needsInput)
         let tapped = routeTap.wants(.needsInput)
         guard !subs.isEmpty || tapped else { return }
+        let frame = Self.needsInputFrame(workspaceId: workspaceId, surfaceId: surfaceId, payload: payload)
+        for sub in subs { sub.enqueue(frame) }
+        if tapped { routeTap.ingest(frame) }
+    }
+
+    /// The `needs_input` frame. `agent.needs_input` also builds it to ask the route engine whether
+    /// a `notify` route takes over the call's banner.
+    static func needsInputFrame(workspaceId: UUID, surfaceId: UUID, payload: [String: String]) -> [String: Any] {
         var frame: [String: Any] = payload.filter { !$0.value.isEmpty }
         frame["event"] = "needs_input"
         frame["workspace_id"] = workspaceId.uuidString
         frame["surface_id"] = surfaceId.uuidString
         frame["ts"] = Date().timeIntervalSince1970
-        for sub in subs { sub.enqueue(frame) }
-        if tapped { routeTap.ingest(frame) }
+        return frame
     }
 
     func publishWorkspaceLifecycle(kind: String, workspaceId: UUID, title: String?) {

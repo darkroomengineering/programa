@@ -18555,6 +18555,125 @@
           }
         }
       }
+    },
+    "routes.loadIssues.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some event routes did not load"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一部のイベントルートを読み込めませんでした"
+          }
+        }
+      }
+    },
+    "routes.loadIssues.bodyOne": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” in programa.json has a problem and was skipped."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "programa.json の「%@」に問題があるため、スキップしました。"
+          }
+        }
+      }
+    },
+    "routes.loadIssues.bodyMany": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%1$@” and %2$lld more routes in programa.json have problems and were skipped."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "programa.json の「%1$@」ほか %2$lld 件のルートに問題があるため、スキップしました。"
+          }
+        }
+      }
+    },
+    "routes.run.failed.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Route “%@” failed"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ルート「%@」が失敗しました"
+          }
+        }
+      }
+    },
+    "routes.run.failed.exitStatus": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exited with status %lld"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "終了ステータス %lld で終了しました"
+          }
+        }
+      }
+    },
+    "routes.run.failed.timedOut": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timed out after %lld seconds"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 秒でタイムアウトしました"
+          }
+        }
+      }
+    },
+    "routes.run.failed.launch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The command could not start"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コマンドを開始できませんでした"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
