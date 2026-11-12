@@ -65,15 +65,19 @@ enum PaneLaunchdSpawner {
             guard status == 0 else { throw SpawnError.bootstrap(status) }
             bootstrappedLabel = label
             // Each exec of the bundled CLI can take seconds: code-signing checks on first launch,
-            // and over a second apiece on a saturated machine. The leader and its child each get 5 s.
-            guard let root = waitForPID(at: dir.appendingPathComponent("leader"), timeout: 5) else { throw SpawnError.handshake }
+            // and over a second apiece on a saturated machine, such as one restoring many panes right
+            // after a reboot. The leader and its child each get 5 s, extended while the job still runs.
+            let leader = dir.appendingPathComponent("leader")
+            guard let root = waitForPID(at: leader, timeout: 5, extendingWhile: { launchdPID(label: label, scratch: dir) != nil })
+            else { throw SpawnError.handshake }
             // The handshake folder is writable by any same-user process, so trust only the pid launchd reports for this job.
             guard launchdPID(label: label, scratch: dir) == root else { throw SpawnError.handshake }
             TerminalController.registerRevivedRoot(root)
             do {
                 guard watchExit(pid: root, label: label, directory: dir) else { throw SpawnError.handshake }
                 try publishGate(at: dir.appendingPathComponent("prepare"))
-                guard waitForPID(at: dir.appendingPathComponent("ready"), timeout: 5) == root else { throw SpawnError.handshake }
+                guard waitForPID(at: dir.appendingPathComponent("ready"), timeout: 5, extendingWhile: { kill(root, 0) == 0 }) == root
+                else { throw SpawnError.handshake }
                 try publishGate(at: dir.appendingPathComponent("go"))
             } catch {
                 TerminalController.unregisterRevivedRoot(root)
@@ -102,6 +106,14 @@ enum PaneLaunchdSpawner {
             if parts.count == 2, parts[0] == "pid", let pid = Int32(parts[1]) { return pid }
         }
         return nil
+    }
+
+    /// Falling back starts the shell directly on the tty, and a running shell can never move into a job
+    /// afterwards, so a slow but live job is worth waiting for. A job that never started still falls back at `timeout`.
+    private static func waitForPID(at url: URL, timeout: UInt64, extendingWhile running: () -> Bool) -> pid_t? {
+        if let pid = waitForPID(at: url, timeout: timeout) { return pid }
+        guard running() else { return nil }
+        return waitForPID(at: url, timeout: 15)
     }
 
     private static func waitForPID(at url: URL, timeout seconds: UInt64) -> pid_t? {
