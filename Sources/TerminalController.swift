@@ -2374,7 +2374,7 @@ class TerminalController {
     nonisolated func v2UUID(_ params: [String: Any], _ key: String) -> UUID? {
         guard let s = v2String(params, key) else { return nil }
         if let uuid = UUID(uuidString: s) {
-            return uuid
+            return RestoredSessionIdAliases.shared.resolve(uuid)
         }
         return v2ResolveHandleRef(s)
     }
@@ -2394,7 +2394,7 @@ class TerminalController {
         let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         if let uuid = UUID(uuidString: trimmed) {
-            return uuid
+            return RestoredSessionIdAliases.shared.resolve(uuid)
         }
         return v2ResolveHandleRef(trimmed)
     }
