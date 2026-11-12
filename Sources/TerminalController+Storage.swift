@@ -13,7 +13,7 @@ extension TerminalController {
         let settings = StorageSettings.read()
         let openDirectories = v2MainSync { WorktreeStorage.openWorkspaceDirectories() }
         let entries = WorktreeStorage.scanAll(openDirectories: openDirectories, programaDirectory: settings.directory)
-        let policy = WorktreeRemovalPolicy.automatic(gracePeriodHours: settings.autoRemoveAfterHours)
+        let policy = WorktreeRemovalPolicy.manual(gracePeriodHours: settings.autoRemoveAfterHours)
         let now = Date()
 
         var payloads: [[String: Any]] = []
@@ -35,6 +35,7 @@ extension TerminalController {
                 "programa_created": entry.isProgramaCreated,
                 "dirty": v2OrNull(entry.isDirty),
                 "ignored_env_files": v2OrNull(entry.hasIgnoredEnvFiles),
+                "ignored_files": v2OrNull(entry.hasIgnoredFiles),
                 "merged": v2OrNull(entry.isMerged),
                 "open_in_workspace": entry.isOpenInWorkspace,
                 "process_running": entry.isProcessRunningInside,
@@ -79,8 +80,8 @@ extension TerminalController {
         WorktreeStorage.passLock.lock()
         defer { WorktreeStorage.passLock.unlock() }
         let settings = StorageSettings.read()
-        let policy = WorktreeRemovalPolicy(
-            gracePeriod: ignoreGracePeriod ? nil : settings.autoRemoveAfterHours * 3600,
+        let policy = WorktreeRemovalPolicy.manual(
+            gracePeriodHours: ignoreGracePeriod ? nil : settings.autoRemoveAfterHours,
             includeExternal: includeExternal
         )
 

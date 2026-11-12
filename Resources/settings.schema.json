@@ -264,7 +264,7 @@
         "autoRemoveMerged": {
           "type": "boolean",
           "default": true,
-          "description": "Every 6 hours, remove git worktrees under 'directory' whose branch is merged into the remote default branch (or whose upstream branch was deleted), that have no uncommitted or untracked changes, hold no ignored .env* files outside node_modules, are not open in a workspace, have no process running inside, and were not used for 'autoRemoveAfterHours'. Uses 'git worktree remove' without --force and never deletes branches."
+          "description": "Every 6 hours, remove git worktrees under 'directory' whose branch is merged into the remote default branch (or whose upstream branch was deleted), that have no uncommitted or untracked changes, hold no ignored .env* files outside node_modules and no other ignored files outside rebuildable build and dependency folders such as node_modules, build or .venv (for example a .dev.vars, a local database or a nested clone), are not open in a workspace, have no process running inside, and were not used for 'autoRemoveAfterHours'. Uses 'git worktree remove' without --force and never deletes branches."
         },
         "autoRemoveAfterHours": {
           "type": "number",

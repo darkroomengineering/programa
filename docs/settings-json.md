@@ -88,7 +88,7 @@ Native git worktree workflow settings.
 | Key | Type | Default | What it does |
 |---|---|---|---|
 | `directory` | string | `"~/.programa/worktrees"` | Base directory for new git worktrees created via 'programa worktree create' (or the 'worktree.create' socket method) when no explicit --path is given. Worktrees are created under <directory>/<repo-name>/<branch-slug>. |
-| `autoRemoveMerged` | boolean | `true` | Every 6 hours, remove git worktrees under `directory` whose branch is merged into the remote default branch (or whose upstream branch was deleted), that have no uncommitted or untracked changes, hold no ignored `.env*` files outside `node_modules/`, are not open in a workspace, have no process running inside, and were not used for `autoRemoveAfterHours`. Uses `git worktree remove` without `--force` and never deletes branches. See `programa storage`. |
+| `autoRemoveMerged` | boolean | `true` | Every 6 hours, remove git worktrees under `directory` whose branch is merged into the remote default branch (or whose upstream branch was deleted), that have no uncommitted or untracked changes, hold no ignored `.env*` files outside `node_modules/` and no other ignored files outside rebuildable build and dependency folders such as `node_modules/`, `build/` or `.venv/` (for example a `.dev.vars`, a local database or a nested clone), are not open in a workspace, have no process running inside, and were not used for `autoRemoveAfterHours`. Uses `git worktree remove` without `--force` and never deletes branches. See `programa storage`. |
 | `autoRemoveAfterHours` | number | `24` | Hours a merged worktree must go unused before `autoRemoveMerged` removes it. Values below 1 are treated as 1. |
 
 ## `shortcuts`

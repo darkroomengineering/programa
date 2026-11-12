@@ -95,6 +95,12 @@ struct WorktreeRemovalPolicy: Equatable, Sendable {
     static func automatic(gracePeriodHours: Double) -> WorktreeRemovalPolicy {
         WorktreeRemovalPolicy(gracePeriod: gracePeriodHours * 3600, includeExternal: false, keepsIgnoredFiles: true)
     }
+
+    /// The rules `storage.scan` and `storage.clean` report and apply. Keep the scan on this so
+    /// it never calls removable what `storage clean --dry-run` keeps, or the reverse.
+    static func manual(gracePeriodHours: Double?, includeExternal: Bool = false) -> WorktreeRemovalPolicy {
+        WorktreeRemovalPolicy(gracePeriod: gracePeriodHours.map { $0 * 3600 }, includeExternal: includeExternal)
+    }
 }
 
 // MARK: - WorktreeStorage

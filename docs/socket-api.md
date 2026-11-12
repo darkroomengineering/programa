@@ -1022,6 +1022,7 @@ is its `blocker`:
 | `status_unknown` | git could not report the dirty, ignored-file or merged state. |
 | `dirty` | Modified or untracked (not ignored) files. |
 | `env_files` | Ignored `.env*` files outside `node_modules/`, including ones inside an ignored folder such as `build/`. `git worktree remove` deletes ignored files, and these are often the only copy of local secrets. No flag overrides this. |
+| `ignored_files` | Background monitor only: ignored files outside rebuildable build and dependency folders (`node_modules`, `.build`, `build`, `dist`, `.next`, `.nuxt`, `.turbo`, `.cache`, `target`, `Pods`, `DerivedData`, `.gradle`, `coverage`, `__pycache__`, `.venv`, `venv`), such as a `.dev.vars`, a local database or a nested clone. The monitor deletes without asking, so it keeps these. `storage.scan` and `storage.clean` never return it, because a manual clean previews what it removes. |
 | `not_merged` | Not merged by the rule above. |
 | `open_in_workspace` | A workspace or panel directory is the worktree or inside it. |
 | `process_running` | A process's current directory is the worktree or inside it. |
@@ -1029,15 +1030,19 @@ is its `blocker`:
 
 Removal is `git worktree remove` without `--force`; branches are never deleted. The background
 monitor applies the same rules every 6 hours when `worktrees.autoRemoveMerged` is on (default),
-never to external worktrees.
+never to external worktrees, and also keeps worktrees with `ignored_files`.
 
 ### `storage.scan`
 
 `{}` -> `{"worktrees": [{"repo_root", "path", "branch", "size_bytes", "size_partial",
-"last_modified", "programa_created", "dirty", "ignored_env_files", "merged", "open_in_workspace", "process_running",
-"removable", "blocker"}], "total_bytes", "reclaimable_bytes"}`. `removable`/`blocker` use the
-automatic rules (external worktrees excluded, grace period applied). `last_modified` is ISO 8601
-or `null`; `branch`, `dirty`, `ignored_env_files`, `merged` and `blocker` may be `null`.
+"last_modified", "programa_created", "dirty", "ignored_env_files", "ignored_files", "merged",
+"open_in_workspace", "process_running", "removable", "blocker"}], "total_bytes", "reclaimable_bytes"}`.
+`removable`/`blocker` use the `storage.clean` rules with its default params (external worktrees
+excluded, grace period applied), so a worktree the scan calls removable is one
+`storage.clean` with `dry_run` lists. `ignored_files` reports ignored files outside rebuildable
+folders; only the background monitor keeps a worktree for them. `last_modified` is ISO 8601 or
+`null`; `branch`, `dirty`, `ignored_env_files`, `ignored_files`, `merged` and `blocker` may be
+`null`.
 
 The result also includes `caches`, an array of `{"id", "category", "title", "path", "size_bytes",
 "size_partial", "last_used", "auto_cleanable", "blocker"}`. Categories are `xcode`, `android`

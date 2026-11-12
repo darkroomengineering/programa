@@ -2739,7 +2739,7 @@
     "storage.scan": {
       "auth_required": true,
       "debug_only": false,
-      "description": "Git worktree and developer cache disk usage, safety blockers, automatic cleanup eligibility, and per-category cache totals. (scan).",
+      "description": "Git worktree and developer cache disk usage, safety facts (including ignored_env_files and ignored_files per worktree), removability under the storage.clean rules, cache automatic cleanup eligibility, and per-category cache totals. (scan).",
       "errors": [],
       "focus_intent": false,
       "handler": "v2StorageScan",
