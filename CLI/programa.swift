@@ -821,11 +821,10 @@ struct ProgramaCLI {
         guard let surfaces = listed["surfaces"] as? [[String: Any]] else {
             throw CLIError(message: "Invalid surface.list response: missing surfaces")
         }
-        if let expectedWorkspace = workspaceHandle.flatMap(UUID.init(uuidString:)),
-           let returnedWorkspace = listed["workspace_id"] as? String,
-           UUID(uuidString: returnedWorkspace) != expectedWorkspace {
-            throw CLIError(message: "Invalid surface.list response: workspace mismatch")
-        }
+        let listedWorkspace = (listed["workspace_id"] as? String).flatMap(UUID.init(uuidString:))
+        let workspaceMoved = workspaceHandle.flatMap(UUID.init(uuidString:)).map { expected in
+            listed["workspace_id"] is String && listedWorkspace != expected
+        } ?? false
         let originUUID = UUID(uuidString: origin)
         var resolvedOrigin: String?
         for surface in surfaces {
@@ -842,10 +841,24 @@ struct ProgramaCLI {
                 resolvedOrigin = id
             }
         }
+        if let resolvedOrigin, !workspaceMoved { return resolvedOrigin }
+        guard workspaceMoved || originUUID != nil else { return nil }
+        // A shell reattached after a relaunch keeps the ids it was spawned with. The server maps
+        // them to its restored pane (and lists that pane's live workspace), so ask the server to
+        // resolve the origin rather than comparing raw UUIDs against the listing.
+        let identified = try client.sendV2(
+            method: V2MethodNames.systemIdentify,
+            params: ["caller": params.merging(["surface_id": origin]) { _, new in new }]
+        )
+        let caller = identified["caller"] as? [String: Any]
+        if workspaceMoved, listedWorkspace == nil
+            || (caller?["workspace_id"] as? String).flatMap(UUID.init(uuidString:)) != listedWorkspace {
+            throw CLIError(message: "Invalid surface.list response: workspace mismatch")
+        }
         // Only a missing/foreign origin falls back to the workspace's focused
         // surface. A validated origin is pinned to its UUID for this command;
         // a later server error must never retry against a different panel.
-        return resolvedOrigin
+        return caller?["surface_id"] as? String
     }
 
     private func canonicalSurfaceHandleFromTabInput(_ value: String) -> String {

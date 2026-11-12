@@ -1556,7 +1556,7 @@ extension TerminalController {
             return tabManager.tabs.first(where: { $0.id == selected })
         }
 
-        if let uuid = UUID(uuidString: trimmed) {
+        if let uuid = UUID(uuidString: trimmed).map({ RestoredSessionIdAliases.shared.resolve($0) }) {
             return tabManager.tabs.first(where: { $0.id == uuid })
         }
 
@@ -1592,7 +1592,7 @@ extension TerminalController {
     }
 
     private func resolveSurfaceId(from arg: String, tab: Workspace) -> UUID? {
-        if let uuid = UUID(uuidString: arg), tab.panels[uuid] != nil {
+        if let uuid = UUID(uuidString: arg).map({ RestoredSessionIdAliases.shared.resolve($0) }), tab.panels[uuid] != nil {
             return uuid
         }
 
