@@ -247,13 +247,14 @@ is `contracts/v2/methods.json`.
 System:
 - ping -> `system.ping` (liveness; the CLI's `ping` subcommand calls this and prints "PONG" on success)
 - `system.identify` (params: `caller`, `surface_id`, `tab_id`, `window_id`, `workspace_id`). The result's `build` object carries the `commit` and the `source_fingerprint` the app was built from; `scripts/source-fingerprint.sh` prints the same hash for a checkout.
+- `system.tree` (params: `all_windows`, `caller`, `window_id`, `workspace_id`). `window_id` lists that window and reports its focus in `active`, without selecting or raising it.
 - `settings.open` (params: `activate`, `target`)
 - `feedback.open` (params: `activate`, `window_id`, `workspace_id`)
 - `feedback.submit` (no params in the contract)
 
 Windows:
 - list_windows -> `window.list`
-- current_window -> `window.current`
+- current_window -> `window.current` (params: `window_id`; with it, answers for that window instead of the current one)
 - focus_window -> `window.focus`
 - new_window -> `window.create`
 - close_window -> `window.close`
