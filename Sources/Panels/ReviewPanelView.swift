@@ -301,7 +301,9 @@ struct ReviewPanelView: View {
                 emptyStateView
                     .padding(24)
                 Spacer(minLength: 0)
-            } else if isVisibleInUI {
+            } else {
+                // Mounted while the tab is hidden too (Bonsplit keeps every tab's view), so
+                // switching tabs keeps the page and its scroll position instead of reloading.
                 ReviewDiffWebView(
                     patch: panel.viewerPatch,
                     files: panel.files,
@@ -318,8 +320,6 @@ struct ReviewPanelView: View {
                     isComposerFocused = true
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                Spacer(minLength: 0)
             }
 
             if let composer {
