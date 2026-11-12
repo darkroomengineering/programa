@@ -2350,13 +2350,22 @@ extension ProgramaCLI {
           const enqueue = (task) => (queue = queue.then(task).catch(() => {}))
           const call = (event, sessionID) =>
             runHook(sessionID ? [event, "--cwd", directory, "--session", sessionID] : [event, "--cwd", directory])
+          // A failed lookup is not cached and resolves to UNKNOWN, which is truthy, so an unresolved
+          // session is never reported as a root.
+          const UNKNOWN = Symbol("unknown")
           const parentOf = (sessionID) => {
             if (!parents.has(sessionID)) {
               parents.set(
                 sessionID,
                 Promise.resolve()
                   .then(() => lookupParentID(sessionID))
-                  .then((parentID) => parentID || undefined, () => undefined),
+                  .then(
+                    (parentID) => parentID || undefined,
+                    () => {
+                      parents.delete(sessionID)
+                      return UNKNOWN
+                    },
+                  ),
               )
             }
             return parents.get(sessionID)
@@ -2365,6 +2374,7 @@ extension ProgramaCLI {
             let id = sessionID
             for (let depth = 0; depth < 16; depth++) {
               const parentID = await parentOf(id)
+              if (parentID === UNKNOWN) return undefined
               if (!parentID) break
               id = parentID
             }
