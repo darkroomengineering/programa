@@ -10,6 +10,7 @@ ENCLOSURE_MODULE="${SCRIPT_DIR}/sparkle_enclosure.js"
 ENCLOSURE_KEEP_BUILDS="${ROLLING_ENCLOSURE_KEEP_BUILDS:-}"
 # Candidate drafts kept as private rollback archives (each holds that build's dSYMs).
 CANDIDATE_KEEP_COUNT="${ROLLING_CANDIDATE_KEEP_COUNT:-5}"
+CHANGELOG_FILE="${ROLLING_CHANGELOG_FILE:-${SCRIPT_DIR}/../CHANGELOG.md}"
 GH_BIN="${GH_BIN:-gh}"
 REPOSITORY="${GITHUB_REPOSITORY:-}"
 CANDIDATE_PREFIX=""
@@ -725,6 +726,24 @@ if (hadRolling === "true") {
 }
 fs.writeFileSync(destinationPath, notes);
 NODE
+  # Every ship's patch is the CI run number, so no CHANGELOG.md section names it exactly: the
+  # newest section with the same major.minor goes above the generated notes. A missing file
+  # or section keeps the generated notes alone and never fails the release.
+  CHANGELOG_SECTION="${TEMP_DIR}/changelog-section.md"
+  if [[ -f "${CHANGELOG_FILE}" ]] && awk -v prefix="[${SELECTED_VERSION%.*}." '
+      /^## / { if (found) exit; found = index($2, prefix) == 1 }
+      found {
+        sub(/[ \t\r]+$/, "")
+        if ($0 == "") { blanks++; next }
+        for (; blanks > 0; blanks--) print ""
+        print
+      }
+    ' "${CHANGELOG_FILE}" > "${CHANGELOG_SECTION}" 2>/dev/null && \
+    grep -q -v '^## ' "${CHANGELOG_SECTION}"; then
+    printf '\n' >> "${CHANGELOG_SECTION}"
+    cat "${NOTES_FILE}" >> "${CHANGELOG_SECTION}"
+    mv "${CHANGELOG_SECTION}" "${NOTES_FILE}"
+  fi
 fi
 
 if [[ "${PRESERVE_PUBLISHED_METADATA}" != "true" ]]; then
