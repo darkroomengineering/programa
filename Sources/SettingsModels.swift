@@ -177,6 +177,19 @@ enum CommandPaletteSwitcherSearchSettings {
 
 }
 
+/// `app.reviewDiffRenderer`: which view draws the Review panel's diff body.
+enum ReviewDiffRendererSettings {
+    enum Renderer: String {
+        /// `@pierre/diffs` in a web view (`ReviewDiffWebView`).
+        case pierre
+        /// The SwiftUI row list in `ReviewPanelView`.
+        case native
+    }
+
+    static let rendererKey = "reviewDiffRenderer"
+    static let defaultRenderer = Renderer.pierre
+}
+
 enum ClaudeCodeIntegrationSettings {
     static let hooksEnabledKey = "claudeCodeHooksEnabled"
     static let defaultHooksEnabled = true

@@ -25,6 +25,7 @@ General app preferences from Settings > App.
 | `autoResumeAgents` | boolean | `true` | Resume Claude Code, Codex and OpenCode sessions that were running at quit when their pane is restored. |
 | `reapLeftoverAgentProcesses` | boolean | `true` | When a Claude Code session exits, stop the processes it started and left running (MCP servers, dev servers, debug binaries). Processes started with `nohup` are kept. See [Processes an agent leaves behind](workspace-interface.md#processes-an-agent-leaves-behind). |
 | `commandPaletteSearchesAllSurfaces` | boolean | `false` | Search every surface in the command palette switcher instead of only the active workspace. |
+| `reviewDiffRenderer` | string | `"pierre"` | How the Review panel draws diffs. One of: `pierre` (split view with syntax colors and word-level changes, drawn in a web view), `native` (the plain built-in list, which uses less memory on very large diffs). |
 
 ## `notifications`
 

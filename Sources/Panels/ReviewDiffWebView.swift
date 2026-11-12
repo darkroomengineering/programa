@@ -16,12 +16,12 @@ enum ReviewDiffViewerStyle: String {
     case unified
 }
 
-/// Debug spike (INC-392): renders the review diff with `@pierre/diffs` in a WKWebView. The
-/// bundle in `Resources/review-diff-viewer` (built by `scripts/build-review-diff-viewer.sh`)
-/// is served from the `programa-review` scheme because ES module workers and dynamic imports
-/// need a real origin. The page pulls the patch from `/patch` and posts `selectLines` back.
+/// Renders the review diff with `@pierre/diffs` in a WKWebView (the default Review panel
+/// renderer, see `ReviewDiffRendererSettings`). The bundle in `Resources/review-diff-viewer`
+/// (built by `scripts/build-review-diff-viewer.sh`) is served from the `programa-review` scheme
+/// because ES module workers and dynamic imports need a real origin. The page pulls the patch
+/// from `/patch` and the not-diffable labels from `/notices`, and posts `selectLines` back.
 struct ReviewDiffWebView: NSViewRepresentable {
-    static let debugToggleKey = "debugReviewPierreDiffs"
     static let scheme = "programa-review"
     fileprivate static let messageHandlerName = "programaReview"
 

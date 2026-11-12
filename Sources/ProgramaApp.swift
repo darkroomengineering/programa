@@ -77,7 +77,6 @@ struct programaApp: App {
     private let primaryWindowId = UUID()
     @AppStorage(AppearanceSettings.appearanceModeKey) private var appearanceMode = AppearanceSettings.defaultMode.rawValue
     @AppStorage(ShortcutHintDebugSettings.alwaysShowHintsKey) private var alwaysShowShortcutHints = ShortcutHintDebugSettings.defaultAlwaysShowHints
-    @AppStorage(ReviewDiffWebView.debugToggleKey) private var debugReviewPierreDiffs = false
     @AppStorage(DevBuildBannerDebugSettings.sidebarBannerVisibleKey)
     private var showSidebarDevBuildBanner = DevBuildBannerDebugSettings.defaultShowSidebarBanner
     @AppStorage(SocketControlSettings.appStorageKey) private var socketControlMode = SocketControlSettings.defaultMode.rawValue
@@ -428,10 +427,6 @@ struct programaApp: App {
                 }
 
                 Toggle(String(localized: "debug.shortcutHints.alwaysShow", defaultValue: "Always Show Shortcut Hints"), isOn: $alwaysShowShortcutHints)
-                Toggle(
-                    String(localized: "debug.review.pierreDiffs", defaultValue: "Render Review Diffs with Pierre"),
-                    isOn: $debugReviewPierreDiffs
-                )
                 Toggle(
                     String(localized: "debug.devBuildBanner.show", defaultValue: "Show Dev Build Banner"),
                     isOn: $showSidebarDevBuildBanner
