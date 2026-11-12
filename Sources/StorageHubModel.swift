@@ -135,7 +135,7 @@ final class StorageHubModel: ObservableObject {
     private let queue = DispatchQueue(label: "com.darkroom.programa.storage-hub", qos: .utility)
     // Separate from `queue` so slow session measuring never delays scans or cleans.
     private let liveSessionQueue = DispatchQueue(label: "com.darkroom.programa.storage-hub.live-sessions", qos: .utility)
-    nonisolated private static let manualPolicy = WorktreeRemovalPolicy(gracePeriod: nil, includeExternal: false)
+    nonisolated private static let manualPolicy = WorktreeRemovalPolicy.manual(gracePeriodHours: nil)
 
     var cachedReclaimableBytes: Int64? { snapshot?.reclaimableBytes }
 

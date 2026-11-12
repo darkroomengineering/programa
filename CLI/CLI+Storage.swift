@@ -205,6 +205,7 @@ extension ProgramaCLI {
         case "status_unknown": return "git status unknown"
         case "dirty": return "uncommitted changes"
         case "env_files": return "ignored env files"
+        case "ignored_files": return "ignored local files"
         case "not_merged": return "not merged"
         case "open_in_workspace": return "open in a workspace"
         case "process_running": return "process running inside"

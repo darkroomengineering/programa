@@ -484,6 +484,10 @@ final class WorktreeStorageTests: XCTestCase {
         XCTAssertEqual(scanned.hasIgnoredFiles, true)
         XCTAssertEqual(scanned.removalBlocker(policy: automatic, now: later), .ignoredFiles)
         XCTAssertNil(scanned.removalBlocker(policy: noGrace, now: later))
+        XCTAssertNil(
+            scanned.removalBlocker(policy: .manual(gracePeriodHours: 24), now: later),
+            "storage.scan and storage.clean agree that a manual clean may remove it"
+        )
 
         let outcome = clean(entries, policy: automatic, now: later)
         XCTAssertTrue(outcome.removed.isEmpty, "removed: \(outcome.removed.map(\.path))")
