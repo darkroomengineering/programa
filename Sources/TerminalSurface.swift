@@ -1942,6 +1942,32 @@ final class TerminalSurface: Identifiable, ObservableObject {
         )
     }
 
+    /// `SessionEscrowClient`'s resend hook: a replacement holder knows none of
+    /// the sessions the dead one held, so every still-open surface among
+    /// `surfaceIds` escrows a fresh duplicate of its master again. Surfaces
+    /// already torn down are skipped.
+    nonisolated static func reescrowLiveSurfacesAfterHolderLoss(_ surfaceIds: Set<String>) {
+        DispatchQueue.main.async {
+            for surface in TerminalSurfaceRegistry.shared.allSurfaces()
+            where surfaceIds.contains(surface.id.uuidString) {
+                surface.reescrowAfterHolderLoss()
+            }
+        }
+    }
+
+    /// Re-runs the escrow this surface already did once, from whichever master
+    /// it still owns: the runtime surface's, or an unconsumed revive descriptor's.
+    private func reescrowAfterHolderLoss() {
+        guard hasAttemptedSessionEscrow else { return }
+        if let surface {
+            guard let childPID = SessionWALStore.resolveSurfaceIdentity(surface: surface).childPID else { return }
+            attemptSessionEscrow(surface: surface, surfaceId: id.uuidString, childPID: childPID)
+        } else if let reviveDescriptor {
+            hasAttemptedSessionEscrow = false
+            escrowRevivedDescriptorImmediately(reviveDescriptor)
+        }
+    }
+
     /// Escrows a revive descriptor's master fd at panel construction, before any
     /// runtime surface exists. Sets `hasAttemptedSessionEscrow` first so the
     /// identity retry loop (`resolveSessionWALIdentity`, run at realization)

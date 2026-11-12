@@ -11,7 +11,9 @@ import Bonsplit
 /// is confined to `queue`, off-main. See the file-level doc comment for
 /// the full protocol/degradation contract.
 final class SessionEscrowClient {
-    static let shared = SessionEscrowClient()
+    static let shared = SessionEscrowClient(
+        resendLiveSessions: TerminalSurface.reescrowLiveSurfacesAfterHolderLoss
+    )
 
     /// Returned to the caller on a successful escrow so it can be recorded
     /// in `meta.json` (`SessionWALStore.markEscrowed`).
@@ -20,16 +22,70 @@ final class SessionEscrowClient {
         let socketPath: String
     }
 
-    private let queue = DispatchQueue(label: "com.darkroom.programa.session-escrow-client", qos: .utility)
-    private var connectionFD: Int32?
-    private var heartbeatTimer: DispatchSourceTimer?
-    // A successful send can transfer the descriptor before its acknowledgement
-    // arrives. Keep the release capability independently from durable success.
-    private var sentClaimsBySurfaceId: [String: String] = [:]
-    private var acknowledgementBuffer = Data()
-    private lazy var socketPath = Self.escrowSocketPath()
+    /// The persistent holder connection's lifecycle. Claims live on the
+    /// connection because only the holder that received them knows them: a
+    /// replacement holder starts empty.
+    private enum ConnectionState {
+        case disconnected
+        case connected(HolderConnection)
+        /// The holder went away while holding these surfaces' masters, which
+        /// the app still owns. Never empty; re-escrowed once a holder answers.
+        case holderLost(unsentSurfaceIds: Set<String>)
+    }
 
-    private init() {}
+    private final class HolderConnection {
+        let fd: Int32
+        let heartbeat: DispatchSourceTimer
+        let connectedAtSystemUptime = ProcessInfo.processInfo.systemUptime
+        // A successful send can transfer the descriptor before its acknowledgement
+        // arrives. Keep the release capability independently from durable success.
+        var claimsBySurfaceId: [String: String] = [:]
+        /// Surfaces a lost holder held that this connection has not received
+        /// yet. Carried to the next holder if this one is lost too.
+        var pendingResendSurfaceIds: Set<String> = []
+        var acknowledgementBuffer = Data()
+
+        init(fd: Int32, heartbeat: DispatchSourceTimer) {
+            self.fd = fd
+            self.heartbeat = heartbeat
+        }
+    }
+
+    private let queue = DispatchQueue(label: "com.darkroom.programa.session-escrow-client", qos: .utility)
+    private var state = ConnectionState.disconnected
+    private lazy var socketPath = socketPathProvider()
+
+    private let isEnabled: Bool
+    private let heartbeatInterval: TimeInterval
+    private let socketPathProvider: () -> String
+    private let connectToHolder: (String) -> Int32?
+    /// Asked to re-escrow the given surfaces once a replacement holder
+    /// answers. Called on `queue`; must not block it, and must re-escrow
+    /// through `escrow` with a fresh duplicate of each still-live master.
+    private let resendLiveSessions: (Set<String>) -> Void
+
+    /// Tests inject a transport and a resend hook; `shared` uses the real
+    /// holder and stays disabled under XCTest.
+    init(
+        isEnabled: Bool = !SessionMachineryGate.isUnitTesting,
+        heartbeatInterval: TimeInterval = SessionEscrowPolicy.heartbeatInterval,
+        socketPath: @escaping () -> String = { SessionEscrowClient.escrowSocketPath() },
+        connectToHolder: @escaping (String) -> Int32? = SessionEscrowClient.connectSpawningHolderIfNeeded,
+        resendLiveSessions: @escaping (Set<String>) -> Void
+    ) {
+        self.isEnabled = isEnabled
+        self.heartbeatInterval = heartbeatInterval
+        self.socketPathProvider = socketPath
+        self.connectToHolder = connectToHolder
+        self.resendLiveSessions = resendLiveSessions
+    }
+
+    deinit {
+        if case .connected(let connection) = state {
+            connection.heartbeat.cancel()
+            close(connection.fd)
+        }
+    }
 
     /// Escrows one surface's already-dup'd master fd. `dupedMasterFD` is
     /// ALWAYS closed by this method (success or failure) -- callers must
@@ -43,7 +99,7 @@ final class SessionEscrowClient {
         childPID: Int32,
         completion: @escaping (Result?) -> Void
     ) {
-        guard !SessionMachineryGate.isUnitTesting else {
+        guard isEnabled else {
             close(dupedMasterFD)
             completion(nil)
             return
@@ -57,20 +113,21 @@ final class SessionEscrowClient {
             }
             defer { close(dupedMasterFD) }
 
-            guard self.sentClaimsBySurfaceId[surfaceId] == nil else {
-                #if DEBUG
-                dlog("session.escrow.client.skip surface=\(surfaceId.prefix(8)) reason=already_escrowed")
-                #endif
-                completion(nil)
-                return
-            }
-            guard let fd = self.ensureConnection() else {
+            guard let connection = self.ensureConnection() else {
                 #if DEBUG
                 dlog("session.escrow.client.fail surface=\(surfaceId.prefix(8)) reason=no_connection")
                 #endif
                 completion(nil)
                 return
             }
+            guard connection.claimsBySurfaceId[surfaceId] == nil else {
+                #if DEBUG
+                dlog("session.escrow.client.skip surface=\(surfaceId.prefix(8)) reason=already_escrowed")
+                #endif
+                completion(nil)
+                return
+            }
+            let fd = connection.fd
 
             var token = [UInt8](repeating: 0, count: EscrowWireFormat.tokenSize)
             let randomStatus = token.withUnsafeMutableBytes { buffer -> Int32 in
@@ -92,16 +149,15 @@ final class SessionEscrowClient {
                 #if DEBUG
                 dlog("session.escrow.client.fail surface=\(surfaceId.prefix(8)) reason=send errno=\(errno)")
                 #endif
-                self.teardownConnection()
+                self.connectionLost(reason: "send")
                 completion(nil)
                 return
             }
-            self.sentClaimsBySurfaceId[surfaceId] = tokenHex
-            var buffer = self.acknowledgementBuffer
+            connection.claimsBySurfaceId[surfaceId] = tokenHex
+            connection.pendingResendSurfaceIds.remove(surfaceId)
             let acknowledged = Self.receiveEscrowAcknowledgement(
-                over: fd, sessionId: surfaceId, buffer: &buffer
+                over: fd, sessionId: surfaceId, buffer: &connection.acknowledgementBuffer
             )
-            self.acknowledgementBuffer = buffer
             guard acknowledged else {
                 // The holder may already own the duplicate. Keep heartbeats
                 // alive so uncertainty does not start a second PTY reader.
@@ -125,23 +181,30 @@ final class SessionEscrowClient {
     /// Callers must only use this once the close is final (past the undo
     /// grace period) and never during app termination.
     func release(surfaceId: String) {
-        guard !SessionMachineryGate.isUnitTesting else { return }
+        guard isEnabled else { return }
         queue.async { [weak self] in
             guard let self else { return }
-            // Nothing to release if we never escrowed it, and dropping the id
-            // here keeps a later re-escrow of the same surface id working.
-            guard let tokenHex = self.sentClaimsBySurfaceId[surfaceId] else { return }
-            guard let token = Self.tokenBytes(fromHex: tokenHex),
-                  let frame = EscrowWireFormat.encodeReleaseFrame(sessionId: surfaceId, token: token) else {
-                return
-            }
             // Deliberately does NOT open a connection: if we have none, the
             // holder either never got this session or is already gone.
-            guard let fd = self.connectionFD else { return }
-            if UnixDomainFDPassing.send(fd: nil, payload: frame, over: fd) {
-                self.sentClaimsBySurfaceId.removeValue(forKey: surfaceId)
-            } else {
-                self.teardownConnection()
+            switch self.state {
+            case .disconnected:
+                return
+            case .holderLost(var unsentSurfaceIds):
+                // A pane closed for good must not be handed to the next holder.
+                unsentSurfaceIds.remove(surfaceId)
+                self.state = unsentSurfaceIds.isEmpty ? .disconnected : .holderLost(unsentSurfaceIds: unsentSurfaceIds)
+            case .connected(let connection):
+                connection.pendingResendSurfaceIds.remove(surfaceId)
+                // Nothing to release if we never escrowed it, and dropping the id
+                // here keeps a later re-escrow of the same surface id working.
+                guard let tokenHex = connection.claimsBySurfaceId.removeValue(forKey: surfaceId),
+                      let token = Self.tokenBytes(fromHex: tokenHex),
+                      let frame = EscrowWireFormat.encodeReleaseFrame(sessionId: surfaceId, token: token) else {
+                    return
+                }
+                if !UnixDomainFDPassing.send(fd: nil, payload: frame, over: connection.fd) {
+                    self.connectionLost(reason: "release")
+                }
             }
         }
     }
@@ -161,17 +224,54 @@ final class SessionEscrowClient {
     }
 
     /// `queue`-confined. Returns the existing connection if live, otherwise
-    /// attempts to connect, spawning the holder once (on the first failed
-    /// attempt only) if nothing answers. Bounded by
+    /// attempts to connect through `connectToHolder`. Reconnecting after a
+    /// holder loss asks `resendLiveSessions` to re-escrow the lost surfaces.
+    private func ensureConnection() -> HolderConnection? {
+        let unsentSurfaceIds: Set<String>
+        switch state {
+        case .connected(let connection): return connection
+        case .disconnected: unsentSurfaceIds = []
+        case .holderLost(let surfaceIds): unsentSurfaceIds = surfaceIds
+        }
+        guard let fd = connectToHolder(socketPath) else { return nil }
+        let connection = HolderConnection(fd: fd, heartbeat: makeHeartbeat(fd: fd))
+        connection.pendingResendSurfaceIds = unsentSurfaceIds
+        state = .connected(connection)
+        if !unsentSurfaceIds.isEmpty {
+            dilog("escrow.client", "holder_reconnected resending=\(unsentSurfaceIds.count) connFD=\(fd)")
+            resendLiveSessions(unsentSurfaceIds)
+        }
+        return connection
+    }
+
+    /// `queue`-confined. The only way out of `.connected`: closes the socket
+    /// and keeps the claimed surfaces for the next holder. A holder that dies
+    /// soon after accepting does not reconnect here, or one that dies on every
+    /// escrow would respawn forever; the next `escrow` or wake retries instead.
+    private func connectionLost(reason: String) {
+        guard case .connected(let connection) = state else { return }
+        connection.heartbeat.cancel()
+        close(connection.fd)
+        let unsentSurfaceIds = Set(connection.claimsBySurfaceId.keys).union(connection.pendingResendSurfaceIds)
+        guard !unsentSurfaceIds.isEmpty else {
+            state = .disconnected
+            return
+        }
+        state = .holderLost(unsentSurfaceIds: unsentSurfaceIds)
+        let age = ProcessInfo.processInfo.systemUptime - connection.connectedAtSystemUptime
+        dilog("escrow.client", "holder_lost reason=\(reason) sessions=\(unsentSurfaceIds.count) connectionAge=\(Int(age))")
+        guard age >= SessionEscrowPolicy.holderLossAutoReconnectMinimumAge else { return }
+        queue.async { [weak self] in _ = self?.ensureConnection() }
+    }
+
+    /// Connects to the holder at `socketPath`, spawning it once (on the
+    /// first failed attempt only) if nothing answers. Bounded by
     /// `SessionEscrowPolicy.connectRetryCount` short retries; never
     /// blocks indefinitely.
-    private func ensureConnection() -> Int32? {
-        if let connectionFD { return connectionFD }
+    static func connectSpawningHolderIfNeeded(socketPath: String) -> Int32? {
         var spawnedHolder = false
         for attempt in 0..<SessionEscrowPolicy.connectRetryCount {
             if let fd = UnixDomainFDPassing.connect(to: socketPath) {
-                connectionFD = fd
-                startHeartbeat(fd: fd)
                 #if DEBUG
                 dlog("session.escrow.client.connected attempt=\(attempt) socket=\(socketPath)")
                 #endif
@@ -179,7 +279,7 @@ final class SessionEscrowClient {
             }
             if !spawnedHolder {
                 spawnedHolder = true
-                Self.spawnHolderIfNeeded(socketPath: socketPath)
+                spawnHolderIfNeeded(socketPath: socketPath)
             }
             if attempt < SessionEscrowPolicy.connectRetryCount - 1 {
                 Thread.sleep(forTimeInterval: SessionEscrowPolicy.connectRetryDelay)
@@ -191,32 +291,21 @@ final class SessionEscrowClient {
         return nil
     }
 
-    private func startHeartbeat(fd: Int32) {
-        heartbeatTimer?.cancel()
+    private func makeHeartbeat(fd: Int32) -> DispatchSourceTimer {
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(
-            deadline: .now() + SessionEscrowPolicy.heartbeatInterval,
-            repeating: SessionEscrowPolicy.heartbeatInterval,
+            deadline: .now() + heartbeatInterval,
+            repeating: heartbeatInterval,
             leeway: .milliseconds(500)
         )
         timer.setEventHandler { [weak self] in
-            guard let self, let fd = self.connectionFD else { return }
+            guard let self, case .connected(let connection) = self.state, connection.fd == fd else { return }
             if !UnixDomainFDPassing.send(fd: nil, payload: EscrowWireFormat.heartbeatFrame(), over: fd) {
-                self.teardownConnection()
+                self.connectionLost(reason: "heartbeat")
             }
         }
         timer.resume()
-        heartbeatTimer = timer
-    }
-
-    private func teardownConnection() {
-        heartbeatTimer?.cancel()
-        heartbeatTimer = nil
-        if let connectionFD {
-            close(connectionFD)
-        }
-        connectionFD = nil
-        acknowledgementBuffer.removeAll(keepingCapacity: true)
+        return timer
     }
 
     /// Called from `AppDelegate`'s `NSWorkspace.didWakeNotification` handler.
@@ -224,22 +313,28 @@ final class SessionEscrowClient {
     /// `heartbeatInterval` tick, so the holder's `lastActivity` (now measured
     /// with `ProcessInfo.systemUptime`, see `serve`) is refreshed as soon as
     /// possible after wake rather than up to `heartbeatInterval` seconds
-    /// later. A dead/closed connection is torn down here so the next
-    /// `escrow`/`release` call reconnects rather than repeatedly failing to
-    /// write to a stale fd. Never blocks the caller (main actor): the send
-    /// itself is dispatched onto `queue`.
+    /// later. A dead/closed connection is torn down here, and a lost holder
+    /// is replaced so its surfaces are re-escrowed. Never blocks the caller
+    /// (main actor): the work itself is dispatched onto `queue`.
     func notifySystemDidWake() {
-        guard !SessionMachineryGate.isUnitTesting else { return }
+        guard isEnabled else { return }
         queue.async { [weak self] in
-            guard let self, let fd = self.connectionFD else {
+            guard let self else { return }
+            if case .connected(let connection) = self.state {
+                let fd = connection.fd
+                if UnixDomainFDPassing.send(fd: nil, payload: EscrowWireFormat.heartbeatFrame(), over: fd) {
+                    dilog("escrow.client", "wake heartbeat=sent connFD=\(fd)")
+                    return
+                }
+                dilog("escrow.client", "wake heartbeat=failed connFD=\(fd) errno=\(errno) -- tearing down for reconnect")
+                self.connectionLost(reason: "wake")
+            }
+            guard case .holderLost = self.state else {
                 dilog("escrow.client", "wake reconnect=skipped reason=no_connection")
                 return
             }
-            if UnixDomainFDPassing.send(fd: nil, payload: EscrowWireFormat.heartbeatFrame(), over: fd) {
-                dilog("escrow.client", "wake heartbeat=sent connFD=\(fd)")
-            } else {
-                dilog("escrow.client", "wake heartbeat=failed connFD=\(fd) errno=\(errno) -- tearing down for reconnect")
-                self.teardownConnection()
+            if self.ensureConnection() == nil {
+                dilog("escrow.client", "wake reconnect=failed")
             }
         }
     }
