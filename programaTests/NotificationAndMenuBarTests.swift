@@ -1077,6 +1077,88 @@ final class TerminalControllerNotificationTitleTests: XCTestCase {
     }
 }
 
+/// A shell reattached after a relaunch keeps the surface and workspace ids it was spawned with,
+/// and the CLI sends those env ids as-is, so socket handlers must resolve them to the live panel.
+@MainActor
+final class TerminalControllerReattachedShellIdTests: XCTestCase {
+    private func withRestoredPane(
+        _ body: (_ workspace: Workspace, _ panelId: UUID, _ oldSurface: UUID, _ oldWorkspace: UUID) -> Void
+    ) {
+        let manager = TabManager()
+        let store = TerminalNotificationStore.shared
+        let originalTabManager = TerminalController.shared.tabManager
+
+        store.replaceNotificationsForTesting([])
+        store.configureNotificationDeliveryHandlerForTesting { _, _ in }
+        TerminalController.shared.tabManager = manager
+
+        defer {
+            store.replaceNotificationsForTesting([])
+            store.resetNotificationDeliveryHandlerForTesting()
+            TerminalController.shared.tabManager = originalTabManager
+        }
+
+        guard let workspace = manager.selectedWorkspace,
+              let panelId = workspace.focusedPanelId else {
+            XCTFail("Expected selected workspace with a focused panel")
+            return
+        }
+
+        let oldSurface = UUID(), oldWorkspace = UUID()
+        RestoredSessionIdAliases.shared.registerReattach(
+            .init(surfaceId: oldSurface, workspaceId: oldWorkspace),
+            panelId: panelId,
+            workspaceId: workspace.id
+        )
+        body(workspace, panelId, oldSurface, oldWorkspace)
+    }
+
+    func testNotificationCreateForTargetResolvesReattachedShellIds() {
+        withRestoredPane { workspace, panelId, oldSurface, oldWorkspace in
+            let result = TerminalController.shared.v2NotificationCreateForTarget(params: [
+                "workspace_id": oldWorkspace.uuidString,
+                "surface_id": oldSurface.uuidString,
+                "title": "Waiting for input"
+            ])
+
+            guard case .ok = result else {
+                XCTFail("Expected the reattached shell's ids to reach its restored panel, got \(result)")
+                return
+            }
+            XCTAssertEqual(TerminalNotificationStore.shared.notifications.first?.tabId, workspace.id)
+            XCTAssertEqual(TerminalNotificationStore.shared.notifications.first?.surfaceId, panelId)
+        }
+    }
+
+    func testNotificationCreateForSurfaceResolvesReattachedSurfaceId() {
+        withRestoredPane { workspace, panelId, oldSurface, _ in
+            let result = TerminalController.shared.v2NotificationCreateForSurface(params: [
+                "surface_id": oldSurface.uuidString,
+                "title": "Done"
+            ])
+
+            guard case .ok = result else {
+                XCTFail("Expected the reattached shell's surface id to reach its restored panel, got \(result)")
+                return
+            }
+            XCTAssertEqual(TerminalNotificationStore.shared.notifications.first?.tabId, workspace.id)
+            XCTAssertEqual(TerminalNotificationStore.shared.notifications.first?.surfaceId, panelId)
+        }
+    }
+
+    func testUUIDParsersResolveReattachedShellIdsAndKeepLiveIds() {
+        withRestoredPane { workspace, panelId, oldSurface, oldWorkspace in
+            let controller = TerminalController.shared
+            XCTAssertEqual(controller.v2UUID(["surface_id": oldSurface.uuidString], "surface_id"), panelId)
+            XCTAssertEqual(controller.v2UUID(["workspace_id": oldWorkspace.uuidString], "workspace_id"), workspace.id)
+            XCTAssertEqual(controller.v2UUIDAny(oldSurface.uuidString), panelId)
+            XCTAssertEqual(controller.v2UUID(["surface_id": panelId.uuidString], "surface_id"), panelId)
+            let unrelated = UUID()
+            XCTAssertEqual(controller.v2UUIDAny(unrelated.uuidString), unrelated)
+        }
+    }
+}
+
 final class AppNotificationRouterTests: XCTestCase {
     func testDefaultActionRoutesToExactTabSurfaceAndNotification() {
         let tabId = UUID()
