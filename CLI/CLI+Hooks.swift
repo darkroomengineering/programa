@@ -332,7 +332,7 @@ extension ProgramaCLI {
     /// lives in the provider (also gated earlier in `run()` and
     /// `validateRegisteredArguments`, before any socket connection is attempted).
     /// The plugin passes `--cwd`/`--session` as CLI args rather than stdin JSON; stdin
-    /// is still read and tolerated. session.idle and permission.asked can fire close
+    /// is still read and tolerated. A turn ending and permission.asked can fire close
     /// together; the writes are idempotent, so repeated firing is harmless.
     func runOpenCodeHook(commandArgs: [String], client: SocketClient) throws {
         try runAgentHook(openCodeHookProvider(), commandArgs: commandArgs, client: client)
@@ -433,7 +433,7 @@ extension ProgramaCLI {
             pidKey: { Self.sessionScopedPIDKey("opencode", sessionId: $0) },
             startPid: { self.inferredCodexAgentPID() },
             inferPid: { self.inferredCodexAgentPID() },
-            // session.idle carries no transcript/message payload, so the completion body
+            // The turn-end events carry no transcript/message payload, so the completion body
             // stays generic unless a future stdin JSON payload supplies one.
             completion: { parsed, session in
                 self.plainStopCompletion(
@@ -2312,27 +2312,154 @@ extension ProgramaCLI {
     ///
     /// OpenCode has no shell-hook config (unlike Claude Code/Codex): local plugin
     /// files under plugins/ auto-load with no opencode.json edit and no npm install.
-    /// The exported function runs once at process boot (`{ directory, worktree, $ }`,
-    /// Bun's `$`) and returns the lifecycle hooks object. `.quiet().nothrow()` on
-    /// every `$` call is load-bearing — Bun's `$` throws on non-zero exit by default,
-    /// and a programa CLI hiccup must never crash the user's opencode session.
+    /// One default export serves both plugin APIs: OpenCode v2 calls `setup(ctx)`, v1
+    /// (1.3.4 and newer) calls `server(input)`. v1 implementations do not run on v2:
+    /// https://github.com/anomalyco/opencode/blob/v2.2.7/services/site/src/docs/content/build/plugins/migrate-v1.mdx
+    /// v2 gives plugins no Bun `$`, so both paths spawn the CLI through
+    /// `node:child_process`, and `runHook` swallows every failure: a programa CLI
+    /// hiccup must never crash the user's opencode session.
     private static let openCodePluginJS: String = {
         """
         // Programa integration for OpenCode. Managed by `programa opencode install-integration`.
-        export const ProgramaPlugin = async ({ directory, worktree, $ }) => {
-          const hook = (event, extra = []) =>
-            $`programa opencode-hook ${event} --cwd ${directory} ${extra}`.quiet().nothrow()
-          hook("session-start")
-          return {
-            "chat.message": async (input) => {
-              await hook("prompt-submit", ["--session", input?.sessionID ?? ""])
-            },
-            event: async ({ event }) => {
-              if (event?.type === "session.idle") await hook("stop", ["--session", event.properties?.sessionID ?? ""])
-              if (event?.type === "permission.asked") await hook("notification", ["--session", event.properties?.sessionID ?? ""])
-            },
-            dispose: async () => { await hook("session-end") },
+        // One file for both plugin APIs: OpenCode v2 calls setup(ctx), v1 (1.3.4 and newer) calls server(input).
+        import { spawn } from "node:child_process"
+
+        const runHook = (args) =>
+          new Promise((resolve) => {
+            let child
+            try {
+              child = spawn("programa", ["opencode-hook", ...args], { stdio: "ignore" })
+            } catch {
+              return resolve()
+            }
+            const timer = setTimeout(() => child.kill(), 10000)
+            const done = () => {
+              clearTimeout(timer)
+              resolve()
+            }
+            child.once("error", done)
+            child.once("close", done)
+          })
+
+        // Subagent sessions (parentID set) never report a turn, so they cannot mark the parent idle or
+        // become the id `programa resume` reopens. Calls run one at a time, in event order.
+        const createIntegration = (directory, lookupParentID) => {
+          const parents = new Map()
+          let lastRootID
+          let queue = Promise.resolve()
+          const enqueue = (task) => (queue = queue.then(task).catch(() => {}))
+          const call = (event, sessionID) =>
+            runHook(sessionID ? [event, "--cwd", directory, "--session", sessionID] : [event, "--cwd", directory])
+          // A failed lookup is not cached and resolves to UNKNOWN, which is truthy, so an unresolved
+          // session is never reported as a root.
+          const UNKNOWN = Symbol("unknown")
+          const parentOf = (sessionID) => {
+            if (!parents.has(sessionID)) {
+              parents.set(
+                sessionID,
+                Promise.resolve()
+                  .then(() => lookupParentID(sessionID))
+                  .then(
+                    (parentID) => parentID || undefined,
+                    () => {
+                      parents.delete(sessionID)
+                      return UNKNOWN
+                    },
+                  ),
+              )
+            }
+            return parents.get(sessionID)
           }
+          const rootOf = async (sessionID) => {
+            let id = sessionID
+            for (let depth = 0; depth < 16; depth++) {
+              const parentID = await parentOf(id)
+              if (parentID === UNKNOWN) return undefined
+              if (!parentID) break
+              id = parentID
+            }
+            return id
+          }
+          return {
+            created(sessionID, parentID) {
+              if (sessionID) parents.set(sessionID, Promise.resolve(parentID || undefined))
+            },
+            start: () => enqueue(() => call("session-start")),
+            turn: (event, sessionID) =>
+              enqueue(async () => {
+                if (!sessionID || (await parentOf(sessionID))) return
+                lastRootID = sessionID
+                await call(event, sessionID)
+              }),
+            // A subagent's permission prompt still blocks the user, so it is reported on its root session.
+            attention: (sessionID) =>
+              enqueue(async () => {
+                const rootID = sessionID ? await rootOf(sessionID) : undefined
+                if (rootID) lastRootID = rootID
+                await call("notification", rootID)
+              }),
+            end: () => enqueue(() => call("session-end", lastRootID)),
+          }
+        }
+
+        export default {
+          id: "programa",
+          setup(ctx) {
+            // By default v2 runs plugins in one background service shared by every terminal, started with
+            // the environment of whichever terminal launched it, so its PROGRAMA_* variables name the wrong
+            // pane. Only a private server (`opencode --standalone`), which the TUI spawns with `serve --stdio`
+            // and its own environment, can report for the pane it runs in.
+            if (!process.argv.includes("--stdio")) return
+            const directory = ctx.location.directory
+            const programa = createIntegration(directory, async (sessionID) => {
+              const result = await ctx.session.get({ sessionID })
+              return (result?.data ?? result)?.parentID
+            })
+            const controller = new AbortController()
+            programa.start()
+            const types = [
+              "session.created",
+              "session.execution.started",
+              "session.execution.succeeded",
+              "session.execution.failed",
+              "session.execution.interrupted",
+              "permission.asked",
+            ]
+            void (async () => {
+              try {
+                for await (const event of ctx.event.subscribe({ types, signal: controller.signal })) {
+                  if (event.location?.directory && event.location.directory !== directory) continue
+                  const data = event.data ?? {}
+                  if (event.type === "session.created") programa.created(data.sessionID, data.parentID)
+                  else if (event.type === "session.execution.started") programa.turn("prompt-submit", data.sessionID)
+                  else if (event.type === "permission.asked") programa.attention(data.sessionID)
+                  else programa.turn("stop", data.sessionID)
+                }
+              } catch {}
+            })()
+            return async () => {
+              controller.abort()
+              await programa.end()
+            }
+          },
+          async server({ directory, client }) {
+            const programa = createIntegration(directory, async (id) => (await client.session.get({ path: { id } }))?.data?.parentID)
+            programa.start()
+            return {
+              "chat.message": async (input) => {
+                programa.turn("prompt-submit", input?.sessionID)
+              },
+              event: async ({ event }) => {
+                const properties = event?.properties ?? {}
+                if (event?.type === "session.created") programa.created(properties.info?.id ?? properties.sessionID, properties.info?.parentID)
+                if (event?.type === "session.idle") programa.turn("stop", properties.sessionID)
+                if (event?.type === "permission.asked") programa.attention(properties.sessionID)
+              },
+              dispose: async () => {
+                await programa.end()
+              },
+            }
+          },
         }
         """ + "\n"
     }()
