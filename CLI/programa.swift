@@ -231,13 +231,8 @@ enum CLICommandArgumentContract {
 
 /// The argument grammar a `.registered` command accepts, declared once on its
 /// descriptor so validation is generated from the same source that documents
-/// it (`detailedUsage`), instead of being restated by hand as a switch arm in
-/// `validateRegisteredArguments`. Field vocabulary matches that function's
-/// nested `parse`/`require` helpers.
-///
-/// A command with a `nil` grammar (the default) falls through to the switch
-/// in `validateRegisteredArguments`, which covers only descriptors declared
-/// outside `CLI/Commands/`.
+/// it (`detailedUsage`). `validateRegisteredArguments` consumes it; a
+/// `.registered` command with a `nil` grammar fails closed there.
 struct CLIArgumentGrammar {
     /// Flags that take a value, e.g. `--name <value>`.
     var valueOptions: Set<String> = []
@@ -256,6 +251,9 @@ struct CLIArgumentGrammar {
     /// ranges, mutually exclusive flags). Runs after parsing and
     /// `requiredOptions`; receives the command name for error messages.
     var validate: ((_ command: String, _ parsed: (positional: [String], options: [String: String])) throws -> Void)?
+    /// When set and it returns false, every check above is skipped. Hooks that
+    /// no-op outside a Programa surface must not fail on arguments there.
+    var isEnforced: (() -> Bool)?
 }
 
 /// Single source of truth for a CLI command's name(s), its one-line entry in
@@ -297,9 +295,8 @@ struct CommandDescriptor {
     /// back to `helpLines` only, or to one of the per-family
     /// `*SubcommandUsage` helpers checked before the table lookup).
     let detailedUsage: String?
-    /// When set (and `argumentContract == .registered`), drives argument
-    /// validation directly instead of the command needing a switch arm in
-    /// `validateRegisteredArguments`. `nil` means "still on the switch".
+    /// Drives argument validation when `argumentContract == .registered`;
+    /// required for every such command.
     let grammar: CLIArgumentGrammar?
     /// Executes the command. `nil` for commands implemented directly by
     /// `run()` before generic socket dispatch.
@@ -2163,121 +2160,32 @@ struct ProgramaCLI {
     }
 
     /// Validates a `.registered` command from its descriptor grammar. A command
-    /// with neither a grammar nor a switch arm fails closed before socket
-    /// acquisition until its grammar is declared.
+    /// without a grammar fails closed before socket acquisition.
     private func validateRegisteredArguments(_ args: [String], for command: String) throws {
-        func parse(
-            values: Set<String> = [],
-            booleans: Set<String> = [],
-            shortFlags: Set<String> = [],
-            minPositionals: Int = 0,
-            maxPositionals: Int? = 0, repeatableValues: Set<String> = []
-        ) throws -> (positional: [String], options: [String: String]) {
-            // Unbounded positionals are free text (`send`, `log`), where `-x` is a word.
-            let parsed = try preflightFlagArguments(
-                args,
-                command: command,
-                valueFlags: values,
-                booleanFlags: booleans,
-                repeatableValueFlags: repeatableValues,
-                shortFlags: shortFlags,
-                rejectOptionLikePositionals: maxPositionals != nil
-            )
-            guard parsed.positional.count >= minPositionals else {
-                throw CLIError(message: "\(command): missing required argument")
-            }
-            if let maxPositionals, parsed.positional.count > maxPositionals {
-                throw CLIError(message: "\(command): unexpected arguments: \(parsed.positional.dropFirst(maxPositionals).joined(separator: " "))")
-            }
-            return parsed
-        }
-
-        func require(_ names: [String], in options: [String: String]) throws {
-            for name in names where options[name] == nil {
-                throw CLIError(message: "\(command): --\(name) is required")
-            }
-        }
-
-        // Descriptor grammars and the switch share validation and error messages.
-        if let grammar = commandDescriptor(named: command)?.grammar {
-            let parsed = try parse(
-                values: grammar.valueOptions,
-                booleans: grammar.booleanOptions,
-                shortFlags: grammar.shortFlags,
-                minPositionals: grammar.minPositionals,
-                maxPositionals: grammar.maxPositionals, repeatableValues: grammar.repeatableValueOptions
-            )
-            try require(grammar.requiredOptions, in: parsed.options)
-            try grammar.validate?(command, parsed)
-            return
-        }
-
-        // Descriptors declared outside CLI/Commands/ (tree, agent hooks, tmux
-        // compatibility) still carry their semantic checks here.
-        switch command {
-        case "tree":
-            _ = try parse(values: ["workspace"], booleans: ["all"])
-        case "claude-hook":
-            let parsed = try parse(values: ["workspace", "surface"], maxPositionals: 1)
-            if let subcommand = parsed.positional.first?.lowercased(),
-               !["session-start", "active", "stop", "idle", "prompt-submit", "notification", "notify", "session-end", "pre-tool-use", "subagent-start", "subagent-stop", "help", "--help", "-h"].contains(subcommand) {
-                throw CLIError(message: "claude-hook: unknown event \(subcommand)")
-            }
-        case "codex-hook":
-            guard ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] != nil else { return }
-            let parsed = try parse(values: ["workspace", "surface"], maxPositionals: 1)
-            if let subcommand = parsed.positional.first?.lowercased(),
-               !["session-start", "prompt-submit", "stop", "notification", "notify", "session-end", "help", "--help", "-h"].contains(subcommand) {
-                throw CLIError(message: "codex-hook: unknown event \(subcommand)")
-            }
-        case "opencode-hook":
-            guard ProcessInfo.processInfo.environment["PROGRAMA_SURFACE_ID"] != nil else { return }
-            let parsed = try parse(values: ["workspace", "surface", "cwd", "session"], maxPositionals: 1)
-            if let subcommand = parsed.positional.first?.lowercased(),
-               !["session-start", "prompt-submit", "stop", "notification", "notify", "session-end", "help", "--help", "-h"].contains(subcommand) {
-                throw CLIError(message: "opencode-hook: unknown event \(subcommand)")
-            }
-        case "capture-pane":
-            let parsed = try parse(values: ["workspace", "surface", "lines"], booleans: ["scrollback"])
-            if let lines = parsed.options["lines"], (Int(lines) ?? 0) <= 0 {
-                throw CLIError(message: "capture-pane: --lines must be greater than 0")
-            }
-        case "resize-pane":
-            let parsed = try parse(values: ["pane", "workspace", "amount"], shortFlags: ["-L", "-R", "-U", "-D"], minPositionals: 1, maxPositionals: 1)
-            try require(["pane"], in: parsed.options)
-            guard ["-L", "-R", "-U", "-D"].contains(parsed.positional[0]) else {
-                throw CLIError(message: "resize-pane requires -L, -R, -U, or -D")
-            }
-            if let amount = parsed.options["amount"], (Int(amount) ?? 0) <= 0 {
-                throw CLIError(message: "resize-pane: --amount must be greater than 0")
-            }
-        case "pipe-pane":
-            let parsed = try parse(values: ["command", "workspace", "surface"], maxPositionals: nil)
-            guard parsed.options["command"] != nil || !parsed.positional.isEmpty else {
-                throw CLIError(message: "pipe-pane requires --command <shell-command>")
-            }
-        case "wait-for":
-            let parsed = try parse(values: ["timeout"], booleans: ["signal"], shortFlags: ["-S"], minPositionals: 1, maxPositionals: 2)
-            let positionals = parsed.positional.filter { $0 != "-S" }
-            guard positionals.count == 1 else { throw CLIError(message: "wait-for requires one name") }
-            if let timeout = parsed.options["timeout"] {
-                guard let seconds = Double(timeout), seconds.isFinite, seconds >= 0 else {
-                    throw CLIError(message: "wait-for: --timeout must be finite and nonnegative")
-                }
-            }
-        case "set-hook":
-            let parsed = try parse(values: ["unset"], booleans: ["list"], maxPositionals: nil)
-            if parsed.options["list"] == nil, parsed.options["unset"] == nil, parsed.positional.count < 2 {
-                throw CLIError(message: "set-hook requires <event> <command>")
-            }
-        case "display-message":
-            let parsed = try parse(booleans: ["print"], minPositionals: 1, maxPositionals: nil)
-            guard parsed.positional.filter({ $0 != "-p" }).isEmpty == false else {
-                throw CLIError(message: "display-message requires text")
-            }
-        default:
+        guard let grammar = commandDescriptor(named: command)?.grammar else {
             throw CLIError(message: "Internal CLI registry error: no argument contract for \(command)")
         }
+        if let isEnforced = grammar.isEnforced, !isEnforced() { return }
+        // Unbounded positionals are free text (`send`, `log`), where `-x` is a word.
+        let parsed = try preflightFlagArguments(
+            args,
+            command: command,
+            valueFlags: grammar.valueOptions,
+            booleanFlags: grammar.booleanOptions,
+            repeatableValueFlags: grammar.repeatableValueOptions,
+            shortFlags: grammar.shortFlags,
+            rejectOptionLikePositionals: grammar.maxPositionals != nil
+        )
+        guard parsed.positional.count >= grammar.minPositionals else {
+            throw CLIError(message: "\(command): missing required argument")
+        }
+        if let maxPositionals = grammar.maxPositionals, parsed.positional.count > maxPositionals {
+            throw CLIError(message: "\(command): unexpected arguments: \(parsed.positional.dropFirst(maxPositionals).joined(separator: " "))")
+        }
+        for name in grammar.requiredOptions where parsed.options[name] == nil {
+            throw CLIError(message: "\(command): --\(name) is required")
+        }
+        try grammar.validate?(command, parsed)
     }
 
     func validateArguments(
