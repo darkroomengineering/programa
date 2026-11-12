@@ -33,7 +33,9 @@ struct ReviewDiffWebView: NSViewRepresentable {
         return directory
     }
 
-    let rawDiff: String
+    let patch: String
+    /// Entry `i` of `patch`; files with a `notDiffableReason` get their label in the viewer.
+    let files: [ReviewFileDiff]
     let revision: UInt64
     let style: ReviewDiffViewerStyle
     let bundleDirectory: URL
@@ -46,7 +48,7 @@ struct ReviewDiffWebView: NSViewRepresentable {
     func makeNSView(context: Context) -> WKWebView {
         let coordinator = context.coordinator
         coordinator.onSelectLines = onSelectLines
-        coordinator.schemeHandler.patchText = rawDiff
+        coordinator.schemeHandler.setContent(patch: patch, files: files)
         coordinator.lastRevision = revision
         coordinator.lastStyle = style
 
@@ -79,7 +81,7 @@ struct ReviewDiffWebView: NSViewRepresentable {
         coordinator.onSelectLines = onSelectLines
         if coordinator.lastRevision != revision {
             coordinator.lastRevision = revision
-            coordinator.schemeHandler.patchText = rawDiff
+            coordinator.schemeHandler.setContent(patch: patch, files: files)
             webView.evaluateJavaScript("window.programaReview?.reload()", completionHandler: nil)
         }
         if coordinator.lastStyle != style {
@@ -97,7 +99,7 @@ struct ReviewDiffWebView: NSViewRepresentable {
         webView.loadHTMLString("", baseURL: nil)
         coordinator.webView = nil
         coordinator.onSelectLines = nil
-        coordinator.schemeHandler.patchText = ""
+        coordinator.schemeHandler.setContent(patch: "", files: [])
     }
 
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
@@ -172,15 +174,28 @@ private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
     }
 }
 
-/// Serves the bundled viewer files and the current patch. Holds no reference to the web view.
-/// WebKit calls it on the main thread and every response is written synchronously, so there
-/// is never a task to cancel in `stop`.
+/// Serves the bundled viewer files, the current patch (`/patch`) and the placeholder labels for
+/// its not-diffable entries (`/notices`, a JSON object keyed by entry index). Holds no reference
+/// to the web view. WebKit calls it on the main thread and every response is written
+/// synchronously, so there is never a task to cancel in `stop`.
 final class ReviewDiffSchemeHandler: NSObject, WKURLSchemeHandler {
     let rootDirectory: URL
-    var patchText = ""
+    private var patchText = ""
+    private var noticesJSON = Data("{}".utf8)
 
     init(rootDirectory: URL) {
         self.rootDirectory = rootDirectory.standardizedFileURL
+    }
+
+    func setContent(patch: String, files: [ReviewFileDiff]) {
+        patchText = patch
+        var notices: [String: String] = [:]
+        for (index, file) in files.enumerated() {
+            if let reason = file.notDiffableReason {
+                notices[String(index)] = reason.label
+            }
+        }
+        noticesJSON = (try? JSONSerialization.data(withJSONObject: notices)) ?? Data("{}".utf8)
     }
 
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
@@ -190,6 +205,10 @@ final class ReviewDiffSchemeHandler: NSObject, WKURLSchemeHandler {
         }
         if url.path == "/patch" {
             respond(urlSchemeTask, url: url, data: Data(patchText.utf8), contentType: "text/plain; charset=utf-8")
+            return
+        }
+        if url.path == "/notices" {
+            respond(urlSchemeTask, url: url, data: noticesJSON, contentType: "application/json")
             return
         }
         let fileURL = rootDirectory.appendingPathComponent(String(url.path.dropFirst())).standardizedFileURL

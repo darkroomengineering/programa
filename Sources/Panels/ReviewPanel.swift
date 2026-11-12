@@ -61,8 +61,8 @@ final class ReviewPanel: Panel, ObservableObject {
     @Published private(set) var baseBranch: String
     var files: [ReviewFileDiff] { diffOperation.value?.files ?? [] }
     private(set) var filesRevision: UInt64 = 0
-    /// Raw `git diff` text behind `files`, served to the Pierre diff viewer (debug spike).
-    var rawDiff: String { diffOperation.value?.rawDiff ?? "" }
+    /// The patch the Pierre diff viewer renders; entry `i` is `files[i]`.
+    var viewerPatch: String { diffOperation.value?.viewerPatch ?? "" }
     @Published private(set) var comments: [ReviewComment] = []
     @Published private(set) var commentDeliveryFailure: ReviewCommentDeliveryFailure?
     @Published private var diffOperation: Operation<ReviewDiffSnapshot?> = .settled(generation: 0, value: nil)

@@ -54,6 +54,11 @@ struct ReviewFileDiff: Identifiable, Equatable, Sendable {
 enum ReviewDiffParser {
     /// Parses (potentially multi-file) `git diff --no-color` unified-diff output.
     static func parse(_ diffText: String) -> [ReviewFileDiff] {
+        parseEntries(diffText).map(\.file)
+    }
+
+    /// Like `parse`, plus each file's own `diff --git` section of `diffText`, newline-terminated.
+    static func parseEntries(_ diffText: String) -> [(file: ReviewFileDiff, patch: String)] {
         guard !diffText.isEmpty else { return [] }
         var lines = diffText.components(separatedBy: "\n")
         // git ends its output with a newline, which leaves one empty element after the split.
@@ -62,7 +67,7 @@ enum ReviewDiffParser {
             lines.removeLast()
         }
 
-        var result: [ReviewFileDiff] = []
+        var result: [(file: ReviewFileDiff, patch: String)] = []
         var index = 0
         while index < lines.count {
             guard lines[index].hasPrefix("diff --git ") else {
@@ -70,10 +75,11 @@ enum ReviewDiffParser {
                 continue
             }
             let (fileDiff, nextIndex) = parseFileDiff(lines: lines, startIndex: index)
+            let endIndex = max(nextIndex, index + 1)
             if let fileDiff {
-                result.append(fileDiff)
+                result.append((file: fileDiff, patch: lines[index..<endIndex].joined(separator: "\n") + "\n"))
             }
-            index = max(nextIndex, index + 1)
+            index = endIndex
         }
         return result
     }

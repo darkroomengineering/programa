@@ -25,8 +25,10 @@ struct ReviewDiffSnapshot: Equatable, Sendable {
     var repositoryRoot: String?
     var resolvedBaseBranch: String?
     var error: ReviewDiffError?
-    /// The `git diff` text the tracked `files` were parsed from. Untracked files are not in it.
-    var rawDiff: String = ""
+    /// What the Pierre diff viewer renders: one `diff --git` entry per element of `files`, in the
+    /// same order, so the viewer can address a file by index. A file with a `notDiffableReason`
+    /// keeps only its header, and the viewer labels it with that reason.
+    var viewerPatch: String = ""
 
     var diffableFileCount: Int {
         files.filter { $0.notDiffableReason == nil }.count
@@ -181,7 +183,7 @@ struct ReviewDiffProber {
         case .success(let diff):
             var files = diff.files
             files.append(contentsOf: untrackedFileDiffs(repoRoot: repoRoot))
-            return ReviewDiffSnapshot(files: files, repositoryRoot: repoRoot, resolvedBaseBranch: nil, error: nil, rawDiff: diff.rawDiff)
+            return ReviewDiffSnapshot(files: files, repositoryRoot: repoRoot, resolvedBaseBranch: nil, error: nil, viewerPatch: diff.viewerPatch)
         }
     }
 
@@ -195,7 +197,7 @@ struct ReviewDiffProber {
             case .failure(let error):
                 return ReviewDiffSnapshot(files: [], repositoryRoot: repoRoot, resolvedBaseBranch: candidate, error: error)
             case .success(let diff):
-                return ReviewDiffSnapshot(files: diff.files, repositoryRoot: repoRoot, resolvedBaseBranch: candidate, error: nil, rawDiff: diff.rawDiff)
+                return ReviewDiffSnapshot(files: diff.files, repositoryRoot: repoRoot, resolvedBaseBranch: candidate, error: nil, viewerPatch: diff.viewerPatch)
             }
         }
         return ReviewDiffSnapshot(repositoryRoot: repoRoot, resolvedBaseBranch: nil, error: .unknownBaseBranch(baseBranch))
@@ -234,7 +236,7 @@ struct ReviewDiffProber {
 
     // MARK: - Diff + binary/size overrides
 
-    private nonisolated static func diffAndOverrides(repoRoot: String, diffRangeArgs: [String]) -> Result<(files: [ReviewFileDiff], rawDiff: String), ReviewDiffError> {
+    private nonisolated static func diffAndOverrides(repoRoot: String, diffRangeArgs: [String]) -> Result<(files: [ReviewFileDiff], viewerPatch: String), ReviewDiffError> {
         switch runCommandResult(
             directory: repoRoot,
             executable: "git",
@@ -243,13 +245,17 @@ struct ReviewDiffProber {
         case .failure(let error):
             return .failure(error)
         case .success(let diffText):
-            var files = ReviewDiffParser.parse(diffText)
+            let entries = ReviewDiffParser.parseEntries(diffText)
+            var files = entries.map(\.file)
             switch binaryFilePaths(repoRoot: repoRoot, diffRangeArgs: diffRangeArgs) {
             case .failure(let error):
                 return .failure(error)
             case .success(let binaryPaths):
                 applyOverrides(files: &files, binaryPaths: binaryPaths)
-                return .success((files: files, rawDiff: diffText))
+                let viewerPatch = zip(files, entries).map { file, entry in
+                    file.notDiffableReason == nil ? entry.patch : headerOnly(entry.patch)
+                }.joined()
+                return .success((files: files, viewerPatch: viewerPatch))
             }
         }
     }
@@ -291,6 +297,12 @@ struct ReviewDiffProber {
                 files[index].hunks = []
             }
         }
+    }
+
+    /// A file entry cut before its first hunk, so the viewer shows the file without its content.
+    private nonisolated static func headerOnly(_ patch: String) -> String {
+        guard let firstHunk = patch.range(of: "\n@@") else { return patch }
+        return String(patch[..<firstHunk.lowerBound]) + "\n"
     }
 
     // MARK: - Untracked files

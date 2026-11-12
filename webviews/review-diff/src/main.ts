@@ -2,7 +2,7 @@
 import {
   CodeView,
   getFiletypeFromFileName,
-  parsePatchFiles,
+  processFile,
   type CodeViewDiffItem,
   type CodeViewItem,
   type CodeViewOptions,
@@ -86,7 +86,23 @@ function viewOptions(diffStyle: DiffStyle): Options {
     layout: { paddingTop: 0, gap: 1, paddingBottom: 16 },
     unsafeCSS: UNSAFE_CSS,
     onGutterUtilityClick: handleGutterUtilityClick as Options["onGutterUtilityClick"],
+    renderHeaderMetadata: renderNotice as Options["renderHeaderMetadata"],
   };
+}
+
+// Item id -> label for files the native side reduced to a bare header (too
+// large, binary, untracked). The text comes localized from Swift.
+let notices = new Map<string, string>();
+
+function renderNotice(_fileDiff: unknown, context: { item: CodeViewItem<undefined> }): Element | undefined {
+  const label = notices.get(context.item.id);
+  if (label == null) return undefined;
+  // Header slots sit in the light DOM, out of reach of `unsafeCSS`, so style inline.
+  const element = document.createElement("span");
+  element.style.opacity = "0.6";
+  element.style.fontStyle = "italic";
+  element.textContent = label;
+  return element;
 }
 
 const UNSAFE_CSS = `
@@ -99,8 +115,7 @@ const UNSAFE_CSS = `
     --diffs-font-family: ui-monospace, "SF Mono", Menlo, monospace;
     --diffs-font-size: 12px;
   }
-  :host, pre, code { background-color: transparent; }
-  [data-diffs-header] {
+  :host, pre, code { background-color: transparent; }  [data-diffs-header] {
     background-color: color-mix(in srgb, Canvas 70%, transparent) !important;
     -webkit-backdrop-filter: blur(8px);
     backdrop-filter: blur(8px);
@@ -113,36 +128,60 @@ view.setup(root);
 
 let generation = 0;
 
-function itemsFromPatch(patchText: string, cacheKey: string): CodeViewDiffItem[] {
-  const items: CodeViewDiffItem[] = [];
-  const seenIds = new Map<string, number>();
-  for (const patch of parsePatchFiles(patchText, { cacheKeyPrefix: cacheKey })) {
-    for (const fileDiff of patch.files) {
-      const filetype = getFiletypeFromFileName(fileDiff.name);
-      if (!HIGHLIGHTED_LANGUAGE_IDS.has(filetype)) {
-        fileDiff.lang = "text";
-      }
-      const occurrence = seenIds.get(fileDiff.name) ?? 0;
-      seenIds.set(fileDiff.name, occurrence + 1);
-      items.push({
-        id: occurrence === 0 ? fileDiff.name : `${fileDiff.name}#${occurrence}`,
-        type: "diff",
-        fileDiff,
-        version: generation,
-      });
-    }
+// The native side writes one `diff --git` entry per file and keys its notices
+// by entry index, so entries are split and parsed one by one: an entry Pierre
+// cannot parse must not shift the index of the ones after it.
+function splitEntries(patchText: string): string[] {
+  const starts: number[] = patchText.startsWith("diff --git ") ? [0] : [];
+  for (let at = patchText.indexOf("\ndiff --git "); at !== -1; at = patchText.indexOf("\ndiff --git ", at + 1)) {
+    starts.push(at + 1);
   }
-  return items;
+  return starts.map((start, n) => patchText.slice(start, starts[n + 1] ?? patchText.length));
+}
+
+function itemsFromPatch(
+  patchText: string,
+  entryNotices: Record<string, string>,
+  cacheKey: string,
+): { items: CodeViewDiffItem[]; notices: Map<string, string> } {
+  const items: CodeViewDiffItem[] = [];
+  const itemNotices = new Map<string, string>();
+  const seenIds = new Map<string, number>();
+  splitEntries(patchText).forEach((entry, index) => {
+    const fileDiff = processFile(entry, { cacheKey: `${cacheKey}-${index}`, isGitDiff: true });
+    if (fileDiff == null) return;
+    const filetype = getFiletypeFromFileName(fileDiff.name);
+    if (!HIGHLIGHTED_LANGUAGE_IDS.has(filetype)) {
+      fileDiff.lang = "text";
+    }
+    const occurrence = seenIds.get(fileDiff.name) ?? 0;
+    seenIds.set(fileDiff.name, occurrence + 1);
+    const id = occurrence === 0 ? fileDiff.name : `${fileDiff.name}#${occurrence}`;
+    const notice = entryNotices[String(index)];
+    if (typeof notice === "string") itemNotices.set(id, notice);
+    items.push({ id, type: "diff", fileDiff, version: generation });
+  });
+  return { items, notices: itemNotices };
+}
+
+async function fetchNotices(): Promise<Record<string, string>> {
+  const response = await fetch("/notices", { cache: "no-store" });
+  if (!response.ok) throw new Error(`notices request failed: ${response.status}`);
+  const body: unknown = await response.json();
+  if (body == null || typeof body !== "object" || Array.isArray(body)) return {};
+  return body as Record<string, string>;
 }
 
 async function reload(): Promise<void> {
   const current = ++generation;
   try {
-    const response = await fetch("/patch", { cache: "no-store" });
+    const [response, entryNotices] = await Promise.all([fetch("/patch", { cache: "no-store" }), fetchNotices()]);
     if (!response.ok) throw new Error(`patch request failed: ${response.status}`);
     const patchText = await response.text();
     if (current !== generation) return;
-    view.setItems(itemsFromPatch(patchText, `review-${current}`));
+    const parsed = itemsFromPatch(patchText, entryNotices, `review-${current}`);
+    notices = parsed.notices;
+    view.setItems(parsed.items);
     view.render();
   } catch (error) {
     postToNative({ type: "error", message: String((error as Error)?.stack ?? error) });

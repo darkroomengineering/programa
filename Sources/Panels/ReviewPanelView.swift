@@ -151,6 +151,21 @@ final class ReviewPanelRowPlanner {
     }
 }
 
+extension ReviewNotDiffableReason {
+    /// Shown in place of the file's hunks, in the native list and in the Pierre viewer.
+    var label: String {
+        switch self {
+        case .binary:
+            return String(localized: "review.notDiffable.binary", defaultValue: "Binary file -- not diffable")
+        case .tooLarge(let sizeBytes):
+            let kilobytes = sizeBytes / 1024
+            return String(localized: "review.notDiffable.tooLarge", defaultValue: "Too large to diff (\(kilobytes) KB)")
+        case .newUntrackedFile:
+            return String(localized: "review.notDiffable.newUntrackedFile", defaultValue: "New file")
+        }
+    }
+}
+
 /// SwiftUI view for a `ReviewPanel`: per-file collapsible diff sections, click-a-line (or
 /// shift-click a range) to attach a comment, and a "Send to agent" action. Modeled on
 /// `MarkdownPanelView.swift`'s structure (focus-flash overlay, read-only content). No syntax
@@ -288,7 +303,8 @@ struct ReviewPanelView: View {
                 Spacer(minLength: 0)
             } else if isVisibleInUI {
                 ReviewDiffWebView(
-                    rawDiff: panel.rawDiff,
+                    patch: panel.viewerPatch,
+                    files: panel.files,
                     revision: panel.filesRevision,
                     style: .split,
                     bundleDirectory: bundleDirectory
@@ -704,21 +720,9 @@ struct ReviewPanelView: View {
         HStack(spacing: 6) {
             Image(systemName: "doc.questionmark")
                 .foregroundColor(.secondary)
-            Text(notDiffableLabel(reason))
+            Text(reason.label)
                 .font(.caption)
                 .foregroundColor(.secondary)
-        }
-    }
-
-    private func notDiffableLabel(_ reason: ReviewNotDiffableReason) -> String {
-        switch reason {
-        case .binary:
-            return String(localized: "review.notDiffable.binary", defaultValue: "Binary file -- not diffable")
-        case .tooLarge(let sizeBytes):
-            let kilobytes = sizeBytes / 1024
-            return String(localized: "review.notDiffable.tooLarge", defaultValue: "Too large to diff (\(kilobytes) KB)")
-        case .newUntrackedFile:
-            return String(localized: "review.notDiffable.newUntrackedFile", defaultValue: "New file")
         }
     }
 
