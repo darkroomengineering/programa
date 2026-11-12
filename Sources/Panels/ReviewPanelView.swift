@@ -151,11 +151,27 @@ final class ReviewPanelRowPlanner {
     }
 }
 
+extension ReviewNotDiffableReason {
+    /// Shown in place of the file's hunks, in the native list and in the Pierre viewer.
+    var label: String {
+        switch self {
+        case .binary:
+            return String(localized: "review.notDiffable.binary", defaultValue: "Binary file -- not diffable")
+        case .tooLarge(let sizeBytes):
+            let kilobytes = sizeBytes / 1024
+            return String(localized: "review.notDiffable.tooLarge", defaultValue: "Too large to diff (\(kilobytes) KB)")
+        case .newUntrackedFile:
+            return String(localized: "review.notDiffable.newUntrackedFile", defaultValue: "New file")
+        }
+    }
+}
+
 /// SwiftUI view for a `ReviewPanel`: per-file collapsible diff sections, click-a-line (or
 /// shift-click a range) to attach a comment, and a "Send to agent" action. Modeled on
-/// `MarkdownPanelView.swift`'s structure (focus-flash overlay, read-only content). No syntax
-/// highlighting in v1 -- diff lines render as colored +/- rows in a monospace font, mirroring
-/// git's own coloring model. See docs/plans/diff-review-panel.md §1/§3.
+/// `MarkdownPanelView.swift`'s structure (focus-flash overlay, read-only content). The diff body
+/// is drawn by `ReviewDiffWebView` unless `app.reviewDiffRenderer` is `native`; the native list
+/// renders colored +/- rows in a monospace font, without syntax highlighting.
+/// See docs/plans/diff-review-panel.md §1/§3.
 struct ReviewPanelView: View {
     @ObservedObject var panel: ReviewPanel
     let isFocused: Bool
@@ -169,7 +185,7 @@ struct ReviewPanelView: View {
     @State private var rowPlanner = ReviewPanelRowPlanner()
     @State private var isConfirmingCheckpointRevert = false
     @FocusState private var isComposerFocused: Bool
-    @AppStorage(ReviewDiffWebView.debugToggleKey) private var renderDiffsWithPierre = false
+    @AppStorage(ReviewDiffRendererSettings.rendererKey) private var diffRenderer = ReviewDiffRendererSettings.defaultRenderer
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private struct InlineComposerState {
@@ -192,7 +208,7 @@ struct ReviewPanelView: View {
                     .padding(.vertical, 8)
             }
             Divider()
-            if usesPierreDiffs, let bundleDirectory = ReviewDiffWebView.bundleDirectory {
+            if diffRenderer == .pierre, let bundleDirectory = ReviewDiffWebView.bundleDirectory {
                 pierreDiffContent(bundleDirectory: bundleDirectory)
             } else {
                 ScrollView {
@@ -263,16 +279,7 @@ struct ReviewPanelView: View {
         }
     }
 
-    // MARK: - Pierre diff viewer (debug spike)
-
-    /// Debug builds only, so a stray `defaults write` cannot switch a Release build over.
-    private var usesPierreDiffs: Bool {
-#if DEBUG
-        renderDiffsWithPierre
-#else
-        false
-#endif
-    }
+    // MARK: - Pierre diff viewer
 
     /// Same states as the native list, but the diff rows come from `ReviewDiffWebView`, which
     /// scrolls itself. The composer and pending comments stay native below it.
@@ -286,11 +293,15 @@ struct ReviewPanelView: View {
                 emptyStateView
                     .padding(24)
                 Spacer(minLength: 0)
-            } else if isVisibleInUI {
+            } else {
+                // Mounted while the tab is hidden too (Bonsplit keeps every tab's view), so
+                // switching tabs keeps the page and its scroll position instead of reloading.
                 ReviewDiffWebView(
-                    rawDiff: panel.rawDiff,
+                    patch: panel.viewerPatch,
+                    files: panel.files,
                     revision: panel.filesRevision,
                     style: .split,
+                    isVisibleInUI: isVisibleInUI,
                     bundleDirectory: bundleDirectory
                 ) { selection in
                     composer = InlineComposerState(
@@ -302,8 +313,6 @@ struct ReviewPanelView: View {
                     isComposerFocused = true
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                Spacer(minLength: 0)
             }
 
             if let composer {
@@ -704,21 +713,9 @@ struct ReviewPanelView: View {
         HStack(spacing: 6) {
             Image(systemName: "doc.questionmark")
                 .foregroundColor(.secondary)
-            Text(notDiffableLabel(reason))
+            Text(reason.label)
                 .font(.caption)
                 .foregroundColor(.secondary)
-        }
-    }
-
-    private func notDiffableLabel(_ reason: ReviewNotDiffableReason) -> String {
-        switch reason {
-        case .binary:
-            return String(localized: "review.notDiffable.binary", defaultValue: "Binary file -- not diffable")
-        case .tooLarge(let sizeBytes):
-            let kilobytes = sizeBytes / 1024
-            return String(localized: "review.notDiffable.tooLarge", defaultValue: "Too large to diff (\(kilobytes) KB)")
-        case .newUntrackedFile:
-            return String(localized: "review.notDiffable.newUntrackedFile", defaultValue: "New file")
         }
     }
 

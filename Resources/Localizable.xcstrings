@@ -7387,23 +7387,6 @@
         }
       }
     },
-    "debug.review.pierreDiffs": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Render Review Diffs with Pierre"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "レビューの差分を Pierre で表示"
-          }
-        }
-      }
-    },
     "debug.updatePill.automatic": {
       "extractionState": "manual",
       "localizations": {

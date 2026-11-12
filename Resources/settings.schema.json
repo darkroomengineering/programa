@@ -118,6 +118,12 @@
           "type": "boolean",
           "default": false,
           "description": "Search every surface in the command palette switcher instead of only the active workspace."
+        },
+        "reviewDiffRenderer": {
+          "type": "string",
+          "enum": ["pierre", "native"],
+          "default": "pierre",
+          "description": "How the Review panel draws diffs. pierre: split view with syntax colors and word-level changes, in a web view. native: the plain built-in list, which uses less memory on very large diffs."
         }
       }
     },

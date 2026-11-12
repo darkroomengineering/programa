@@ -25,8 +25,10 @@ struct ReviewDiffSnapshot: Equatable, Sendable {
     var repositoryRoot: String?
     var resolvedBaseBranch: String?
     var error: ReviewDiffError?
-    /// The `git diff` text the tracked `files` were parsed from. Untracked files are not in it.
-    var rawDiff: String = ""
+    /// What the Pierre diff viewer renders: one `diff --git` entry per element of `files`, in the
+    /// same order, so the viewer can address a file by index. A file with a `notDiffableReason`
+    /// keeps only its header, and the viewer labels it with that reason.
+    var viewerPatch: String = ""
 
     var diffableFileCount: Int {
         files.filter { $0.notDiffableReason == nil }.count
@@ -179,9 +181,16 @@ struct ReviewDiffProber {
             // error instead of returning a partial (or empty) file list.
             return ReviewDiffSnapshot(files: [], repositoryRoot: repoRoot, resolvedBaseBranch: nil, error: error)
         case .success(let diff):
-            var files = diff.files
-            files.append(contentsOf: untrackedFileDiffs(repoRoot: repoRoot))
-            return ReviewDiffSnapshot(files: files, repositoryRoot: repoRoot, resolvedBaseBranch: nil, error: nil, rawDiff: diff.rawDiff)
+            let untracked = untrackedFileDiffs(repoRoot: repoRoot)
+            // Every untracked file carries a `notDiffableReason`, so the viewer gets its header only.
+            let viewerPatch = diff.viewerPatch + untracked.map { newFileHeader(path: $0.displayPath) }.joined()
+            return ReviewDiffSnapshot(
+                files: diff.files + untracked,
+                repositoryRoot: repoRoot,
+                resolvedBaseBranch: nil,
+                error: nil,
+                viewerPatch: viewerPatch
+            )
         }
     }
 
@@ -195,7 +204,7 @@ struct ReviewDiffProber {
             case .failure(let error):
                 return ReviewDiffSnapshot(files: [], repositoryRoot: repoRoot, resolvedBaseBranch: candidate, error: error)
             case .success(let diff):
-                return ReviewDiffSnapshot(files: diff.files, repositoryRoot: repoRoot, resolvedBaseBranch: candidate, error: nil, rawDiff: diff.rawDiff)
+                return ReviewDiffSnapshot(files: diff.files, repositoryRoot: repoRoot, resolvedBaseBranch: candidate, error: nil, viewerPatch: diff.viewerPatch)
             }
         }
         return ReviewDiffSnapshot(repositoryRoot: repoRoot, resolvedBaseBranch: nil, error: .unknownBaseBranch(baseBranch))
@@ -234,7 +243,7 @@ struct ReviewDiffProber {
 
     // MARK: - Diff + binary/size overrides
 
-    private nonisolated static func diffAndOverrides(repoRoot: String, diffRangeArgs: [String]) -> Result<(files: [ReviewFileDiff], rawDiff: String), ReviewDiffError> {
+    private nonisolated static func diffAndOverrides(repoRoot: String, diffRangeArgs: [String]) -> Result<(files: [ReviewFileDiff], viewerPatch: String), ReviewDiffError> {
         switch runCommandResult(
             directory: repoRoot,
             executable: "git",
@@ -243,13 +252,17 @@ struct ReviewDiffProber {
         case .failure(let error):
             return .failure(error)
         case .success(let diffText):
-            var files = ReviewDiffParser.parse(diffText)
+            let entries = ReviewDiffParser.parseEntries(diffText)
+            var files = entries.map(\.file)
             switch binaryFilePaths(repoRoot: repoRoot, diffRangeArgs: diffRangeArgs) {
             case .failure(let error):
                 return .failure(error)
             case .success(let binaryPaths):
                 applyOverrides(files: &files, binaryPaths: binaryPaths)
-                return .success((files: files, rawDiff: diffText))
+                let viewerPatch = zip(files, entries).map { file, entry in
+                    file.notDiffableReason == nil ? entry.patch : headerOnly(entry.patch)
+                }.joined()
+                return .success((files: files, viewerPatch: viewerPatch))
             }
         }
     }
@@ -293,6 +306,12 @@ struct ReviewDiffProber {
         }
     }
 
+    /// A file entry cut before its first hunk, so the viewer shows the file without its content.
+    private nonisolated static func headerOnly(_ patch: String) -> String {
+        guard let firstHunk = patch.range(of: "\n@@") else { return patch }
+        return String(patch[..<firstHunk.lowerBound]) + "\n"
+    }
+
     // MARK: - Untracked files
 
     private nonisolated static func untrackedFileDiffs(repoRoot: String) -> [ReviewFileDiff] {
@@ -321,6 +340,36 @@ struct ReviewDiffProber {
             return ReviewFileDiff(oldPath: nil, newPath: path, status: .added, hunks: [], notDiffableReason: .binary)
         }
         return ReviewFileDiff(oldPath: nil, newPath: path, status: .added, hunks: [], notDiffableReason: .newUntrackedFile)
+    }
+
+    /// The header `git diff` would write for a new file, with no hunks.
+    private nonisolated static func newFileHeader(path: String) -> String {
+        let newPath = gitQuotedPath("b/" + path)
+        return "diff --git \(gitQuotedPath("a/" + path)) \(newPath)\nnew file mode 100644\n--- /dev/null\n+++ \(newPath)\n"
+    }
+
+    /// Quotes a path the way git does with `core.quotePath=false`, so a quote, backslash or
+    /// control character (a newline above all) cannot break the patch into extra lines.
+    private nonisolated static func gitQuotedPath(_ path: String) -> String {
+        let needsQuoting = path.unicodeScalars.contains { $0 == "\"" || $0 == "\\" || $0.value < 0x20 || $0.value == 0x7f }
+        guard needsQuoting else { return path }
+        var quoted = "\""
+        for scalar in path.unicodeScalars {
+            switch scalar {
+            case "\"": quoted += "\\\""
+            case "\\": quoted += "\\\\"
+            case "\t": quoted += "\\t"
+            case "\n": quoted += "\\n"
+            case "\r": quoted += "\\r"
+            default:
+                if scalar.value < 0x20 || scalar.value == 0x7f {
+                    quoted += String(format: "\\%03o", scalar.value)
+                } else {
+                    quoted.unicodeScalars.append(scalar)
+                }
+            }
+        }
+        return quoted + "\""
     }
 
     private nonisolated static func isLikelyBinary(fullPath: String) -> Bool {

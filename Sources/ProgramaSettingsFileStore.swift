@@ -453,6 +453,13 @@ final class ProgramaSettingsFileStore {
         if let value = jsonBool(section["commandPaletteSearchesAllSurfaces"]) {
             snapshot.managedUserDefaults[CommandPaletteSwitcherSearchSettings.searchAllSurfacesKey] = .bool(value)
         }
+        if let raw = jsonString(section["reviewDiffRenderer"]) {
+            if let renderer = ReviewDiffRendererSettings.Renderer(rawValue: raw) {
+                snapshot.managedUserDefaults[ReviewDiffRendererSettings.rendererKey] = .string(renderer.rawValue)
+            } else {
+                logInvalid("app.reviewDiffRenderer", sourcePath: sourcePath)
+            }
+        }
         if let rawTerminalTheme = section["terminalTheme"] {
             if rawTerminalTheme is NSNull {
                 snapshot.managedCustomSettings.terminalTheme = ManagedTerminalTheme(light: nil, dark: nil)
@@ -1178,6 +1185,7 @@ final class ProgramaSettingsFileStore {
                     "autoResumeAgents": AgentAutoResumeSettings.defaultAutoResumeAgents,
                     "reapLeftoverAgentProcesses": LeftoverProcessReaperSettings.defaultReapLeftoverAgentProcesses,
                     "commandPaletteSearchesAllSurfaces": CommandPaletteSwitcherSearchSettings.defaultSearchAllSurfaces,
+                    "reviewDiffRenderer": ReviewDiffRendererSettings.defaultRenderer.rawValue,
                 ],
             ],
             [

@@ -452,6 +452,39 @@ final class ConfigFixSweepRegressionTests: XCTestCase {
         XCTAssertEqual(last.text, "c")
     }
 
+    /// A binary diff has no `---`/`+++` lines, so its path comes only from the `diff --git`
+    /// header, which git C-quotes for names with a quote, backslash, tab or raw bytes. An
+    /// unquoted marker name with a space ends in a tab that is not part of the path.
+    func testDiffParserDecodesQuotedHeaderPathsAndDropsMarkerTab() throws {
+        let diff = #"""
+        diff --git "a/dir/qu\"ote\tname.bin" "b/dir/qu\"ote\tname.bin"
+        new file mode 100644
+        index 0000000..1111111
+        Binary files /dev/null and "b/dir/qu\"ote\tname.bin" differ
+        diff --git "a/caf\303\251\\x.bin" "b/caf\303\251\\x.bin"
+        index 1111111..2222222 100644
+        Binary files "a/caf\303\251\\x.bin" and "b/caf\303\251\\x.bin" differ
+        diff --git a/sp ace.txt b/sp ace.txt
+        index 3333333..4444444 100644
+        --- a/sp ace.txt\#t
+        +++ b/sp ace.txt\#t
+        @@ -1 +1 @@
+        -a
+        +b
+
+        """#
+
+        let entries = ReviewDiffParser.parseEntries(diff)
+
+        XCTAssertEqual(entries.map(\.file.displayPath), ["dir/qu\"ote\tname.bin", "café\\x.bin", "sp ace.txt"])
+        XCTAssertEqual(entries[0].file.status, .added)
+        XCTAssertEqual(entries[0].file.notDiffableReason, .binary)
+        XCTAssertEqual(entries[1].file.notDiffableReason, .binary)
+        XCTAssertEqual(entries[1].file.oldPath, "café\\x.bin")
+        XCTAssertNil(entries[2].file.notDiffableReason)
+        XCTAssertTrue(entries.allSatisfy { $0.patch.hasPrefix("diff --git ") })
+    }
+
     // MARK: - CONF-06: JSONC comments end at any line terminator
 
     private func parsedJSONC(_ source: String) throws -> [String: Int]? {
