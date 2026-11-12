@@ -2043,6 +2043,8 @@ class TerminalController {
             return v2Result(id: id, self.v2Subscribe(params: params, connection: connection))
         case "unsubscribe":
             return v2Result(id: id, self.v2Unsubscribe(params: params, connection: connection))
+        case "routes.list":
+            return v2Result(id: id, self.v2RoutesList(params: params))
 
 #if DEBUG
         // Debug / test-only (Release answers method_not_found)
@@ -2112,6 +2114,8 @@ class TerminalController {
             return v2Result(id: id, self.v2DebugNotificationBannerCount())
         case "debug.notification.banner_reset":
             return v2Result(id: id, self.v2DebugNotificationBannerReset())
+        case "debug.routes.load":
+            return v2Result(id: id, self.v2DebugRoutesLoad(params: params))
         case "debug.settle":
             return v2Result(id: id, self.v2DebugSettle(params: params))
         case "debug.flash.count":

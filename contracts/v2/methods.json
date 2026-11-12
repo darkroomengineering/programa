@@ -1080,6 +1080,31 @@
       },
       "threading": "main"
     },
+    "debug.routes.load": {
+      "auth_required": true,
+      "debug_only": true,
+      "description": "DEBUG-build-only introspection and simulation. Installs the event routes in `json` (programa.json text) in place of the global file's routes; `json: null` returns to the file.",
+      "errors": [
+        "invalid_params",
+        "unavailable"
+      ],
+      "focus_intent": false,
+      "handler": "v2DebugRoutesLoad",
+      "params": {
+        "additionalProperties": false,
+        "properties": {
+          "json": {}
+        },
+        "required": [
+          "json"
+        ],
+        "type": "object"
+      },
+      "result": {
+        "type": "object"
+      },
+      "threading": "main"
+    },
     "debug.samples.reset": {
       "auth_required": true,
       "debug_only": true,
@@ -2614,6 +2639,24 @@
             "type": "string"
           }
         },
+        "required": [],
+        "type": "object"
+      },
+      "result": {
+        "type": "object"
+      },
+      "threading": "main"
+    },
+    "routes.list": {
+      "auth_required": true,
+      "debug_only": false,
+      "description": "Event routes from programa.json. Lists each loaded route with its counters and last error, and every load issue.",
+      "errors": [],
+      "focus_intent": false,
+      "handler": "v2RoutesList",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
         "required": [],
         "type": "object"
       },

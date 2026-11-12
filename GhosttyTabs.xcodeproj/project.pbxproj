@@ -246,6 +246,12 @@
 		A5001208 /* UpdateTitlebarAccessory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001218 /* UpdateTitlebarAccessory.swift */; };
 		A5001610 /* SessionPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001611 /* SessionPersistence.swift */; };
 		A5001650 /* ProgramaConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001651 /* ProgramaConfig.swift */; };
+		EVRT00000000000000000002 /* ProgramaRoutes.swift in Sources */ = {isa = PBXBuildFile; fileRef = EVRT00000000000000000001 /* ProgramaRoutes.swift */; };
+		EVRT00000000000000000004 /* RouteMatching.swift in Sources */ = {isa = PBXBuildFile; fileRef = EVRT00000000000000000003 /* RouteMatching.swift */; };
+		EVRT00000000000000000006 /* RouteGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EVRT00000000000000000005 /* RouteGate.swift */; };
+		EVRT00000000000000000008 /* RouteEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = EVRT00000000000000000007 /* RouteEngine.swift */; };
+		EVRT0000000000000000000A /* RouteActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = EVRT00000000000000000009 /* RouteActions.swift */; };
+		EVRT0000000000000000000C /* TerminalController+Routes.swift in Sources */ = {isa = PBXBuildFile; fileRef = EVRT0000000000000000000B /* TerminalController+Routes.swift */; };
 		A5001652 /* ProgramaConfigExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001653 /* ProgramaConfigExecutor.swift */; };
 		NRPA00001 /* FileWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRPA00002 /* FileWatcher.swift */; };
 		A5001654 /* ProgramaDirectoryTrust.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001655 /* ProgramaDirectoryTrust.swift */; };
@@ -398,6 +404,8 @@
 					7C135CU00000000000000004 /* ClosedTerminalUndoStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C135CU00000000000000003 /* ClosedTerminalUndoStoreTests.swift */; };
 					7C10SE2A0000000000000002 /* WorkspaceCloseConfirmationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C10SE2A0000000000000001 /* WorkspaceCloseConfirmationTests.swift */; };
 					C1A2B3C4D5E6F70800000001 /* ProgramaConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A2B3C4D5E6F70800000002 /* ProgramaConfigTests.swift */; };
+					EVRT0000000000000000000E /* ProgramaRouteDecodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EVRT0000000000000000000D /* ProgramaRouteDecodingTests.swift */; };
+					EVRT00000000000000000010 /* RouteGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EVRT0000000000000000000F /* RouteGateTests.swift */; };
 					9EAF4699346282F2171FCDB7 /* ProgramaDirectoryTrustTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CA3597273B50CC0592C0164 /* ProgramaDirectoryTrustTests.swift */; };
 		C7A10002 /* V2MethodNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A10001 /* V2MethodNames.swift */; };
 		B0F65D90C522CCE8ECCBE4AF /* V2MethodNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A10001 /* V2MethodNames.swift */; };
@@ -720,6 +728,12 @@
 		A5001223 /* UpdateLogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Update/UpdateLogStore.swift; sourceTree = "<group>"; };
 		A5001611 /* SessionPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionPersistence.swift; sourceTree = "<group>"; };
 		A5001651 /* ProgramaConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaConfig.swift; sourceTree = "<group>"; };
+		EVRT00000000000000000001 /* ProgramaRoutes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaRoutes.swift; sourceTree = "<group>"; };
+		EVRT00000000000000000003 /* RouteMatching.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteMatching.swift; sourceTree = "<group>"; };
+		EVRT00000000000000000005 /* RouteGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteGate.swift; sourceTree = "<group>"; };
+		EVRT00000000000000000007 /* RouteEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteEngine.swift; sourceTree = "<group>"; };
+		EVRT00000000000000000009 /* RouteActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteActions.swift; sourceTree = "<group>"; };
+		EVRT0000000000000000000B /* TerminalController+Routes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+Routes.swift"; sourceTree = "<group>"; };
 		A5001653 /* ProgramaConfigExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaConfigExecutor.swift; sourceTree = "<group>"; };
 		NRPA00002 /* FileWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileWatcher.swift; sourceTree = "<group>"; };
 		A5001655 /* ProgramaDirectoryTrust.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaDirectoryTrust.swift; sourceTree = "<group>"; };
@@ -864,6 +878,8 @@
 				7C135CU00000000000000003 /* ClosedTerminalUndoStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClosedTerminalUndoStoreTests.swift; sourceTree = "<group>"; };
 				7C10SE2A0000000000000001 /* WorkspaceCloseConfirmationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceCloseConfirmationTests.swift; sourceTree = "<group>"; };
 				C1A2B3C4D5E6F70800000002 /* ProgramaConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaConfigTests.swift; sourceTree = "<group>"; };
+				EVRT0000000000000000000D /* ProgramaRouteDecodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaRouteDecodingTests.swift; sourceTree = "<group>"; };
+				EVRT0000000000000000000F /* RouteGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteGateTests.swift; sourceTree = "<group>"; };
 		3CA3597273B50CC0592C0164 /* ProgramaDirectoryTrustTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaDirectoryTrustTests.swift; sourceTree = "<group>"; };
 		C7A10001 /* V2MethodNames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = V2MethodNames.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -1218,6 +1234,12 @@
 				A5001222 /* WindowAccessor.swift */,
 				A5001611 /* SessionPersistence.swift */,
 				A5001651 /* ProgramaConfig.swift */,
+				EVRT00000000000000000001 /* ProgramaRoutes.swift */,
+				EVRT00000000000000000003 /* RouteMatching.swift */,
+				EVRT00000000000000000005 /* RouteGate.swift */,
+				EVRT00000000000000000007 /* RouteEngine.swift */,
+				EVRT00000000000000000009 /* RouteActions.swift */,
+				EVRT0000000000000000000B /* TerminalController+Routes.swift */,
 				A5001653 /* ProgramaConfigExecutor.swift */,
 				NRPA00002 /* FileWatcher.swift */,
 				A5001655 /* ProgramaDirectoryTrust.swift */,
@@ -1445,6 +1467,8 @@
 					7C135CU00000000000000003 /* ClosedTerminalUndoStoreTests.swift */,
 					7C10SE2A0000000000000001 /* WorkspaceCloseConfirmationTests.swift */,
 					C1A2B3C4D5E6F70800000002 /* ProgramaConfigTests.swift */,
+					EVRT0000000000000000000D /* ProgramaRouteDecodingTests.swift */,
+					EVRT0000000000000000000F /* RouteGateTests.swift */,
 					3CA3597273B50CC0592C0164 /* ProgramaDirectoryTrustTests.swift */,
 					A9A8BC17CBD749D48C344001 /* MCPSocketBridgeTests.swift */,
 				);
@@ -1839,6 +1863,12 @@
 				A500120C /* WindowAccessor.swift in Sources */,
 				A5001610 /* SessionPersistence.swift in Sources */,
 				A5001650 /* ProgramaConfig.swift in Sources */,
+				EVRT00000000000000000002 /* ProgramaRoutes.swift in Sources */,
+				EVRT00000000000000000004 /* RouteMatching.swift in Sources */,
+				EVRT00000000000000000006 /* RouteGate.swift in Sources */,
+				EVRT00000000000000000008 /* RouteEngine.swift in Sources */,
+				EVRT0000000000000000000A /* RouteActions.swift in Sources */,
+				EVRT0000000000000000000C /* TerminalController+Routes.swift in Sources */,
 			A5001652 /* ProgramaConfigExecutor.swift in Sources */,
 				NRPA00001 /* FileWatcher.swift in Sources */,
 			A5001654 /* ProgramaDirectoryTrust.swift in Sources */,
@@ -1942,6 +1972,8 @@
 					7C135CU00000000000000004 /* ClosedTerminalUndoStoreTests.swift in Sources */,
 					7C10SE2A0000000000000002 /* WorkspaceCloseConfirmationTests.swift in Sources */,
 					C1A2B3C4D5E6F70800000001 /* ProgramaConfigTests.swift in Sources */,
+					EVRT0000000000000000000E /* ProgramaRouteDecodingTests.swift in Sources */,
+					EVRT00000000000000000010 /* RouteGateTests.swift in Sources */,
 					9EAF4699346282F2171FCDB7 /* ProgramaDirectoryTrustTests.swift in Sources */,
 					F6D8BDB710C64A444F3DE4F0 /* MCPSocketBridgeTests.swift in Sources */,
 					386AE1E1270DD8B6AA427C61 /* SocketPathResolution.swift in Sources */,

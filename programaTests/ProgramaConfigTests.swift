@@ -352,11 +352,15 @@ final class ProgramaConfigDecodingTests: XCTestCase {
         assertDecodeThrows(json, mentioning: "either a 'pane' key or a 'direction' key")
     }
 
-    func testDecodeMissingCommandsKeyThrows() {
-        let json = """
+    /// A routes-only file must load, so a file without `commands` decodes with none.
+    func testDecodeMissingCommandsKeyYieldsNoCommands() throws {
+        let config = try decode("""
         { "notCommands": [] }
-        """
-        assertDecodeThrows(json, mentioning: "commands")
+        """)
+        XCTAssertEqual(config.commands, [])
+        XCTAssertNil(config.recipes)
+        XCTAssertEqual(config.routes, [])
+        XCTAssertEqual(config.routeIssues, [])
     }
 
     func testDecodeInvalidSurfaceTypeThrows() {

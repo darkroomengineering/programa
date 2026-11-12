@@ -2,9 +2,34 @@ import Bonsplit
 import Combine
 import Foundation
 
-struct ProgramaConfigFile: Codable, Sendable, Equatable {
+struct ProgramaConfigFile: Decodable, Sendable, Equatable {
     var commands: [ProgramaCommandDefinition]
     var recipes: [ProgramaRecipeDefinition]?
+    var routes: [ProgramaRouteDefinition]
+    /// The `routes` entries that did not load; they never cost the file its other entries.
+    var routeIssues: [ProgramaRouteIssue]
+    /// Trust digest of the exact config bytes, set by `ProgramaConfigStore`. Not part of the
+    /// file format.
+    var sourceDigest: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case commands, recipes, routes
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // A routes-only file must load, so `commands` may be absent.
+        commands = try container.decodeIfPresent([ProgramaCommandDefinition].self, forKey: .commands) ?? []
+        recipes = try container.decodeIfPresent([ProgramaRecipeDefinition].self, forKey: .recipes)
+        if container.contains(.routes) {
+            let decoded = ProgramaRouteDefinition.decodeList(from: try container.superDecoder(forKey: .routes))
+            routes = decoded.routes
+            routeIssues = decoded.issues
+        } else {
+            routes = []
+            routeIssues = []
+        }
+    }
 }
 
 /// A named, reusable input to a `command` template or a recipe `prompt`, referenced as
@@ -387,6 +412,13 @@ final class ProgramaConfigStore: ObservableObject {
     /// `ProgramaConfigSourceTrackingTests`.
     private(set) var recipeSourcePaths: [String: String] = [:]
 
+    /// Routes, their load issues and the trust digest, from the global file only. A route runs
+    /// with no person present and cannot show the trust prompt, so a project file's routes never
+    /// load.
+    private(set) var loadedRoutes: [ProgramaRouteDefinition] = []
+    private(set) var routeIssues: [ProgramaRouteIssue] = []
+    private(set) var routesDigest: String?
+
     // `internal` (not `private(set)`) rather than fully public: production code only ever
     // mutates these through `updateLocalConfigPath`/the computed default below, but tests in
     // this module need to point `loadAll()` at real temp files without a home-directory
@@ -526,7 +558,8 @@ final class ProgramaConfigStore: ObservableObject {
         }
 
         // Global config fills in the rest
-        if let globalConfig = parseConfig(at: globalConfigPath) {
+        let globalConfig = parseConfig(at: globalConfigPath)
+        if let globalConfig {
             for command in globalConfig.commands {
                 if !seenNames.contains(command.name) {
                     commands.append(command)
@@ -543,10 +576,17 @@ final class ProgramaConfigStore: ObservableObject {
             }
         }
 
+        let routes = globalConfig?.routes ?? []
+        let issues = globalConfig?.routeIssues ?? []
+        let digest = globalConfig?.sourceDigest
+
         guard commands != loadedCommands ||
                 sourcePaths != commandSourcePaths ||
                 recipes != loadedRecipes ||
-                recipeSources != recipeSourcePaths else {
+                recipeSources != recipeSourcePaths ||
+                routes != loadedRoutes ||
+                issues != routeIssues ||
+                digest != routesDigest else {
             return
         }
 
@@ -554,6 +594,9 @@ final class ProgramaConfigStore: ObservableObject {
         commandSourcePaths = sourcePaths
         loadedRecipes = recipes
         recipeSourcePaths = recipeSources
+        loadedRoutes = routes
+        routeIssues = issues
+        routesDigest = digest
         configRevision &+= 1
     }
 
@@ -584,6 +627,7 @@ final class ProgramaConfigStore: ObservableObject {
         do {
             var config = try JSONDecoder().decode(ProgramaConfigFile.self, from: sanitized)
             let digest = ProgramaDirectoryTrust.executableDigest(forSanitizedConfig: sanitized)
+            config.sourceDigest = digest
             for index in config.commands.indices {
                 config.commands[index].sourceDigest = digest
             }
