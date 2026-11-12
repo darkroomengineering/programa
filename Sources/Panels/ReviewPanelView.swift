@@ -301,6 +301,7 @@ struct ReviewPanelView: View {
                     files: panel.files,
                     revision: panel.filesRevision,
                     style: .split,
+                    isVisibleInUI: isVisibleInUI,
                     bundleDirectory: bundleDirectory
                 ) { selection in
                     composer = InlineComposerState(

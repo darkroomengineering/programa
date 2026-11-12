@@ -38,6 +38,9 @@ struct ReviewDiffWebView: NSViewRepresentable {
     let files: [ReviewFileDiff]
     let revision: UInt64
     let style: ReviewDiffViewerStyle
+    /// The view stays mounted while its tab is hidden; hiding it keeps it from taking file
+    /// drops and clicks meant for the visible tab.
+    let isVisibleInUI: Bool
     let bundleDirectory: URL
     let onSelectLines: (ReviewDiffLineSelection) -> Void
 
@@ -64,6 +67,7 @@ struct ReviewDiffWebView: NSViewRepresentable {
         webView.underPageBackgroundColor = .clear
         webView.navigationDelegate = coordinator
         coordinator.webView = webView
+        webView.isHidden = !isVisibleInUI
 
         var components = URLComponents()
         components.scheme = Self.scheme
@@ -78,6 +82,7 @@ struct ReviewDiffWebView: NSViewRepresentable {
 
     func updateNSView(_ webView: WKWebView, context: Context) {
         let coordinator = context.coordinator
+        webView.isHidden = !isVisibleInUI
         coordinator.onSelectLines = onSelectLines
         if coordinator.lastRevision != revision {
             coordinator.lastRevision = revision
