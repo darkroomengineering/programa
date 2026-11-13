@@ -121,9 +121,15 @@ view as Programa reads it, even when an unsigned report later in the same burst 
 badge. So on a Claude Code terminal:
 
 - Claude's own unsigned status drives the badge, and its hooks drive routes.
-- While Claude reports its own status, its PreToolUse hook moves only the routes' view to
-  `working` (`surface.report_agent_state` with `route_only: true`), so routes see the agent resume
-  after a permission prompt while the badge stays Claude's.
+- While Claude reports its own status, its PostToolUse hook moves only the routes' view to
+  `working` (`surface.report_agent_state` with `route_only` and `resumed`), so routes see the agent
+  resume after a permission prompt while the badge stays Claude's. PostToolUse runs only after the
+  tool did, so the prompt was answered, and it is a synchronous hook, so its report lands before the
+  next tool's prompt can. The async PreToolUse hook could land after that prompt, so it reports
+  nothing here.
+- Only a report that proves the prompt was answered ends a stop for input in the routes' view: a
+  hooks report, a signed program report, or a route-only report marked `resumed`. A route-only
+  report without it never moves a blocked view.
 - After Esc, Claude reports idle itself and fires no Stop hook: the badge leaves Working, but held
   route text waits for the next turn's Stop hook, or expires.
 - A hook clear (SessionEnd) ends the routes' view even while the badge stays with the program.

@@ -382,6 +382,7 @@ extension ProgramaCLI {
             },
             extraEvents: [
                 "pre-tool-use": { self.runClaudePreToolUse($0) },
+                "post-tool-use": { self.runClaudePostToolUse($0) },
                 "subagent-start": { self.runClaudeSubagentStart($0) },
                 "subagent-stop": { self.runClaudeSubagentStop($0) },
             ]
@@ -841,11 +842,8 @@ extension ProgramaCLI {
         )
 
         // Clear the badge first, unless Claude reports its own state: this hook is async, and a
-        // late "working" would override Claude's idle after an Esc (claudeReportsOwnStatus). Then
-        // only routes hear it, so they see the agent resume after a permission prompt (INC-1057).
-        if let surfaceId, claudeReportsOwnStatus {
-            reportRouteOnlyWorking(client: client, provider: "claude-code", workspaceId: workspaceId, surfaceId: surfaceId, sessionId: ctx.parsed.sessionId, pid: claudePid)
-        } else if let surfaceId {
+        // late "working" would override Claude's idle after an Esc (claudeReportsOwnStatus).
+        if let surfaceId, !claudeReportsOwnStatus {
             reportAgentStateAndEvent(client: client, provider: "claude-code", eventType: "item.started", workspaceId: workspaceId, surfaceId: surfaceId, state: .working, sessionId: ctx.parsed.sessionId, pid: claudePid)
         }
 

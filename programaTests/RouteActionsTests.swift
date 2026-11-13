@@ -648,4 +648,48 @@ final class RouteActionsTests: XCTestCase {
         XCTAssertEqual(live.deliveries.map(\.text), ["next"])
         XCTAssertEqual(live.deliveries.map(\.submit), [true])
     }
+
+    /// INC-1057: Claude Code's PreToolUse hook is async, so a route-only `working` from it can land
+    /// after the next permission prompt went up. It must leave the blocked route view alone, so
+    /// routes still wait; only the synchronous PostToolUse hook, which proves the prompt was
+    /// answered, resumes it, and the Stop hook then releases the held text once.
+    func testALateRouteOnlyWorkingCannotEndAPermissionStop() throws {
+        let workspace = Workspace(title: "Test")
+        let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
+        let live = WorkspaceAgentTarget(workspace: workspace, panelId: surfaceId)
+        workspaceTarget = live
+        try install(#"{ "name": "s", "on": "agent/+/state/working", "send": { "text": "go" } }"#)
+
+        // A turn starts; Claude's own (unsigned) status owns the badge. The route's text waits.
+        workspace.updatePanelAgentState(panelId: surfaceId, state: .working, source: .hooks, sessionKey: key)
+        engine.ingest(state("working", previous: "idle", writer: agent))
+        workspace.updatePanelAgentState(panelId: surfaceId, state: .working, source: .program, programState: .working)
+        XCTAssertTrue(live.deliveries.isEmpty)
+
+        // The Notification hook reports a permission prompt.
+        workspace.updatePanelAgentState(
+            panelId: surfaceId, state: .blocked, source: .hooks, sessionKey: key, promptKind: .permission
+        )
+        engine.ingest(needsInput())
+        engine.ingest(state("blocked", previous: "working", writer: agent))
+
+        // A late PreToolUse route-only working arrives while the prompt is still on screen.
+        workspace.updatePanelRouteAgentState(panelId: surfaceId, state: .working, source: .hooks, sessionKey: key)
+        XCTAssertEqual(workspace.panelAgentPresence[surfaceId]?.route?.state, .blocked, "a route-only working ended the stop")
+        XCTAssertTrue(live.deliveries.isEmpty)
+
+        // PostToolUse: the tool ran, so the prompt was answered.
+        workspace.updatePanelRouteAgentState(
+            panelId: surfaceId, state: .working, source: .hooks, sessionKey: key, resumesBlocked: true
+        )
+        XCTAssertEqual(workspace.panelAgentPresence[surfaceId]?.route?.state, .working)
+        engine.ingest(state("working", previous: "blocked", writer: agent))
+        XCTAssertTrue(live.deliveries.isEmpty, "still mid-turn")
+
+        // Stop: the badge stays with Claude's own status, the route view ends the turn.
+        workspace.updatePanelAgentState(panelId: surfaceId, state: .idle, source: .hooks, sessionKey: key)
+        XCTAssertEqual(workspace.panelAgentPresence[surfaceId]?.route?.state, .idle)
+        engine.ingest(state("idle", previous: "working", writer: agent))
+        XCTAssertEqual(live.deliveries.map(\.text), ["go"])
+    }
 }

@@ -829,9 +829,9 @@ final class AgentActivityStateTests: XCTestCase {
         XCTAssertTrue(workspace.agentWriterIdentified(panelId: signed))
     }
 
-    /// INC-1057: Claude Code's PreToolUse hook, while Claude reports its own status, sends a
-    /// route-only working report: routes see the agent resume after a permission prompt, and the
-    /// badge stays Claude's (INC-413).
+    /// INC-1057: a route-only report moves what routes see and never the badge (INC-413). It cannot
+    /// end a stop for input unless it is marked as a resume, which only Claude Code's synchronous
+    /// PostToolUse hook sends.
     func testRouteOnlyReportMovesTheRouteViewButNeverTheBadge() {
         let workspace = Workspace(title: "Test")
         let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
@@ -842,14 +842,18 @@ final class AgentActivityStateTests: XCTestCase {
         workspace.updatePanelAgentState(panelId: panel, state: .blocked, source: .hooks, sessionKey: key)
         workspace.updatePanelAgentState(panelId: panel, state: .blocked, source: .program, programState: .blocked)
         workspace.updatePanelRouteAgentState(panelId: panel, state: .working, source: .hooks, sessionKey: key)
+        XCTAssertEqual(workspace.panelAgentPresence[panel]?.route?.state, .blocked, "only a resume ends a stop")
+        workspace.updatePanelRouteAgentState(
+            panelId: panel, state: .working, source: .hooks, sessionKey: key, resumesBlocked: true
+        )
         XCTAssertEqual(workspace.panelAgentStates[panel], .blocked)
         XCTAssertEqual(workspace.panelAgentStateSources[panel], .program)
         XCTAssertEqual(workspace.panelAgentPresence[panel]?.programState, .blocked)
         XCTAssertEqual(workspace.panelAgentPresence[panel]?.route, RouteAgentPresence(state: .working, source: .hooks, sessionKey: key))
         XCTAssertEqual(workspace.routeAgentState(panelId: panel), .working)
 
-        workspace.updatePanelRouteAgentState(panelId: panel, state: .idle, source: .program)
-        workspace.updatePanelRouteAgentState(panelId: panel, state: .idle, source: .inferred)
+        workspace.updatePanelRouteAgentState(panelId: panel, state: .idle, source: .program, resumesBlocked: true)
+        workspace.updatePanelRouteAgentState(panelId: panel, state: .idle, source: .inferred, resumesBlocked: true)
         XCTAssertEqual(workspace.panelAgentPresence[panel]?.route?.state, .working, "only trusted reports move the route view")
     }
 
@@ -862,7 +866,7 @@ final class AgentActivityStateTests: XCTestCase {
         let panelId = try XCTUnwrap(workspace.focusedPanelId)
         let panel = try XCTUnwrap(workspace.panels[panelId] as? TerminalPanel)
         let token = ProgramStatusToken.generate()
-        panel.surface.programStatusTokenDigest = ProgramStatusToken.digest(of: token)
+        panel.surface.setProgramStatusTokenDigestForTesting(ProgramStatusToken.digest(of: token))
         func report(_ state: ProgramStatusState, _ body: String) throws -> ProgramStatusDispatcher.Event {
             .report(try XCTUnwrap(ProgramStatusReport.parse(state: state, body: Data(body.utf8))))
         }

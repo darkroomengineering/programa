@@ -83,6 +83,8 @@ extension ProgramaCLI {
         ClaudeHookEventSpec(name: "Notification", event: "notification", timeout: 10, isAsync: false),
         ClaudeHookEventSpec(name: "UserPromptSubmit", event: "prompt-submit", timeout: 10, isAsync: false),
         ClaudeHookEventSpec(name: "PreToolUse", event: "pre-tool-use", timeout: 5, isAsync: true),
+        // Synchronous on purpose: see `runClaudePostToolUse`.
+        ClaudeHookEventSpec(name: "PostToolUse", event: "post-tool-use", timeout: 5, isAsync: false),
         ClaudeHookEventSpec(name: "SubagentStart", event: "subagent-start", timeout: 5, isAsync: false),
         ClaudeHookEventSpec(name: "SubagentStop", event: "subagent-stop", timeout: 5, isAsync: false)
     ]

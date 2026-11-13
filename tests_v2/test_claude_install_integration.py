@@ -34,6 +34,7 @@ EXPECTED_EVENTS = [
     "Notification",
     "UserPromptSubmit",
     "PreToolUse",
+    "PostToolUse",
 ]
 
 

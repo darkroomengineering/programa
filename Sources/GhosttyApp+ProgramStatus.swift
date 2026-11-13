@@ -148,12 +148,13 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
                 ) {
                     projectRoot = projectRoot || rootTouched
                     // Only the batch's last root record reaches the badge below, so a signed root
-                    // report goes to the route view as it comes: an unsigned report later in the
-                    // same batch must not hide it from routes.
+                    // report goes to the route view as it comes, with the authority it would have
+                    // there as the last record: an unsigned report later in the same batch must
+                    // not hide it from routes.
                     if authentication == .verified, rootTouched, let state = report.state {
                         manager.updateSurfaceRouteAgentState(
                             tabId: key.tabId, surfaceId: key.surfaceId, state: state.legacyAgentState,
-                            source: .program, programVerified: true
+                            source: .program, programVerified: true, resumesBlocked: true
                         )
                     }
                 }

@@ -1712,10 +1712,12 @@ class TabManager: ObservableObject {
         state: AgentActivityState,
         source: AgentStateSource = .hooks,
         sessionKey: AgentSessionKey? = nil,
-        programVerified: Bool = false
+        programVerified: Bool = false,
+        resumesBlocked: Bool = false
     ) {
         workspace(withId: tabId)?.updatePanelRouteAgentState(
-            panelId: surfaceId, state: state, source: source, sessionKey: sessionKey, programVerified: programVerified
+            panelId: surfaceId, state: state, source: source, sessionKey: sessionKey, programVerified: programVerified,
+            resumesBlocked: resumesBlocked
         )
     }
 

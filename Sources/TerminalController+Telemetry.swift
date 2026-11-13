@@ -327,9 +327,14 @@ extension TerminalController {
             (provider, reportedPid, sessionKey) = identity
         }
 
-        // `route_only`: the report moves only what event routes see (`AgentPresence.route`), not the
-        // badge, helpers or ports. Claude Code's PreToolUse hook sends it while Claude reports its
-        // own status, so routes still see the agent resume after a permission prompt.
+        // `route_only`: a `working` report that moves only what event routes see
+        // (`AgentPresence.route`), not the badge, helpers or ports, and never a blocked route view
+        // unless `resumed` says the hook proves the prompt was answered. Claude Code's PostToolUse
+        // hook sends it with `resumed` while Claude reports its own status.
+        let routeOnly = v2Bool(params, "route_only") == true
+        if routeOnly, state != .working {
+            return .err(code: "invalid_params", message: "route_only accepts only state working", data: nil)
+        }
         let reply: [String: Any] = [
             "workspace_id": workspaceId.uuidString,
             "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
@@ -338,9 +343,13 @@ extension TerminalController {
             "state": state.rawValue,
             "source": source.rawValue,
         ]
-        if v2Bool(params, "route_only") == true {
+        if routeOnly {
+            let resumesBlocked = v2Bool(params, "resumed") == true
             v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { tabManager, _, sid in
-                tabManager.updateSurfaceRouteAgentState(tabId: workspaceId, surfaceId: sid, state: state, source: source, sessionKey: sessionKey)
+                tabManager.updateSurfaceRouteAgentState(
+                    tabId: workspaceId, surfaceId: sid, state: state, source: source, sessionKey: sessionKey,
+                    resumesBlocked: resumesBlocked
+                )
             }
             return .ok(reply)
         }

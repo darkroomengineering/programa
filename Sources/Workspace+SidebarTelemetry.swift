@@ -424,17 +424,23 @@ extension Workspace {
 
     /// Moves only the route view (`AgentPresence.route`), for a trusted report that must not drive
     /// the badge: a signed OSC 7501 report the drain applied before a later unsigned one in the
-    /// same batch, or Claude Code's PreToolUse hook while Claude reports its own status. A no-op
+    /// same batch, or Claude Code's PostToolUse hook while Claude reports its own status. A no-op
     /// without a presence, since the route view lives with it; routes then miss the report and
     /// fail closed.
+    ///
+    /// It leaves a blocked route view alone unless `resumesBlocked`: only a report that proves the
+    /// person answered the prompt may end a stop for input (a hook that runs after the tool, not
+    /// an async one that can land after the next prompt went up).
     func updatePanelRouteAgentState(
         panelId: UUID,
         state: AgentActivityState,
         source: AgentStateSource,
         sessionKey: AgentSessionKey? = nil,
-        programVerified: Bool = false
+        programVerified: Bool = false,
+        resumesBlocked: Bool = false
     ) {
         guard let current = panelAgentPresence[panelId],
+              resumesBlocked || current.route?.state != .blocked,
               let route = Self.nextRoute(
                   after: current.route, state: state, source: source, sessionKey: sessionKey, programVerified: programVerified
               ),
