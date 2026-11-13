@@ -1032,7 +1032,7 @@ final class AgentActivityStateTests: XCTestCase {
     func testPromptMarkWithoutAShellPromptReportSinceArmingKeepsThePrompt() throws {
         let f = try armUnderNativeStatus()
         f.drain([.prompt])
-        XCTAssertNil(f.workspace.panelAgentPresence[f.panelId])
+        XCTAssertEqual(f.workspace.panelAgentPresence[f.panelId]?.route?.state, .blocked, "the mark wiped the hooks' view")
         XCTAssertEqual(f.hold, .permission, "a printed mark while the shell runs the agent closed the prompt")
 
         let g = try promptGateFixture()
@@ -1101,6 +1101,38 @@ final class AgentActivityStateTests: XCTestCase {
         f.drain([try osc(.working, "app=claude")])
         XCTAssertTrue(f.panel.surface.isPromptShowing)
         XCTAssertTrue(f.workspace.canAutoSubmitToAgent(panelId: f.panelId))
+    }
+
+    /// INC-1147: printed bytes that drop the program's record (a reset, an unsigned clear, a prompt
+    /// mark the shell did not report) leave what the hooks said; the badge falls back to it.
+    func testPrintedClearsKeepTheHooksView() throws {
+        let unsignedClear = try osc(nil, "")
+        for clear: ProgramStatusDispatcher.Event in [.resetAll, unsignedClear, .prompt] {
+            let f = try armUnderNativeStatus()
+            f.drain([clear])
+            let presence = try XCTUnwrap(f.workspace.panelAgentPresence[f.panelId], "\(clear) wiped the hooks' view")
+            XCTAssertEqual(presence.route?.state, .blocked, "\(clear)")
+            XCTAssertEqual(presence.state, .blocked, "\(clear): the badge shows the hooks' view")
+            XCTAssertEqual(presence.source, .hooks, "\(clear)")
+            XCTAssertEqual(f.hold, .permission, "\(clear)")
+
+            f.manager.clearSurfaceAgentState(tabId: f.workspace.id, surfaceId: f.panelId)
+            XCTAssertNil(f.workspace.panelAgentPresence[f.panelId], "\(clear): the hooks' clear still ends it")
+            XCTAssertNil(f.hold, "\(clear)")
+        }
+    }
+
+    /// A signed route view outlives a printed reset too, and the agent's signed clear still ends it
+    /// once its record is gone.
+    func testASignedViewOutlivesAPrintedResetAndEndsOnASignedClear() throws {
+        let f = try promptGateFixture()
+        f.drain([try osc(.working, "programa_token=\(f.token)")])
+        f.drain([.resetAll])
+        XCTAssertEqual(f.workspace.panelAgentPresence[f.panelId]?.route, RouteAgentPresence(state: .working, source: .program))
+        XCTAssertTrue(f.workspace.agentWriterIdentified(panelId: f.panelId))
+
+        f.drain([try osc(nil, "programa_token=\(f.token)")])
+        XCTAssertNil(f.workspace.panelAgentPresence[f.panelId], "the agent's signed clear ends it")
     }
 
     /// The shell runs Claude Code, whose own unsigned status owns the badge, and its Notification
