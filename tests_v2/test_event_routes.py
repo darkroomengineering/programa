@@ -283,7 +283,8 @@ def _case_forged_idle_during_permission(client: ProgramaClient, session: _Sessio
 
 def _case_refused_during_prompt(client: ProgramaClient, session: _Session) -> None:
     workspace_id, surface_id = session.shell()
-    _load(client, [{"name": "held", "on": "agent/+/needs_input/permission",
+    # Text routes cannot fire on needs_input topics alone, so match the call by its kind.
+    _load(client, [{"name": "held", "on": "agent/#", "when": {"kind": "permission"},
                     "send": {"text": "HELD-TEXT", "whenBusy": "steer"}}])
     _needs_input(client, workspace_id, surface_id, "permission")
     _wait("the refusal", lambda: _route(client, "held").get("last_error") is not None)

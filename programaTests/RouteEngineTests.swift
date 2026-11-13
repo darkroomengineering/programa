@@ -99,7 +99,8 @@ final class RouteEngineTests: XCTestCase {
             now: { clock.now },
             scheduleWake: { date, body in clock.schedule(at: date, body) },
             modelFields: modelFields,
-            deferWork: { $0() }
+            deferWork: { $0() },
+            blockedSurfaces: { [] }
         )
     }
 
@@ -478,7 +479,8 @@ final class RouteEngineTests: XCTestCase {
             now: { clock.now },
             scheduleWake: { date, body in clock.schedule(at: date, body) },
             modelFields: { _ in [:] },
-            deferWork: { deferred.append($0) }
+            deferWork: { deferred.append($0) },
+            blockedSurfaces: { [] }
         )
         let executor = RecordingExecutor()
         engine.executor = executor
@@ -584,7 +586,7 @@ final class RouteEngineTests: XCTestCase {
 
     func testAProgramPermissionPromptAlsoHoldsDeliveries() throws {
         let engine = makeEngine()
-        try install(#"{ "name": "s", "on": "agent/+/needs_input/#", "send": { "text": "go" } }"#, on: engine)
+        try install(#"{ "name": "s", "on": "agent/#", "when": { "kind": "question" }, "send": { "text": "go" } }"#, on: engine)
         let blocked = RouteEvent(
             topic: "agent/S1/state/blocked",
             fields: ["surface_id": "S1", "state": "blocked", "program_status.kind": "permission"],
@@ -619,6 +621,42 @@ final class RouteEngineTests: XCTestCase {
         engine.ingest(agentState(surface: "S1", state: "working", previous: "idle", writer: agent))
         engine.ingest(agentState(surface: "S1", state: "idle", previous: "working", writer: agent))
         XCTAssertEqual(executor.wentIdle.map(\.id), [executor.fires.first?.id])
+    }
+
+    func testAWorkingReportOlderThanTheStopDoesNotResume() throws {
+        // The tap delivers `working` asynchronously; `agent.needs_input` records its stop in its
+        // own hop. A `working` published before the stop can therefore arrive after it.
+        let engine = makeEngine()
+        try install(#"{ "name": "s", "on": "agent/+/state/working", "send": { "text": "go" } }"#, on: engine)
+        _ = engine.ingestNeedsInput(RouteEvent(
+            topic: "agent/S1/needs_input/question",
+            fields: ["surface_id": "S1", "kind": "question", "ts": "100.5"],
+            writer: agent
+        ))
+        engine.ingest(RouteEvent(topic: "agent/S1/state/working", fields: ["surface_id": "S1", "state": "working", "ts": "100.25"], writer: agent))
+        XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S1"), "stamped before the stop")
+
+        engine.ingest(RouteEvent(topic: "agent/S1/state/working", fields: ["surface_id": "S1", "state": "working", "ts": "101.0"], writer: agent))
+        XCTAssertNil(engine.textDeliveryRefusal(surfaceId: "S1"))
+    }
+
+    func testASurfaceBlockedWhenRoutesInstallWaitsForTheProgram() throws {
+        let clock = clock!
+        let engine = RouteEngine(
+            now: { clock.now },
+            scheduleWake: { date, body in clock.schedule(at: date, body) },
+            modelFields: { _ in [:] },
+            deferWork: { $0() },
+            blockedSurfaces: { ["S1"] }
+        )
+        try install(#"{ "name": "s", "on": "agent/+/state/working", "send": { "text": "go" } }"#, on: engine)
+
+        XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S1"), "its stop was never seen, so no writer is known")
+        XCTAssertNil(engine.textDeliveryRefusal(surfaceId: "S2"))
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "blocked", writer: agent))
+        XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S1"))
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "blocked", writer: "program"))
+        XCTAssertNil(engine.textDeliveryRefusal(surfaceId: "S1"))
     }
 
     func testAQuestionHoldsTextUntilTheAgentWorksAgain() throws {
@@ -663,7 +701,7 @@ final class RouteEngineTests: XCTestCase {
         let executor = RecordingExecutor()
         let engine = makeEngine()
         engine.executor = executor
-        try install(#"{ "name": "s", "on": "agent/+/needs_input/#", "send": { "text": "go" } }"#, on: engine)
+        try install(#"{ "name": "s", "on": "agent/#", "when": { "kind": "question" }, "send": { "text": "go" } }"#, on: engine)
 
         engine.ingest(needsInput(surface: "S1"))
         engine.ingest(agentState(surface: "S1", state: "none"))
@@ -731,7 +769,7 @@ final class RouteEngineTests: XCTestCase {
         let executor = RecordingExecutor()
         let engine = makeEngine()
         engine.executor = executor
-        try install(#"{ "name": "p", "on": "agent/+/needs_input/#", "throttleMs": "1m", "prompt": { "text": "go" } }"#, on: engine)
+        try install(#"{ "name": "p", "on": "agent/#", "when": { "kind": "question" }, "throttleMs": "1m", "prompt": { "text": "go" } }"#, on: engine)
 
         engine.ingest(needsInput(surface: "S1", writer: agent))
         let first = try XCTUnwrap(executor.fires.first)
@@ -748,7 +786,7 @@ final class RouteEngineTests: XCTestCase {
     func testATextRouteListensForAgentStateWhateverItsTopic() throws {
         let tap = RouteTap()
         let engine = makeEngine(tap: tap)
-        try install(#"{ "name": "s", "on": "agent/+/needs_input/#", "send": { "text": "go" } }"#, on: engine)
+        try install(#"{ "name": "s", "on": "agent/#", "when": { "kind": "question" }, "send": { "text": "go" } }"#, on: engine)
         XCTAssertTrue(tap.wants(.needsInput))
         XCTAssertTrue(tap.wants(.agentState))
     }

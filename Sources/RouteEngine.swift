@@ -106,8 +106,7 @@ final class RouteEngine {
     }
 
     /// What text deliveries need from one surface's recent agent reports. Built from the frames
-    /// the tap delivers, so it starts empty at each install and anything unseen counts against a
-    /// delivery.
+    /// the tap delivers; at each install it starts from the surfaces blocked at that moment.
     private struct AgentTrack {
         enum Resume: Equatable {
             case free
@@ -117,7 +116,11 @@ final class RouteEngine {
             /// Programa's hooks report a prompt over the socket while the program's own OSC 7501
             /// status owns the presence and reports the `working` after it. With no writer known,
             /// only the program resumes it.
-            case awaitingWorking(from: String?)
+            ///
+            /// `since` is the stop's `ts`. A `working` report stamped earlier was published before
+            /// the stop and reached the engine late (the tap delivers asynchronously, while
+            /// `agent.needs_input` records its stop in its own hop), so it is ignored.
+            case awaitingWorking(from: String?, since: Double?)
         }
 
         /// Writer of the latest `working` report; nil when it named no session.
@@ -131,6 +134,8 @@ final class RouteEngine {
     private let modelFields: @MainActor (RouteEvent) -> [String: String]
     /// Runs actions fired while an `agent.needs_input` call is ingested, after that call's hop.
     private let deferWork: @MainActor (@escaping @MainActor () -> Void) -> Void
+    /// Surface ids whose agent is `blocked` right now.
+    private let blockedSurfaces: @MainActor () -> [String]
     /// Collects fires instead of running them, while `ingestNeedsInput` holds the hop.
     private var deferredFires: [RouteFire]?
 
@@ -154,13 +159,15 @@ final class RouteEngine {
         now: @escaping @MainActor () -> Date = Date.init,
         scheduleWake: @escaping @MainActor (Date, @escaping @MainActor () -> Void) -> Void = RouteEngine.scheduleOnMain(at:_:),
         modelFields: @escaping @MainActor (RouteEvent) -> [String: String] = RouteEngine.resolveModelFields(for:),
-        deferWork: @escaping @MainActor (@escaping @MainActor () -> Void) -> Void = RouteEngine.runOnMainLater(_:)
+        deferWork: @escaping @MainActor (@escaping @MainActor () -> Void) -> Void = RouteEngine.runOnMainLater(_:),
+        blockedSurfaces: @escaping @MainActor () -> [String] = RouteEngine.blockedSurfaceIds
     ) {
         self.tap = tap
         self.now = now
         self.scheduleWake = scheduleWake
         self.modelFields = modelFields
         self.deferWork = deferWork
+        self.blockedSurfaces = blockedSurfaces
     }
 
     // MARK: - Routes
@@ -208,7 +215,12 @@ final class RouteEngine {
         let cancelled = Array(deliveries.values)
         deliveries = [:]
         gates = [:]
-        agentTracks = [:]
+        // Stops from before this install were never seen: a surface blocked now waits for the
+        // program's own `working`, the only report that needs no record of the stop.
+        agentTracks = Dictionary(
+            blockedSurfaces().map { ($0, AgentTrack(resume: .awaitingWorking(from: nil, since: nil))) },
+            uniquingKeysWith: { first, _ in first }
+        )
         generation &+= 1
         source = set.source
         routes = set.routes.map { InstalledRoute(compiled: CompiledRoute($0)) }
@@ -337,14 +349,19 @@ final class RouteEngine {
             agentTracks.removeValue(forKey: surfaceId)
             return
         case ("state", "working"):
-            track.lastWorkingWriter = event.writer
-            if case .awaitingWorking(let from) = track.resume, let writer = event.writer,
-               writer == from || writer == "program" {
-                track.resume = .free
+            if case .awaitingWorking(let from, let since) = track.resume {
+                if let since, let ts = event.fields["ts"].flatMap(Double.init), ts < since { return }
+                if let writer = event.writer, writer == from || writer == "program" {
+                    track.resume = .free
+                }
             }
+            track.lastWorkingWriter = event.writer
         case ("state", "blocked"), ("needs_input", _):
             // Any stop for the person, whatever its kind: failing closed costs one `working`.
-            track.resume = .awaitingWorking(from: event.writer ?? track.lastWorkingWriter)
+            track.resume = .awaitingWorking(
+                from: event.writer ?? track.lastWorkingWriter,
+                since: event.fields["ts"].flatMap(Double.init)
+            )
         default:
             break
         }
@@ -382,9 +399,16 @@ final class RouteEngine {
         let fires = deferredFires ?? []
         deferredFires = nil
         if !fires.isEmpty {
+            // A fire that holds a delivery runs only if the delivery is still the one this call
+            // started: a releasing report handled before this block may have delivered it already.
+            let firedStates = fires.map { ($0, gates[GateKey(route: $0.route.name, key: $0.key)]) }
             deferWork { [weak self] in
                 guard let self else { return }
-                for fire in fires where self.isCurrent(fire) {
+                for (fire, firedState) in firedStates where self.isCurrent(fire) {
+                    if fire.route.deliveryTimeout != nil {
+                        let gateKey = GateKey(route: fire.route.name, key: fire.key)
+                        guard self.deliveries[gateKey]?.id == fire.id, self.gates[gateKey] == firedState else { continue }
+                    }
                     self.execute(fire)
                 }
             }
@@ -499,6 +523,13 @@ final class RouteEngine {
     }
 
     // MARK: - Production seams
+
+    static func blockedSurfaceIds() -> [String] {
+        guard let contexts = AppDelegate.shared?.mainWindowContexts.values else { return [] }
+        return contexts.flatMap { $0.tabManager.tabs }.flatMap { workspace in
+            workspace.panelAgentPresence.filter { $0.value.state == .blocked }.keys.map(\.uuidString)
+        }
+    }
 
     static func runOnMainLater(_ body: @escaping @MainActor () -> Void) {
         DispatchQueue.main.async { MainActor.assumeIsolated { body() } }

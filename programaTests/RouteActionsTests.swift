@@ -74,7 +74,8 @@ final class RouteActionsTests: XCTestCase {
             now: { clock.now },
             scheduleWake: { date, body in clock.schedule(at: date, body) },
             modelFields: { _ in [:] },
-            deferWork: { $0() }
+            deferWork: { $0() },
+            blockedSurfaces: { [] }
         )
         let temp = try XCTUnwrap(RouteEngine.canonicalDirectory(FileManager.default.temporaryDirectory.path))
         directory = URL(fileURLWithPath: temp).appendingPathComponent(UUID().uuidString)
@@ -370,7 +371,7 @@ final class RouteActionsTests: XCTestCase {
 
     func testQueueWaitsForTheEndOfTheAgentsWork() throws {
         target?.agentState = .working
-        try install(#"{ "name": "s", "on": "agent/+/needs_input/#", "send": { "text": "go {{state}}" } }"#)
+        try install(#"{ "name": "s", "on": "agent/#", "when": { "kind": "question" }, "send": { "text": "go {{state}}" } }"#)
         engine.ingest(state("working", previous: "idle", writer: agent))
         engine.ingest(needsInput())
         XCTAssertEqual(target?.deliveries.count, 0)
@@ -386,14 +387,14 @@ final class RouteActionsTests: XCTestCase {
 
     func testSteerDeliversAtOnceEvenWhileTheAgentWorks() throws {
         target?.agentState = .working
-        try install(#"{ "name": "s", "on": "agent/+/needs_input/#", "send": { "text": "go", "whenBusy": "steer" } }"#)
+        try install(#"{ "name": "s", "on": "agent/#", "when": { "kind": "question" }, "send": { "text": "go", "whenBusy": "steer" } }"#)
         engine.ingest(needsInput())
 
         XCTAssertEqual(target?.deliveries.map(\.text), ["go"])
     }
 
     func testPromptSubmitsAndHoldsItsRouteUntilItsTurnEnds() throws {
-        try install(#"{ "name": "p", "on": "agent/+/needs_input/#", "throttleMs": "1m", "prompt": { "text": "continue" } }"#)
+        try install(#"{ "name": "p", "on": "agent/#", "when": { "kind": "question" }, "throttleMs": "1m", "prompt": { "text": "continue" } }"#)
         engine.ingest(needsInput())
         XCTAssertEqual(target?.deliveries.map(\.submit), [true])
 
@@ -408,7 +409,7 @@ final class RouteActionsTests: XCTestCase {
 
     func testPromptToAnAgentThatCannotTakeItSubmitsNothing() throws {
         target?.canAutoSubmit = false
-        try install(#"{ "name": "p", "on": "agent/+/needs_input/#", "throttleMs": "1m", "prompt": { "text": "continue" } }"#)
+        try install(#"{ "name": "p", "on": "agent/#", "when": { "kind": "question" }, "throttleMs": "1m", "prompt": { "text": "continue" } }"#)
         engine.ingest(needsInput())
 
         XCTAssertEqual(target?.deliveries.map(\.submit), [false])
@@ -428,7 +429,7 @@ final class RouteActionsTests: XCTestCase {
         for (name, setUp, message) in cases {
             target = FakeAgentTarget()
             setUp(try XCTUnwrap(target))
-            try install(#"{ "name": "s", "on": "agent/+/needs_input/#", "send": { "text": "go", "whenBusy": "steer" } }"#)
+            try install(#"{ "name": "s", "on": "agent/#", "when": { "kind": "question" }, "send": { "text": "go", "whenBusy": "steer" } }"#)
             engine.ingest(needsInput())
 
             XCTAssertEqual(target?.deliveries.count, 0, name)
@@ -473,7 +474,7 @@ final class RouteActionsTests: XCTestCase {
 
     func testAQueuedDeliveryIsCheckedAgainWhenItGoes() throws {
         target?.agentState = .working
-        try install(#"{ "name": "s", "on": "agent/+/needs_input/#", "send": { "text": "go" } }"#)
+        try install(#"{ "name": "s", "on": "agent/#", "when": { "kind": "question" }, "send": { "text": "go" } }"#)
         engine.ingest(state("working", previous: "idle", writer: agent))
         engine.ingest(needsInput())
         target?.hasDraftHold = true
@@ -518,9 +519,32 @@ final class RouteActionsTests: XCTestCase {
         XCTAssertEqual(busy, 1)
     }
 
+    func testAFireDeliveredBeforeItsDeferredRunIsNotDeliveredAgain() throws {
+        // `agent.needs_input` runs its fires after its hop; a releasing idle can be handled first.
+        var deferred: [@MainActor () -> Void] = []
+        let clock = clock!
+        engine = RouteEngine(
+            now: { clock.now },
+            scheduleWake: { date, body in clock.schedule(at: date, body) },
+            modelFields: { _ in [:] },
+            deferWork: { deferred.append($0) },
+            blockedSurfaces: { [] }
+        )
+        try install(#"{ "name": "s", "on": "agent/#", "when": { "kind": "question" }, "send": { "text": "go" } }"#)
+        target?.agentState = .working
+        engine.ingest(state("working", previous: "idle", writer: agent))
+        XCTAssertFalse(engine.ingestNeedsInput(needsInput()))
+
+        workThenIdle()
+        XCTAssertEqual(target?.deliveries.count, 1, "the agent's own working and idle release it")
+
+        deferred.forEach { $0() }
+        XCTAssertEqual(target?.deliveries.count, 1, "the deferred run finds that delivery already done")
+    }
+
     func testAGoneSurfaceEndsTheDelivery() throws {
         target = nil
-        try install(#"{ "name": "s", "on": "agent/+/needs_input/#", "send": { "text": "go" } }"#)
+        try install(#"{ "name": "s", "on": "agent/#", "when": { "kind": "question" }, "send": { "text": "go" } }"#)
         engine.ingest(needsInput())
 
         XCTAssertEqual(route?.lastError, "the event's surface is gone")

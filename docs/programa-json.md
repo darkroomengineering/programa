@@ -354,8 +354,9 @@ below refuses the delivery, sends nothing, and records the reason as the route's
 - The agent's state reports name no session.
 - The agent stopped for input (a `blocked` report, or an `agent.needs_input` call of any kind)
   and has not reported `working` since, from the writer of that stop or from the program's own
-  status. When the stop named no writer, only the program's own status resumes it. A report that
-  only closes the prompt box does not count.
+  status. When the stop named no writer, only the program's own status resumes it, and the same
+  holds for an agent that was already stopped when the routes loaded. A report that only closes the
+  prompt box does not count.
 - The agent report that fired the route names no session.
 - The report that fired the route is the first one from this agent, so nothing shows that an
   agent is really there.
@@ -382,6 +383,9 @@ routes cannot feed each other.
   for an absent identifier renders empty.
 - A `prompt` route must set `throttleMs` to at least 60000 (one minute), which bounds how often it
   can submit.
+- A `send` or `prompt` route whose `on` matches only `needs_input` topics does not load: the agent
+  is waiting for the person at that moment, so the text could never go out. Fire it from an
+  `agent/+/state/…` topic instead.
 
 ## Layout schema
 
