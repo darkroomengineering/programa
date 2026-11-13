@@ -161,6 +161,11 @@ extension TerminalController {
                 data: nil
             )
         }
+        // The lexical half of OSC 7's `validatedReportedDirectory`. Its existence check is left
+        // out: a shell behind the SSH relay reports a remote path that does not exist here.
+        guard path.hasPrefix("/"), !path.split(separator: "/").contains(where: { $0 == "." || $0 == ".." }) else {
+            return .err(code: "invalid_params", message: "path must be absolute, without . or .. components", data: nil)
+        }
 
         v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { tabManager, _, sid in
             tabManager.updateSurfaceDirectory(tabId: workspaceId, surfaceId: sid, directory: path)

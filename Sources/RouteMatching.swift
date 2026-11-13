@@ -58,9 +58,14 @@ extension ProgramaRouteCondition {
 }
 
 extension ProgramaRouteRegex {
-    /// A search, not a full match: the pattern may match anywhere in the value.
+    /// How much of a value a pattern sees, in UTF-16 units. Event fields carry agent-written text,
+    /// and a slow pattern on a long body would run on the main thread.
+    static let inputLimit = 4096
+
+    /// A search, not a full match: the pattern may match anywhere in the first `inputLimit` units.
     func matches(_ value: String) -> Bool {
-        expression.firstMatch(in: value, range: NSRange(value.startIndex..., in: value)) != nil
+        let length = min((value as NSString).length, Self.inputLimit)
+        return expression.firstMatch(in: value, range: NSRange(location: 0, length: length)) != nil
     }
 }
 

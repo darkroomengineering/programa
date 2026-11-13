@@ -41,6 +41,7 @@ private final class RecordingExecutor: RouteActionExecutor {
     var fires: [RouteFire] = []
     var cancelled: [String] = []
     var issueReports: [[ProgramaRouteIssue]] = []
+    var wentIdle: [RouteFire] = []
 
     func execute(_ fire: RouteFire, engine: RouteEngine) {
         fires.append(fire)
@@ -52,6 +53,10 @@ private final class RecordingExecutor: RouteActionExecutor {
 
     func reportLoadIssues(_ issues: [ProgramaRouteIssue]) {
         issueReports.append(issues)
+    }
+
+    func targetWentIdle(_ fire: RouteFire, engine: RouteEngine) {
+        wentIdle.append(fire)
     }
 }
 
@@ -431,11 +436,148 @@ final class RouteEngineTests: XCTestCase {
         XCTAssertFalse(engine.hasNotifyRoute(matching: agentState(surface: "S1", state: "idle")))
     }
 
+    func testAPermissionBannerGivesWayOnlyToARouteThatFiresForThatCall() throws {
+        let engine = makeEngine()
+        try install(#"""
+        { "name": "ask", "on": "agent/+/needs_input/#", "throttleMs": "5m", "notify": { "title": "t" } }
+        """#, on: engine)
+        let permission = needsInput(surface: "S1", kind: "permission")
+
+        XCTAssertTrue(engine.hasNotifyRoute(matching: permission), "the route fires for this call, so its banner is the one shown")
+        engine.ingest(permission)
+        XCTAssertEqual(counters(engine, "ask")?.fired, 1)
+
+        XCTAssertFalse(engine.hasNotifyRoute(matching: permission), "a throttled permission call keeps its built-in banner")
+        XCTAssertTrue(engine.hasNotifyRoute(matching: needsInput(surface: "S1")), "a throttled question stays suppressed")
+    }
+
+    func testADebouncedPermissionCallKeepsItsBanner() throws {
+        let engine = makeEngine()
+        try install(#"{ "name": "ask", "on": "agent/+/needs_input/#", "debounceMs": 1000, "notify": { "title": "t" } }"#, on: engine)
+
+        XCTAssertFalse(engine.hasNotifyRoute(matching: needsInput(surface: "S1", kind: "permission")))
+        XCTAssertTrue(engine.hasNotifyRoute(matching: needsInput(surface: "S1")))
+    }
+
     func testBannerQueryChecksWhenAgainstModelFields() throws {
         let engine = makeEngine { _ in ["worktree": "false"] }
         try install(#"{ "name": "ask", "on": "agent/+/needs_input/#", "when": { "worktree": "true" }, "notify": { "title": "t" } }"#, on: engine)
 
         XCTAssertFalse(engine.hasNotifyRoute(matching: needsInput(surface: "S1")))
+    }
+
+    // MARK: - Text deliveries
+
+    func testAnIdleReportHandsAQueuedDeliveryToTheExecutor() throws {
+        let executor = RecordingExecutor()
+        let engine = makeEngine()
+        engine.executor = executor
+        try install(#"{ "name": "s", "on": "agent/+/needs_input/#", "send": { "text": "go" } }"#, on: engine)
+
+        engine.ingest(needsInput(surface: "S1"))
+        let fire = try XCTUnwrap(executor.fires.first)
+        engine.ingest(agentState(surface: "S2", state: "idle"))
+        engine.ingest(agentState(surface: "S1", state: "working"))
+        XCTAssertEqual(executor.wentIdle, [], "only the target surface's idle report delivers")
+
+        engine.ingest(agentState(surface: "S1", state: "idle"))
+        XCTAssertEqual(executor.wentIdle, [fire])
+    }
+
+    func testAClearEndsAQueuedDeliveryWithAnError() throws {
+        let executor = RecordingExecutor()
+        let engine = makeEngine()
+        engine.executor = executor
+        try install(#"{ "name": "s", "on": "agent/+/needs_input/#", "send": { "text": "go" } }"#, on: engine)
+
+        engine.ingest(needsInput(surface: "S1"))
+        engine.ingest(agentState(surface: "S1", state: "none"))
+        XCTAssertEqual(executor.wentIdle, [])
+        XCTAssertEqual(engine.snapshot().routes.first?.lastError, "the agent stopped before the text was delivered")
+
+        engine.ingest(needsInput(surface: "S1"))
+        XCTAssertEqual(counters(engine, "s")?.fired, 2, "the route is free again")
+    }
+
+    func testAPromptOnTheIdleEdgeCannotTriggerItself() throws {
+        let executor = RecordingExecutor()
+        let engine = makeEngine()
+        engine.executor = executor
+        try install(#"{ "name": "p", "on": "agent/+/state/idle", "throttleMs": 1000, "prompt": { "text": "next" } }"#, on: engine)
+
+        engine.ingest(agentState(surface: "S1", state: "idle", previous: "working"))
+        engine.turnStarted(try XCTUnwrap(executor.fires.first))
+        engine.ingest(agentState(surface: "S1", state: "working"))
+        clock.advance(by: 5)
+        engine.ingest(agentState(surface: "S1", state: "idle", previous: "working"))
+
+        XCTAssertEqual(
+            counters(engine, "p"),
+            RouteCounters(matched: 2, fired: 1, busy: 1),
+            "the idle that ends the prompt's own turn is busy for its route, not a new fire"
+        )
+        XCTAssertEqual(executor.wentIdle, [], "an own turn is not a queued delivery")
+
+        engine.ingest(agentState(surface: "S1", state: "idle", previous: "working"))
+        XCTAssertEqual(counters(engine, "p")?.fired, 2, "the turn ended, so the route is free again")
+    }
+
+    func testTurnStartedFromAnOldFireIsIgnored() throws {
+        let executor = RecordingExecutor()
+        let engine = makeEngine()
+        engine.executor = executor
+        try install(#"{ "name": "p", "on": "agent/+/needs_input/#", "throttleMs": 1000, "prompt": { "text": "go" } }"#, on: engine)
+
+        engine.ingest(needsInput(surface: "S1"))
+        let first = try XCTUnwrap(executor.fires.first)
+        engine.endDelivery(first)
+        clock.advance(by: 2)
+        engine.ingest(needsInput(surface: "S1"))
+        engine.turnStarted(first)
+
+        engine.ingest(agentState(surface: "S1", state: "idle"))
+        XCTAssertEqual(executor.wentIdle.map(\.id), [executor.fires.last?.id], "the newer fire is still waiting, not in a turn")
+    }
+
+    func testATextRouteListensForAgentStateWhateverItsTopic() throws {
+        let tap = RouteTap()
+        let engine = makeEngine(tap: tap)
+        try install(#"{ "name": "s", "on": "agent/+/needs_input/#", "send": { "text": "go" } }"#, on: engine)
+        XCTAssertTrue(tap.wants(.needsInput))
+        XCTAssertTrue(tap.wants(.agentState))
+    }
+
+    func testRegexSeesOnlyTheFirst4096Units() throws {
+        let regex = try ProgramaRouteRegex(pattern: "needle", flags: "")
+        XCTAssertTrue(regex.matches(String(repeating: "a", count: 4090) + "needle"))
+        XCTAssertFalse(regex.matches(String(repeating: "a", count: 4091) + "needle"))
+    }
+
+    func testCanonicalDirectoryResolvesDotsAndSymlinksAndRejectsTheRest() throws {
+        let fm = FileManager.default
+        let root = URL(fileURLWithPath: try XCTUnwrap(RouteEngine.canonicalDirectory(fm.temporaryDirectory.path)))
+            .appendingPathComponent(UUID().uuidString)
+        let inside = root.appendingPathComponent("work/app")
+        let outside = root.appendingPathComponent("elsewhere")
+        try fm.createDirectory(at: inside, withIntermediateDirectories: true)
+        try fm.createDirectory(at: outside, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: root) }
+        let link = inside.appendingPathComponent("link")
+        try fm.createSymbolicLink(at: link, withDestinationURL: outside)
+
+        XCTAssertEqual(RouteEngine.canonicalDirectory(inside.path + "/../../elsewhere"), outside.path)
+        XCTAssertEqual(RouteEngine.canonicalDirectory(link.path), outside.path, "a symlink resolves to where it points")
+        XCTAssertNil(RouteEngine.canonicalDirectory(root.appendingPathComponent("missing").path))
+        XCTAssertNil(RouteEngine.canonicalDirectory("work/app"), "a relative path is refused")
+
+        let file = root.appendingPathComponent("file")
+        try Data().write(to: file)
+        XCTAssertNil(RouteEngine.canonicalDirectory(file.path), "a file is not a directory")
+
+        let engine = makeEngine { _ in ["cwd": RouteEngine.canonicalDirectory(link.path) ?? ""] }
+        try install(#"{ "name": "work", "on": "agent/#", "when": { "cwd": { "regex": "/work/" } }, "review": {} }"#, on: engine)
+        engine.ingest(agentState(surface: "S1", state: "idle"))
+        XCTAssertEqual(counters(engine, "work")?.matched, 0, "a cwd regex sees the resolved path, not the link's")
     }
 
     func testInstallTellsTheTapWhichClassesToBuild() throws {

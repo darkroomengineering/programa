@@ -280,7 +280,12 @@ final class ProgramaRouteDecodingTests: XCTestCase {
         try assertIssue(
             #"{ "name": "n", "on": "agent/#", "throttleMs": 1000, "prompt": { "text": "{{program_status.step}}" } }"#,
             mentions: "free-text field"
+        )        // The agent's hook chooses `provider`, so it is free text too.
+        try assertIssue(
+            #"{ "name": "n", "on": "agent/#", "send": { "text": "from {{provider}}" } }"#,
+            mentions: "'send.text' names free-text field 'provider'"
         )
+        XCTAssertNoThrow(try onlyRoute(#"{ "name": "n", "on": "agent/#", "notify": { "title": "{{provider}}" } }"#))
     }
 
     func testRunCommandIsNotTemplated() throws {

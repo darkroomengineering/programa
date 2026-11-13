@@ -145,9 +145,10 @@ enum ProgramaRouteField {
 
     static let identifiers: Set<String> = [
         "topic", "workspace_id", "surface_id", "state", "previous_state", "source", "kind",
-        "provider", "worktree", "ts",
+        "worktree", "ts",
     ]
-    static let freeText: Set<String> = ["title", "subtitle", "body", "cwd", "git_branch"]
+    /// `provider` is whatever the agent's hook passed to `agent.needs_input`, so it is free text.
+    static let freeText: Set<String> = ["title", "subtitle", "body", "provider", "cwd", "git_branch"]
     static let programStatusPrefix = "program_status."
 
     static func trust(of field: String) -> Trust? {

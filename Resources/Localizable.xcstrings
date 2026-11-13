@@ -18596,13 +18596,51 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "“%1$@” and %2$lld more routes in programa.json have problems and were skipped."
+            "value": "“%1$@” and %#@routes@ in programa.json have problems and were skipped."
+          },
+          "substitutions": {
+            "routes": {
+              "argNum": 2,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg more route"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg more routes"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "programa.json の「%1$@」ほか %2$lld 件のルートに問題があるため、スキップしました。"
+            "value": "programa.json の「%1$@」ほか %#@routes@に問題があるため、スキップしました。"
+          },
+          "substitutions": {
+            "routes": {
+              "argNum": 2,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg 件のルート"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }

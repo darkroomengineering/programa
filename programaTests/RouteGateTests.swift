@@ -352,6 +352,44 @@ final class RouteGateTests: XCTestCase {
         )
     }
 
+    /// The delivering rows hold whichever delivery the route is in.
+    func testEveryDeliveringRowAppliesToEachDelivery() throws {
+        let route = try compiled(throttleMs: 900_000, action: .prompt(text: "go", whenBusy: .queue))
+        for delivery in [RouteDelivery.running, .waitingForIdle(event()), .ownTurn] {
+            let start = RouteGateState.delivering(delivery, expiresAt: at(600), cooldownUntil: at(900))
+            XCTAssertEqual(reduce(start, .matched(event(), now: at(1)), route).0, start, "\(delivery)")
+            XCTAssertEqual(reduce(start, .matched(event(), now: at(1)), route).1, [.count(.busy)], "\(delivery)")
+
+            let ended = reduce(start, .deliveryEnded(now: at(3)), route)
+            XCTAssertEqual(ended.0, .coolingDown(until: at(900)), "\(delivery)")
+            XCTAssertEqual(ended.1, [.wake(at: at(900))], "\(delivery)")
+
+            XCTAssertEqual(reduce(start, .wake(now: at(599)), route).0, start, "\(delivery)")
+            let expired = reduce(start, .wake(now: at(600)), route)
+            XCTAssertEqual(expired.0, .coolingDown(until: at(900)), "\(delivery)")
+            XCTAssertEqual(expired.1, [.cancelDelivery, .count(.expired), .wake(at: at(900))], "\(delivery)")
+        }
+    }
+
+    func testTurnStartedMovesAWaitingPromptToItsOwnTurn() throws {
+        let route = try compiled(throttleMs: 60_000, action: .prompt(text: "go", whenBusy: .queue))
+        let waiting = RouteGateState.delivering(.waitingForIdle(event()), expiresAt: at(600), cooldownUntil: at(60))
+        let (state, effects) = reduce(waiting, .turnStarted, route)
+        XCTAssertEqual(state, .delivering(.ownTurn, expiresAt: at(600), cooldownUntil: at(60)), "the expiry and window carry over")
+        XCTAssertEqual(effects, [])
+
+        for start in [
+            RouteGateState.delivering(.ownTurn, expiresAt: at(600), cooldownUntil: nil),
+            .delivering(.running, expiresAt: at(600), cooldownUntil: nil),
+            .debouncing(pending: event(), deadline: at(2), cooldownUntil: nil),
+            .coolingDown(until: at(5)),
+        ] {
+            XCTAssertEqual(reduce(start, .turnStarted, route).0, start, "\(start)")
+            XCTAssertEqual(reduce(start, .turnStarted, route).1, [], "\(start)")
+        }
+        XCTAssertNil(reduce(nil, .turnStarted, route).0)
+    }
+
     func testReviewDoesNotHoldTheRoute() throws {
         let review = try compiled(action: .review(mode: nil, baseBranch: nil))
         XCTAssertNil(review.deliveryTimeout)

@@ -62,6 +62,9 @@ protocol RouteActionExecutor: AnyObject {
     /// already released the route, so no `endDelivery` follows; a late one is ignored, and only
     /// its error is kept.
     func cancel(_ fire: RouteFire)
+    /// `fire` is a `send` or `prompt` queued behind a working agent, and its surface just reported
+    /// idle. Deliver it now, then call `endDelivery`, or `turnStarted` for a submitted prompt.
+    func targetWentIdle(_ fire: RouteFire, engine: RouteEngine)
     /// A changed global file installed with route issues. Called once per file digest.
     func reportLoadIssues(_ issues: [ProgramaRouteIssue])
 }
@@ -174,7 +177,12 @@ final class RouteEngine {
         source = set.source
         routes = set.routes.map { InstalledRoute(compiled: CompiledRoute($0)) }
         issues = set.issues
-        tap?.setWantedClasses(Self.eventClasses(for: set.routes.map(\.on)))
+        var classes = Self.eventClasses(for: set.routes.map(\.on))
+        // A `send` or `prompt` waits on its surface's idle report whatever topic fired it.
+        if set.routes.contains(where: { $0.action.deliversText }) {
+            classes.insert(.agentState)
+        }
+        tap?.setWantedClasses(classes)
         for fire in cancelled {
             executor?.cancel(fire)
         }
@@ -182,7 +190,17 @@ final class RouteEngine {
 
     // MARK: - Events
 
+    /// Matches the routes first, then settles the text deliveries that were already held on the
+    /// event's surface. In that order, the idle that ends a prompt's own turn counts as `busy` for
+    /// its route instead of firing it again, and a delivery this very event fired is not handed
+    /// back as "went idle".
     func ingest(_ tapped: RouteEvent) {
+        let heldBefore = Set(deliveries.values.map(\.id))
+        match(tapped)
+        settleTextDeliveries(after: tapped, heldBefore: heldBefore)
+    }
+
+    private func match(_ tapped: RouteEvent) {
         let candidates = routes.indices.filter { routes[$0].compiled.definition.on.matches(topic: tapped.topic) }
         guard !candidates.isEmpty else { return }
         let event = resolved(tapped)
@@ -190,23 +208,66 @@ final class RouteEngine {
         let at = now()
         for index in candidates where routes[index].compiled.definition.matches(event) {
             routes[index].counters.matched += 1
-            let definition = routes[index].compiled.definition
-            let key = ProgramaConfigExecutor.substituteParameters(in: definition.key, values: values)
-            apply(.matched(event, now: at), to: GateKey(route: definition.name, key: key))
+            apply(.matched(event, now: at), to: gateKey(routes[index].compiled.definition, values: values))
         }
     }
 
-    /// Whether a `notify` route matches `tapped` on topic and `when`, whatever its gate would do:
-    /// the built-in `needs_input` banner gives way to the route for every call the route matches,
-    /// including the ones its throttle drops. Synchronous, so the caller can ask before it posts.
+    /// An idle report delivers the `send`s and `prompt`s queued on that surface and ends the
+    /// prompt turns open on it; a clear ends both, since the agent is gone.
+    private func settleTextDeliveries(after event: RouteEvent, heldBefore: Set<UInt64>) {
+        guard event.topic.hasPrefix("agent/"), let surfaceId = event.fields["surface_id"] else { return }
+        let cleared = event.topic.hasSuffix("/state/none")
+        guard cleared || event.topic.hasSuffix("/state/idle") else { return }
+        for (gateKey, fire) in deliveries
+        where heldBefore.contains(fire.id) && fire.event.fields["surface_id"] == surfaceId {
+            // An earlier settle in this loop can have moved this gate on.
+            guard deliveries[gateKey]?.id == fire.id,
+                  case .delivering(let delivery, _, _) = gates[gateKey] else { continue }
+            switch delivery {
+            case .running:
+                continue
+            case .ownTurn:
+                endDelivery(fire)
+            case .waitingForIdle where cleared:
+                endDelivery(fire, error: "the agent stopped before the text was delivered")
+            case .waitingForIdle:
+                if let executor {
+                    executor.targetWentIdle(fire, engine: self)
+                } else {
+                    endDelivery(fire)
+                }
+            }
+        }
+    }
+
+    /// Whether `tapped`'s built-in `needs_input` banner gives way to a `notify` route. A question
+    /// gives way whenever a route matches on topic and `when`, throttled or not, so "once per
+    /// 5 minutes" is what the person sees. A permission prompt gives way only when a route fires
+    /// for this very call: a throttled or debounced route must never hide one. Synchronous, so
+    /// the caller can ask before it posts; the tap's ingest of the same call runs next.
     func hasNotifyRoute(matching tapped: RouteEvent) -> Bool {
-        let candidates = routes.map(\.compiled.definition).filter { definition in
-            guard case .notify = definition.action else { return false }
-            return definition.on.matches(topic: tapped.topic)
+        let candidates = routes.map(\.compiled).filter { route in
+            guard case .notify = route.definition.action else { return false }
+            return route.definition.on.matches(topic: tapped.topic)
         }
         guard !candidates.isEmpty else { return false }
         let event = resolved(tapped)
-        return candidates.contains { $0.matches(event) }
+        let values = event.values
+        let firesOnly = tapped.fields["kind"] == "permission"
+        let at = now()
+        return candidates.contains { route in
+            guard route.definition.matches(event) else { return false }
+            guard firesOnly else { return true }
+            let key = gateKey(route.definition, values: values)
+            return RouteGate.reduce(gates[key], .matched(event, now: at), route: route).1.contains {
+                if case .fire = $0 { return true }
+                return false
+            }
+        }
+    }
+
+    private func gateKey(_ definition: ProgramaRouteDefinition, values: [String: String]) -> GateKey {
+        GateKey(route: definition.name, key: ProgramaConfigExecutor.substituteParameters(in: definition.key, values: values))
     }
 
     /// The tapped event plus the fields the model adds. Frame fields win.
@@ -223,6 +284,14 @@ final class RouteEngine {
         let gateKey = GateKey(route: fire.route.name, key: fire.key)
         guard deliveries[gateKey]?.id == fire.id else { return }
         apply(.deliveryEnded(now: now()), to: gateKey)
+    }
+
+    /// Reports that `fire`'s prompt was submitted: the route stays held until the turn it started
+    /// ends, so a route on the idle edge cannot trigger itself.
+    func turnStarted(_ fire: RouteFire) {
+        let gateKey = GateKey(route: fire.route.name, key: fire.key)
+        guard deliveries[gateKey]?.id == fire.id else { return }
+        apply(.turnStarted, to: gateKey)
     }
 
     /// Sets the route's last error, unless the route set that fired has been replaced.
@@ -298,9 +367,22 @@ final class RouteEngine {
               let surfaceId = event.fields["surface_id"].flatMap(UUID.init(uuidString:)),
               let workspace = AppDelegate.shared?.workspaceFor(tabId: workspaceId) else { return [:] }
         var fields = ["worktree": (workspace.worktreeBranch ?? "").isEmpty ? "false" : "true"]
-        fields["cwd"] = workspace.sidebarResolvedDirectory(for: surfaceId)
+        fields["cwd"] = workspace.sidebarResolvedDirectory(for: surfaceId).flatMap(canonicalDirectory)
         fields["git_branch"] = workspace.panelGitBranches[surfaceId]?.branch
         return fields
+    }
+
+    /// `path` with symlinks and `..` resolved, or nil when it is not absolute or not an existing
+    /// directory. A reported directory is shell-written and can be `/allowed/../../elsewhere`, so
+    /// `when` and `run` see only this form.
+    nonisolated static func canonicalDirectory(_ path: String) -> String? {
+        guard path.hasPrefix("/"), let resolved = realpath(path, nil) else { return nil }
+        defer { free(resolved) }
+        let canonical = String(cString: resolved)
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: canonical, isDirectory: &isDirectory),
+              isDirectory.boolValue else { return nil }
+        return canonical
     }
 
     /// The event classes a set of patterns can match. Over-inclusive on purpose: a class missing
@@ -338,6 +420,13 @@ private extension ProgramaRouteTopicPattern {
 }
 
 extension ProgramaRouteAction {
+    var deliversText: Bool {
+        switch self {
+        case .send, .prompt: return true
+        case .notify, .run, .review: return false
+        }
+    }
+
     var name: String {
         switch self {
         case .notify: return "notify"

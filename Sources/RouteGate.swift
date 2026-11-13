@@ -60,6 +60,8 @@ enum RouteGateInput: Sendable, Equatable {
     case matched(RouteEvent, now: Date)
     case wake(now: Date)
     case deliveryEnded(now: Date)
+    /// A `prompt` was submitted: the delivery now waits for the turn it started to end.
+    case turnStarted
 }
 
 enum RouteCounter: String, Sendable, Equatable {
@@ -88,7 +90,7 @@ enum RouteGate {
         switch (state, input) {
         case (nil, .matched(let event, let now)):
             return admit(event, now: now, cooldownUntil: nil, route: route)
-        case (nil, .wake), (nil, .deliveryEnded):
+        case (nil, .wake), (nil, .deliveryEnded), (nil, .turnStarted):
             return (nil, [])
 
         case (.debouncing(_, _, let cooldownUntil), .matched(let event, let now)):
@@ -103,7 +105,7 @@ enum RouteGate {
                 return (.coolingDown(until: cooldownUntil), [.count(.throttled), .wake(at: cooldownUntil)])
             }
             return fire(pending, now: now, route: route)
-        case (.debouncing, .deliveryEnded):
+        case (.debouncing, .deliveryEnded), (.debouncing, .turnStarted):
             return (state, [])
 
         case (.coolingDown(let until), .matched(let event, let now)):
@@ -116,7 +118,7 @@ enum RouteGate {
             return (state, [.count(.throttled)])
         case (.coolingDown(let until), .wake(let now)):
             return now >= until ? (nil, []) : (state, [])
-        case (.coolingDown, .deliveryEnded):
+        case (.coolingDown, .deliveryEnded), (.coolingDown, .turnStarted):
             return (state, [])
 
         case (.delivering, .matched):
@@ -127,6 +129,10 @@ enum RouteGate {
             guard now >= expiresAt else { return (state, []) }
             let (next, effects) = settle(cooldownUntil: cooldownUntil, now: now)
             return (next, [.cancelDelivery, .count(.expired)] + effects)
+        case (.delivering(.waitingForIdle, let expiresAt, let cooldownUntil), .turnStarted):
+            return (.delivering(.ownTurn, expiresAt: expiresAt, cooldownUntil: cooldownUntil), [])
+        case (.delivering, .turnStarted):
+            return (state, [])
         }
     }
 
