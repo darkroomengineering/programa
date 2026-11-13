@@ -25,6 +25,11 @@ SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 FUZZ_SEED = int(os.environ.get("PROGRAMA_SPLIT_2PANE_SEED", "20260223"))
 WORKSPACES = int(os.environ.get("PROGRAMA_SPLIT_2PANE_WORKSPACES", "3"))
 CYCLES_PER_WORKSPACE = int(os.environ.get("PROGRAMA_SPLIT_2PANE_CYCLES", "220"))
+# Stops early once this many seconds pass, so it fits the 300 s per-test limit of the CI runner.
+# Each workspace gets an equal share, so every fresh workspace still churns.
+TIME_BUDGET_S = float(os.environ.get("PROGRAMA_SPLIT_2PANE_TIME_BUDGET_S", "240"))
+# Fewer cycles than this inside the budget means the app is too slow to churn, which is itself a failure.
+MIN_CYCLES = int(os.environ.get("PROGRAMA_SPLIT_2PANE_MIN_CYCLES", "100"))
 TRANSITION_TIMEOUT_S = float(os.environ.get("PROGRAMA_SPLIT_2PANE_TIMEOUT_S", "2.0"))
 HOLD_MIN_S = float(os.environ.get("PROGRAMA_SPLIT_2PANE_HOLD_MIN_S", "0.003"))
 HOLD_MAX_S = float(os.environ.get("PROGRAMA_SPLIT_2PANE_HOLD_MAX_S", "0.018"))
@@ -353,6 +358,7 @@ def main() -> int:
         c.activate_app()
 
         for workspace_index in range(1, WORKSPACES + 1):
+            workspace_deadline = time.monotonic() + TIME_BUDGET_S / max(1, WORKSPACES)
             ws = c.new_workspace()
             c.select_workspace(ws)
             c.activate_app()
@@ -365,6 +371,8 @@ def main() -> int:
                 raise ProgramaClientError(f"New workspace did not start as single pane (workspace={workspace_index}, panes={start_panes})")
 
             for cycle in range(1, CYCLES_PER_WORKSPACE + 1):
+                if time.monotonic() >= workspace_deadline:
+                    break
                 total_cycles += 1
 
                 if PRE_ACTION_JITTER_MAX_S > 0:
@@ -434,9 +442,15 @@ def main() -> int:
             c.close_workspace(ws)
             time.sleep(0.05)
 
+        planned_cycles = WORKSPACES * CYCLES_PER_WORKSPACE
+        if total_cycles < min(MIN_CYCLES, planned_cycles):
+            raise ProgramaClientError(
+                f"only {total_cycles} cycles finished in {TIME_BUDGET_S:.0f}s; want at least {min(MIN_CYCLES, planned_cycles)}"
+            )
+
     print(
         "PASS: strict two-pane cmd+d/ctrl+d frame guard "
-        f"(seed={FUZZ_SEED}, workspaces={WORKSPACES}, cycles={total_cycles}, samples={total_samples}, "
+        f"(seed={FUZZ_SEED}, workspaces={WORKSPACES}, cycles={total_cycles}/{WORKSPACES * CYCLES_PER_WORKSPACE}, samples={total_samples}, "
         f"extra_ctrl_d={total_extra_ctrl_d}, epsilon={EPSILON}, layout_timeouts={timeout_state.get('count', 0)})"
     )
     return 0
