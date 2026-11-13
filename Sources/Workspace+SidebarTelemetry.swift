@@ -81,6 +81,13 @@ extension Workspace {
         let previousState = panelShellActivityStates[panelId] ?? .unknown
         guard previousState != state else { return false }
         panelShellActivityStates[panelId] = state
+        // The shell's own socket report, unlike a printed prompt mark, proves the foreground
+        // program exited, so it ends a prompt left armed once nothing is `blocked`. zsh sends it
+        // from precmd, before PS1 prints the OSC 133;A mark that drops a program's `blocked`
+        // record, so a program-owned `blocked` badge still holds the gate here.
+        if state == .promptIdle {
+            closePromptGateIfTrusted(panelId: panelId, trusted: true)
+        }
         // The shell left its prompt, so the banner's Resume could no longer type its line.
         // Only on entering `.commandRunning`: the agent's exit can land while the shell still
         // reports the agent itself as running, before its prompt report.
@@ -268,7 +275,8 @@ extension Workspace {
     ///
     /// `promptKind` is what a `blocked` report is waiting on (nil when the reporter did not say).
     /// It goes only to the surface's person-input gate, which refuses socket writes while a
-    /// permission or sign-in prompt shows (TerminalSurface+DraftGate.swift).
+    /// permission or sign-in prompt shows (TerminalSurface+DraftGate.swift). Any `blocked` report
+    /// arms that gate; an unsigned program report never closes it (`notePromptGate`).
     func updatePanelAgentState(
         panelId: UUID,
         state: AgentActivityState,
@@ -310,12 +318,15 @@ extension Workspace {
             self.publishRouteAgentState(panelId: panelId, route: route, previous: current?.route?.state, sessionKey: sessionKey)
         }
 
+        let trusted = !(source == .program && !programVerified)
+
         if Self.programHolds(currentSource: current?.source, currentState: current?.state, against: source, state)
             || (source == .inferred && current?.source == .hooks) {
             // Hooks always win over inference: dropped write must not move lastEventAt either, so
             // a hooks-owned surface's staleness clock keeps ticking from its last real hook
             // event, not from an inferred sample that never took effect.
             if routeChanged { panelAgentPresence[panelId]?.route = route }
+            notePromptGate(panelId: panelId, state: state, promptKind: promptKind, trusted: trusted)
             publishRoute()
             return
         }
@@ -341,12 +352,10 @@ extension Workspace {
             // threshold. No wait-registry or socket fan-out, since nothing observable changed.
             panelAgentPresence[panelId]?.lastEventAt = now
             panelAgentPresence[panelId]?.staleObserved = false
+            if routeChanged { panelAgentPresence[panelId]?.route = route }
             // A repeated `blocked` report (a second permission request in one turn) re-arms a
             // prompt the person already answered with a key.
-            if state == .blocked {
-                (panels[panelId] as? TerminalPanel)?.surface.noteAgentPrompt(promptKind, isBlocked: true)
-            }
-            if routeChanged { panelAgentPresence[panelId]?.route = route }
+            notePromptGate(panelId: panelId, state: state, promptKind: promptKind, trusted: trusted)
             publishRoute()
             return
         }
@@ -359,11 +368,7 @@ extension Workspace {
             programState: programState,
             route: route
         )
-        // `current == nil` covers a prompt kept armed across a sidebar reset: the agent's next
-        // report after that reset is what tells us the box closed.
-        if state == .blocked || current?.state == .blocked || current == nil {
-            (panels[panelId] as? TerminalPanel)?.surface.noteAgentPrompt(promptKind, isBlocked: state == .blocked)
-        }
+        notePromptGate(panelId: panelId, state: state, promptKind: promptKind, trusted: trusted)
         noteReviewNudgeTurnEdge(panelId: panelId, previous: current?.state, next: state)
         // Event-driven half of surface.wait's `agent_state` condition (#166 task 2) and
         // agent.prompt's internal working/idle watch (#166 task 3) -- see
@@ -394,13 +399,27 @@ extension Workspace {
     /// Clears a surface's agent presence. A `.program` clear removes only program-owned presence;
     /// a hooks/inferred clear is ignored while the presence is program-owned. `force` removes the
     /// presence whoever owns it (permanent panel close).
-    func clearPanelAgentState(panelId: UUID, source: AgentStateSource = .hooks, force: Bool = false) {
-        guard let current = panelAgentPresence[panelId] else { return }
+    ///
+    /// A `.program` clear ends a showing prompt only when `programVerified` (a `state=clear` that
+    /// carried the surface's token): an unsigned clear, a printed shell prompt mark and a terminal
+    /// reset drop the presence but leave the prompt gate armed.
+    func clearPanelAgentState(
+        panelId: UUID, source: AgentStateSource = .hooks, force: Bool = false, programVerified: Bool = false
+    ) {
+        let trusted = force || source != .program || programVerified
+        guard let current = panelAgentPresence[panelId] else {
+            closePromptGateIfTrusted(panelId: panelId, trusted: trusted)
+            return
+        }
         let ownsClear = { (owner: AgentStateSource) in force || (source == .program) == (owner == .program) }
         guard ownsClear(current.source) else {
             // The badge stays, but a clear from the route view's own tier still ends it.
-            guard let route = current.route, ownsClear(route.source) else { return }
+            guard let route = current.route, ownsClear(route.source) else {
+                closePromptGateIfTrusted(panelId: panelId, trusted: trusted)
+                return
+            }
             panelAgentPresence[panelId]?.route = nil
+            closePromptGateIfTrusted(panelId: panelId, trusted: trusted)
             SocketEventBroadcaster.shared.publishAgentState(
                 workspaceId: id, surfaceId: panelId, state: nil, previousState: route.state, source: nil,
                 toSubscribers: false
@@ -408,9 +427,7 @@ extension Workspace {
             return
         }
         panelAgentPresence.removeValue(forKey: panelId)
-        if current.state == .blocked {
-            (panels[panelId] as? TerminalPanel)?.surface.noteAgentPrompt(nil, isBlocked: false)
-        }
+        closePromptGateIfTrusted(panelId: panelId, trusted: trusted)
         AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil, source: nil)
         // Routes see the clear too: a held delivery ends rather than outliving the agent.
         SocketEventBroadcaster.shared.publishAgentState(
@@ -437,15 +454,25 @@ extension Workspace {
         source: AgentStateSource,
         sessionKey: AgentSessionKey? = nil,
         programVerified: Bool = false,
-        resumesBlocked: Bool = false
+        resumesBlocked: Bool = false,
+        promptKind: ProgramStatusKind? = nil
     ) {
-        guard let current = panelAgentPresence[panelId],
-              resumesBlocked || current.route?.state != .blocked,
-              let route = Self.nextRoute(
-                  after: current.route, state: state, source: source, sessionKey: sessionKey, programVerified: programVerified
-              ),
-              route != current.route else { return }
-        panelAgentPresence[panelId]?.route = route
+        guard let current = panelAgentPresence[panelId] else { return }
+        let moved = resumesBlocked || current.route?.state != .blocked
+            ? Self.nextRoute(
+                after: current.route, state: state, source: source, sessionKey: sessionKey, programVerified: programVerified
+            )
+            : nil
+        let route = moved.flatMap { $0 == current.route ? nil : $0 }
+        if let route { panelAgentPresence[panelId]?.route = route }
+        // A resume re-checks the prompt even when the route view already showed `working`.
+        if state == .blocked || resumesBlocked {
+            notePromptGate(
+                panelId: panelId, state: state, promptKind: promptKind,
+                trusted: !(source == .program && !programVerified)
+            )
+        }
+        guard let route else { return }
         publishRouteAgentState(panelId: panelId, route: route, previous: current.route?.state, sessionKey: sessionKey)
     }
 
@@ -488,6 +515,29 @@ extension Workspace {
                 : nil,
             toSubscribers: false
         )
+    }
+
+    /// The prompt gate's side of a report, applied after the report moved the presence. Any
+    /// `blocked` report arms it, whichever tier sent it and whether or not it reached the badge.
+    /// Printed bytes can forge an unsigned report, so only a `trusted` one (anything but an
+    /// unsigned program report) may close it, and only once neither the badge nor the route view
+    /// is `blocked`.
+    private func notePromptGate(
+        panelId: UUID, state: AgentActivityState, promptKind: ProgramStatusKind?, trusted: Bool
+    ) {
+        if state == .blocked {
+            (panels[panelId] as? TerminalPanel)?.surface.noteAgentPrompt(promptKind, isBlocked: true)
+        } else {
+            closePromptGateIfTrusted(panelId: panelId, trusted: trusted)
+        }
+    }
+
+    private func closePromptGateIfTrusted(panelId: UUID, trusted: Bool) {
+        guard trusted,
+              let surface = (panels[panelId] as? TerminalPanel)?.surface, surface.isPromptShowing,
+              panelAgentPresence[panelId]?.state != .blocked,
+              panelAgentPresence[panelId]?.route?.state != .blocked else { return }
+        surface.noteAgentPrompt(nil, isBlocked: false)
     }
 
     /// Whether a program presence in `currentState` keeps a report from another tier: always
@@ -657,7 +707,7 @@ extension Workspace {
         let clearedAgentStates = panelAgentPresence.mapValues(\.state)
         // A showing permission or sign-in prompt stays armed: any client can reset the sidebar,
         // and the box is still on screen. The person's key, an `answer_prompt` write or the
-        // agent's next report ends it.
+        // agent's next trusted report ends it.
         for (panelId, presence) in panelAgentPresence where presence.state == .blocked {
             guard let surface = (panels[panelId] as? TerminalPanel)?.surface,
                   surface.activePromptHold() == nil else { continue }

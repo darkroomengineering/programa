@@ -1713,19 +1713,23 @@ class TabManager: ObservableObject {
         source: AgentStateSource = .hooks,
         sessionKey: AgentSessionKey? = nil,
         programVerified: Bool = false,
-        resumesBlocked: Bool = false
+        resumesBlocked: Bool = false,
+        promptKind: ProgramStatusKind? = nil
     ) {
         workspace(withId: tabId)?.updatePanelRouteAgentState(
             panelId: surfaceId, state: state, source: source, sessionKey: sessionKey, programVerified: programVerified,
-            resumesBlocked: resumesBlocked
+            resumesBlocked: resumesBlocked, promptKind: promptKind
         )
     }
 
     /// Clears a previously reported agent activity state for a surface (e.g. on hook
-    /// session-end). No-ops if the workspace/panel don't exist.
-    func clearSurfaceAgentState(tabId: UUID, surfaceId: UUID, source: AgentStateSource = .hooks) {
+    /// session-end). No-ops if the workspace/panel don't exist. `programVerified`: a `.program`
+    /// clear came from a signed `state=clear` (`Workspace.clearPanelAgentState`).
+    func clearSurfaceAgentState(
+        tabId: UUID, surfaceId: UUID, source: AgentStateSource = .hooks, programVerified: Bool = false
+    ) {
         guard let tab = workspace(withId: tabId) else { return }
-        tab.clearPanelAgentState(panelId: surfaceId, source: source)
+        tab.clearPanelAgentState(panelId: surfaceId, source: source, programVerified: programVerified)
     }
 
     private func normalizeDirectory(_ directory: String) -> String {

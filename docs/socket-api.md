@@ -651,12 +651,21 @@ line saying so and exit non-zero, as do the tmux shim's `send-keys`, `paste-buff
   `agent.event` `user-input.requested`, OSC 7501 `kind=question` or no kind, and
   `surface.report_agent_state` `blocked`. Claude Code's idle prompt reports as a question, so
   `agent.prompt` to an idle helper still sends.
-- The refusal lifts when the agent leaves `blocked`, when the person presses a key at the prompt
-  (Return, Escape, Ctrl+C, or any typed key), when a write with `answer_prompt` is delivered,
-  when `surface.clear_agent_state` runs or the agent's process exits, and while the setting below
-  is off. There is no timer: a prompt left alone for an hour still needs the person.
-  `workspace.reset_sidebar` clears the badge but keeps a showing permission or sign-in prompt
-  refused until one of the events above.
+- The refusal lifts when a trusted report says the agent left `blocked`, when the person presses a
+  key at the prompt (Return, Escape, Ctrl+C, or any typed key), when a write with `answer_prompt`
+  is delivered, when `surface.clear_agent_state` runs, when the agent's hooks clear its state as it
+  exits, when Programa's shell integration reports the shell back at its prompt with nothing
+  `blocked`, and while the setting below is off. There is no timer: a prompt left alone for an hour
+  still needs the person. `workspace.reset_sidebar` clears the badge but keeps a showing permission
+  or sign-in prompt refused until one of these events.
+- Trusted reports are the socket reports (hooks, `surface.report_agent_state`, `agent.event`),
+  screen-based agent detection, and [signed](program-status.md#signed-reports) OSC 7501 reports.
+  Any report can start a refusal, but an unsigned OSC 7501 report never lifts one: text printed in
+  the pane can forge it. An unsigned `working`, `idle` or `state=clear`, a printed shell prompt
+  mark and a terminal reset still move or clear `agent_state`, so `agent_state` can read `working`
+  while writes are still refused. A program that prints its own unsigned status, or a hooked agent
+  inside plain SSH, stays refused after its prompt closes until the person presses a key, a write
+  passes `answer_prompt`, or another event above happens.
 - A later `question` or kindless `blocked` report does not replace a showing permission or
   sign-in prompt.
 - Any socket client can still lift the refusal by reporting the agent as `working` or `idle`, or

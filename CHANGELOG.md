@@ -11,6 +11,7 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 
 ### Fixed
 - Text printed into a terminal can no longer pose as an agent's status and release an event route's `send` or `prompt` text. Programa gives each terminal a secret that its agent hooks put in their status reports, and only a report carrying it counts as the agent. A report without it, such as Claude Code's own status, still drives the sidebar as before, while routes follow the agent's hooks. See `docs/program-status.md`.
+- Text printed into a terminal can no longer lift the refusal that protects an agent's permission or sign-in prompt, so a script can no longer press keys into the dialog after a faked status. Besides a key you press and `--answer-prompt`, it now lifts on the agent's hooks, its signed status or screen detection, and never on a status report printed without Programa's secret. For a program that prints its own status without Programa's secret, or an agent inside plain SSH, the refusal now lasts until you answer the prompt at the keyboard or a script passes `--answer-prompt`. See `docs/socket-api.md`.
 
 ## [0.7.0] - 2026-11-11
 

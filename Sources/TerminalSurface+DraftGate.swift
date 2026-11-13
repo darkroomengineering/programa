@@ -8,7 +8,8 @@ import Bonsplit
 // Only person input moves the draft side of the gate: keyDown, paste, IME/dictation commits and
 // drag-drop in `GhosttyNSView`. Terminal replies (DA1, DSR, OSC 11, focus reports) and socket
 // writes reach the PTY without passing through those sites, so they can never look like typing.
-// The prompt side moves on agent-state reports (`Workspace.updatePanelAgentState`).
+// The prompt side moves on agent-state reports (`Workspace.updatePanelAgentState`): any report
+// can arm it, and only a report printed bytes could not have forged can close it.
 
 /// Unsent person input. Times are `systemUptime` seconds, the clock `NSEvent.timestamp` uses.
 struct PersonDraft: Equatable {
@@ -132,7 +133,8 @@ enum PersonDraftEvent: Equatable {
     case socketWriteDelivered
     /// The agent reported a prompt (`blocked`). `at` is `systemUptime` seconds.
     case agentPrompt(ProgramStatusKind?, at: TimeInterval)
-    /// The agent left `blocked`, or its state was cleared.
+    /// A trusted report shows the agent no longer `blocked`, a trusted clear removed its state, or
+    /// the shell reported its prompt with nothing `blocked`.
     case agentPromptClosed
     /// The draft went `PersonDraftGate.idleExpiry` seconds without a keystroke.
     case expired
@@ -191,6 +193,13 @@ extension TerminalSurface {
         guard case .promptShowing(let kind?, let since, _) = draftGate,
               PersonDraftGate.refusesWrites(kind) else { return nil }
         return PersonPromptHold(kind: kind, ageMs: max(0, Int(((now - since) * 1000).rounded())))
+    }
+
+    /// True while the agent's prompt of any kind shows and the person has not answered it. It can
+    /// outlast a badge that left `blocked`: printed bytes move the badge but never close the gate.
+    var isPromptShowing: Bool {
+        if case .promptShowing = draftGate { return true }
+        return false
     }
 
     /// Agent-state hook: the agent reported a prompt of `kind` (every `blocked` report, so a
