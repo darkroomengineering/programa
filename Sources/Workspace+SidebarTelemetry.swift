@@ -415,7 +415,8 @@ extension Workspace {
     ///
     /// A `.program` clear ends a showing prompt only for a signed `state=clear`, or for a prompt
     /// mark once the shell reported its prompt over the socket since the prompt armed. An unsigned
-    /// clear, a mark alone and a terminal reset drop the presence but leave the prompt gate armed.
+    /// clear, a mark alone and a terminal reset leave the prompt gate armed and keep a trusted
+    /// route view, which the badge then shows; without one they drop the presence.
     func clearPanelAgentState(
         panelId: UUID, source: AgentStateSource = .hooks, force: Bool = false,
         programClear: ProgramRootClear = .unsigned
@@ -431,10 +432,13 @@ extension Workspace {
             closePromptGate(panelId: panelId, by: closer)
             return
         }
+        // Printed bytes (an unsigned clear, a prompt mark the shell did not report, a reset) drop
+        // the program's record but never what a trusted reporter said (INC-1147).
+        let printedClear = source == .program && closer == nil
         let ownsClear = { (owner: AgentStateSource) in force || (source == .program) == (owner == .program) }
         guard ownsClear(current.source) else {
             // The badge stays, but a clear from the route view's own tier still ends it.
-            guard let route = current.route, ownsClear(route.source) else {
+            guard let route = current.route, ownsClear(route.source), !printedClear else {
                 closePromptGate(panelId: panelId, by: closer)
                 return
             }
@@ -443,6 +447,18 @@ extension Workspace {
             SocketEventBroadcaster.shared.publishAgentState(
                 workspaceId: id, surfaceId: panelId, state: nil, previousState: route.state, source: nil,
                 toSubscribers: false
+            )
+            return
+        }
+        if printedClear, let route = current.route {
+            // The badge falls back to the route view; routes see no change.
+            panelAgentPresence[panelId] = AgentPresence(
+                state: route.state, source: route.source, lastEventAt: Date(), sessionKey: route.sessionKey, route: route
+            )
+            AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: route.state, source: route.source)
+            SocketEventBroadcaster.shared.publishAgentState(
+                workspaceId: id, surfaceId: panelId, state: route.state, previousState: current.state,
+                source: route.source, writer: nil, programStatus: nil, toRoutes: false
             )
             return
         }

@@ -742,7 +742,7 @@ final class AgentActivityStateTests: XCTestCase {
         workspace.clearPanelAgentState(panelId: panel)
         XCTAssertNotNil(workspace.panelAgentPresence[panel])
 
-        workspace.clearPanelAgentState(panelId: panel, source: .program)
+        workspace.clearPanelAgentState(panelId: panel, source: .program, programClear: .signed)
         XCTAssertNil(workspace.panelAgentPresence[panel])
 
         workspace.updatePanelAgentState(panelId: panel, state: .working, source: .hooks)

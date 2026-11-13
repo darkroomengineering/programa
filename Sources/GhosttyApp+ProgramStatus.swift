@@ -152,6 +152,11 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
                     projectRoot = projectRoot || rootTouched
                     if rootTouched {
                         rootClear = report.state == nil && authentication == .verified ? .signed : .unsigned
+                    } else if report.id.isEmpty, report.state == nil, authentication == .verified {
+                        // The agent's own clear projects even with no record left: printed bytes
+                        // may have dropped it while the badge kept a trusted view.
+                        projectRoot = true
+                        rootClear = .signed
                     }
                     // Only the batch's last root record reaches the badge below, so a signed root
                     // report goes to the route view as it comes, with the authority it would have
