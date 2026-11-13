@@ -255,7 +255,8 @@ condition except `ne` and `exists: false`. A regex sees only the first 4096 UTF-
 field. An unknown operator, a regex that does not compile, `flags` without `regex`, an operator
 object with no condition, or a regex that repeats a group which already repeats (such as `(a+)+`
 or `(\w+\s?)*`, which can take exponential time) makes the route fail to load. That check cannot
-catch every slow pattern, so each match is also stopped after 50 ms: the condition then counts as
+catch every slow pattern, so matching is also bounded: all the regexes of all routes share one
+50 ms budget per event. A regex stopped by that budget, or reached after it is spent, counts as
 unmet, and the route's last error names the field.
 
 ### The gate: `debounceMs`, `throttleMs` and `key`

@@ -1288,7 +1288,7 @@ while a route's prompt turn holds the event's surface.
 | `could not start: the surface's working directory is unknown or does not exist` | A `run` whose event has no resolvable `cwd`. |
 | `could not start: <reason>` | A `run` command failed to start. |
 | `never started: no run slot was free within N s` | A `run` command waited for one of the 4 run slots for its whole timeout. |
-| `when.<field>: the regex ran longer than 50 ms and was stopped; the event did not match` | A `when` regex hit its time limit; the event counted as not matching. |
+| `when.<field>: the regex ran longer than 50 ms and was stopped; the event did not match` | The `when` regexes of all routes share one 50 ms budget per event. This route's regex was stopped, or not started, because the budget ran out; the event counted as not matching. |
 | `review: <code>: <message>` | `review.open` failed, for example `review: unavailable: Not a git repository: /path`. |
 | `review: the event names no workspace` | A `review` route on an event without a workspace. |
 | `refused: the surface has no agent; nothing was sent` | A `send` or `prompt` to a surface with no agent state. |
