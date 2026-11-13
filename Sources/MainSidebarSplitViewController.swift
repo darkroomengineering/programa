@@ -67,6 +67,7 @@ final class MainSidebarSplitViewController: NSSplitViewController {
     /// The floating system sidebar on macOS 26 sits inset; earlier versions report 0.
     var onSidebarTopInsetChange: ((CGFloat) -> Void)?
     private var reportedSidebarTopInset: CGFloat?
+    private var isTopInsetMeasurementScheduled = false
     /// Collapse animations whose completion has not run; released in deinit so a window
     /// closed mid-animation cannot leave the global portal resize counter raised.
     private var pendingAnimations = 0
@@ -159,7 +160,7 @@ final class MainSidebarSplitViewController: NSSplitViewController {
     override func viewDidLayout() {
         super.viewDidLayout()
         guard let state = sidebarState, view.window != nil, view.bounds.width > 0 else { return }
-        reportSidebarTopInsetIfChanged()
+        scheduleSidebarTopInsetMeasurement()
         if !didApplyInitialWidth {
             didApplyInitialWidth = true
             updateMaximumThickness(availableWidth: view.bounds.width)
@@ -176,15 +177,24 @@ final class MainSidebarSplitViewController: NSSplitViewController {
         }
     }
 
+    /// Measured on the next turn, after the whole layout pass: mid-pass, while the window grows,
+    /// the sidebar's glass container can still hold its old frame and report a larger inset.
+    private func scheduleSidebarTopInsetMeasurement() {
+        guard !isTopInsetMeasurementScheduled else { return }
+        isTopInsetMeasurementScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isTopInsetMeasurementScheduled = false
+            self.reportSidebarTopInsetIfChanged()
+        }
+    }
+
     private func reportSidebarTopInsetIfChanged() {
         guard let window = view.window, !sidebarItem.isCollapsed, sidebarHost.bounds.height > 0 else { return }
         let inset = max(0, window.frame.height - sidebarHost.convert(sidebarHost.bounds, to: nil).maxY)
         if let reported = reportedSidebarTopInset, abs(reported - inset) <= 0.5 { return }
         reportedSidebarTopInset = inset
-        // The receiver updates SwiftUI state; not from inside the layout pass.
-        DispatchQueue.main.async { [weak self] in
-            self?.onSidebarTopInsetChange?(inset)
-        }
+        onSidebarTopInsetChange?(inset)
     }
 
     private func needsWidthReapply(_ state: SidebarState) -> Bool {
