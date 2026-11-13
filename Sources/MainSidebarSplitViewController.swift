@@ -22,8 +22,9 @@ enum SidebarWidthPolicy {
     }
 }
 
-/// Marks the main window's sidebar split so Programa's own divider walkers
-/// (`WindowTerminalHostView`, `SplitDividerOverlayView`) leave its divider to AppKit.
+/// Marks the main window's sidebar split so Programa's own divider walkers leave its divider
+/// to AppKit: `SplitDividerOverlayView` does not draw it, and `WindowTerminalHostView` only
+/// passes presses on it through the terminal portal.
 protocol MainSidebarSplitViewMarker: AnyObject {}
 
 final class MainSidebarSplitView: NSSplitView, MainSidebarSplitViewMarker {
