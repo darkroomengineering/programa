@@ -1045,7 +1045,7 @@ def main() -> int:
     # so a late async PreToolUse hook that writes "working" after Claude reported idle would
     # pin the pane at Working. With PROGRAMA_CLAUDE_NATIVE_STATUS=1 the hook leaves the root
     # record and the surface state to Claude; it still clears notifications.
-    def pre_tool_use_writes(native: bool) -> tuple[bytes, list[str]]:
+    def tool_hook_writes(native: bool, event: str = "pre-tool-use") -> tuple[bytes, list[dict[str, Any]]]:
         master, slave = os.openpty()
         try:
             with tempfile.TemporaryDirectory(prefix="pcli-", dir="/tmp") as directory:
@@ -1059,13 +1059,13 @@ def main() -> int:
                     env["PROGRAMA_CLAUDE_NATIVE_STATUS"] = "1"
                 with SocketRecorder(directory) as recorder:
                     subprocess.run(
-                        [CLI_PATH, "--socket", recorder.path, "claude-hook", "pre-tool-use"],
+                        [CLI_PATH, "--socket", recorder.path, "claude-hook", event],
                         input=json.dumps({"session_id": "native-status-session", "tool_name": "Bash",
                                           "tool_input": {"command": "ls"}}),
                         capture_output=True, text=True, check=False, timeout=8.0, env=env,
                         start_new_session=True,
                     )
-                methods = [str(frame.get("method")) for frame in recorder.frames]
+                frames = list(recorder.frames)
             os.set_blocking(master, False)
             written = b""
             try:
@@ -1073,7 +1073,7 @@ def main() -> int:
                     written += chunk
             except BlockingIOError:
                 pass
-            return written, methods
+            return written, frames
         finally:
             os.close(master)
             os.close(slave)
@@ -1081,18 +1081,38 @@ def main() -> int:
     def root_status_writes(written: bytes) -> list[bytes]:
         return [seq for seq in written.split(b"\x1b]7501;")[1:] if b"id=" not in seq.split(b"\x1b\\")[0]]
 
+    def methods_of(frames: list[dict[str, Any]]) -> list[str]:
+        return [str(frame.get("method")) for frame in frames]
+
     state_methods = {"surface.report_agent_state", "agent.event"}
-    hook_written, hook_methods = pre_tool_use_writes(native=False)
+    hook_written, hook_frames = tool_hook_writes(native=False)
+    hook_methods = methods_of(hook_frames)
     check(any(b"state=working" in seq for seq in root_status_writes(hook_written)),
           f"pre-tool-use without native status wrote no root working record: {hook_written!r}")
     check(state_methods <= set(hook_methods), f"pre-tool-use without native status sent {hook_methods!r}")
-    native_written, native_methods = pre_tool_use_writes(native=True)
+    native_written, native_frames = tool_hook_writes(native=True)
+    native_methods = methods_of(native_frames)
     check(root_status_writes(native_written) == [],
           f"pre-tool-use with native status still wrote the root record: {native_written!r}")
     check(not state_methods & set(native_methods),
           f"pre-tool-use with native status still reported agent state: {native_methods!r}")
     check("notification.clear" in native_methods,
           f"pre-tool-use with native status stopped clearing notifications: {native_methods!r}")
+
+    # INC-1057: with native status, the synchronous PostToolUse hook tells event routes the agent
+    # resumed (a route-only `working` marked `resumed`, which may end a stop for input) and
+    # never touches the badge. Without native status it sends nothing: PreToolUse covers it.
+    post_written, post_frames = tool_hook_writes(native=True, event="post-tool-use")
+    resumed = [frame.get("params", {}) for frame in post_frames if frame.get("method") == "surface.report_agent_state"]
+    check(root_status_writes(post_written) == [], f"post-tool-use wrote a root record: {post_written!r}")
+    check("agent.event" not in methods_of(post_frames), f"post-tool-use sent an agent event: {post_frames!r}")
+    check(len(resumed) == 1 and resumed[0].get("route_only") is True and resumed[0].get("resumed") is True
+          and resumed[0].get("state") == "working" and resumed[0].get("session_id") == "native-status-session"
+          and resumed[0].get("workspace_id") == WORKSPACE_ID and resumed[0].get("surface_id") == SURFACE_ID,
+          f"post-tool-use with native status sent no route-only resumed working report: {post_frames!r}")
+    _, plain_post_frames = tool_hook_writes(native=False, event="post-tool-use")
+    check(not state_methods & set(methods_of(plain_post_frames)),
+          f"post-tool-use without native status reported agent state: {plain_post_frames!r}")
 
     if failures:
         print(f"FAIL: {len(failures)} CLI registry behavior assertion(s) failed")

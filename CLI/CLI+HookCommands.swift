@@ -126,10 +126,10 @@ extension ProgramaCLI {
         [
             CommandDescriptor(
                 names: ["claude-hook"],
-                helpLines: ["claude-hook <session-start|stop|session-end|notification|prompt-submit|pre-tool-use|subagent-start|subagent-stop> [--workspace <id|ref>] [--surface <id|ref>]"],
+                helpLines: ["claude-hook <session-start|stop|session-end|notification|prompt-submit|pre-tool-use|post-tool-use|subagent-start|subagent-stop> [--workspace <id|ref>] [--surface <id|ref>]"],
                 grammar: Self.agentHookGrammar(
                     valueOptions: ["workspace", "surface"],
-                    events: ["session-start", "active", "stop", "idle", "prompt-submit", "notification", "notify", "session-end", "pre-tool-use", "subagent-start", "subagent-stop"],
+                    events: ["session-start", "active", "stop", "idle", "prompt-submit", "notification", "notify", "session-end", "pre-tool-use", "post-tool-use", "subagent-start", "subagent-stop"],
                     onlyInsideSurface: false
                 ),
                 execute: { ctx in

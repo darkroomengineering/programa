@@ -3,6 +3,7 @@
 // Ghostty's parser has already validated every report before the action reaches Swift. The
 // checks here are defense in depth, so the store never holds a record the sidebar or the socket
 // could not safely show. See docs/program-status.md.
+import CryptoKit
 import Foundation
 
 enum ProgramStatusState: String, Sendable, CaseIterable {
@@ -27,6 +28,66 @@ enum ProgramStatusKind: String, Sendable {
     case permission, question, auth
 }
 
+/// The per-surface secret that tells Programa's own reports apart from bytes any program in the
+/// terminal can print (a file preview with raw ESC in an agent's dialog). Each spawned shell gets
+/// a fresh token in `environmentKey`; Programa's hooks send it back as `reportKey`. The app keeps
+/// only its SHA-256 digest, so neither memory dumps of the surface nor the session snapshot hold
+/// the token itself.
+enum ProgramStatusToken {
+    static let environmentKey = "PROGRAMA_STATUS_TOKEN"
+    /// At most 16 bytes: Ghostty discards a report with a longer key.
+    static let reportKey = "programa_token"
+
+    struct Digest: Equatable, Sendable, Codable {
+        let bytes: [UInt8]
+
+        /// Constant time in the digest length, so a mismatch reveals nothing about where it is.
+        func matches(_ other: Digest) -> Bool {
+            guard bytes.count == other.bytes.count else { return false }
+            var difference: UInt8 = 0
+            for (lhs, rhs) in zip(bytes, other.bytes) { difference |= lhs ^ rhs }
+            return difference == 0
+        }
+
+        init(bytes: [UInt8]) { self.bytes = bytes }
+
+        /// Lowercase hex, the form persisted in the session snapshot.
+        init(from decoder: Decoder) throws {
+            let hex = Array(try decoder.singleValueContainer().decode(String.self).utf8)
+            let bytes = hex.count.isMultiple(of: 2)
+                ? stride(from: 0, to: hex.count, by: 2).compactMap { UInt8(String(decoding: hex[$0..<$0 + 2], as: UTF8.self), radix: 16) }
+                : []
+            guard !bytes.isEmpty, bytes.count * 2 == hex.count else {
+                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "not hex"))
+            }
+            self.bytes = bytes
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encode(bytes.map { String(format: "%02x", $0) }.joined())
+        }
+    }
+
+    /// 128 random bits as 32 lowercase hex digits, which fits a report value (`isName`).
+    static func generate() -> String {
+        var generator = SystemRandomNumberGenerator()
+        return (0..<16).map { _ in String(format: "%02x", UInt8.random(in: .min ... .max, using: &generator)) }.joined()
+    }
+
+    static func digest(of token: String) -> Digest {
+        Digest(bytes: Array(SHA256.hash(data: Data(token.utf8))))
+    }
+}
+
+/// What a report proved about its writer: `verified` carries the surface's own token, `unsigned`
+/// carries none (or the surface's token is unknown), `forged` carries another one.
+enum ProgramStatusAuthentication: Equatable, Sendable {
+    case verified
+    case unsigned
+    case forged
+}
+
 struct ProgramStatusRecord: Equatable, Sendable {
     /// Empty string is the root record (the program itself).
     var id: String
@@ -39,6 +100,8 @@ struct ProgramStatusRecord: Equatable, Sendable {
     var title: String?
     var msg: String?
     var updatedAt: Date
+    /// The report that wrote the record carried the surface's token.
+    var verified = false
 }
 
 /// One validated report. `state == nil` is the `clear` operation: it removes `id` and every
@@ -57,6 +120,9 @@ struct ProgramStatusReport: Equatable, Sendable {
     var app: String?
     var title: String?
     var msg: String?
+    /// Digest of the `programa_token` value, nil when absent or not a name. The token itself is
+    /// never kept.
+    var tokenDigest: ProgramStatusToken.Digest?
 
     /// Parses the bytes after `7501;`. Returns nil when the report must be discarded whole.
     /// Pairs split on `:`, keys on the first `=`; malformed pairs are skipped, unknown keys
@@ -97,9 +163,20 @@ struct ProgramStatusReport: Equatable, Sendable {
             msg = decodedMsg.value
         }
 
+        let tokenDigest = values[Substring(ProgramStatusToken.reportKey)].flatMap { raw in
+            isName(raw, maxLength: maxSegmentLength) ? ProgramStatusToken.digest(of: String(raw)) : nil
+        }
+
         return ProgramStatusReport(
-            state: state, id: id, kind: kind, progress: progress, app: app, title: title, msg: msg
+            state: state, id: id, kind: kind, progress: progress, app: app, title: title, msg: msg,
+            tokenDigest: tokenDigest
         )
+    }
+
+    /// `expected` is the digest of the surface's token, nil when Programa does not know it.
+    func authentication(against expected: ProgramStatusToken.Digest?) -> ProgramStatusAuthentication {
+        guard let tokenDigest, let expected else { return .unsigned }
+        return tokenDigest.matches(expected) ? .verified : .forged
     }
 
     static func isValidId(_ id: String) -> Bool {
@@ -194,7 +271,7 @@ final class ProgramStatusStore {
     }
 
     @discardableResult
-    func apply(_ report: ProgramStatusReport, at now: Date = Date()) -> ProgramStatusChange {
+    func apply(_ report: ProgramStatusReport, verified: Bool = false, at now: Date = Date()) -> ProgramStatusChange {
         guard let state = report.state else {
             return .applied(rootTouched: clear(id: report.id))
         }
@@ -209,7 +286,8 @@ final class ProgramStatusStore {
             app: report.app,
             title: report.title,
             msg: report.msg,
-            updatedAt: now
+            updatedAt: now,
+            verified: verified
         )
         return .applied(rootTouched: report.id.isEmpty)
     }

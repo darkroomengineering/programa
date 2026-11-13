@@ -80,7 +80,8 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
                 // Only a same-state update (progress, text) may replace a queued report; a state
                 // change must reach waiters and notifications even inside one burst.
                 if queued.id == report.id {
-                    guard queued.state == report.state else { break }
+                    // A report with another token must not stand in for a signed one.
+                    guard queued.state == report.state, queued.tokenDigest == report.tokenDigest else { break }
                     events[index] = event
                     return
                 }
@@ -101,7 +102,14 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
         guard let manager = AppDelegate.shared?.tabManagerFor(tabId: key.tabId),
               let workspace = manager.tabs.first(where: { $0.id == key.tabId }),
               let panel = workspace.panels[key.surfaceId] as? TerminalPanel else { return }
+        apply(events, to: panel, in: workspace, manager: manager)
+    }
 
+    /// Applies one drained batch to `panel`: the records, then the root's projection into the
+    /// workspace's agent presence. Internal so tests can run a batch without the app delegate.
+    @MainActor
+    func apply(_ events: [Event], to panel: TerminalPanel, in workspace: Workspace, manager: TabManager) {
+        let key = Key(tabId: workspace.id, surfaceId: panel.id)
         var lastRootState = panel.programStatus.root?.state
         var transitions: [ProgramStatusRecord?] = []
         var projectRoot = false
@@ -126,8 +134,29 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
             }
             switch event {
             case .report(let report):
-                if case .applied(let rootTouched) = panel.programStatus.apply(report) {
+                // A report with another surface's token, or a guessed one, is dropped whole. One
+                // without a token still shows, but never counts as the agent (see `verified`).
+                let authentication = report.authentication(against: panel.surface.programStatusTokenDigest)
+                guard authentication != .forged else {
+#if DEBUG
+                    dlog("programStatus.forged surface=\(key.surfaceId.uuidString.prefix(5)) id=\(report.id)")
+#endif
+                    continue
+                }
+                if case .applied(let rootTouched) = panel.programStatus.apply(
+                    report, verified: authentication == .verified
+                ) {
                     projectRoot = projectRoot || rootTouched
+                    // Only the batch's last root record reaches the badge below, so a signed root
+                    // report goes to the route view as it comes, with the authority it would have
+                    // there as the last record: an unsigned report later in the same batch must
+                    // not hide it from routes.
+                    if authentication == .verified, rootTouched, let state = report.state {
+                        manager.updateSurfaceRouteAgentState(
+                            tabId: key.tabId, surfaceId: key.surfaceId, state: state.legacyAgentState,
+                            source: .program, programVerified: true, resumesBlocked: true
+                        )
+                    }
                 }
 #if DEBUG
                 dlog(
@@ -169,7 +198,8 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
                 state: root.state.legacyAgentState,
                 source: .program,
                 programState: root.state,
-                promptKind: root.kind
+                promptKind: root.kind,
+                programVerified: root.verified
             )
         } else {
             manager.clearSurfaceAgentState(tabId: key.tabId, surfaceId: key.surfaceId, source: .program)

@@ -205,12 +205,13 @@ def _test_needs_input_event(socket_path: str, workspace_id: str, surface_id: str
         _must(second.get("body") == second_question, f"already-blocked surface must still push needs_input, got {second}")
         _must(second.get("kind") == "permission", f"expected kind=permission, got {second}")
 
-        # Program-owned presence: OSC 7501 `working` outranks the hooks `blocked` write, so no
-        # blocked agent_state frame follows, but the needs_input frame must still arrive.
+        # Program-owned presence: a signed OSC 7501 `working` (carrying the shell's token, as
+        # Programa's hooks send it) outranks the hooks `blocked` write, so no blocked agent_state
+        # frame follows, but the needs_input frame must still arrive.
         with ProgramaClient(socket_path) as driver:
             driver._call(
                 "surface.send_text",
-                {"surface_id": program_surface_id, "text": "printf '\\033]7501;state=working:app=test\\033\\\\'; sleep 12\n"},
+                {"surface_id": program_surface_id, "text": "printf '\\033]7501;state=working:app=test:programa_token=%s\\033\\\\' \"$PROGRAMA_STATUS_TOKEN\"; sleep 12\n"},
             )
         _read_frame_matching(
             sub_client,

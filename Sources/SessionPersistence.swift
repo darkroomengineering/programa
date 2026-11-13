@@ -257,6 +257,9 @@ struct SessionGitBranchSnapshot: Codable, Sendable {
 struct SessionTerminalPanelSnapshot: Codable, Sendable {
     var workingDirectory: String?
     var scrollback: String?
+    /// Digest of the shell's `PROGRAMA_STATUS_TOKEN` (never the token), so a shell revived from
+    /// escrow keeps signing its OSC 7501 reports. Absent in older snapshots.
+    var programStatusTokenDigest: ProgramStatusToken.Digest?
 }
 
 struct SessionMarkdownPanelSnapshot: Codable, Sendable {

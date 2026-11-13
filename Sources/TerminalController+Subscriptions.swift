@@ -430,10 +430,14 @@ final class SocketEventBroadcaster: @unchecked Sendable {
         previousState: AgentActivityState?,
         source: AgentStateSource? = nil,
         writer: String? = nil,
-        programStatus: [String: Any]? = nil
+        programStatus: [String: Any]? = nil,
+        toSubscribers: Bool = true,
+        toRoutes: Bool = true
     ) {
-        let subs = subscribers(for: .agentState)
-        let tapped = routeTap.wants(.agentState)
+        // Routes can get a frame subscribers do not: they follow `AgentPresence.route`, which only
+        // trusted reports move, while subscribers follow the displayed state.
+        let subs = toSubscribers ? subscribers(for: .agentState) : []
+        let tapped = toRoutes && routeTap.wants(.agentState)
         guard !subs.isEmpty || tapped else { return }
         var frame: [String: Any] = [
             "event": "agent_state",

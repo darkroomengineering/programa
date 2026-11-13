@@ -89,6 +89,9 @@ struct AgentPresence: Equatable, Sendable {
     /// The root record's state when `source == .program`; `state` holds its legacy projection
     /// (done and error both read as `.idle`). Nil for every other source.
     var programState: ProgramStatusState?
+    /// What event routes see of this agent, kept beside the displayed state above. Nil when no
+    /// trusted reporter has spoken since the presence was created.
+    var route: RouteAgentPresence?
     /// Set by the watchdog sweep once `isStale` first turns true, and reset by every write.
     /// Staleness itself is computed from `lastEventAt`; this stored flag only makes the
     /// transition a real value change, so the `removeDuplicates` sidebar publisher fires.
@@ -105,6 +108,24 @@ struct AgentPresence: Equatable, Sendable {
     /// `working` once is still working.
     func isStale(now: Date, threshold: TimeInterval = AgentPresence.staleThreshold) -> Bool {
         source != .program && state != .idle && now.timeIntervalSince(lastEventAt) > threshold
+    }
+}
+
+/// The agent as event routes see it: only reports from a reporter that cannot be faked by
+/// terminal output, hooks over the socket or OSC 7501 carrying the surface's token
+/// (`ProgramStatusToken`). An unsigned OSC 7501 report (Claude Code's own status, or bytes
+/// anything in the terminal printed) can own the displayed state but never this one, so it can
+/// never name a writer for a route or end the work a held `send` or `prompt` waits on.
+struct RouteAgentPresence: Equatable, Sendable {
+    var state: AgentActivityState
+    /// `.hooks` or `.program`; a `.program` route presence is always a signed one.
+    var source: AgentStateSource
+    /// Hooks only, resolved like `AgentPresence.sessionKey`.
+    var sessionKey: AgentSessionKey?
+
+    /// Whether its reporter names itself: a signed program, or hooks with a session id.
+    var writerIdentified: Bool {
+        source == .program || !(sessionKey?.sessionId ?? "").isEmpty
     }
 }
 

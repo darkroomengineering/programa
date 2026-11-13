@@ -3597,6 +3597,12 @@
           },
           "pid": {
             "type": "integer"
+          },
+          "route_only": {
+            "type": "boolean"
+          },
+          "resumed": {
+            "type": "boolean"
           }
         },
         "required": [

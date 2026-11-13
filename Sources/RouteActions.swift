@@ -82,8 +82,9 @@ protocol RouteAgentTarget {
     var promptHoldKind: String? { get }
     /// A person has unsent typed input.
     var hasDraftHold: Bool { get }
-    /// The agent's state comes from a reporter that names itself: OSC 7501 from the program, or
-    /// hooks reports that carry a session id. Screen inference and keyless hooks reports do not.
+    /// The agent's state comes from a reporter that names itself: OSC 7501 carrying the surface's
+    /// token, or hooks reports that carry a session id. Screen inference, unsigned OSC 7501 and
+    /// keyless hooks reports do not.
     var writerIdentified: Bool { get }
     /// One paste, plus Return when `submit` is true.
     func deliver(_ text: String, submit: Bool)
@@ -483,18 +484,11 @@ private struct LiveRouteAgentTarget: RouteAgentTarget {
     let workspace: Workspace
     let panel: TerminalPanel
 
-    var agentState: AgentActivityState? { workspace.panelAgentPresence[panel.id]?.state }
-    var canAutoSubmit: Bool { workspace.canAutoSubmitToAgent(panelId: panel.id) }
+    var agentState: AgentActivityState? { workspace.routeAgentState(panelId: panel.id) }
+    var canAutoSubmit: Bool { workspace.canAutoSubmitRouteText(panelId: panel.id) }
     var promptHoldKind: String? { panel.surface.activePromptHold()?.kind.rawValue }
     var hasDraftHold: Bool { panel.surface.activeDraftHold() != nil }
-    var writerIdentified: Bool {
-        guard let presence = workspace.panelAgentPresence[panel.id] else { return false }
-        switch presence.source {
-        case .program: return true
-        case .hooks: return !(presence.sessionKey?.sessionId ?? "").isEmpty
-        case .inferred: return false
-        }
-    }
+    var writerIdentified: Bool { workspace.agentWriterIdentified(panelId: panel.id) }
 
     func deliver(_ text: String, submit: Bool) {
         if submit {
@@ -504,6 +498,29 @@ private struct LiveRouteAgentTarget: RouteAgentTarget {
             panel.surface.forceRefresh(reason: "route.send")
         }
         panel.surface.noteDraftEvent(.socketWriteDelivered)
+    }
+}
+
+extension Workspace {
+    /// Whether the panel's agent, as routes see it, comes from a reporter that names itself (see
+    /// `RouteAgentTarget.writerIdentified`). Reads the route view, not the badge: an unsigned
+    /// OSC 7501 report can own the badge.
+    func agentWriterIdentified(panelId: UUID) -> Bool {
+        panelAgentPresence[panelId]?.route?.writerIdentified ?? false
+    }
+
+    /// The agent's state as routes see it: the route view once a trusted reporter has spoken, so
+    /// printed OSC 7501 bytes cannot make a working agent look idle to a route; else the badge
+    /// (a panel without a route view gets no text: `agentWriterIdentified` is false there).
+    func routeAgentState(panelId: UUID) -> AgentActivityState? {
+        guard let presence = panelAgentPresence[panelId] else { return nil }
+        return presence.route?.state ?? presence.state
+    }
+
+    /// `canAutoSubmitToAgent`, which `deliverTextToAgent` checks again for the badge, and the
+    /// route view is not blocked either.
+    func canAutoSubmitRouteText(panelId: UUID) -> Bool {
+        canAutoSubmitToAgent(panelId: panelId) && routeAgentState(panelId: panelId) != .blocked
     }
 }
 

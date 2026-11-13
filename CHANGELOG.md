@@ -9,6 +9,9 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 ### Changed
 - Plain `claude` in a Programa terminal now starts with Claude Code agent teams on, the same as `programa claude-teams`, so teammates open as Programa panes. A `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` you set yourself, including `0`, is left alone, and so is `claude` inside your own tmux or screen. Turn it off in Settings > Agents > Claude Agent Teams (`automation.claudeTeamsByDefault`). `programa claude-teams` still works and always turns teams on.
 
+### Fixed
+- Text printed into a terminal can no longer pose as an agent's status and release an event route's `send` or `prompt` text. Programa gives each terminal a secret that its agent hooks put in their status reports, and only a report carrying it counts as the agent. A report without it, such as Claude Code's own status, still drives the sidebar as before, while routes follow the agent's hooks. See `docs/program-status.md`.
+
 ## [0.7.0] - 2026-11-11
 
 ### Added

@@ -1220,6 +1220,12 @@ CLI: `programa agent-event --event <event_type> [--provider <p>] [--session-id <
 and `pid` params. They key the report to a hook session and register the pid for the stale-PID
 watchdog and port scanning; a report without them still works and is left unkeyed.
 
+`surface.report_agent_state` also accepts `route_only: true`, only with `state: "working"`
+(anything else is `invalid_params`). Such a report moves only what event routes see of the agent,
+never `agent_state`, the badge, helpers or ports, and it leaves a blocked route view alone unless
+`resumed: true` says the sender knows the prompt was answered. Claude Code's PostToolUse hook sends
+both while Claude reports its own status (`docs/program-status.md`, Authority).
+
 ## `agent.needs_input` (docs/plans/agent-state-unification.md)
 
 Atomically reports a surface as blocked on user input and posts the matching notification, in one

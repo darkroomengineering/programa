@@ -259,6 +259,13 @@ extension Workspace {
     ///   (idle/done/error), accepted only when they report an active state. Accepting only active
     ///   claims keeps a hook `idle` from overwriting a program `done` badge.
     ///
+    /// Event routes read `AgentPresence.route` instead, updated by the same rules from trusted
+    /// reports only: hooks, and `.program` with `programVerified` (the report carried the
+    /// surface's token). An unsigned program report can own the badge but never the route view,
+    /// so routes get their own frames: one per route-view change, carrying that view's previous
+    /// state and the report's writer. A panel no trusted reporter has spoken for yet hands routes
+    /// its displayed changes, without a writer.
+    ///
     /// `promptKind` is what a `blocked` report is waiting on (nil when the reporter did not say).
     /// It goes only to the surface's person-input gate, which refuses socket writes while a
     /// permission or sign-in prompt shows (TerminalSurface+DraftGate.swift).
@@ -271,6 +278,7 @@ extension Workspace {
         inferredAgent: String? = nil,
         programState: ProgramStatusState? = nil,
         promptKind: ProgramStatusKind? = nil,
+        programVerified: Bool = false,
         at now: Date = Date()
     ) {
         let current = panelAgentPresence[panelId]
@@ -292,15 +300,23 @@ extension Workspace {
             }
         }
 
-        if source != .program, let current, current.source == .program,
-           current.state != .idle || state == .idle {
-            return
+        let movedRoute = Self.nextRoute(
+            after: current?.route, state: state, source: source, sessionKey: sessionKey, programVerified: programVerified
+        )
+        let routeChanged = movedRoute != nil && movedRoute != current?.route
+        let route = routeChanged ? movedRoute : current?.route
+        let publishRoute = {
+            guard routeChanged, let route else { return }
+            self.publishRouteAgentState(panelId: panelId, route: route, previous: current?.route?.state, sessionKey: sessionKey)
         }
 
-        if source == .inferred, let current, current.source == .hooks {
-            // Hooks always win: dropped write must not move lastEventAt either, so a
-            // hooks-owned surface's staleness clock keeps ticking from its last real hook
+        if Self.programHolds(currentSource: current?.source, currentState: current?.state, against: source, state)
+            || (source == .inferred && current?.source == .hooks) {
+            // Hooks always win over inference: dropped write must not move lastEventAt either, so
+            // a hooks-owned surface's staleness clock keeps ticking from its last real hook
             // event, not from an inferred sample that never took effect.
+            if routeChanged { panelAgentPresence[panelId]?.route = route }
+            publishRoute()
             return
         }
 
@@ -330,6 +346,8 @@ extension Workspace {
             if state == .blocked {
                 (panels[panelId] as? TerminalPanel)?.surface.noteAgentPrompt(promptKind, isBlocked: true)
             }
+            if routeChanged { panelAgentPresence[panelId]?.route = route }
+            publishRoute()
             return
         }
         panelAgentPresence[panelId] = AgentPresence(
@@ -338,7 +356,8 @@ extension Workspace {
             lastEventAt: now,
             sessionKey: resolvedSessionKey,
             inferredAgent: resolvedInferredAgent,
-            programState: programState
+            programState: programState,
+            route: route
         )
         // `current == nil` covers a prompt kept armed across a sidebar reset: the agent's next
         // report after that reset is what tells us the box closed.
@@ -357,11 +376,13 @@ extension Workspace {
             state: state,
             previousState: current?.state,
             source: source,
-            writer: RouteEvent.writer(source: source, sessionKey: sessionKey),
+            writer: nil,
             programStatus: source == .program
                 ? (panels[panelId] as? TerminalPanel)?.programStatus.root?.wirePayload
-                : nil
+                : nil,
+            toRoutes: route == nil
         )
+        publishRoute()
 #if DEBUG
         dlog(
             "surface.agentState workspace=\(id.uuidString.prefix(5)) " +
@@ -375,19 +396,110 @@ extension Workspace {
     /// presence whoever owns it (permanent panel close).
     func clearPanelAgentState(panelId: UUID, source: AgentStateSource = .hooks, force: Bool = false) {
         guard let current = panelAgentPresence[panelId] else { return }
-        if !force, (source == .program) != (current.source == .program) { return }
+        let ownsClear = { (owner: AgentStateSource) in force || (source == .program) == (owner == .program) }
+        guard ownsClear(current.source) else {
+            // The badge stays, but a clear from the route view's own tier still ends it.
+            guard let route = current.route, ownsClear(route.source) else { return }
+            panelAgentPresence[panelId]?.route = nil
+            SocketEventBroadcaster.shared.publishAgentState(
+                workspaceId: id, surfaceId: panelId, state: nil, previousState: route.state, source: nil,
+                toSubscribers: false
+            )
+            return
+        }
         panelAgentPresence.removeValue(forKey: panelId)
         if current.state == .blocked {
             (panels[panelId] as? TerminalPanel)?.surface.noteAgentPrompt(nil, isBlocked: false)
         }
         AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil, source: nil)
+        // Routes see the clear too: a held delivery ends rather than outliving the agent.
         SocketEventBroadcaster.shared.publishAgentState(
-            workspaceId: id, surfaceId: panelId, state: nil, previousState: current.state, source: nil,
-            writer: RouteEvent.writer(source: source, sessionKey: nil)
+            workspaceId: id, surfaceId: panelId, state: nil, previousState: current.route?.state ?? current.state,
+            source: nil
         )
 #if DEBUG
         dlog("surface.agentState.clear workspace=\(id.uuidString.prefix(5)) panel=\(panelId.uuidString.prefix(5))")
 #endif
+    }
+
+    /// Moves only the route view (`AgentPresence.route`), for a trusted report that must not drive
+    /// the badge: a signed OSC 7501 report the drain applied before a later unsigned one in the
+    /// same batch, or Claude Code's PostToolUse hook while Claude reports its own status. A no-op
+    /// without a presence, since the route view lives with it; routes then miss the report and
+    /// fail closed.
+    ///
+    /// It leaves a blocked route view alone unless `resumesBlocked`: only a report that proves the
+    /// person answered the prompt may end a stop for input (a hook that runs after the tool, not
+    /// an async one that can land after the next prompt went up).
+    func updatePanelRouteAgentState(
+        panelId: UUID,
+        state: AgentActivityState,
+        source: AgentStateSource,
+        sessionKey: AgentSessionKey? = nil,
+        programVerified: Bool = false,
+        resumesBlocked: Bool = false
+    ) {
+        guard let current = panelAgentPresence[panelId],
+              resumesBlocked || current.route?.state != .blocked,
+              let route = Self.nextRoute(
+                  after: current.route, state: state, source: source, sessionKey: sessionKey, programVerified: programVerified
+              ),
+              route != current.route else { return }
+        panelAgentPresence[panelId]?.route = route
+        publishRouteAgentState(panelId: panelId, route: route, previous: current.route?.state, sessionKey: sessionKey)
+    }
+
+    /// The route view after a report, or nil when the report does not move it: it comes from an
+    /// untrusted reporter, or a signed program holds the view against it.
+    private static func nextRoute(
+        after current: RouteAgentPresence?,
+        state: AgentActivityState,
+        source: AgentStateSource,
+        sessionKey: AgentSessionKey?,
+        programVerified: Bool
+    ) -> RouteAgentPresence? {
+        guard source == .hooks || (source == .program && programVerified),
+              !programHolds(currentSource: current?.source, currentState: current?.state, against: source, state)
+        else { return nil }
+        return RouteAgentPresence(
+            state: state,
+            source: source,
+            sessionKey: source == .hooks ? sessionKey ?? (current?.source == .hooks ? current?.sessionKey : nil) : nil
+        )
+    }
+
+    /// One frame for routes only. The writer comes from the report's own session key, never the
+    /// view's resolved one (`RouteEvent.writer`).
+    private func publishRouteAgentState(
+        panelId: UUID,
+        route: RouteAgentPresence,
+        previous: AgentActivityState?,
+        sessionKey: AgentSessionKey?
+    ) {
+        SocketEventBroadcaster.shared.publishAgentState(
+            workspaceId: id,
+            surfaceId: panelId,
+            state: route.state,
+            previousState: previous,
+            source: route.source,
+            writer: RouteEvent.writer(source: route.source, sessionKey: sessionKey, programVerified: route.source == .program),
+            programStatus: route.source == .program
+                ? (panels[panelId] as? TerminalPanel)?.programStatus.root?.wirePayload
+                : nil,
+            toSubscribers: false
+        )
+    }
+
+    /// Whether a program presence in `currentState` keeps a report from another tier: always
+    /// while it is active, and while it rests unless the report claims an active state.
+    private static func programHolds(
+        currentSource: AgentStateSource?,
+        currentState: AgentActivityState?,
+        against source: AgentStateSource,
+        _ state: AgentActivityState
+    ) -> Bool {
+        guard source != .program, currentSource == .program, let currentState else { return false }
+        return currentState != .idle || state == .idle
     }
 
     // MARK: - Review nudge

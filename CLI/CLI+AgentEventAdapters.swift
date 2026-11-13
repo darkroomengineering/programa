@@ -62,6 +62,47 @@ extension ProgramaCLI {
         )
     }
 
+    /// Claude Code's PostToolUse: the tool ran, so any permission prompt before it was answered.
+    /// While Claude reports its own status (which owns the badge, and keeps PreToolUse silent), it
+    /// tells event routes the agent resumed. It must be a synchronous hook: Claude waits for it
+    /// before the next tool, so its report lands before that tool's permission prompt can, which
+    /// is what lets it end a stop for input. PreToolUse is async and could land after it.
+    func runClaudePostToolUse(_ ctx: AgentHookContext) {
+        guard claudeReportsOwnStatus else { return }
+        let session = ctx.parsed.sessionId.flatMap { ctx.store.lookup(sessionId: $0) }
+        guard let workspaceId = [session?.workspaceId, ctx.workspaceArg].compactMap({ $0 }).first(where: isUUID),
+              let surfaceId = [session?.surfaceId, ctx.surfaceArg].compactMap({ $0 }).first(where: isUUID) else { return }
+        reportRouteOnlyWorking(
+            client: ctx.client, provider: "claude-code", workspaceId: workspaceId, surfaceId: surfaceId,
+            sessionId: ctx.parsed.sessionId, pid: session?.pid, resumed: true
+        )
+    }
+
+    /// A `working` report with `route_only`: it moves what event routes see of the agent, never
+    /// the badge, for a hook whose badge update the program's own status owns. `resumed` lets it
+    /// end a stop for input; send it only from a hook that proves the prompt was answered.
+    func reportRouteOnlyWorking(
+        client: SocketClient,
+        provider: String,
+        workspaceId: String,
+        surfaceId: String,
+        sessionId: String? = nil,
+        pid: Int? = nil,
+        resumed: Bool = false
+    ) {
+        var params: [String: Any] = [
+            "workspace_id": workspaceId,
+            "surface_id": surfaceId,
+            "state": CLIAgentActivityState.working.rawValue,
+            "provider": provider,
+            "route_only": true,
+        ]
+        if resumed { params["resumed"] = true }
+        if let sessionId, !sessionId.isEmpty { params["session_id"] = sessionId }
+        if let pid { params["pid"] = pid }
+        _ = try? client.sendV2(method: V2MethodNames.surfaceReportAgentState, params: params)
+    }
+
     /// Sends `agent.needs_input` (docs/plans/agent-state-unification.md T2): one atomic
     /// socket call covering the `notification.create_for_target` +
     /// `workspace.set_status` "Needs input" + `surface.report_agent_state` trio a hook

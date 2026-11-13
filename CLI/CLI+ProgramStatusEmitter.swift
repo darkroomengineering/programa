@@ -11,21 +11,28 @@ enum ProgramStatusSequence {
     /// Raw bytes of a child record's title, well under the protocol's 192 so `msg` keeps room.
     static let maxTitleBytes = 96
 
+    /// The report key for the surface's `PROGRAMA_STATUS_TOKEN` (`ProgramStatusToken.reportKey`
+    /// in the app).
+    static let tokenKey = "programa_token"
+
     /// Builds `ESC ] 7501 ; key=value:key=value ESC \`. `title` and `msg` are stripped of
     /// control characters and truncated on a UTF-8 boundary so the full sequence is
-    /// <= `maxBytes`. `id` must already be a valid record id (`segment(/segment)*`).
+    /// <= `maxBytes`. `id` must already be a valid record id (`segment(/segment)*`). `token` is
+    /// the surface's `PROGRAMA_STATUS_TOKEN`; it goes before `msg` so the byte budget counts it.
     static func build(
         state: String,
         kind: String? = nil,
         app: String? = nil,
         msg: String? = nil,
         id: String? = nil,
-        title: String? = nil
+        title: String? = nil,
+        token: String? = nil
     ) -> [UInt8] {
         var fields = ["state=\(state)"]
         if let id, !id.isEmpty { fields.append("id=\(id)") }
         if let kind, !kind.isEmpty { fields.append("kind=\(kind)") }
         if let app, isValidApp(app) { fields.append("app=\(app)") }
+        if let token, isValidApp(token) { fields.append("\(tokenKey)=\(token)") }
         if let title {
             let bytes = truncatedUTF8(sanitized(title), maxBytes: maxTitleBytes)
             if !bytes.isEmpty { fields.append("title=\(Data(bytes).base64EncodedString())") }
@@ -94,9 +101,10 @@ extension ProgramaCLI {
         ProcessInfo.processInfo.environment["PROGRAMA_CLAUDE_NATIVE_STATUS"] == "1"
     }
 
-    /// Emits one OSC 7501 status report to the agent's terminal. No-op unless
-    /// `PROGRAMA_SURFACE_ID` is set (also true over SSH when forwarded) and not inside tmux,
-    /// and for Claude's root record while Claude reports it itself (`clear` still goes out).
+    /// Emits one OSC 7501 status report to the agent's terminal, signed with the surface's
+    /// `PROGRAMA_STATUS_TOKEN` when the environment has it. No-op unless `PROGRAMA_SURFACE_ID` is
+    /// set (also true over SSH when forwarded) and not inside tmux, and for Claude's root record
+    /// while Claude reports it itself (`clear` still goes out).
     func emitProgramStatus(
         state: String,
         kind: String? = nil,
@@ -109,7 +117,12 @@ extension ProgramaCLI {
         guard let surface = env["PROGRAMA_SURFACE_ID"], !surface.isEmpty else { return }
         if env["TMUX"] != nil { return }
         if app == "claude-code", id == nil, state != "clear", claudeReportsOwnStatus { return }
-        let bytes = ProgramStatusSequence.build(state: state, kind: kind, app: app, msg: msg, id: id, title: title)
+        let bytes = ProgramStatusSequence.build(
+            state: state, kind: kind, app: app, msg: msg, id: id, title: title,
+            // Over SSH the token can only have arrived through the user's own SendEnv; such a
+            // report stays unsigned, as the protocol doc promises.
+            token: env["SSH_CONNECTION"] == nil ? env["PROGRAMA_STATUS_TOKEN"] : nil
+        )
         guard let fd = openProgramStatusTTY(env: env) else { return }
         defer { close(fd) }
         // A background hook process on a TOSTOP terminal would otherwise be stopped by SIGTTOU.

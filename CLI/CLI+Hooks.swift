@@ -382,6 +382,7 @@ extension ProgramaCLI {
             },
             extraEvents: [
                 "pre-tool-use": { self.runClaudePreToolUse($0) },
+                "post-tool-use": { self.runClaudePostToolUse($0) },
                 "subagent-start": { self.runClaudeSubagentStart($0) },
                 "subagent-stop": { self.runClaudeSubagentStop($0) },
             ]

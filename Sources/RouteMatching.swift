@@ -17,12 +17,14 @@ struct RouteEvent: Sendable, Equatable {
 
     /// The writer of one agent report, from that report's own source and session key, never
     /// from the presence it updates (a report without a key keeps the key an earlier report set).
-    /// OSC 7501 is the program in the terminal; a hooks report is identified only by its session
-    /// id. Screen inference and keyless hooks reports have no writer.
-    static func writer(source: AgentStateSource?, sessionKey: AgentSessionKey?) -> String? {
+    /// OSC 7501 is the program in the terminal only when the report carried the surface's token
+    /// (`programVerified`): any bytes reaching the terminal can make an unsigned one. A hooks
+    /// report is identified only by its session id. Screen inference, unsigned program reports and
+    /// keyless hooks reports have no writer.
+    static func writer(source: AgentStateSource?, sessionKey: AgentSessionKey?, programVerified: Bool = false) -> String? {
         switch source {
         case .program:
-            return "program"
+            return programVerified ? "program" : nil
         case .hooks:
             guard let sessionKey, let sessionId = sessionKey.sessionId, !sessionId.isEmpty else { return nil }
             return "hooks:\(sessionKey.provider):\(sessionId)"

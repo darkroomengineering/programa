@@ -1693,14 +1693,32 @@ class TabManager: ObservableObject {
         sessionKey: AgentSessionKey? = nil,
         transcriptPath: String? = nil,
         programState: ProgramStatusState? = nil,
-        promptKind: ProgramStatusKind? = nil
+        promptKind: ProgramStatusKind? = nil,
+        programVerified: Bool = false
     ) -> Bool {
         guard let tab = workspace(withId: tabId), tab.panels[surfaceId] != nil else { return false }
         tab.updatePanelAgentState(
             panelId: surfaceId, state: state, source: source, sessionKey: sessionKey,
-            transcriptPath: transcriptPath, programState: programState, promptKind: promptKind
+            transcriptPath: transcriptPath, programState: programState, promptKind: promptKind,
+            programVerified: programVerified
         )
         return true
+    }
+
+    /// Moves only what event routes see of a surface's agent (`Workspace.updatePanelRouteAgentState`).
+    func updateSurfaceRouteAgentState(
+        tabId: UUID,
+        surfaceId: UUID,
+        state: AgentActivityState,
+        source: AgentStateSource = .hooks,
+        sessionKey: AgentSessionKey? = nil,
+        programVerified: Bool = false,
+        resumesBlocked: Bool = false
+    ) {
+        workspace(withId: tabId)?.updatePanelRouteAgentState(
+            panelId: surfaceId, state: state, source: source, sessionKey: sessionKey, programVerified: programVerified,
+            resumesBlocked: resumesBlocked
+        )
     }
 
     /// Clears a previously reported agent activity state for a surface (e.g. on hook

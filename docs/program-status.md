@@ -23,6 +23,7 @@ repeats, the last value wins.
 | `progress` | Only read when `state` is `working` or `blocked`: an integer from 0 to 100. |
 | `app` | A stable name for the program, 1-32 characters from `A-Za-z0-9_.+-`. A child without `app` uses its nearest ancestor's. |
 | `title`, `msg` | Standard base64 text, padding optional. At most 192 and 2048 decoded bytes, valid UTF-8, no control characters. |
+| `programa_token` | Programa's own extension: the terminal's `PROGRAMA_STATUS_TOKEN`, which marks the report as coming from Programa's agent hooks. See [Signed reports](#signed-reports). |
 
 A report replaces its record completely. A report with an invalid id, invalid text or an unknown
 state is discarded whole. `state=clear` removes the record named by `id` and every descendant
@@ -68,9 +69,39 @@ The root record drives the terminal's own status. Child records show up as helpe
 - `agent_state` projects the root record: `working` and `blocked` map to themselves, and `idle`,
   `done` and `error` map to `idle`. The surface's `agent_state_source` reads `"program"`.
 
+## Signed reports
+
+Anything that reaches the terminal can print an OSC 7501 report, including untrusted text an agent
+shows, such as a file preview with raw escape bytes in a permission dialog. So Programa only takes
+a report as the agent's own when it is signed:
+
+- Each shell Programa spawns gets a random 128-bit `PROGRAMA_STATUS_TOKEN` (32 hex digits) in its
+  environment, next to `PROGRAMA_SURFACE_ID`. Programa's Claude Code, Codex and OpenCode hooks add
+  it to every report as `programa_token=<token>`.
+- A report whose token matches the terminal's is signed. A report with another token is
+  discarded whole. A report without one is unsigned: it still updates the records, the sidebar
+  and `agent_state` exactly as a program report always has, but it never counts as the agent for
+  [event routes](plans/event-routes.md) (see [Authority](#authority)): an unsigned
+  working-then-idle pair cannot release a route's `send` or `prompt` text.
+- The app keeps only the token's SHA-256 digest and compares digests in constant time, and never
+  logs the token. The token still sits in the shell's environment, and signed reports are terminal
+  output, so the session's scrollback log on disk holds them as written. The session snapshot keeps
+  the digest, so a shell revived after a relaunch keeps signing. A shell recovered without its
+  snapshot entry, or spawned before this release, sends reports Programa cannot check, and they
+  count as unsigned.
+- Programa never forwards the token over SSH, and the hooks leave it out of a report inside an
+  SSH session, so a remote report is unsigned.
+- Claude Code 2.1.295 and later report their own status without the token. Those reports are
+  unsigned: they drive the badge, and the hooks' socket reports are what routes see.
+
 ## Authority
 
-OSC 7501 outranks hooks, and hooks outrank screen inference.
+Programa keeps two views of a surface's agent. `agent_state` and the sidebar badge show what the
+agent is doing. Event routes read a second view that only trusted reporters move: hooks over the
+socket, and signed program reports.
+
+For `agent_state` and the badge, OSC 7501 (signed or not) outranks hooks, and hooks outrank
+screen inference.
 
 1. A program report always applies.
 2. While the root record is `working` or `blocked`, hook and inferred reports are ignored.
@@ -79,6 +110,35 @@ OSC 7501 outranks hooks, and hooks outrank screen inference.
    visible in `program_status`.
 4. Screen inference does not run on a surface that a program or a hook owns.
 5. While the program owns the surface, a hook or inferred clear is ignored in every state.
+
+For event routes, the same rules apply between signed program reports and hooks, and unsigned
+program reports and screen inference never move the view. Only that view names a writer
+(`program` for signed reports, the hook session for hooks) and only its `working` to `idle`
+releases held `send` or `prompt` text. Everything else a text route decides also reads that view
+once it exists: whether the agent is busy (`whenBusy: queue`), whether a `prompt` may press
+Return, and which surfaces count as blocked when routes install. A signed root report reaches the
+view as Programa reads it, even when an unsigned report later in the same burst ends up on the
+badge. So on a Claude Code terminal:
+
+- Claude's own unsigned status drives the badge, and its hooks drive routes.
+- While Claude reports its own status, its PostToolUse hook moves only the routes' view to
+  `working` (`surface.report_agent_state` with `route_only` and `resumed`), so routes see the agent
+  resume after a permission prompt while the badge stays Claude's. PostToolUse runs only after the
+  tool did, so the prompt was answered, and it is a synchronous hook, so its report lands before the
+  next tool's prompt can. The async PreToolUse hook could land after that prompt, so it reports
+  nothing here.
+- Only a report that proves the prompt was answered ends a stop for input in the routes' view: a
+  hooks report, a signed program report, or a route-only report marked `resumed`. A route-only
+  report without it never moves a blocked view.
+- After Esc, Claude reports idle itself and fires no Stop hook: the badge leaves Working, but held
+  route text waits for the next turn's Stop hook, or expires.
+- A hook clear (SessionEnd) ends the routes' view even while the badge stays with the program.
+- Any clear that removes the badge, signed or not (a program clear, a shell prompt, a reset), also
+  ends the routes' view, so a held delivery ends instead of waiting on an agent that is gone.
+
+A surface no trusted reporter has spoken for, such as one where only a program prints its own
+status, hands routes its `agent_state` changes without a writer: `notify`, `review` and `run`
+routes still fire on them, and text routes never deliver on them.
 
 `surface.report_agent_state` rejects `source: "program"`.
 
@@ -97,7 +157,7 @@ flowchart TD
 
 ## Hooks emit it too
 
-The Claude Code, Codex and OpenCode hooks write OSC 7501 to the terminal as well as reporting to
+The Claude Code, Codex and OpenCode hooks write signed OSC 7501 to the terminal as well as reporting to
 the socket, so the report also reaches a terminal where the socket is out of reach, such as an SSH
 session. The Claude Code hooks also report each subagent as the child record
 `agents/<helper id>`: `working` from SubagentStart and each of its tool calls, `blocked` when it
