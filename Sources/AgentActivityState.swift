@@ -92,6 +92,9 @@ struct AgentPresence: Equatable, Sendable {
     /// What event routes see of this agent, kept beside the displayed state above. Nil when no
     /// trusted reporter has spoken since the presence was created.
     var route: RouteAgentPresence?
+    /// Whether a trusted reporter made this agent known, so its end may fire `run` and `review`
+    /// routes. A signed program report always sets `route`, and socket reports are hooks reports.
+    var hasTrustedOrigin: Bool { route != nil || source == .hooks }
     /// Set by the watchdog sweep once `isStale` first turns true, and reset by every write.
     /// Staleness itself is computed from `lastEventAt`; this stored flag only makes the
     /// transition a real value change, so the `removeDuplicates` sidebar publisher fires.

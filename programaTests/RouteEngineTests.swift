@@ -154,6 +154,32 @@ final class RouteEngineTests: XCTestCase {
         XCTAssertEqual(counters(engine, "ask"), RouteCounters(matched: 3, fired: 3))
     }
 
+    /// INC-1123: `run` and `review` act on a directory printed bytes can set, so an event from an
+    /// unverified reporter fires neither, and spends none of their throttle window. `notify` fires.
+    func testAnUntrustedEventFiresNotifyButNeitherRunNorReview() throws {
+        let executor = RecordingExecutor()
+        let engine = makeEngine()
+        engine.executor = executor
+        try install(#"""
+        { "name": "n", "on": "agent/+/state/idle", "notify": { "title": "t" } },
+        { "name": "run", "on": "agent/+/state/idle", "throttleMs": 60000, "run": { "command": "true" } },
+        { "name": "rev", "on": "agent/+/state/idle", "throttleMs": 60000, "review": {} }
+        """#, on: engine)
+
+        let fields = ["workspace_id": "W1", "surface_id": "S1", "state": "idle", "source": "program"]
+        engine.ingest(RouteEvent(topic: "agent/S1/state/idle", fields: fields, trusted: false))
+        XCTAssertEqual(executor.fires.map(\.route.name), ["n"])
+        for name in ["run", "rev"] {
+            XCTAssertEqual(counters(engine, name), RouteCounters(matched: 1), name)
+            let lastError = engine.snapshot().routes.first { $0.name == name }?.lastError
+            XCTAssertTrue(lastError?.hasPrefix("refused:") == true, "\(name): \(lastError ?? "nil")")
+        }
+
+        engine.ingest(agentState(surface: "S1", state: "idle", writer: agent))
+        XCTAssertEqual(executor.fires.map(\.route.name), ["n", "n", "run", "rev"], "the untrusted event spent no throttle window")
+        XCTAssertEqual(counters(engine, "run"), RouteCounters(matched: 2, fired: 1))
+    }
+
     func testWhenFiltersOnFieldsTheModelAdds() throws {
         let engine = makeEngine { event in
             event.fields["surface_id"] == "S1" ? ["worktree": "true"] : ["worktree": "false"]
