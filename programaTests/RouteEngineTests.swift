@@ -540,6 +540,27 @@ final class RouteEngineTests: XCTestCase {
         )
     }
 
+    func testManySlowRegexesShareOneTimeBudgetPerEvent() throws {
+        let slowRoutes = (1...40).map { #"{ "name": "slow\#($0)", "on": "agent/#", "when": { "body": { "regex": "^(a|aa)+$" } }, "review": {} }"# }
+        let fastRoute = #"{ "name": "fast", "on": "agent/#", "when": { "body": { "regex": "b$" } }, "review": {} }"#
+        let engine = makeEngine()
+        try install((slowRoutes + [fastRoute]).joined(separator: ", "), on: engine)
+        let nearMiss = String(repeating: "a", count: 4000) + "b"
+
+        let start = ProcessInfo.processInfo.systemUptime
+        engine.ingest(RouteEvent(topic: "agent/S1/needs_input/question", fields: ["surface_id": "S1", "body": nearMiss]))
+        XCTAssertLessThan(
+            ProcessInfo.processInfo.systemUptime - start, 1.0,
+            "40 slow regexes stop together near the event's 50 ms budget, not 50 ms each"
+        )
+
+        let timeoutError = "when.body: the regex ran longer than 50 ms and was stopped; the event did not match"
+        for route in engine.snapshot().routes {
+            XCTAssertEqual(route.counters.matched, 0, "\(route.name) runs no regex once the budget is spent")
+            XCTAssertEqual(route.lastError, timeoutError, route.name)
+        }
+    }
+
     // MARK: - Text deliveries
 
     func testOnlyTheEndOfWorkFromTheSameWriterReleasesAQueuedDelivery() throws {
