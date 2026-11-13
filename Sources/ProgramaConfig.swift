@@ -2,9 +2,34 @@ import Bonsplit
 import Combine
 import Foundation
 
-struct ProgramaConfigFile: Codable, Sendable, Equatable {
+struct ProgramaConfigFile: Decodable, Sendable, Equatable {
     var commands: [ProgramaCommandDefinition]
     var recipes: [ProgramaRecipeDefinition]?
+    var routes: [ProgramaRouteDefinition]
+    /// The `routes` entries that did not load; they never cost the file its other entries.
+    var routeIssues: [ProgramaRouteIssue]
+    /// Trust digest of the exact config bytes, set by `ProgramaConfigStore`. Not part of the
+    /// file format.
+    var sourceDigest: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case commands, recipes, routes
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // A routes-only file must load, so `commands` may be absent.
+        commands = try container.decodeIfPresent([ProgramaCommandDefinition].self, forKey: .commands) ?? []
+        recipes = try container.decodeIfPresent([ProgramaRecipeDefinition].self, forKey: .recipes)
+        if container.contains(.routes) {
+            let decoded = ProgramaRouteDefinition.decodeList(from: try container.superDecoder(forKey: .routes))
+            routes = decoded.routes
+            routeIssues = decoded.issues
+        } else {
+            routes = []
+            routeIssues = []
+        }
+    }
 }
 
 /// A named, reusable input to a `command` template or a recipe `prompt`, referenced as
@@ -373,6 +398,11 @@ enum ProgramaSurfaceType: String, Codable, Sendable, Equatable {
     static let retiredRawValues: Set<String> = ["browser"]
 }
 
+enum ProgramaConfigParseError: Error {
+    case jsonc(Error)
+    case duplicateKey
+}
+
 @MainActor
 final class ProgramaConfigStore: ObservableObject {
     @Published private(set) var loadedCommands: [ProgramaCommandDefinition] = []
@@ -386,6 +416,16 @@ final class ProgramaConfigStore: ObservableObject {
     /// mistakes an untrusted recipe for the trusted global config. See
     /// `ProgramaConfigSourceTrackingTests`.
     private(set) var recipeSourcePaths: [String: String] = [:]
+
+    /// Routes, their load issues and the trust digest, from the global file only. A route runs
+    /// with no person present and cannot show the trust prompt, so a project file's routes never
+    /// load.
+    private(set) var loadedRoutes: [ProgramaRouteDefinition] = []
+    private(set) var routeIssues: [ProgramaRouteIssue] = []
+    private(set) var routesDigest: String?
+    /// Where this store's global routes go. Every window's store reads the same global file, and
+    /// the engine ignores a digest it already holds. Tests point it at their own engine.
+    var routeEngine: RouteEngine = .shared
 
     // `internal` (not `private(set)`) rather than fully public: production code only ever
     // mutates these through `updateLocalConfigPath`/the computed default below, but tests in
@@ -526,7 +566,8 @@ final class ProgramaConfigStore: ObservableObject {
         }
 
         // Global config fills in the rest
-        if let globalConfig = parseConfig(at: globalConfigPath) {
+        let globalConfig = parseConfig(at: globalConfigPath)
+        if let globalConfig {
             for command in globalConfig.commands {
                 if !seenNames.contains(command.name) {
                     commands.append(command)
@@ -543,10 +584,18 @@ final class ProgramaConfigStore: ObservableObject {
             }
         }
 
+        let routes = globalConfig?.routes ?? []
+        let issues = globalConfig?.routeIssues ?? []
+        let digest = globalConfig?.sourceDigest
+        routeEngine.install(routes: routes, issues: issues, source: .file(digest: digest))
+
         guard commands != loadedCommands ||
                 sourcePaths != commandSourcePaths ||
                 recipes != loadedRecipes ||
-                recipeSources != recipeSourcePaths else {
+                recipeSources != recipeSourcePaths ||
+                routes != loadedRoutes ||
+                issues != routeIssues ||
+                digest != routesDigest else {
             return
         }
 
@@ -554,6 +603,9 @@ final class ProgramaConfigStore: ObservableObject {
         commandSourcePaths = sourcePaths
         loadedRecipes = recipes
         recipeSourcePaths = recipeSources
+        loadedRoutes = routes
+        routeIssues = issues
+        routesDigest = digest
         configRevision &+= 1
     }
 
@@ -566,38 +618,47 @@ final class ProgramaConfigStore: ObservableObject {
             return nil
         }
 
+        do {
+            return try Self.decodeConfig(data)
+        } catch ProgramaConfigParseError.jsonc(let error) {
+            NSLog("[ProgramaConfig] JSONC preprocessing error at %@: %@", path, String(describing: error))
+        } catch ProgramaConfigParseError.duplicateKey {
+            NSLog("[ProgramaConfig] rejecting %@: an object repeats a key", path)
+        } catch {
+            NSLog("[ProgramaConfig] parse error at %@: %@", path, String(describing: error))
+        }
+        return nil
+    }
+
+    /// Decodes programa.json bytes and stamps every entry with the trust digest. `debug.routes.load`
+    /// decodes its text through here too, so it sees exactly what a file would load.
+    nonisolated static func decodeConfig(_ data: Data) throws -> ProgramaConfigFile {
         let sanitized: Data
         do {
             sanitized = try JSONCParser.preprocess(data: data)
         } catch {
-            NSLog("[ProgramaConfig] JSONC preprocessing error at %@: %@", path, String(describing: error))
-            return nil
+            throw ProgramaConfigParseError.jsonc(error)
         }
         // The trust digest and this decoder are different parsers; a repeated key could be
         // approved under one value and executed under the other. See
         // `JSONCParser.containsDuplicateObjectKeys`.
         guard !JSONCParser.containsDuplicateObjectKeys(sanitized) else {
-            NSLog("[ProgramaConfig] rejecting %@: an object repeats a key", path)
-            return nil
+            throw ProgramaConfigParseError.duplicateKey
         }
 
-        do {
-            var config = try JSONDecoder().decode(ProgramaConfigFile.self, from: sanitized)
-            let digest = ProgramaDirectoryTrust.executableDigest(forSanitizedConfig: sanitized)
-            for index in config.commands.indices {
-                config.commands[index].sourceDigest = digest
-            }
-            if var recipes = config.recipes {
-                for index in recipes.indices {
-                    recipes[index].sourceDigest = digest
-                }
-                config.recipes = recipes
-            }
-            return config
-        } catch {
-            NSLog("[ProgramaConfig] parse error at %@: %@", path, String(describing: error))
-            return nil
+        var config = try JSONDecoder().decode(ProgramaConfigFile.self, from: sanitized)
+        let digest = ProgramaDirectoryTrust.executableDigest(forSanitizedConfig: sanitized)
+        config.sourceDigest = digest
+        for index in config.commands.indices {
+            config.commands[index].sourceDigest = digest
         }
+        if var recipes = config.recipes {
+            for index in recipes.indices {
+                recipes[index].sourceDigest = digest
+            }
+            config.recipes = recipes
+        }
+        return config
     }
 
     // MARK: - File watching (local)

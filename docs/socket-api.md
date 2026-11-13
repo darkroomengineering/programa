@@ -315,13 +315,16 @@ Surfaces / Splits:
 - `surface.wait` (see "surface.wait" below)
 - `agent.prompt` (see "agent.prompt" below)
 - `subscribe`/`unsubscribe` (see "Socket Event Subscriptions" below)
+- `routes.list` (see "Event routes" below)
 - `review.open` / `review.refresh` / `review.comment.add` / `review.comment.remove` / `review.comment.list` / `review.send_comments` (see "Review Panel" below)
 
 Surface Telemetry (report_*/ports/git/pr — off-main parse, main.async mutate; see "Socket
 command threading policy" in the root `CLAUDE.md`):
 - report_tty -> `surface.report_tty`
 - ports_kick -> `surface.ports_kick`
-- report_pwd -> `surface.report_pwd`
+- report_pwd -> `surface.report_pwd`. A `path` that is not absolute, or has a `.` or `..`
+  component, is rejected with `invalid_params`. It does not have to exist: a shell behind the SSH
+  relay reports a path on the remote machine.
 - report_shell_state -> `surface.report_shell_state` (shares the `SocketFastPathState` dedup helper)
 - report_git_branch -> `surface.report_git_branch`
 - clear_git_branch -> `surface.clear_git_branch`
@@ -847,6 +850,10 @@ as the advanced path, not the default way to wait for something). Its flags pick
 `programa watch-events --needs-input` alone prints only `needs_input` frames (plus any
 `dropped` frame), for bridges that act only on agents waiting for the user.
 
+Event routes from `programa.json` consume the same `agent_state`, `needs_input` and
+`workspace_lifecycle` events inside the app, whether or not any client subscribes (see "Event
+routes" below).
+
 ### `subscribe`
 
 | Field | Type | Required | Notes |
@@ -1236,6 +1243,63 @@ updates `AgentSupervisionRegistry` in the same handler call. Existing methods
 hook configuration on user machines doesn't need reinstalling to pick it up. Errors:
 `invalid_params`, `not_found`.
 
+## Event routes (`routes.list`)
+
+Routes are the `routes` block of the global `programa.json` ([programa-json.md](programa-json.md#routes)).
+`routes.list` takes no params and returns the routes in use, their counters, and the routes that
+did not load. It runs on the main thread, so the counters and issues come from one snapshot.
+CLI: `programa routes` (a table) and `programa --json routes` (this result).
+
+```json
+{
+  "source": "file",
+  "routes": [
+    {"name": "blocked-question", "on": "agent/+/needs_input/question", "action": "notify",
+     "matched": 3, "fired": 1, "throttled": 2, "busy": 0, "expired": 0, "last_error": null}
+  ],
+  "issues": [
+    {"index": 2, "name": "bad", "message": "'on' may use '#' only as the last level: 'agent/#/x'"}
+  ]
+}
+```
+
+| Field | Notes |
+|---|---|
+| `source` | `"file"` for the global `programa.json`, `"debug_override"` while `debug.routes.load` holds. |
+| `routes[].action` | `notify`, `send`, `prompt`, `run` or `review`. |
+| `routes[].matched` | Events that passed the topic and `when`. |
+| `routes[].fired` | Actions run. |
+| `routes[].throttled` | Matches the throttle dropped. |
+| `routes[].busy` | Matches dropped while the route's last action still held it. |
+| `routes[].expired` | Deliveries cancelled at their timeout. |
+| `routes[].last_error` | The route's most recent error, or `null`. It stays until the routes are installed again. |
+| `issues[]` | One per `routes` entry that did not load. `index` is its position in the array, or `null` when `routes` is not an array; `name` is `null` when the entry has none. |
+
+Counters and last errors reset whenever the routes are installed again: when the global file's
+settings change, and on every `debug.routes.load`. `busy` also counts `prompt` matches skipped
+while a route's prompt turn holds the event's surface.
+
+`last_error` is one of:
+
+| Text | Meaning |
+|---|---|
+| `exited with status N` | A `run` command exited non-zero. |
+| `timed out after N s` or `timed out after N ms` | A `run` command reached its timeout, waiting for a turn included. |
+| `could not start: the surface's working directory is unknown or does not exist` | A `run` whose event has no resolvable `cwd`. |
+| `could not start: <reason>` | A `run` command failed to start. |
+| `review: <code>: <message>` | `review.open` failed, for example `review: unavailable: Not a git repository: /path`. |
+| `review: the event names no workspace` | A `review` route on an event without a workspace. |
+| `refused: the surface has no agent; nothing was sent` | A `send` or `prompt` to a surface with no agent state. |
+| `refused: a <kind> prompt is showing; nothing was sent` | A `send` or `prompt` during a permission or sign-in prompt. |
+| `refused: the surface has unsent typed input; nothing was sent` | A `send` or `prompt` while a person has typed unsent input. |
+| `refused: the agent's state reports name no session; nothing was sent` | A `send` or `prompt` to an agent known only from screen detection or from hooks reports without a `session_id`. |
+| `refused: waiting for the agent to resume after a permission prompt` | A `send` or `prompt` after a permission or sign-in prompt, before the same writer reported `working`. |
+| `refused: the report that fired this route names no session; nothing was sent` | A `send` or `prompt` fired by an agent report without a `session_id` (OSC 7501 reports count as named). |
+| `refused: the report that fired this route is the first from this agent; nothing was sent` | A `send` or `prompt` fired by the report that created the agent's state. |
+| `pasted without submitting: no agent ready for a prompt` | A `prompt` to an agent that is blocked or stale. |
+| `the agent stopped before the text was delivered` | A queued `send` or `prompt` whose agent state was cleared before it went out. |
+| `the event's surface is gone` | A `send` or `prompt` whose surface no longer exists, or an event with no surface. |
+
 ## `notification.claim_banners`
 
 Lets a connected client show the macOS banner for agent questions itself, so the user gets one
@@ -1328,6 +1392,15 @@ of every terminal), exist only in Debug builds. Release builds answer them with
 the macOS banner path since launch or the last `debug.notification.banner_reset`. It counts
 before the notification-permission check, so tests on a runner without permission still see
 each hand-off.
+
+`debug.routes.load` installs event routes for a test without writing the user's global
+`programa.json`. `json` is required: `programa.json` text, decoded as the global file would be
+(JSONC, a repeated key rejected, one issue per bad route), whose routes replace the file's until
+the next call with `json: null`. A reload of the global file meanwhile is kept for later and does
+not replace the test's routes. The result is `{"source", "routes": [names], "issues": [...]}`,
+with `issues` shaped as in `routes.list`; with `json: null` it lists the file's routes again.
+Text that is not a valid `programa.json` returns `invalid_params`. A test should end with
+`json: null` so the next one starts from the file.
 
 ## Tests
 

@@ -161,9 +161,17 @@ extension TerminalController {
                 data: nil
             )
         }
+        // The lexical half of OSC 7's `validatedReportedDirectory`. Its existence check is left
+        // out: a shell behind the SSH relay reports a remote path that does not exist here.
+        guard path.hasPrefix("/"), !path.split(separator: "/").contains(where: { $0 == "." || $0 == ".." }) else {
+            return .err(code: "invalid_params", message: "path must be absolute, without . or .. components", data: nil)
+        }
 
+        // Off main: resolving touches the file system, which can stall on a network mount. A path
+        // from a shell behind the SSH relay may not exist here and then resolves to nothing.
+        let resolved = RouteEngine.canonicalDirectory(path)
         v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { tabManager, _, sid in
-            tabManager.updateSurfaceDirectory(tabId: workspaceId, surfaceId: sid, directory: path)
+            tabManager.updateSurfaceDirectory(tabId: workspaceId, surfaceId: sid, directory: path, resolvedForRoutes: resolved)
         }
 
         return .ok([
@@ -516,18 +524,25 @@ extension TerminalController {
             )
 
             let resolvedTitle = TerminalController.v2ResolveNotificationTitle(title: title, workspace: tab, surfaceId: sid)
+            let payload = needsInputFields.merging(["title": resolvedTitle]) { $1 }
+            // A matching `notify` route owns this call's banner, throttled or not; the entry
+            // still reaches the list, sidebar and Dock badge.
+            let routeOwnsBanner = RouteEvent(
+                frame: SocketEventBroadcaster.needsInputFrame(workspaceId: workspaceId, surfaceId: sid, payload: payload)
+            ).map(RouteEngine.shared.hasNotifyRoute(matching:)) ?? false
             TerminalNotificationStore.shared.addNotification(
                 tabId: tab.id,
                 surfaceId: sid,
                 title: resolvedTitle,
                 subtitle: subtitle,
                 body: body,
-                deliversBanner: !NotificationBannerClaims.shared.isClaimed(.needsInput)
+                deliversBanner: !NotificationBannerClaims.shared.isClaimed(.needsInput) && !routeOwnsBanner
             )
             SocketEventBroadcaster.shared.publishNeedsInput(
                 workspaceId: workspaceId,
                 surfaceId: sid,
-                payload: needsInputFields.merging(["title": resolvedTitle]) { $1 }
+                payload: payload,
+                writer: RouteEvent.writer(source: .hooks, sessionKey: sessionKey)
             )
 
             _ = try? AgentSupervisionRegistry.shared.updateActiveSurface(

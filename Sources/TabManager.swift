@@ -1598,11 +1598,14 @@ class TabManager: ObservableObject {
 
     // MARK: - Surface Directory Updates (Backwards Compatibility)
 
-    func updateSurfaceDirectory(tabId: UUID, surfaceId: UUID, directory: String) {
+    /// `resolvedForRoutes` is `directory` resolved off main (`RouteEngine.canonicalDirectory`);
+    /// nil leaves event routes without a directory for this report.
+    func updateSurfaceDirectory(tabId: UUID, surfaceId: UUID, directory: String, resolvedForRoutes: String? = nil) {
         guard let tab = workspace(withId: tabId) else { return }
         let previousDirectory = gitProbeDirectory(for: tab, panelId: surfaceId)
         let normalized = normalizeDirectory(directory)
         tab.updatePanelDirectory(panelId: surfaceId, directory: normalized)
+        tab.noteResolvedPanelDirectory(panelId: surfaceId, resolved: resolvedForRoutes)
         let nextDirectory = normalizedWorkingDirectory(normalized)
         if previousDirectory != nextDirectory {
             scheduleWorkspaceGitMetadataRefreshIfPossible(

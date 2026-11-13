@@ -460,6 +460,36 @@ extension ProgramaCLI {
             ),
 
             CommandDescriptor(
+                names: ["routes"],
+                helpLines: ["routes"],
+                argumentContract: .noArguments,
+                detailedUsage: """
+                Usage: programa routes
+
+                List the event routes from the global programa.json with their counters and
+                last error, and every route that did not load. --json prints the raw
+                routes.list result.
+
+                Counters: matched (topic and `when` held), fired (the action ran), throttled
+                (dropped by throttleMs), busy (dropped while the route's last action was still
+                running, or a prompt route skipped while a route's prompt turn held the surface)
+                and expired (an action cancelled at its timeout).
+
+                Example:
+                  programa routes
+                  programa --json routes
+                """,
+                execute: { ctx in
+                    let payload = try ctx.client.sendV2(method: V2MethodNames.routesList)
+                    if ctx.jsonOutput {
+                        print(self.jsonString(payload))
+                    } else {
+                        self.printRoutes(payload)
+                    }
+                }
+            ),
+
+            CommandDescriptor(
                 names: ["send"],
                 helpLines: ["send [--workspace <id|ref>] [--surface <id|ref>] [--force] [--answer-prompt] <text>"],
                 detailedUsage: """
@@ -676,6 +706,50 @@ extension ProgramaCLI {
             throw CLIError(message: "\(error.message.dropFirst(draftPrefix.count)). \(hint)")
         } catch let error as CLIError where error.message.hasPrefix(approvalPrefix) {
             throw CLIError(message: "\(error.message.dropFirst(approvalPrefix.count)). \(approvalHint)")
+        }
+    }
+}
+
+private extension ProgramaCLI {
+    func printRoutes(_ payload: [String: Any]) {
+        let source = (payload["source"] as? String) == "debug_override"
+            ? "debug override (debug.routes.load)"
+            : "global programa.json"
+        print("Source: \(source)")
+
+        let routes = (payload["routes"] as? [[String: Any]]) ?? []
+        if routes.isEmpty {
+            print("No event routes loaded.")
+        } else {
+            let counters = ["matched", "fired", "throttled", "busy", "expired"]
+            var rows = [["NAME", "ON", "ACTION"] + counters.map { $0.uppercased() } + ["LAST ERROR"]]
+            for route in routes {
+                rows.append(
+                    [route["name"], route["on"], route["action"]].map { ($0 as? String) ?? "" }
+                        + counters.map { String((route[$0] as? Int) ?? 0) }
+                        + [(route["last_error"] as? String) ?? "-"]
+                )
+            }
+            let widths = (0..<rows[0].count).map { column in rows.map { $0[column].count }.max() ?? 0 }
+            for row in rows {
+                let cells = row.enumerated().map { column, cell in
+                    let pad = String(repeating: " ", count: widths[column] - cell.count)
+                    // Counters right-aligned; the last column is not padded.
+                    if (3..<8).contains(column) { return pad + cell }
+                    return column == row.count - 1 ? cell : cell + pad
+                }
+                print(cells.joined(separator: "  "))
+            }
+        }
+
+        let issues = (payload["issues"] as? [[String: Any]]) ?? []
+        guard !issues.isEmpty else { return }
+        print("")
+        print("Did not load:")
+        for issue in issues {
+            let position = (issue["index"] as? Int).map { "routes[\($0)]" } ?? "routes"
+            let name = (issue["name"] as? String).map { " \"\($0)\"" } ?? ""
+            print("  \(position)\(name): \((issue["message"] as? String) ?? "")")
         }
     }
 }

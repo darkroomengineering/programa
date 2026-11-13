@@ -53,6 +53,21 @@ extension Workspace {
         }
     }
 
+    /// Records the resolved form of the directory just reported for `panelId` (resolved off main by
+    /// the reporter; nil when it does not resolve). It stays tied to that report: a later
+    /// directory from any path makes it stale.
+    func noteResolvedPanelDirectory(panelId: UUID, resolved: String?) {
+        guard let reported = panelDirectories[panelId] else { return }
+        resolvedPanelDirectories[panelId] = ResolvedPanelDirectory(reported: reported, resolved: resolved)
+    }
+
+    /// The directory event routes see for `panelId`: the resolved form of its current reported
+    /// directory, or nil when none was resolved for it.
+    func resolvedRouteDirectory(for panelId: UUID) -> String? {
+        guard let entry = resolvedPanelDirectories[panelId], entry.reported == panelDirectories[panelId] else { return nil }
+        return entry.resolved
+    }
+
     /// Updates the shell-activity state for a panel.
     ///
     /// - Returns: `true` if the update was applied (panel exists and state changed),
@@ -340,7 +355,9 @@ extension Workspace {
             workspaceId: id,
             surfaceId: panelId,
             state: state,
+            previousState: current?.state,
             source: source,
+            writer: RouteEvent.writer(source: source, sessionKey: sessionKey),
             programStatus: source == .program
                 ? (panels[panelId] as? TerminalPanel)?.programStatus.root?.wirePayload
                 : nil
@@ -364,7 +381,10 @@ extension Workspace {
             (panels[panelId] as? TerminalPanel)?.surface.noteAgentPrompt(nil, isBlocked: false)
         }
         AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil, source: nil)
-        SocketEventBroadcaster.shared.publishAgentState(workspaceId: id, surfaceId: panelId, state: nil, source: nil)
+        SocketEventBroadcaster.shared.publishAgentState(
+            workspaceId: id, surfaceId: panelId, state: nil, previousState: current.state, source: nil,
+            writer: RouteEvent.writer(source: source, sessionKey: nil)
+        )
 #if DEBUG
         dlog("surface.agentState.clear workspace=\(id.uuidString.prefix(5)) panel=\(panelId.uuidString.prefix(5))")
 #endif
@@ -522,7 +542,7 @@ extension Workspace {
                 ProgramStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil)
             }
         }
-        let clearedAgentSurfaceIds = Array(panelAgentPresence.keys)
+        let clearedAgentStates = panelAgentPresence.mapValues(\.state)
         // A showing permission or sign-in prompt stays armed: any client can reset the sidebar,
         // and the box is still on screen. The person's key, an `answer_prompt` write or the
         // agent's next report ends it.
@@ -532,9 +552,11 @@ extension Workspace {
             surface.noteAgentPrompt(nil, isBlocked: false)
         }
         panelAgentPresence.removeAll()
-        for surfaceId in clearedAgentSurfaceIds {
+        for (surfaceId, previousState) in clearedAgentStates {
             AgentStateWaitRegistry.shared.notify(surfaceId: surfaceId, newState: nil, source: nil)
-            SocketEventBroadcaster.shared.publishAgentState(workspaceId: id, surfaceId: surfaceId, state: nil, source: nil)
+            SocketEventBroadcaster.shared.publishAgentState(
+                workspaceId: id, surfaceId: surfaceId, state: nil, previousState: previousState, source: nil
+            )
         }
         surfaceListeningPorts.removeAll()
         listeningPorts.removeAll()
@@ -608,6 +630,9 @@ extension Workspace {
     func pruneSurfaceMetadata(validSurfaceIds: Set<UUID>) {
         if panelDirectories.keys.contains(where: { !validSurfaceIds.contains($0) }) {
             panelDirectories = panelDirectories.filter { validSurfaceIds.contains($0.key) }
+        }
+        if resolvedPanelDirectories.keys.contains(where: { !validSurfaceIds.contains($0) }) {
+            resolvedPanelDirectories = resolvedPanelDirectories.filter { validSurfaceIds.contains($0.key) }
         }
         if panelTitles.keys.contains(where: { !validSurfaceIds.contains($0) }) {
             panelTitles = panelTitles.filter { validSurfaceIds.contains($0.key) }
