@@ -135,7 +135,8 @@ def _case_load_and_clear(client: ProgramaClient) -> None:
 
 def _case_throttle_and_banners(client: ProgramaClient, session: _Session) -> None:
     workspace_id, surface_id = session.shell()
-    _load(client, [{"name": "ask", "on": "agent/+/needs_input/question", "throttleMs": 3000,
+    # A window far longer than the three calls take, even on a loaded runner.
+    _load(client, [{"name": "ask", "on": "agent/+/needs_input/question", "throttleMs": "10m",
                     "notify": {"title": "Agent needs you", "body": "{{body}}"}}])
     client._call("debug.notification.banner_reset")
 
@@ -143,7 +144,7 @@ def _case_throttle_and_banners(client: ProgramaClient, session: _Session) -> Non
         _needs_input(client, workspace_id, surface_id, "question")
         _wait_counter(client, "ask", "matched", call)
     route = _route(client, "ask")
-    _must((route.get("fired"), route.get("throttled")) == (1, 2), f"three questions in 3 s fire once: {route}")
+    _must((route.get("fired"), route.get("throttled")) == (1, 2), f"three questions inside one window fire once: {route}")
     _must(_banners(client) == 1, f"only the route's own notification shows a banner, got {_banners(client)}")
 
     # A permission call this route does not match keeps its built-in banner.
@@ -244,11 +245,34 @@ def _case_refused_during_prompt(client: ProgramaClient, session: _Session) -> No
     _must("HELD-TEXT" not in _screen(client, workspace_id, surface_id), "nothing may be sent during a prompt")
 
 
+def _surface_directory(client: ProgramaClient, surface_id: str) -> str | None:
+    """The surface's directory as the app holds it, from `system.tree`."""
+    def find(node: Any) -> str | None:
+        if isinstance(node, dict):
+            if node.get("id") == surface_id and "current_directory" in node:
+                return node.get("current_directory")
+            children = node.values()
+        elif isinstance(node, list):
+            children = node
+        else:
+            return None
+        for child in children:
+            found = find(child)
+            if found is not None:
+                return found
+        return None
+    return find(client._call("system.tree", {}) or {})
+
+
 def _case_run_directory(client: ProgramaClient, session: _Session, temp_dir: str) -> None:
     workspace_id, surface_id = session.shell()
 
     def report_pwd(path: str) -> None:
         client._call("surface.report_pwd", {"workspace_id": workspace_id, "surface_id": surface_id, "path": path})
+
+    def directory_is(path: str) -> bool:
+        current = _surface_directory(client, surface_id)
+        return current is not None and os.path.realpath(current) == os.path.realpath(path)
 
     try:
         report_pwd(f"{temp_dir}/../{Path(temp_dir).name}")
@@ -257,9 +281,19 @@ def _case_run_directory(client: ProgramaClient, session: _Session, temp_dir: str
     else:
         raise ProgramaClientError("surface.report_pwd accepted a path with ..")
 
+    # The shell's own directory reports (OSC 7 is validated off the main thread) can land after
+    # one the test sends, so move the shell itself into the temp dir and wait until the app
+    # agrees. Its later reports then name the same directory, and a run that went wrong would
+    # write there rather than into the home directory.
+    client._call("surface.send_text", {"workspace_id": workspace_id, "surface_id": surface_id,
+                                       "text": f"cd '{temp_dir}'\n"})
+    _wait("the shell to report the temp dir", lambda: directory_is(temp_dir))
+
     _load(client, [{"name": "marker", "on": "agent/+/state/idle",
                     "run": {"command": "printf '%s' \"$PROGRAMA_ROUTE_SURFACE_ID\" > route-marker"}}])
-    report_pwd(f"/nonexistent-{uuid.uuid4().hex}/project")
+    missing = f"/nonexistent-{uuid.uuid4().hex}/project"
+    report_pwd(missing)
+    _wait("the app to hold the missing directory", lambda: _surface_directory(client, surface_id) == missing)
     _report(client, workspace_id, surface_id, "idle")
     _wait("the refused run", lambda: _route(client, "marker").get("last_error") is not None)
     route = _route(client, "marker")
@@ -267,10 +301,11 @@ def _case_run_directory(client: ProgramaClient, session: _Session, temp_dir: str
           f"a missing directory must refuse the run: {route}")
 
     report_pwd(temp_dir)
+    _wait("the app to hold the temp dir again", lambda: directory_is(temp_dir))
     _report(client, workspace_id, surface_id, "working")
     _report(client, workspace_id, surface_id, "idle")
     marker = Path(temp_dir) / "route-marker"
-    _wait("the run's marker file", lambda: marker.exists() and marker.read_text() == surface_id)
+    _wait("the run's marker file", lambda: marker.exists() and marker.read_text() == surface_id, timeout_s=60.0)
     _wait_counter(client, "marker", "fired", 2)
 
 
