@@ -227,9 +227,11 @@ def main() -> int:
             _must(row.get("agent_state") == "working", f"case 5 hooks working must win over program done: {row}")
             _must(row.get("agent_state_source") == "hooks", f"case 5 source after hooks working: {row}")
 
-            # 5b. INC-1057: an unsigned report (no token, as any printed bytes) still shows, but
-            #     ranks below hooks, and one with a wrong token is discarded. Case 5 left the
-            #     hooks owning the surface; clear that first.
+            # 5b. INC-1057: an unsigned report (no token, as any printed bytes) keeps the badge
+            #     authority a program report has, so a hooks idle cannot end its working claim
+            #     (event routes read a separate view that only hooks and signed reports move,
+            #     covered by the unit tests). A report with a wrong token is discarded. Case 5
+            #     left the hooks owning the surface; clear that first.
             _reset(client, workspace_id, surface_id)
             client._call("surface.clear_agent_state", {"workspace_id": workspace_id, "surface_id": surface_id})
             _emit_held(client, surface_id, "state=working")
@@ -241,8 +243,8 @@ def main() -> int:
                 {"workspace_id": workspace_id, "surface_id": surface_id, "state": "idle"},
             )
             row = _surface(client, workspace_id, surface_id)
-            _must(row.get("agent_state") == "idle", f"case 5b hooks idle must end an unsigned working claim: {row}")
-            _must(row.get("agent_state_source") == "hooks", f"case 5b source after hooks idle: {row}")
+            _must(row.get("agent_state") == "working", f"case 5b hooks idle must not end an unsigned working badge: {row}")
+            _must(row.get("agent_state_source") == "program", f"case 5b source after hooks idle: {row}")
             _reset(client, workspace_id, surface_id)
             _emit_marked(client, workspace_id, surface_id, [
                 _osc("state=done:programa_token=00000000000000000000000000000000"),

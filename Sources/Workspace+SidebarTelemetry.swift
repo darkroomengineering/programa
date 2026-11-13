@@ -253,15 +253,18 @@ extension Workspace {
     ///   (never reported) or already `.inferred`. If it's `.hooks`, the write is silently
     ///   dropped — belt-and-suspenders: the screen-manifest engine's Phase A should already skip
     ///   sampling a hooks-owned surface, but this is the authoritative guard regardless.
-    /// - `source == .program` (OSC 7501) with `programVerified` (the report carried the surface's
-    ///   token) always writes, and `programState` carries the root record's finer state. While
-    ///   the current presence is a verified `.program`, every other write is dropped if its state
-    ///   is active (working/blocked), and, if it is resting (idle/done/error), accepted only when
-    ///   it reports an active state. Accepting only active claims keeps a hook `idle` from
-    ///   overwriting a program `done` badge.
-    /// - An unverified `.program` write (no token: Claude Code's own status, or bytes anything in
-    ///   the terminal printed) ranks below hooks: it is dropped while hooks own the surface, and
-    ///   hooks always replace it. It still outranks `.inferred` by the rule above.
+    /// - `source == .program` (OSC 7501) always writes, and `programState` carries the root
+    ///   record's finer state. While the current presence is `.program`, `.hooks`/`.inferred`
+    ///   writes are dropped if its state is active (working/blocked), and, if it is resting
+    ///   (idle/done/error), accepted only when they report an active state. Accepting only active
+    ///   claims keeps a hook `idle` from overwriting a program `done` badge.
+    ///
+    /// Event routes read `AgentPresence.route` instead, updated by the same rules from trusted
+    /// reports only: hooks, and `.program` with `programVerified` (the report carried the
+    /// surface's token). An unsigned program report can own the badge but never the route view,
+    /// so routes get their own frames: one per route-view change, carrying that view's previous
+    /// state and the report's writer. A panel no trusted reporter has spoken for yet hands routes
+    /// its displayed changes, without a writer.
     ///
     /// `promptKind` is what a `blocked` report is waiting on (nil when the reporter did not say).
     /// It goes only to the surface's person-input gate, which refuses socket writes while a
@@ -297,21 +300,41 @@ extension Workspace {
             }
         }
 
-        let verifiedProgram = source == .program && programVerified
-        if !verifiedProgram, let current, current.source == .program,
-           current.programVerified || source == .inferred,
-           current.state != .idle || state == .idle {
-            return
+        let trusted = source == .hooks || (source == .program && programVerified)
+        var route = current?.route
+        var routeChanged = false
+        if trusted, !Self.programHolds(currentSource: route?.source, currentState: route?.state, against: source, state) {
+            let next = RouteAgentPresence(
+                state: state,
+                source: source,
+                sessionKey: source == .hooks ? sessionKey ?? (route?.source == .hooks ? route?.sessionKey : nil) : nil
+            )
+            routeChanged = next != route
+            route = next
+        }
+        let publishRoute = {
+            guard routeChanged, let route else { return }
+            SocketEventBroadcaster.shared.publishAgentState(
+                workspaceId: self.id,
+                surfaceId: panelId,
+                state: route.state,
+                previousState: current?.route?.state,
+                source: source,
+                writer: RouteEvent.writer(source: source, sessionKey: sessionKey, programVerified: programVerified),
+                programStatus: source == .program
+                    ? (self.panels[panelId] as? TerminalPanel)?.programStatus.root?.wirePayload
+                    : nil,
+                toSubscribers: false
+            )
         }
 
-        if source == .program, !programVerified, let current, current.source == .hooks {
-            return
-        }
-
-        if source == .inferred, let current, current.source == .hooks {
-            // Hooks always win: dropped write must not move lastEventAt either, so a
-            // hooks-owned surface's staleness clock keeps ticking from its last real hook
+        if Self.programHolds(currentSource: current?.source, currentState: current?.state, against: source, state)
+            || (source == .inferred && current?.source == .hooks) {
+            // Hooks always win over inference: dropped write must not move lastEventAt either, so
+            // a hooks-owned surface's staleness clock keeps ticking from its last real hook
             // event, not from an inferred sample that never took effect.
+            if routeChanged { panelAgentPresence[panelId]?.route = route }
+            publishRoute()
             return
         }
 
@@ -330,8 +353,7 @@ extension Workspace {
 
         guard current?.state != state || current?.source != source || current?.sessionKey != resolvedSessionKey
                 || current?.inferredAgent != resolvedInferredAgent
-                || current?.programState != programState
-                || current?.programVerified != verifiedProgram else {
+                || current?.programState != programState else {
             // Same state from the same writer: only the liveness clock moves. Without this a
             // long-running agent that keeps reporting `working` would read as stale at the
             // threshold. No wait-registry or socket fan-out, since nothing observable changed.
@@ -342,6 +364,8 @@ extension Workspace {
             if state == .blocked {
                 (panels[panelId] as? TerminalPanel)?.surface.noteAgentPrompt(promptKind, isBlocked: true)
             }
+            if routeChanged { panelAgentPresence[panelId]?.route = route }
+            publishRoute()
             return
         }
         panelAgentPresence[panelId] = AgentPresence(
@@ -351,7 +375,7 @@ extension Workspace {
             sessionKey: resolvedSessionKey,
             inferredAgent: resolvedInferredAgent,
             programState: programState,
-            programVerified: verifiedProgram
+            route: route
         )
         // `current == nil` covers a prompt kept armed across a sidebar reset: the agent's next
         // report after that reset is what tells us the box closed.
@@ -370,11 +394,13 @@ extension Workspace {
             state: state,
             previousState: current?.state,
             source: source,
-            writer: RouteEvent.writer(source: source, sessionKey: sessionKey, programVerified: verifiedProgram),
+            writer: nil,
             programStatus: source == .program
                 ? (panels[panelId] as? TerminalPanel)?.programStatus.root?.wirePayload
-                : nil
+                : nil,
+            toRoutes: route == nil
         )
+        publishRoute()
 #if DEBUG
         dlog(
             "surface.agentState workspace=\(id.uuidString.prefix(5)) " +
@@ -388,19 +414,42 @@ extension Workspace {
     /// presence whoever owns it (permanent panel close).
     func clearPanelAgentState(panelId: UUID, source: AgentStateSource = .hooks, force: Bool = false) {
         guard let current = panelAgentPresence[panelId] else { return }
-        if !force, (source == .program) != (current.source == .program) { return }
+        let ownsClear = { (owner: AgentStateSource) in force || (source == .program) == (owner == .program) }
+        guard ownsClear(current.source) else {
+            // The badge stays, but a clear from the route view's own tier still ends it.
+            guard let route = current.route, ownsClear(route.source) else { return }
+            panelAgentPresence[panelId]?.route = nil
+            SocketEventBroadcaster.shared.publishAgentState(
+                workspaceId: id, surfaceId: panelId, state: nil, previousState: route.state, source: nil,
+                toSubscribers: false
+            )
+            return
+        }
         panelAgentPresence.removeValue(forKey: panelId)
         if current.state == .blocked {
             (panels[panelId] as? TerminalPanel)?.surface.noteAgentPrompt(nil, isBlocked: false)
         }
         AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil, source: nil)
+        // Routes see the clear too: a held delivery ends rather than outliving the agent.
         SocketEventBroadcaster.shared.publishAgentState(
-            workspaceId: id, surfaceId: panelId, state: nil, previousState: current.state, source: nil,
-            writer: RouteEvent.writer(source: source, sessionKey: nil, programVerified: current.programVerified)
+            workspaceId: id, surfaceId: panelId, state: nil, previousState: current.route?.state ?? current.state,
+            source: nil
         )
 #if DEBUG
         dlog("surface.agentState.clear workspace=\(id.uuidString.prefix(5)) panel=\(panelId.uuidString.prefix(5))")
 #endif
+    }
+
+    /// Whether a program presence in `currentState` keeps a report from another tier: always
+    /// while it is active, and while it rests unless the report claims an active state.
+    private static func programHolds(
+        currentSource: AgentStateSource?,
+        currentState: AgentActivityState?,
+        against source: AgentStateSource,
+        _ state: AgentActivityState
+    ) -> Bool {
+        guard source != .program, currentSource == .program, let currentState else { return false }
+        return currentState != .idle || state == .idle
     }
 
     // MARK: - Review nudge

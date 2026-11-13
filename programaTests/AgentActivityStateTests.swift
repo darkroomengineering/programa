@@ -775,44 +775,57 @@ final class AgentActivityStateTests: XCTestCase {
     }
 
     /// INC-1057: an OSC 7501 report without the surface's token (Claude Code's own status, or
-    /// bytes printed by anything in the terminal) still shows, but ranks below hooks and names no
-    /// writer, so route text never goes out on its word.
-    func testUnsignedProgramReportsRankBelowHooksAndNameNoWriter() {
+    /// bytes anything in the terminal printed) drives the badge with the authority it always had,
+    /// but never the route view: it names no writer and cannot end the work held route text waits
+    /// on.
+    func testUnsignedProgramReportsDriveTheBadgeButNeverTheRouteView() {
         let workspace = Workspace(title: "Test")
         let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
+        let hooksWorking = RouteAgentPresence(state: .working, source: .hooks, sessionKey: key)
 
-        // Claude Code 2.1.295+: its tokenless status interleaves with its hooks' socket reports.
+        // Claude Code 2.1.295+: its own tokenless status interleaves with its hooks.
         let claude = UUID()
         workspace.updatePanelAgentState(panelId: claude, state: .working, source: .hooks, sessionKey: key)
-        workspace.updatePanelAgentState(panelId: claude, state: .idle, source: .program, programState: .done)
         workspace.updatePanelAgentState(panelId: claude, state: .working, source: .program, programState: .working)
-        XCTAssertEqual(workspace.panelAgentStateSources[claude], .hooks, "an unsigned report cannot take a hooks surface")
-        XCTAssertEqual(workspace.panelAgentStates[claude], .working)
-        XCTAssertEqual(workspace.panelAgentPresence[claude]?.sessionKey, key)
-        XCTAssertTrue(workspace.agentWriterIdentified(panelId: claude))
-        workspace.updatePanelAgentState(panelId: claude, state: .idle, source: .hooks, sessionKey: key)
-        XCTAssertEqual(workspace.panelAgentStates[claude], .idle, "the Stop hook still ends the turn")
-        XCTAssertEqual(workspace.panelAgentStateSources[claude], .hooks)
+        XCTAssertEqual(workspace.panelAgentStateSources[claude], .program, "an unsigned report owns the badge as before")
+        XCTAssertEqual(workspace.panelAgentPresence[claude]?.route, hooksWorking)
+        XCTAssertTrue(workspace.agentWriterIdentified(panelId: claude), "routes still see the hooks session")
 
-        // Nothing else reports: the unsigned report shows, without a writer, until hooks speak.
+        // Esc: Claude reports idle itself and no Stop hook fires. The badge leaves Working, but no
+        // idle reaches routes, so held text keeps waiting.
+        workspace.updatePanelAgentState(panelId: claude, state: .idle, source: .program, programState: .idle)
+        XCTAssertEqual(workspace.panelAgentStates[claude], .idle)
+        XCTAssertEqual(workspace.panelAgentPresence[claude]?.route, hooksWorking, "an unsigned idle must not end the route turn")
+
+        // The next turn's hooks reports move both; the Stop hook ends the route turn.
+        workspace.updatePanelAgentState(panelId: claude, state: .working, source: .hooks, sessionKey: key)
+        workspace.updatePanelAgentState(panelId: claude, state: .working, source: .program, programState: .working)
+        workspace.updatePanelAgentState(panelId: claude, state: .idle, source: .hooks, sessionKey: key)
+        XCTAssertEqual(workspace.panelAgentStates[claude], .working, "a hooks idle cannot end a program working badge")
+        XCTAssertEqual(workspace.panelAgentPresence[claude]?.route?.state, .idle)
+
+        // The SessionEnd hook's clear ends the route view; the badge stays with the program.
+        workspace.clearPanelAgentState(panelId: claude)
+        XCTAssertEqual(workspace.panelAgentStateSources[claude], .program)
+        XCTAssertNil(workspace.panelAgentPresence[claude]?.route)
+        XCTAssertFalse(workspace.agentWriterIdentified(panelId: claude))
+
+        // Nothing trusted has reported: the unsigned report shows, without a writer.
         let bare = UUID()
         workspace.updatePanelAgentState(panelId: bare, state: .working, source: .program, programState: .working)
         XCTAssertEqual(workspace.panelAgentStateSources[bare], .program)
-        XCTAssertEqual(workspace.panelAgentPresence[bare]?.programState, .working)
+        XCTAssertNil(workspace.panelAgentPresence[bare]?.route)
         XCTAssertFalse(workspace.agentWriterIdentified(panelId: bare))
-        workspace.updatePanelAgentState(panelId: bare, state: .idle, source: .hooks, sessionKey: key)
-        XCTAssertEqual(workspace.panelAgentStateSources[bare], .hooks, "hooks outrank an unsigned report")
-        XCTAssertTrue(workspace.agentWriterIdentified(panelId: bare))
 
-        // A signed report names the program, and an unsigned one cannot replace it.
+        // A signed report holds the route view the way a program holds the badge.
         let signed = UUID()
         workspace.updatePanelAgentState(
             panelId: signed, state: .working, source: .program, programState: .working, programVerified: true
         )
-        XCTAssertTrue(workspace.agentWriterIdentified(panelId: signed))
-        workspace.updatePanelAgentState(panelId: signed, state: .working, source: .program, programState: .working)
         workspace.updatePanelAgentState(panelId: signed, state: .idle, source: .program, programState: .done)
-        XCTAssertEqual(workspace.panelAgentStates[signed], .working)
+        workspace.updatePanelAgentState(panelId: signed, state: .idle, source: .hooks, sessionKey: key)
+        XCTAssertEqual(workspace.panelAgentPresence[signed]?.programState, .done, "the unsigned done shows")
+        XCTAssertEqual(workspace.panelAgentPresence[signed]?.route, RouteAgentPresence(state: .working, source: .program))
         XCTAssertTrue(workspace.agentWriterIdentified(panelId: signed))
     }
 }

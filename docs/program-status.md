@@ -79,43 +79,62 @@ a report as the agent's own when it is signed:
   environment, next to `PROGRAMA_SURFACE_ID`. Programa's Claude Code, Codex and OpenCode hooks add
   it to every report as `programa_token=<token>`.
 - A report whose token matches the terminal's is signed. A report with another token is
-  discarded whole. A report without one is unsigned: it still updates the records and the
-  sidebar, but ranks below hooks (see below) and never counts as the agent for
-  [event routes](plans/event-routes.md): an unsigned working-then-idle pair cannot release a
-  route's `send` or `prompt` text.
+  discarded whole. A report without one is unsigned: it still updates the records, the sidebar
+  and `agent_state` exactly as a program report always has, but it never counts as the agent for
+  [event routes](plans/event-routes.md) (see [Authority](#authority)): an unsigned
+  working-then-idle pair cannot release a route's `send` or `prompt` text.
 - The app keeps only the token's SHA-256 digest and compares digests in constant time, and never
   logs the token. The token still sits in the shell's environment, and signed reports are terminal
   output, so the session's scrollback log on disk holds them as written. The session snapshot keeps
-  the digest, so a shell revived after a relaunch keeps signing. A shell recovered without its snapshot entry, or spawned before
-  this release, sends reports Programa cannot check, and they count as unsigned.
+  the digest, so a shell revived after a relaunch keeps signing. A shell recovered without its
+  snapshot entry, or spawned before this release, sends reports Programa cannot check, and they
+  count as unsigned.
 - Programa never forwards the token over SSH, and the hooks leave it out of a report inside an
   SSH session, so a remote report is unsigned.
 - Claude Code 2.1.295 and later report their own status without the token. Those reports are
-  unsigned, so on a Claude Code terminal the hooks' socket reports own `agent_state`.
+  unsigned: they drive the badge, and the hooks' socket reports are what routes see.
 
 ## Authority
 
-A signed program report outranks hooks, hooks outrank an unsigned program report, and both
-outrank screen inference.
+Programa keeps two views of a surface's agent. `agent_state` and the sidebar badge show what the
+agent is doing. Event routes read a second view that only trusted reporters move: hooks over the
+socket, and signed program reports.
 
-1. A signed program report always applies.
-2. While a signed root record is `working` or `blocked`, every other report is ignored.
-3. While a signed root record is `idle`, `done` or `error`, another report is accepted only if it
-   says `working` or `blocked`. Then the hook owns the surface's `agent_state`, and the record stays
+For `agent_state` and the badge, OSC 7501 (signed or not) outranks hooks, and hooks outrank
+screen inference.
+
+1. A program report always applies.
+2. While the root record is `working` or `blocked`, hook and inferred reports are ignored.
+3. While the root record is `idle`, `done` or `error`, a hook report is accepted only if it says
+   `working` or `blocked`. Then the hook owns the surface's `agent_state`, and the record stays
    visible in `program_status`.
-4. An unsigned program report is ignored while hooks own the surface, and a hook report always
-   replaces it. Against screen inference it follows rules 2 and 3.
-5. Screen inference does not run on a surface that a program or a hook owns.
-6. While the program owns the surface, a hook or inferred clear is ignored in every state.
+4. Screen inference does not run on a surface that a program or a hook owns.
+5. While the program owns the surface, a hook or inferred clear is ignored in every state.
+
+For event routes, the same rules apply between signed program reports and hooks, and unsigned
+program reports and screen inference never move the view. Only that view names a writer
+(`program` for signed reports, the hook session for hooks) and only its `working` to `idle`
+releases held `send` or `prompt` text. So on a Claude Code terminal:
+
+- Claude's own unsigned status drives the badge, and its hooks drive routes.
+- After Esc, Claude reports idle itself and fires no Stop hook: the badge leaves Working, but held
+  route text waits for the next turn's Stop hook, or expires.
+- A hook clear (SessionEnd) ends the routes' view even while the badge stays with the program.
+- Any clear that removes the badge, signed or not (a program clear, a shell prompt, a reset), also
+  ends the routes' view, so a held delivery ends instead of waiting on an agent that is gone.
+
+A surface no trusted reporter has spoken for, such as one where only a program prints its own
+status, hands routes its `agent_state` changes without a writer: `notify`, `review` and `run`
+routes still fire on them, and text routes never deliver on them.
 
 `surface.report_agent_state` rejects `source: "program"`.
 
-The diagram shows a report for a surface whose `agent_state` a signed program report owns:
+The diagram shows a report for a surface whose `agent_state` the program owns:
 
 ```mermaid
 flowchart TD
   R[Report arrives] --> S{Source}
-  S -->|signed OSC 7501| A[Always applies]
+  S -->|OSC 7501 program| A[Always applies]
   S -->|hook or screen inference| Q{Root record state}
   Q -->|working or blocked| X[Ignored, hook clear too]
   Q -->|idle, done, error| H{Hook says working or blocked?}

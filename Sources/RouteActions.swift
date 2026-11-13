@@ -502,15 +502,11 @@ private struct LiveRouteAgentTarget: RouteAgentTarget {
 }
 
 extension Workspace {
-    /// Whether the panel's agent state comes from a reporter that names itself (see
-    /// `RouteAgentTarget.writerIdentified`).
+    /// Whether the panel's agent, as routes see it, comes from a reporter that names itself (see
+    /// `RouteAgentTarget.writerIdentified`). Reads the route view, not the badge: an unsigned
+    /// OSC 7501 report can own the badge.
     func agentWriterIdentified(panelId: UUID) -> Bool {
-        guard let presence = panelAgentPresence[panelId] else { return false }
-        switch presence.source {
-        case .program: return presence.programVerified
-        case .hooks: return !(presence.sessionKey?.sessionId ?? "").isEmpty
-        case .inferred: return false
-        }
+        panelAgentPresence[panelId]?.route?.writerIdentified ?? false
     }
 }
 
