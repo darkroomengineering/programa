@@ -344,7 +344,8 @@ Programa's agent hooks, or an OSC 7501 status report signed with the terminal's
 `PROGRAMA_STATUS_TOKEN` (see `docs/program-status.md`). Any text printed in a terminal can claim an
 agent state and set the directory a `run` uses, so a state from an unsigned status report or from
 screen detection, and a clear caused by printed output (an unsigned clear, a shell prompt mark, a
-terminal reset) or by screen detection, does not fire them. The route still counts the match, its
+terminal reset) or by screen detection, does not fire them. Neither does the end of an agent only
+those reported, even when the shell's own prompt ends it. The route still counts the match, its
 throttle window stays unspent, and its last error starts with `refused:` and names the reporter.
 `notify` routes fire either way. In practice, `run` and `review` routes fire for Claude Code, Codex
 and OpenCode with Programa's hooks installed, and not for agents Programa knows only through

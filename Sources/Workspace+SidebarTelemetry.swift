@@ -472,11 +472,15 @@ extension Workspace {
         panelAgentPresence.removeValue(forKey: panelId)
         closePromptGate(panelId: panelId, by: closer)
         AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil, source: nil)
-        // Routes see the clear too: a held delivery ends rather than outliving the agent. A
-        // printed clear reaches them untrusted, so it fires no `run` or `review`.
+        // Routes see the clear too: a held delivery ends rather than outliving the agent. It
+        // fires `run` and `review` only when both the clear and the agent it ends came from a
+        // trusted reporter: a printed `working` that the shell's own prompt report then clears is
+        // still printed. A signed program report always sets the route view, and the socket
+        // reports as hooks, so those two fields cover every trusted origin.
+        let trustedOrigin = current.route != nil || current.source == .hooks
         SocketEventBroadcaster.shared.publishAgentState(
             workspaceId: id, surfaceId: panelId, state: nil, previousState: current.route?.state ?? current.state,
-            source: nil, trusted: !printedClear
+            source: nil, trusted: !printedClear && trustedOrigin
         )
 #if DEBUG
         dlog("surface.agentState.clear workspace=\(id.uuidString.prefix(5)) panel=\(panelId.uuidString.prefix(5))")
