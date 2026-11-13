@@ -660,8 +660,9 @@ line saying so and exit non-zero, as do the tmux shim's `send-keys`, `paste-buff
   does not count, and a printed prompt mark alone never ends it. There is no timer: a prompt left alone for an hour
   still needs the person. `workspace.reset_sidebar` clears the badge but keeps a showing permission
   or sign-in prompt refused until one of these events.
-- Trusted reports are the socket reports (hooks, `surface.report_agent_state`, `agent.event`),
-  screen-based agent detection, and [signed](program-status.md#signed-reports) OSC 7501 reports.
+- Trusted reports are the socket reports (hooks, `surface.report_agent_state`, `agent.event`) and
+  [signed](program-status.md#signed-reports) OSC 7501 reports. Screen-based agent detection reads
+  printed text, so it lifts only a refusal that nothing but screen detection reported.
   Any report can start a refusal, but an unsigned OSC 7501 report never lifts one: text printed in
   the pane can forge it. An unsigned `working`, `idle` or `state=clear`, a printed shell prompt
   mark and a terminal reset still move or clear `agent_state`, so `agent_state` can read `working`

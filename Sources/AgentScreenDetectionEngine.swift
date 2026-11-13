@@ -167,7 +167,7 @@ final class AgentScreenDetectionEngine: @unchecked Sendable {
                   let workspace = self.resolveWorkspace(surfaceId, workspaceId),
                   workspace.panels[surfaceId] != nil,
                   workspace.panelAgentStateSources[surfaceId] == .inferred else { return }
-            workspace.clearPanelAgentState(panelId: surfaceId)
+            workspace.clearPanelAgentState(panelId: surfaceId, source: .inferred)
         }
     }
 

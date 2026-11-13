@@ -786,12 +786,13 @@ final class Workspace: Identifiable, ObservableObject {
 
     /// True when `panelId` hosts an agent that agent detection already knows about and that can
     /// take an implicit Return: presence exists, it is not blocked on a permission or y/n prompt,
-    /// and it is not stale. A plain shell must never receive an implicit Return. The prompt gate is
-    /// checked beside the badge because printed bytes can move the badge off `blocked`.
+    /// and it is not stale. A plain shell must never receive an implicit Return. A permission or
+    /// sign-in prompt is checked beside the badge because printed bytes can move the badge off
+    /// `blocked`.
     func canAutoSubmitToAgent(panelId: UUID, now: Date = Date()) -> Bool {
         guard let presence = panelAgentPresence[panelId] else { return false }
         return presence.state != .blocked && !presence.isStale(now: now)
-            && terminalPanel(for: panelId)?.surface.isPromptShowing != true
+            && terminalPanel(for: panelId)?.surface.activePromptHold() == nil
     }
 
     /// Delivers `text` to `terminalPanel` as one paste. Multi-line text keeps its newlines only
