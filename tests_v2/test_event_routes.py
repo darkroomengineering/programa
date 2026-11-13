@@ -14,7 +14,8 @@ whose reports name their writer, and only the end of that writer's own work rele
 Cases: load and clear; throttle and its banner; the permission banner rule; `queue` and the
 prompt's own turn; a prompt on the idle edge that must not trigger itself; `steer`; a surface with
 no agent; refusal during a permission prompt; a forged idle during a permission prompt; routes
-installed while the agent is stopped for input; and a `run` whose reported working directory must be an existing, absolute path without `..`.
+installed while the agent is stopped for input; a `run` whose reported working directory must be an existing, absolute path without `..`;
+and a `run` that an unsigned OSC 7501 report must not fire while a `notify` beside it does.
 """
 
 from __future__ import annotations
@@ -380,6 +381,75 @@ def _case_run_directory(client: ProgramaClient, session: _Session, temp_dir: str
     _wait_counter(client, "marker", "fired", 2)
 
 
+def _clear_agent(client: ProgramaClient, workspace_id: str, surface_id: str) -> None:
+    """Drop the program record and the agent state. A hooks clear is ignored while a program owns
+    the surface, and the test shell may print no prompt mark (OSC 133;A), so a reset drops the
+    record first."""
+    client._call("surface.send_text", {"workspace_id": workspace_id, "surface_id": surface_id,
+                                       "text": "printf '\\033c'\n"})
+    _wait("the program record to drop",
+          lambda: _surface_field(client, workspace_id, surface_id, "program_status") is None)
+    client._call("surface.clear_agent_state", {"workspace_id": workspace_id, "surface_id": surface_id})
+    _wait("the agent state to clear", lambda: _surface_agent_state(client, workspace_id, surface_id) is None)
+
+
+def _surface_field(client: ProgramaClient, workspace_id: str, surface_id: str, field: str) -> Any:
+    listed = client._call("surface.list", {"workspace_id": workspace_id}) or {}
+    for surface in listed.get("surfaces") or []:
+        if str(surface.get("id")) == surface_id:
+            return surface.get(field)
+    raise ProgramaClientError(f"surface {surface_id} not found in surface.list: {listed}")
+
+
+def _case_run_needs_trusted_reporter(client: ProgramaClient, session: _Session, temp_dir: str) -> None:
+    """Printed bytes can claim an agent state and set the directory a `run` uses, so `run` fires
+    only for a trusted reporter. `notify` still fires for an unsigned report."""
+    workspace_id, surface_id = session.shell()
+    work_dir = Path(temp_dir) / "trusted-run"
+    work_dir.mkdir()
+    client._call("surface.send_text", {"workspace_id": workspace_id, "surface_id": surface_id,
+                                       "text": f"cd '{work_dir}'\n"})
+    _wait("the shell to report the trusted-run dir",
+          lambda: os.path.realpath(_surface_directory(client, surface_id) or "") == os.path.realpath(work_dir))
+    _clear_agent(client, workspace_id, surface_id)
+
+    _load(client, [
+        {"name": "trusted-run", "on": "agent/+/state/idle",
+         "run": {"command": "printf '%s' \"$PROGRAMA_ROUTE_SURFACE_ID\" > trusted-marker"}},
+        {"name": "any-notify", "on": "agent/+/state/idle", "notify": {"title": "idle"}},
+    ])
+    marker = work_dir / "trusted-marker"
+
+    def print_pair(token: bool) -> None:
+        # One command line, so no prompt mark lands between the two reports; the sleep keeps them
+        # out of one drain batch.
+        sign = ":programa_token=%s" if token else ""
+        arg = ' "$PROGRAMA_STATUS_TOKEN"' if token else ""
+        text = (
+            f"printf '\\033]7501;state=working{sign}\\033\\\\'{arg}; sleep 1; "
+            f"printf '\\033]7501;state=idle{sign}\\033\\\\'{arg}\n"
+        )
+        client._call("surface.send_text", {"workspace_id": workspace_id, "surface_id": surface_id, "text": text})
+
+    print_pair(token=False)
+    route = _wait_counter(client, "trusted-run", "matched", 1)
+    _must(route.get("fired") == 0, f"an unsigned idle must not fire a run route: {route}")
+    _must(str(route.get("last_error") or "").startswith("refused:"), f"the run route should say why: {route}")
+    _wait_counter(client, "any-notify", "fired", 1)
+    held_until = time.time() + 1.5
+    while time.time() < held_until:
+        _must(not marker.exists(), "an unsigned idle ran the route's command")
+        time.sleep(0.1)
+
+    _clear_agent(client, workspace_id, surface_id)
+    print_pair(token=True)
+    try:
+        _wait("the run's marker after a signed idle",
+              lambda: marker.exists() and marker.read_text() == surface_id, timeout_s=60.0)
+    except ProgramaClientError as exc:
+        raise ProgramaClientError(f"{exc}: {_route(client, 'trusted-run')}") from exc
+
+
 def _run_once(socket_path: str) -> int:
     temp_dir = tempfile.mkdtemp(prefix="programa-routes-")
     with ProgramaClient(socket_path) as client:
@@ -396,6 +466,7 @@ def _run_once(socket_path: str) -> int:
             _case_forged_idle_during_permission(client, session)
             _case_installed_while_blocked(client, session)
             _case_run_directory(client, session, temp_dir)
+            _case_run_needs_trusted_reporter(client, session, temp_dir)
             print("PASS: event routes load, throttle, own banners, deliver text and guard runs")
             return 0
         finally:

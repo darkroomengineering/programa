@@ -13,6 +13,13 @@ private final class InferenceTestClock: @unchecked Sendable {
     func advance(to value: TimeInterval) { lock.lock(); seconds = value; lock.unlock() }
 }
 
+private final class RouteEventLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var recorded: [RouteEvent] = []
+    var events: [RouteEvent] { lock.lock(); defer { lock.unlock() }; return recorded }
+    func append(_ event: RouteEvent) { lock.lock(); recorded.append(event); lock.unlock() }
+}
+
 @MainActor
 final class InferredAgentCleanupTests: XCTestCase {
     private func manifest() throws -> AgentManifest {
@@ -1163,6 +1170,64 @@ final class AgentActivityStateTests: XCTestCase {
         f.workspace.clearPanelAgentState(panelId: f.panelId, source: .inferred)
         XCTAssertEqual(f.workspace.panelAgentPresence[f.panelId]?.route?.state, .blocked, "screen detection's clear wiped the hooks' view")
         XCTAssertEqual(f.hold, .permission)
+    }
+
+    // MARK: - INC-1123: routes learn whether a trusted reporter made each frame
+
+    /// What `SocketEventBroadcaster.shared` hands event routes while `body` runs.
+    private func routeEvents(_ body: () throws -> Void) rethrows -> [RouteEvent] {
+        let log = RouteEventLog()
+        let tap = SocketEventBroadcaster.shared.routeTap
+        tap.redirectForTesting { log.append($0) }
+        defer { tap.redirectForTesting(nil) }
+        try body()
+        return log.events
+    }
+
+    private func states(_ events: [RouteEvent]) -> [String] {
+        events.map { "\($0.topic.split(separator: "/").last ?? "") trusted=\($0.trusted)" }
+    }
+
+    func testASignedClearHandsRoutesATrustedNone() throws {
+        let f = try promptGateFixture()
+        let events = try routeEvents {
+            f.drain([try osc(.working, "programa_token=\(f.token)")])
+            f.drain([try osc(nil, "programa_token=\(f.token)")])
+        }
+        XCTAssertEqual(states(events), ["working trusted=true", "none trusted=true"])
+
+        let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
+        let hooks = routeEvents {
+            f.workspace.updatePanelAgentState(panelId: f.panelId, state: .working, source: .hooks, sessionKey: key)
+            f.manager.clearSurfaceAgentState(tabId: f.workspace.id, surfaceId: f.panelId)
+        }
+        XCTAssertEqual(states(hooks), ["working trusted=true", "none trusted=true"], "a hooks clear stays trusted")
+    }
+
+    func testAnUnsignedClearHandsRoutesAnUntrustedNone() throws {
+        let f = try promptGateFixture()
+        let events = try routeEvents {
+            f.drain([try osc(.working, "app=forged")])
+            f.drain([try osc(nil, "")])
+        }
+        XCTAssertEqual(states(events), ["working trusted=false", "none trusted=false"])
+
+        let reset = try routeEvents {
+            f.drain([try osc(.working, "app=forged")])
+            f.drain([.resetAll])
+        }
+        XCTAssertEqual(states(reset), ["working trusted=false", "none trusted=false"], "a reset is printed bytes too")
+    }
+
+    func testScreenInferenceHandsRoutesUntrustedFrames() throws {
+        let f = try promptGateFixture()
+        let events = routeEvents {
+            f.workspace.updatePanelAgentState(
+                panelId: f.panelId, state: .idle, source: .inferred, inferredAgent: "claude-code"
+            )
+            f.workspace.clearPanelAgentState(panelId: f.panelId, source: .inferred)
+        }
+        XCTAssertEqual(states(events), ["idle trusted=false", "none trusted=false"])
     }
 
     /// The shell runs Claude Code, whose own unsigned status owns the badge, and its Notification
