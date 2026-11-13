@@ -453,7 +453,7 @@ extension Workspace {
             closePromptGate(panelId: panelId, by: closer)
             SocketEventBroadcaster.shared.publishAgentState(
                 workspaceId: id, surfaceId: panelId, state: nil, previousState: route.state, source: nil,
-                toSubscribers: false
+                toSubscribers: false, trusted: true
             )
             return
         }
@@ -465,7 +465,7 @@ extension Workspace {
             AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: route.state, source: route.source)
             SocketEventBroadcaster.shared.publishAgentState(
                 workspaceId: id, surfaceId: panelId, state: route.state, previousState: current.state,
-                source: route.source, writer: nil, programStatus: nil, toRoutes: false
+                source: route.source, writer: nil, programStatus: nil, toRoutes: false, trusted: false
             )
             return
         }
@@ -475,12 +475,10 @@ extension Workspace {
         // Routes see the clear too: a held delivery ends rather than outliving the agent. It
         // fires `run` and `review` only when both the clear and the agent it ends came from a
         // trusted reporter: a printed `working` that the shell's own prompt report then clears is
-        // still printed. A signed program report always sets the route view, and the socket
-        // reports as hooks, so those two fields cover every trusted origin.
-        let trustedOrigin = current.route != nil || current.source == .hooks
+        // still printed.
         SocketEventBroadcaster.shared.publishAgentState(
             workspaceId: id, surfaceId: panelId, state: nil, previousState: current.route?.state ?? current.state,
-            source: nil, trusted: !printedClear && trustedOrigin
+            source: nil, trusted: !printedClear && current.hasTrustedOrigin
         )
 #if DEBUG
         dlog("surface.agentState.clear workspace=\(id.uuidString.prefix(5)) panel=\(panelId.uuidString.prefix(5))")
@@ -563,7 +561,8 @@ extension Workspace {
             programStatus: route.source == .program
                 ? (panels[panelId] as? TerminalPanel)?.programStatus.root?.wirePayload
                 : nil,
-            toSubscribers: false
+            toSubscribers: false,
+            trusted: true
         )
     }
 
@@ -768,7 +767,7 @@ extension Workspace {
                 ProgramStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil)
             }
         }
-        let clearedAgentStates = panelAgentPresence.mapValues(\.state)
+        let clearedPresences = panelAgentPresence
         // A showing permission or sign-in prompt stays armed: any client can reset the sidebar,
         // and the box is still on screen. The person's key, an `answer_prompt` write or the
         // agent's next trusted report ends it.
@@ -778,10 +777,11 @@ extension Workspace {
             surface.noteAgentPrompt(nil, isBlocked: false)
         }
         panelAgentPresence.removeAll()
-        for (surfaceId, previousState) in clearedAgentStates {
+        for (surfaceId, presence) in clearedPresences {
             AgentStateWaitRegistry.shared.notify(surfaceId: surfaceId, newState: nil, source: nil)
             SocketEventBroadcaster.shared.publishAgentState(
-                workspaceId: id, surfaceId: surfaceId, state: nil, previousState: previousState, source: nil
+                workspaceId: id, surfaceId: surfaceId, state: nil, previousState: presence.route?.state ?? presence.state,
+                source: nil, trusted: presence.hasTrustedOrigin
             )
         }
         surfaceListeningPorts.removeAll()

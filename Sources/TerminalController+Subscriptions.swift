@@ -433,7 +433,7 @@ final class SocketEventBroadcaster: @unchecked Sendable {
         programStatus: [String: Any]? = nil,
         toSubscribers: Bool = true,
         toRoutes: Bool = true,
-        trusted: Bool = true
+        trusted: Bool
     ) {
         // Routes can get a frame subscribers do not: they follow `AgentPresence.route`, which only
         // trusted reports move, while subscribers follow the displayed state.

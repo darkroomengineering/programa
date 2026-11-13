@@ -154,10 +154,10 @@ with `refused:`. Text routes never deliver on them. The same holds for a clear p
 cause (an unsigned clear, a prompt the shell did not report, a reset) and for screen detection's
 clear, and for any clear of an agent that only those untrusted reporters reported, such as a
 printed `working` that the shell's own prompt then clears. A signed clear, a hooks clear, a shell
-prompt the shell reported over the socket and a closed surface are trusted when the agent they end
-came from a trusted reporter, so a hooked agent's session end still fires `run` and `review`
-routes on `agent/+/state/none`. A program that wants `run` and
-`review` routes to fire on its status signs its reports with `programa_token`.
+prompt the shell reported over the socket, a closed surface and a sidebar reset are trusted when
+the agent they end came from a trusted reporter, so a hooked agent's session end still fires `run`
+and `review` routes on `agent/+/state/none`. A program that wants `run` and `review` routes to
+fire on its status signs its reports with `programa_token`.
 
 `surface.report_agent_state` rejects `source: "program"`.
 

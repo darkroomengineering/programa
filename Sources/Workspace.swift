@@ -676,14 +676,15 @@ final class Workspace: Identifiable, ObservableObject {
             panel.close()
             PortsHubStore.shared.detachedPanelFinalized(panelId: panelId)
             AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: sourceWorkspaceId, surfaceId: panelId)
-            if agentPresence != nil {
+            if let agentPresence {
                 AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil, source: nil)
                 SocketEventBroadcaster.shared.publishAgentState(
                     workspaceId: sourceWorkspaceId,
                     surfaceId: panelId,
                     state: nil,
-                    previousState: agentPresence?.state,
-                    source: nil
+                    previousState: agentPresence.route?.state ?? agentPresence.state,
+                    source: nil,
+                    trusted: agentPresence.hasTrustedOrigin
                 )
             }
         }
