@@ -646,6 +646,7 @@ jobs:
             tests/test_cli_socket_no_autodiscovery_regression.py \
             tests/test_cli_wait_surface_agent_state.py \
             tests/test_cli_claude_settings_preservation.py \
+            tests/test_cli_claude_teams_default.py \
             tests/test_cli_agent_resume.py \
             tests/test_cli_agent_usage.py \
             tests/test_cli_worktree_from_issue.py \

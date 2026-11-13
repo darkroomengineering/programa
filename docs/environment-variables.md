@@ -31,6 +31,7 @@ them to find the app and the terminal they run in.
 | `PROGRAMA_LOAD_GHOSTTY_ZSH_INTEGRATION`, `PROGRAMA_LOAD_GHOSTTY_BASH_INTEGRATION` | `1` when the integration should also load Ghostty's own zsh or bash integration. |
 | `PROGRAMA_FISH_INTEGRATION_FILE`, `PROGRAMA_FISH_USER_CONFIG_ALREADY_LOADED`, `PROGRAMA_FISH_CONFIG_HOME` | Hand-off state between the app and the fish integration. |
 | `PROGRAMA_CLAUDE_HOOKS_DISABLED` | `1` when Claude Code integration is off (`automation.claudeCodeIntegration`). The `claude` wrapper then runs the real binary untouched. |
+| `PROGRAMA_CLAUDE_TEAMS_DISABLED` | `1` when `automation.claudeTeamsByDefault` is off. The `claude` wrapper then leaves agent teams off unless `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is set. |
 
 The zsh, bash and fish integrations also keep internal state in shell variables named
 `_PROGRAMA_*` (git and pull request polling, tty reporting, tmux key syncing). They are not a
@@ -64,7 +65,7 @@ Read by the app, the CLI and `programa-mcp`. Modes and discovery are described i
 | `PROGRAMA_CLAUDE_PID` | Process id of the Claude Code instance a hook belongs to. Set by the `claude` wrapper. |
 | `PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN` | `programa` binary the `claude` wrapper's hooks call. |
 | `PROGRAMA_CLAUDE_NATIVE_STATUS` | `1` when Claude Code reports its own OSC 7501 status (2.1.295 or later, outside tmux/screen, not a background worker). Set by the `claude` wrapper; the hooks then leave that status to Claude. |
-| `_PROGRAMA_CLAUDE_FLAGS_CACHE_KEY`, `_PROGRAMA_CLAUDE_FLAGS_CACHE_VAL` | Which optional flags (`--session-id`, `--mcp-config`, `--append-system-prompt`) the resolved `claude` binary supports, cached per binary path and mtime by the `claude` wrapper. |
+| `_PROGRAMA_CLAUDE_FLAGS_CACHE_KEY`, `_PROGRAMA_CLAUDE_FLAGS_CACHE_VAL` | Which optional flags (`--session-id`, `--mcp-config`, `--append-system-prompt`) and version-gated features (agent teams, Claude's own status) the resolved `claude` binary supports, cached per binary path and mtime by the `claude` wrapper. |
 | `PROGRAMA_ORIGINAL_NODE_OPTIONS`, `PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT` | The caller's `NODE_OPTIONS`, saved so the wrappers can restore it. |
 | `PROGRAMA_CLAUDE_TEAMS_PROGRAMA_BIN`, `PROGRAMA_CLAUDE_TEAMS_TERM` | `programa` binary and `TERM` for the Claude teams wrapper. |
 

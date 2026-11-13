@@ -193,6 +193,11 @@
           "default": true,
           "description": "Enable Programa integration hooks for Claude Code."
         },
+        "claudeTeamsByDefault": {
+          "type": "boolean",
+          "default": true,
+          "description": "Start plain claude in a Programa terminal with Claude Code agent teams on, with teammates opening as Programa panes. An explicit CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS in the environment always wins. Applies to new terminals."
+        },
         "holdAgentTextWhileTyping": {
           "type": "boolean",
           "default": true,

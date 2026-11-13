@@ -1119,8 +1119,18 @@ extension ProgramaCLI {
             )
             defer { client.close() }
 
-            let payload = try client.sendV2(method: V2MethodNames.systemIdentify)
-            let focused = payload["focused"] as? [String: Any] ?? [:]
+            // Anchor on the launching pane when the env names it: plain `claude` also starts
+            // in panes the user is not looking at (auto-resume, agent_spawn, race).
+            let caller = [
+                "workspace_id": processEnvironment["PROGRAMA_WORKSPACE_ID"],
+                "surface_id": processEnvironment["PROGRAMA_SURFACE_ID"],
+            ].compactMapValues { $0 }
+            let payload = try client.sendV2(
+                method: V2MethodNames.systemIdentify,
+                params: caller.isEmpty ? [:] : ["caller": caller]
+            )
+            let callerPane = (payload["caller"] as? [String: Any]).flatMap { $0["pane_id"] is String ? $0 : nil }
+            let focused = callerPane ?? payload["focused"] as? [String: Any] ?? [:]
 
             let workspaceId = (focused["workspace_id"] as? String)
                 ?? (focused["workspace_ref"] as? String)
