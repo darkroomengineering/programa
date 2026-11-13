@@ -63,6 +63,10 @@ final class MainSidebarSplitViewController: NSSplitViewController {
     private var isApplyingWidth = false
     private var isReapplyScheduled = false
     private var lastSplitWidth: CGFloat = 0
+    /// Receives the sidebar column's distance from the window's top edge when it changes.
+    /// The floating system sidebar on macOS 26 sits inset; earlier versions report 0.
+    var onSidebarTopInsetChange: ((CGFloat) -> Void)?
+    private var reportedSidebarTopInset: CGFloat?
     /// Collapse animations whose completion has not run; released in deinit so a window
     /// closed mid-animation cannot leave the global portal resize counter raised.
     private var pendingAnimations = 0
@@ -155,6 +159,7 @@ final class MainSidebarSplitViewController: NSSplitViewController {
     override func viewDidLayout() {
         super.viewDidLayout()
         guard let state = sidebarState, view.window != nil, view.bounds.width > 0 else { return }
+        reportSidebarTopInsetIfChanged()
         if !didApplyInitialWidth {
             didApplyInitialWidth = true
             updateMaximumThickness(availableWidth: view.bounds.width)
@@ -168,6 +173,17 @@ final class MainSidebarSplitViewController: NSSplitViewController {
             guard let self else { return }
             self.isReapplyScheduled = false
             self.reapplyWidthIfNeeded()
+        }
+    }
+
+    private func reportSidebarTopInsetIfChanged() {
+        guard let window = view.window, !sidebarItem.isCollapsed, sidebarHost.bounds.height > 0 else { return }
+        let inset = max(0, window.frame.height - sidebarHost.convert(sidebarHost.bounds, to: nil).maxY)
+        if let reported = reportedSidebarTopInset, abs(reported - inset) <= 0.5 { return }
+        reportedSidebarTopInset = inset
+        // The receiver updates SwiftUI state; not from inside the layout pass.
+        DispatchQueue.main.async { [weak self] in
+            self?.onSidebarTopInsetChange?(inset)
         }
     }
 
@@ -305,6 +321,7 @@ struct MainSidebarSplitRepresentable: NSViewControllerRepresentable {
     let content: AnyView
     let contentInputs: AnyHashable
     let sidebarState: SidebarState
+    let onSidebarTopInsetChange: (CGFloat) -> Void
 
     final class Coordinator {
         var sidebarInputs: AnyHashable?
@@ -316,6 +333,7 @@ struct MainSidebarSplitRepresentable: NSViewControllerRepresentable {
     func makeNSViewController(context: Context) -> MainSidebarSplitViewController {
         let controller = MainSidebarSplitViewController(sidebar: sidebar, content: content)
         controller.bind(to: sidebarState)
+        controller.onSidebarTopInsetChange = onSidebarTopInsetChange
         context.coordinator.sidebarInputs = sidebarInputs
         context.coordinator.contentInputs = contentInputs
         return controller

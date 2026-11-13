@@ -79,7 +79,7 @@ struct ContentView: View {
             selection: $sidebarSelectionState.selection,
             selectedTabIds: $selectedTabIds,
             lastSidebarSelectionIndex: $lastSidebarSelectionIndex,
-            titlebarHeight: titlebarPadding
+            titlebarHeight: max(0, titlebarPadding - sidebarTopInset)
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -87,6 +87,9 @@ struct ContentView: View {
     /// Space at top of content area for the titlebar. This must be at least the actual titlebar
     /// height; otherwise controls like Bonsplit tab dragging can be interpreted as window drags.
     @State private var titlebarPadding: CGFloat = 32
+    /// How far the sidebar column sits below the window's top edge (the floating system
+    /// sidebar on macOS 26); its toolbar spacer only needs to clear the rest.
+    @State private var sidebarTopInset: CGFloat = 0
     @AppStorage(WorkspacePresentationModeSettings.modeKey)
     var workspacePresentationMode = WorkspacePresentationModeSettings.defaultMode.rawValue
 
@@ -373,6 +376,7 @@ struct ContentView: View {
         let selectedTabIds: Set<UUID>
         let lastSidebarSelectionIndex: Int?
         let titlebarPadding: CGFloat
+        let sidebarTopInset: CGFloat
     }
 
     private var contentAndSidebarLayout: some View {
@@ -382,7 +386,8 @@ struct ContentView: View {
                 selection: sidebarSelectionState.selection,
                 selectedTabIds: selectedTabIds,
                 lastSidebarSelectionIndex: lastSidebarSelectionIndex,
-                titlebarPadding: titlebarPadding
+                titlebarPadding: titlebarPadding,
+                sidebarTopInset: sidebarTopInset
             ),
             content: splitColumn(terminalContentWithSidebarDropOverlay),
             contentInputs: ContentColumnInputs(
@@ -403,7 +408,10 @@ struct ContentView: View {
                 focusedDirectory: focusedDirectory,
                 sidebarDraggedTabId: sidebarDraggedTabId
             ),
-            sidebarState: sidebarState
+            sidebarState: sidebarState,
+            onSidebarTopInsetChange: { inset in
+                if abs(sidebarTopInset - inset) > 0.5 { sidebarTopInset = inset }
+            }
         )
     }
 
