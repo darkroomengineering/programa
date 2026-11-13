@@ -259,10 +259,11 @@ final class RouteEngine {
         let at = now()
         let surfaceId = event.fields["surface_id"]
         var notifyMatches: [String] = []
+        let regexDeadline = RouteRegexDeadline.startingNow()
         for index in candidates {
-            let result = routes[index].compiled.definition.evaluate(event)
+            let result = routes[index].compiled.definition.evaluate(event, until: regexDeadline)
             if let field = result.timedOutField {
-                routes[index].lastError = "when.\(field): the regex ran longer than \(Int(ProgramaRouteRegex.timeLimit * 1000)) ms and was stopped; the event did not match"
+                routes[index].lastError = "when.\(field): the regex ran longer than \(Int(ProgramaRouteRegex.eventBudget * 1000)) ms and was stopped; the event did not match"
             }
             guard result.matches else { continue }
             routes[index].counters.matched += 1
