@@ -134,8 +134,9 @@ struct VerticalTabsSidebar: View {
     @Binding var selection: SidebarSelection
     @Binding var selectedTabIds: Set<UUID>
     @Binding var lastSidebarSelectionIndex: Int?
-    /// Height of the window's titlebar and toolbar. The column hosts report a zero safe
-    /// area (`MainWindowHostingView`), so the list clears the toolbar explicitly.
+    /// How much of the window's titlebar and toolbar overlaps the column, measured from the
+    /// column's top. The column hosts report a zero safe area (`MainWindowHostingView`), so
+    /// the list clears the toolbar explicitly.
     let titlebarHeight: CGFloat
     @StateObject private var modifierKeyMonitor = SidebarShortcutHintModifierMonitor()
     @StateObject private var dragAutoScrollController = SidebarDragAutoScrollController()

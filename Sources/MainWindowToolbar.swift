@@ -377,9 +377,13 @@ private final class MainWindowToolbarHitView: NSView {
         let container = titlebar.superview ?? titlebar
         guard let containerParent = container.superview,
               let titlebarHit = container.hitTest(containerParent.convert(windowPoint, from: nil)) else { return nil }
+        // Only the titlebar and the toolbar view itself (a direct child of the titlebar) are
+        // background. Anything deeper belongs to a toolbar item: on macOS 26 the item viewer,
+        // not its button, takes the hit, and it sits over the pane tab bar while the sidebar
+        // is collapsed.
         var ancestor: NSView? = titlebarHit
         while let view = ancestor {
-            if view is NSControl { return nil }
+            if view is NSControl || view.superview?.superview === titlebar { return nil }
             ancestor = view.superview
         }
         for sibling in themeFrame.subviews.reversed() where sibling !== self && sibling !== container {

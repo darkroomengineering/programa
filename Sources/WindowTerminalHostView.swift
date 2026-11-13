@@ -355,7 +355,7 @@ final class WindowTerminalHostView: NSView {
     private static func collectSplitDividerRegions(in view: NSView, into result: inout [DividerRegion]) {
         guard !view.isHidden else { return }
 
-        if let splitView = view as? NSSplitView, !(splitView is MainSidebarSplitViewMarker) {
+        if let splitView = view as? NSSplitView, routesDividerHits(of: splitView) {
             let dividerCount = max(0, splitView.arrangedSubviews.count - 1)
             for dividerIndex in 0..<dividerCount {
                 let first = splitView.arrangedSubviews[dividerIndex].frame
@@ -385,6 +385,14 @@ final class WindowTerminalHostView: NSView {
         for subview in view.subviews {
             collectSplitDividerRegions(in: subview, into: &result)
         }
+    }
+
+    /// The terminals sit above the main sidebar split too, so a press on its divider must
+    /// pass through to AppKit like any pane divider. A collapsed sidebar has no divider to
+    /// grab, and routing its zero-width column would take clicks from the window edge.
+    private static func routesDividerHits(of splitView: NSSplitView) -> Bool {
+        guard splitView is MainSidebarSplitViewMarker else { return true }
+        return (splitView.arrangedSubviews.first?.frame.width ?? 0) > 1
     }
 
 #if DEBUG

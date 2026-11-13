@@ -22,8 +22,9 @@ enum SidebarWidthPolicy {
     }
 }
 
-/// Marks the main window's sidebar split so Programa's own divider walkers
-/// (`WindowTerminalHostView`, `SplitDividerOverlayView`) leave its divider to AppKit.
+/// Marks the main window's sidebar split so Programa's own divider walkers leave its divider
+/// to AppKit: `SplitDividerOverlayView` does not draw it, and `WindowTerminalHostView` only
+/// passes presses on it through the terminal portal.
 protocol MainSidebarSplitViewMarker: AnyObject {}
 
 final class MainSidebarSplitView: NSSplitView, MainSidebarSplitViewMarker {
@@ -62,6 +63,11 @@ final class MainSidebarSplitViewController: NSSplitViewController {
     private var isApplyingWidth = false
     private var isReapplyScheduled = false
     private var lastSplitWidth: CGFloat = 0
+    /// Receives the sidebar column's distance from the window's top edge when it changes.
+    /// The floating system sidebar on macOS 26 sits inset; earlier versions report 0.
+    var onSidebarTopInsetChange: ((CGFloat) -> Void)?
+    private var reportedSidebarTopInset: CGFloat?
+    private var isTopInsetMeasurementScheduled = false
     /// Collapse animations whose completion has not run; released in deinit so a window
     /// closed mid-animation cannot leave the global portal resize counter raised.
     private var pendingAnimations = 0
@@ -108,6 +114,15 @@ final class MainSidebarSplitViewController: NSSplitViewController {
         collapseObservation = sidebarItem.observe(\.isCollapsed, options: [.new]) { [weak self] item, _ in
             MainActor.assumeIsolated { self?.sidebarItemCollapseDidChange(item.isCollapsed) }
         }
+        // The sidebar's glass container resizes the column after this controller's own layout
+        // pass when the window grows, so the column's frame changes are what settle the inset.
+        sidebarHost.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(sidebarHostFrameDidChange(_:)),
+            name: NSView.frameDidChangeNotification,
+            object: sidebarHost
+        )
     }
 
     @available(*, unavailable)
@@ -154,6 +169,7 @@ final class MainSidebarSplitViewController: NSSplitViewController {
     override func viewDidLayout() {
         super.viewDidLayout()
         guard let state = sidebarState, view.window != nil, view.bounds.width > 0 else { return }
+        scheduleSidebarTopInsetMeasurement()
         if !didApplyInitialWidth {
             didApplyInitialWidth = true
             updateMaximumThickness(availableWidth: view.bounds.width)
@@ -168,6 +184,31 @@ final class MainSidebarSplitViewController: NSSplitViewController {
             self.isReapplyScheduled = false
             self.reapplyWidthIfNeeded()
         }
+    }
+
+    /// Measured on the next turn, after the whole layout pass: mid-pass, while the window grows,
+    /// the sidebar's glass container can still hold its old frame and report a larger inset;
+    /// the column's own frame change when it catches up measures again.
+    @objc private func sidebarHostFrameDidChange(_ notification: Notification) {
+        scheduleSidebarTopInsetMeasurement()
+    }
+
+    private func scheduleSidebarTopInsetMeasurement() {
+        guard !isTopInsetMeasurementScheduled else { return }
+        isTopInsetMeasurementScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isTopInsetMeasurementScheduled = false
+            self.reportSidebarTopInsetIfChanged()
+        }
+    }
+
+    private func reportSidebarTopInsetIfChanged() {
+        guard let window = view.window, !sidebarItem.isCollapsed, sidebarHost.bounds.height > 0 else { return }
+        let inset = max(0, window.frame.height - sidebarHost.convert(sidebarHost.bounds, to: nil).maxY)
+        if let reported = reportedSidebarTopInset, abs(reported - inset) <= 0.5 { return }
+        reportedSidebarTopInset = inset
+        onSidebarTopInsetChange?(inset)
     }
 
     private func needsWidthReapply(_ state: SidebarState) -> Bool {
@@ -304,6 +345,7 @@ struct MainSidebarSplitRepresentable: NSViewControllerRepresentable {
     let content: AnyView
     let contentInputs: AnyHashable
     let sidebarState: SidebarState
+    let onSidebarTopInsetChange: (CGFloat) -> Void
 
     final class Coordinator {
         var sidebarInputs: AnyHashable?
@@ -315,6 +357,7 @@ struct MainSidebarSplitRepresentable: NSViewControllerRepresentable {
     func makeNSViewController(context: Context) -> MainSidebarSplitViewController {
         let controller = MainSidebarSplitViewController(sidebar: sidebar, content: content)
         controller.bind(to: sidebarState)
+        controller.onSidebarTopInsetChange = onSidebarTopInsetChange
         context.coordinator.sidebarInputs = sidebarInputs
         context.coordinator.contentInputs = contentInputs
         return controller
