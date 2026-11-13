@@ -114,6 +114,15 @@ final class MainSidebarSplitViewController: NSSplitViewController {
         collapseObservation = sidebarItem.observe(\.isCollapsed, options: [.new]) { [weak self] item, _ in
             MainActor.assumeIsolated { self?.sidebarItemCollapseDidChange(item.isCollapsed) }
         }
+        // The sidebar's glass container resizes the column after this controller's own layout
+        // pass when the window grows, so the column's frame changes are what settle the inset.
+        sidebarHost.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(sidebarHostFrameDidChange(_:)),
+            name: NSView.frameDidChangeNotification,
+            object: sidebarHost
+        )
     }
 
     @available(*, unavailable)
@@ -178,7 +187,12 @@ final class MainSidebarSplitViewController: NSSplitViewController {
     }
 
     /// Measured on the next turn, after the whole layout pass: mid-pass, while the window grows,
-    /// the sidebar's glass container can still hold its old frame and report a larger inset.
+    /// the sidebar's glass container can still hold its old frame and report a larger inset;
+    /// the column's own frame change when it catches up measures again.
+    @objc private func sidebarHostFrameDidChange(_ notification: Notification) {
+        scheduleSidebarTopInsetMeasurement()
+    }
+
     private func scheduleSidebarTopInsetMeasurement() {
         guard !isTopInsetMeasurementScheduled else { return }
         isTopInsetMeasurementScheduled = true
