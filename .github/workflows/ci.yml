@@ -463,7 +463,8 @@ jobs:
   # that name, not on this one.
   unit-tests-shard:
     needs: change-detection
-    if: needs.change-detection.outputs.run_app_jobs == 'true'
+    # Skipped on pushes to main: the PR already ran this suite on the same code.
+    if: github.event_name != 'push' && needs.change-detection.outputs.run_app_jobs == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -739,8 +740,13 @@ jobs:
           DETECTION_RESULT: ${{ needs.change-detection.result }}
           RUN_APP_JOBS: ${{ needs.change-detection.outputs.run_app_jobs }}
           SHARD_RESULT: ${{ needs.unit-tests-shard.result }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           if [[ "$SHARD_RESULT" == "success" ]]; then
+            exit 0
+          fi
+          if [[ "$SHARD_RESULT" == "skipped" && "$EVENT_NAME" == "push" && "$DETECTION_RESULT" == "success" ]]; then
+            echo "unit-tests-shard skipped: push to main, already run on the PR"
             exit 0
           fi
           if [[ "$SHARD_RESULT" == "skipped" && "$DETECTION_RESULT" == "success" && "$RUN_APP_JOBS" != "true" ]]; then
@@ -754,7 +760,8 @@ jobs:
     needs:
       - build-app
       - change-detection
-    if: needs.change-detection.outputs.run_app_jobs == 'true'
+    # Skipped on pushes to main: the PR already ran this suite on the same code.
+    if: github.event_name != 'push' && needs.change-detection.outputs.run_app_jobs == 'true'
     # Matches build-app's runner OS: the artifact is a Debug binary built
     # against the macOS 26 SDK (Liquid Glass), so it must run on the same
     # OS version it was built for.
