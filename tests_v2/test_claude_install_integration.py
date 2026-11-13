@@ -3,7 +3,7 @@
 
 Runs entirely against the CLI binary with no app/socket involved — the `claude`
 command branch is dispatched before any socket connection is opened. Exercises:
-- Fresh install: writes all six lifecycle hook events into settings.json.
+- Fresh install: writes every lifecycle hook event in EXPECTED_EVENTS into settings.json.
 - Idempotency: a second install run makes no further changes.
 - Preservation: unrelated user hooks and other event keys are left alone; a
   stale programa entry is replaced (not duplicated) on reinstall.
@@ -80,7 +80,7 @@ def test_fresh_install(cli: str) -> None:
                 f"expected a '{CLAUDE_HOOK_MARKER}' command for {event}, got: {commands}",
             )
 
-        print("  PASS: fresh install writes all six lifecycle hook events")
+        print("  PASS: fresh install writes every lifecycle hook event")
 
 
 def test_idempotent_reinstall(cli: str) -> None:
@@ -103,14 +103,13 @@ def test_idempotent_reinstall(cli: str) -> None:
 def test_preserves_user_hooks_and_replaces_stale_entry(cli: str) -> None:
     with tempfile.TemporaryDirectory() as config_dir:
         settings_path = Path(config_dir) / "settings.json"
+        user_post_tool_group = {
+            "matcher": "Bash",
+            "hooks": [{"type": "command", "command": "echo user-post-tool-hook"}],
+        }
         seed = {
             "hooks": {
-                "PostToolUse": [
-                    {
-                        "matcher": "Bash",
-                        "hooks": [{"type": "command", "command": "echo user-post-tool-hook"}],
-                    }
-                ],
+                "PostToolUse": [user_post_tool_group],
                 "SessionStart": [
                     {
                         "matcher": "",
@@ -137,11 +136,24 @@ def test_preserves_user_hooks_and_replaces_stale_entry(cli: str) -> None:
         data = json.loads(settings_path.read_text(encoding="utf-8"))
         hooks = data.get("hooks", {})
 
-        # Unrelated event untouched.
-        post_tool_commands = _hooks_commands(hooks, "PostToolUse")
+        # PostToolUse: Programa installs its own hook there too, so the user's group must
+        # survive verbatim (matcher included) next to exactly one programa group.
+        post_tool_groups = hooks.get("PostToolUse", [])
+        post_tool_user_groups = [
+            g for g in post_tool_groups
+            if not all(CLAUDE_HOOK_MARKER in h.get("command", "") for h in g.get("hooks", []))
+        ]
+        post_tool_programa_groups = [
+            g for g in post_tool_groups
+            if all(CLAUDE_HOOK_MARKER in h.get("command", "") for h in g.get("hooks", []))
+        ]
         _must(
-            post_tool_commands == ["echo user-post-tool-hook"],
-            f"PostToolUse should be preserved verbatim, got: {post_tool_commands}",
+            post_tool_user_groups == [user_post_tool_group],
+            f"user PostToolUse group should be preserved verbatim, got: {post_tool_groups}",
+        )
+        _must(
+            len(post_tool_programa_groups) == 1,
+            f"expected exactly 1 programa PostToolUse group, got: {post_tool_groups}",
         )
 
         # SessionStart: user's custom hook preserved, stale programa entry replaced
