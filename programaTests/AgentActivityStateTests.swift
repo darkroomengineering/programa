@@ -1236,6 +1236,45 @@ final class AgentActivityStateTests: XCTestCase {
         }
     }
 
+    /// A sidebar reset ends every agent at once; each ending is as trusted as the agent it ends,
+    /// and routes see the route view's state as the previous one.
+    func testASidebarResetHandsRoutesTheTrustOfEachAgent() throws {
+        let f = try promptGateFixture()
+        let printed = try routeEvents {
+            f.drain([try osc(.working, "app=forged")])
+            f.workspace.resetSidebarContext()
+        }
+        XCTAssertEqual(states(printed), ["working trusted=false", "none trusted=false"])
+
+        let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
+        let hooks = try routeEvents {
+            f.workspace.updatePanelAgentState(panelId: f.panelId, state: .working, source: .hooks, sessionKey: key)
+            f.drain([try osc(.idle, "app=claude")])
+            f.workspace.resetSidebarContext()
+        }
+        XCTAssertEqual(states(hooks), ["working trusted=true", "none trusted=true"])
+        XCTAssertEqual(hooks.last?.fields["previous_state"], "working", "routes saw the hooks' working, not the badge's idle")
+    }
+
+    /// Closing a terminal ends its agent the same way.
+    func testFinalizingAClosedTerminalHandsRoutesTheTrustOfItsAgent() throws {
+        let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
+        for hooked in [false, true] {
+            let workspace = Workspace()
+            defer { workspace.teardownAllPanels() }
+            let first = try XCTUnwrap(workspace.focusedPanelId)
+            let panel = try XCTUnwrap(workspace.newTerminalSplit(from: first, orientation: .horizontal, focus: false))
+            if hooked {
+                workspace.updatePanelAgentState(panelId: panel.id, state: .working, source: .hooks, sessionKey: key)
+            }
+            workspace.updatePanelAgentState(panelId: panel.id, state: .idle, source: .program, programState: .idle)
+            let transfer = try XCTUnwrap(workspace.detachSurface(panelId: panel.id))
+            let events = routeEvents { transfer.finalizePermanently() }
+            XCTAssertEqual(states(events), ["none trusted=\(hooked)"], "hooked=\(hooked)")
+            XCTAssertEqual(events.last?.fields["previous_state"], hooked ? "working" : "idle", "hooked=\(hooked)")
+        }
+    }
+
     func testScreenInferenceHandsRoutesUntrustedFrames() throws {
         let f = try promptGateFixture()
         let events = routeEvents {
