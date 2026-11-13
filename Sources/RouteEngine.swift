@@ -134,8 +134,9 @@ final class RouteEngine {
     private let modelFields: @MainActor (RouteEvent) -> [String: String]
     /// Runs actions fired while an `agent.needs_input` call is ingested, after that call's hop.
     private let deferWork: @MainActor (@escaping @MainActor () -> Void) -> Void
-    /// Surface ids whose agent is `blocked` right now.
-    private let blockedSurfaces: @MainActor () -> [String]
+    /// Surfaces whose agent is `blocked` right now, each with the writer of its route view (nil
+    /// when the view names none).
+    private let blockedSurfaces: @MainActor () -> [(id: String, writer: String?)]
     /// Collects fires instead of running them, while `ingestNeedsInput` holds the hop.
     private var deferredFires: [RouteFire]?
 
@@ -160,7 +161,7 @@ final class RouteEngine {
         scheduleWake: @escaping @MainActor (Date, @escaping @MainActor () -> Void) -> Void = RouteEngine.scheduleOnMain(at:_:),
         modelFields: @escaping @MainActor (RouteEvent) -> [String: String] = RouteEngine.resolveModelFields(for:),
         deferWork: @escaping @MainActor (@escaping @MainActor () -> Void) -> Void = RouteEngine.runOnMainLater(_:),
-        blockedSurfaces: @escaping @MainActor () -> [String] = RouteEngine.blockedSurfaceIds
+        blockedSurfaces: @escaping @MainActor () -> [(id: String, writer: String?)] = RouteEngine.blockedSurfaceWriters
     ) {
         self.tap = tap
         self.now = now
@@ -215,10 +216,10 @@ final class RouteEngine {
         let cancelled = Array(deliveries.values)
         deliveries = [:]
         gates = [:]
-        // Stops from before this install were never seen: a surface blocked now waits for the
-        // program's own `working`, the only report that needs no record of the stop.
+        // Stops from before this install were never seen: a surface blocked now waits for a
+        // `working` from its route view's writer, or from the program when the view names none.
         agentTracks = Dictionary(
-            blockedSurfaces().map { ($0, AgentTrack(resume: .awaitingWorking(from: nil, since: nil))) },
+            blockedSurfaces().map { ($0.id, AgentTrack(resume: .awaitingWorking(from: $0.writer, since: nil))) },
             uniquingKeysWith: { first, _ in first }
         )
         generation &+= 1
@@ -525,11 +526,19 @@ final class RouteEngine {
 
     // MARK: - Production seams
 
-    static func blockedSurfaceIds() -> [String] {
+    static func blockedSurfaceWriters() -> [(id: String, writer: String?)] {
         guard let contexts = AppDelegate.shared?.mainWindowContexts.values else { return [] }
         return contexts.flatMap { $0.tabManager.tabs }.flatMap { workspace in
-            // The route view when there is one: an unsigned OSC 7501 report can own the badge.
-            workspace.panelAgentPresence.filter { ($0.value.route?.state ?? $0.value.state) == .blocked }.keys.map(\.uuidString)
+            // The route view when there is one: an unsigned OSC 7501 report can own the badge, so
+            // the writer never comes from the presence itself.
+            workspace.panelAgentPresence.compactMap { entry -> (id: String, writer: String?)? in
+                let route = entry.value.route
+                guard (route?.state ?? entry.value.state) == .blocked else { return nil }
+                let writer = route.flatMap {
+                    RouteEvent.writer(source: $0.source, sessionKey: $0.sessionKey, programVerified: $0.source == .program)
+                }
+                return (id: entry.key.uuidString, writer: writer)
+            }
         }
     }
 
