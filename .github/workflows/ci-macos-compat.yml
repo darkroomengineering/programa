@@ -8,7 +8,7 @@ concurrency:
 # already runs the full unit suite on macos-26 for every PR, so this only adds
 # the oldest supported runner (macos-15), and a break there is caught by the
 # next morning. The changes job skips the macOS run when nothing it covers
-# changed since the previous night.
+# changed since the last successful run.
 on:
   schedule:
     - cron: "0 6 * * *"
@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   changes:
@@ -25,20 +26,28 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          fetch-depth: 200
+          fetch-depth: 0
       - id: check
         env:
           EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [[ "$EVENT_NAME" != "schedule" ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if git log --since=25.hours --format=%H -- 'Sources/**' 'CLI/**' 'CLI-MCP/**' 'daemon/**' 'programaTests/**' 'vendor/**' 'scripts/**' '.github/workflows/ci-macos-compat.yml' 'GhosttyTabs.xcodeproj/**' 'ghostty' 'ghostty/**' '.gitmodules' | grep -q .; then
+          # Diff against the last successful run, not a time window:
+          # merge commits keep their branch commits' old dates, and a missed
+          # schedule would otherwise leave a gap.
+          base="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci-macos-compat.yml --branch main --status success --limit 1 --json headSha --jq '.[0].headSha // empty')"
+          if [[ -z "$base" ]] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "No verified baseline; running."
             echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "No covered paths changed in the last 25 hours; skipping."
+          elif git diff --quiet "$base" HEAD -- 'Sources/**' 'CLI/**' 'CLI-MCP/**' 'daemon/**' 'programaTests/**' 'vendor/**' 'scripts/**' '.github/workflows/ci-macos-compat.yml' 'GhosttyTabs.xcodeproj/**' 'ghostty' '.gitmodules'; then
+            echo "No covered paths changed since $base; skipping."
             echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
           fi
 
   compat-tests:
