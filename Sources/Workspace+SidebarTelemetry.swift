@@ -271,6 +271,7 @@ extension Workspace {
         inferredAgent: String? = nil,
         programState: ProgramStatusState? = nil,
         promptKind: ProgramStatusKind? = nil,
+        programVerified: Bool = false,
         at now: Date = Date()
     ) {
         let current = panelAgentPresence[panelId]

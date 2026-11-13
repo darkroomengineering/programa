@@ -27,6 +27,28 @@ enum ProgramStatusKind: String, Sendable {
     case permission, question, auth
 }
 
+/// The per-surface secret that tells Programa's own reports apart from bytes any program in the
+/// terminal can print.
+enum ProgramStatusToken {
+    static let environmentKey = "PROGRAMA_STATUS_TOKEN"
+    static let reportKey = "programa_token"
+
+    struct Digest: Equatable, Sendable {
+        let bytes: [UInt8]
+    }
+
+    static func digest(of token: String) -> Digest {
+        Digest(bytes: [])
+    }
+}
+
+/// What a report proved about its writer.
+enum ProgramStatusAuthentication: Equatable, Sendable {
+    case verified
+    case unsigned
+    case forged
+}
+
 struct ProgramStatusRecord: Equatable, Sendable {
     /// Empty string is the root record (the program itself).
     var id: String
@@ -100,6 +122,10 @@ struct ProgramStatusReport: Equatable, Sendable {
         return ProgramStatusReport(
             state: state, id: id, kind: kind, progress: progress, app: app, title: title, msg: msg
         )
+    }
+
+    func authentication(against expected: ProgramStatusToken.Digest?) -> ProgramStatusAuthentication {
+        .verified
     }
 
     static func isValidId(_ id: String) -> Bool {

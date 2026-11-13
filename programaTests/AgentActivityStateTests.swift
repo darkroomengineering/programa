@@ -667,7 +667,7 @@ final class AgentActivityStateTests: XCTestCase {
     func testProgramActiveBlocksHooksAndInferredWrites() {
         let workspace = Workspace(title: "Test")
         let panel = UUID()
-        workspace.updatePanelAgentState(panelId: panel, state: .working, source: .program, programState: .working)
+        workspace.updatePanelAgentState(panelId: panel, state: .working, source: .program, programState: .working, programVerified: true)
         workspace.updatePanelAgentState(panelId: panel, state: .blocked, source: .hooks)
         workspace.updatePanelAgentState(panelId: panel, state: .idle, source: .hooks)
         workspace.updatePanelAgentState(panelId: panel, state: .blocked, source: .inferred)
@@ -682,7 +682,7 @@ final class AgentActivityStateTests: XCTestCase {
         defer { AgentResumeStore.shared.forget(panelId: panel) }
         // Programa's own hook writes OSC 7501 `working` to the tty before its socket report,
         // so the program tier owns the panel by the time the session id arrives.
-        workspace.updatePanelAgentState(panelId: panel, state: .working, source: .program, programState: .working)
+        workspace.updatePanelAgentState(panelId: panel, state: .working, source: .program, programState: .working, programVerified: true)
         workspace.updatePanelAgentState(
             panelId: panel,
             state: .working,
@@ -715,7 +715,7 @@ final class AgentActivityStateTests: XCTestCase {
     func testRestingProgramAcceptsOnlyActiveHookClaims() {
         let workspace = Workspace(title: "Test")
         let panel = UUID()
-        workspace.updatePanelAgentState(panelId: panel, state: .idle, source: .program, programState: .done)
+        workspace.updatePanelAgentState(panelId: panel, state: .idle, source: .program, programState: .done, programVerified: true)
         workspace.updatePanelAgentState(panelId: panel, state: .idle, source: .hooks)
         XCTAssertEqual(workspace.panelAgentStateSources[panel], .program)
         XCTAssertEqual(workspace.panelAgentPresence[panel]?.programState, .done)
@@ -730,7 +730,7 @@ final class AgentActivityStateTests: XCTestCase {
         let workspace = Workspace(title: "Test")
         let panel = UUID()
         workspace.updatePanelAgentState(panelId: panel, state: .working, source: .hooks)
-        workspace.updatePanelAgentState(panelId: panel, state: .blocked, source: .program, programState: .blocked)
+        workspace.updatePanelAgentState(panelId: panel, state: .blocked, source: .program, programState: .blocked, programVerified: true)
         XCTAssertEqual(workspace.panelAgentStates[panel], .blocked)
         XCTAssertEqual(workspace.panelAgentStateSources[panel], .program)
     }
@@ -738,7 +738,7 @@ final class AgentActivityStateTests: XCTestCase {
     func testHooksClearIgnoredWhileProgramOwnedAndProgramClearOnlyRemovesProgram() {
         let workspace = Workspace(title: "Test")
         let panel = UUID()
-        workspace.updatePanelAgentState(panelId: panel, state: .working, source: .program, programState: .working)
+        workspace.updatePanelAgentState(panelId: panel, state: .working, source: .program, programState: .working, programVerified: true)
         workspace.clearPanelAgentState(panelId: panel)
         XCTAssertNotNil(workspace.panelAgentPresence[panel])
 
@@ -749,7 +749,7 @@ final class AgentActivityStateTests: XCTestCase {
         workspace.clearPanelAgentState(panelId: panel, source: .program)
         XCTAssertNotNil(workspace.panelAgentPresence[panel])
 
-        workspace.updatePanelAgentState(panelId: panel, state: .working, source: .program, programState: .working)
+        workspace.updatePanelAgentState(panelId: panel, state: .working, source: .program, programState: .working, programVerified: true)
         workspace.clearPanelAgentState(panelId: panel, force: true)
         XCTAssertNil(workspace.panelAgentPresence[panel])
     }
@@ -757,10 +757,10 @@ final class AgentActivityStateTests: XCTestCase {
     func testDoneToErrorFiresPresenceChangeDespiteSameLegacyState() {
         let workspace = Workspace(title: "Test")
         let panel = UUID()
-        workspace.updatePanelAgentState(panelId: panel, state: .idle, source: .program, programState: .done)
+        workspace.updatePanelAgentState(panelId: panel, state: .idle, source: .program, programState: .done, programVerified: true)
         let before = workspace.panelAgentPresence[panel]
         workspace.updatePanelAgentState(
-            panelId: panel, state: .idle, source: .program, programState: .error, at: Date().addingTimeInterval(1)
+            panelId: panel, state: .idle, source: .program, programState: .error, programVerified: true, at: Date().addingTimeInterval(1)
         )
         XCTAssertEqual(workspace.panelAgentPresence[panel]?.programState, .error)
         XCTAssertNotEqual(workspace.panelAgentPresence[panel], before)
@@ -770,8 +770,50 @@ final class AgentActivityStateTests: XCTestCase {
         let workspace = Workspace(title: "Test")
         let panel = UUID()
         let longAgo = Date().addingTimeInterval(-3600)
-        workspace.updatePanelAgentState(panelId: panel, state: .working, source: .program, programState: .working, at: longAgo)
+        workspace.updatePanelAgentState(panelId: panel, state: .working, source: .program, programState: .working, programVerified: true, at: longAgo)
         XCTAssertEqual(workspace.panelAgentPresence[panel]?.isStale(now: Date()), false)
+    }
+
+    /// INC-1057: an OSC 7501 report without the surface's token (Claude Code's own status, or
+    /// bytes printed by anything in the terminal) still shows, but ranks below hooks and names no
+    /// writer, so route text never goes out on its word.
+    func testUnsignedProgramReportsRankBelowHooksAndNameNoWriter() {
+        let workspace = Workspace(title: "Test")
+        let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
+
+        // Claude Code 2.1.295+: its tokenless status interleaves with its hooks' socket reports.
+        let claude = UUID()
+        workspace.updatePanelAgentState(panelId: claude, state: .working, source: .hooks, sessionKey: key)
+        workspace.updatePanelAgentState(panelId: claude, state: .idle, source: .program, programState: .done)
+        workspace.updatePanelAgentState(panelId: claude, state: .working, source: .program, programState: .working)
+        XCTAssertEqual(workspace.panelAgentStateSources[claude], .hooks, "an unsigned report cannot take a hooks surface")
+        XCTAssertEqual(workspace.panelAgentStates[claude], .working)
+        XCTAssertEqual(workspace.panelAgentPresence[claude]?.sessionKey, key)
+        XCTAssertTrue(workspace.agentWriterIdentified(panelId: claude))
+        workspace.updatePanelAgentState(panelId: claude, state: .idle, source: .hooks, sessionKey: key)
+        XCTAssertEqual(workspace.panelAgentStates[claude], .idle, "the Stop hook still ends the turn")
+        XCTAssertEqual(workspace.panelAgentStateSources[claude], .hooks)
+
+        // Nothing else reports: the unsigned report shows, without a writer, until hooks speak.
+        let bare = UUID()
+        workspace.updatePanelAgentState(panelId: bare, state: .working, source: .program, programState: .working)
+        XCTAssertEqual(workspace.panelAgentStateSources[bare], .program)
+        XCTAssertEqual(workspace.panelAgentPresence[bare]?.programState, .working)
+        XCTAssertFalse(workspace.agentWriterIdentified(panelId: bare))
+        workspace.updatePanelAgentState(panelId: bare, state: .idle, source: .hooks, sessionKey: key)
+        XCTAssertEqual(workspace.panelAgentStateSources[bare], .hooks, "hooks outrank an unsigned report")
+        XCTAssertTrue(workspace.agentWriterIdentified(panelId: bare))
+
+        // A signed report names the program, and an unsigned one cannot replace it.
+        let signed = UUID()
+        workspace.updatePanelAgentState(
+            panelId: signed, state: .working, source: .program, programState: .working, programVerified: true
+        )
+        XCTAssertTrue(workspace.agentWriterIdentified(panelId: signed))
+        workspace.updatePanelAgentState(panelId: signed, state: .working, source: .program, programState: .working)
+        workspace.updatePanelAgentState(panelId: signed, state: .idle, source: .program, programState: .done)
+        XCTAssertEqual(workspace.panelAgentStates[signed], .working)
+        XCTAssertTrue(workspace.agentWriterIdentified(panelId: signed))
     }
 }
 

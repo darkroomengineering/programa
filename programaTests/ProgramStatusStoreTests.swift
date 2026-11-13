@@ -102,6 +102,27 @@ final class ProgramStatusStoreTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(parse(.working, "progress= 40 ")).progress, 40)
     }
 
+    /// INC-1057: only the surface's own token verifies a report. A wrong token is a forgery; no
+    /// token, a malformed one, or a surface whose token Programa no longer knows (a shell revived
+    /// without its snapshot) leaves the report unsigned. A clear is checked the same way.
+    func testReportAuthenticationAgainstTheSurfaceToken() throws {
+        let token = "9d2b7e41c0f35a68b1e4d7c2a9f06e3b"
+        let surface = ProgramStatusToken.digest(of: token)
+        func authentication(_ state: ProgramStatusState?, _ body: String, _ expected: ProgramStatusToken.Digest?) throws
+            -> ProgramStatusAuthentication {
+            try XCTUnwrap(parse(state, body)).authentication(against: expected)
+        }
+        XCTAssertEqual(try authentication(.working, "programa_token=\(token)", surface), .verified)
+        XCTAssertEqual(try authentication(nil, "id=a: programa_token = \(token) ", surface), .verified)
+        XCTAssertEqual(try authentication(.idle, "programa_token=ffffffffffffffffffffffffffffffff", surface), .forged)
+        XCTAssertEqual(try authentication(.idle, "programa_token=\(token):programa_token=x", surface), .forged)
+        XCTAssertEqual(try authentication(.idle, "app=claude-code", surface), .unsigned)
+        XCTAssertEqual(try authentication(.idle, "programa_token=", surface), .unsigned)
+        XCTAssertEqual(try authentication(.idle, "programa_token=\(token)\(token)", surface), .unsigned)
+        XCTAssertEqual(try authentication(.idle, "programa_token=\(token)", nil), .unsigned)
+        XCTAssertNotEqual(ProgramStatusToken.digest(of: token), ProgramStatusToken.digest(of: String(token.reversed())))
+    }
+
     // MARK: Store
 
     func testApplyUpsertsRootAndProjectsLegacyState() throws {

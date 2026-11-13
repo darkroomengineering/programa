@@ -19,7 +19,7 @@ struct RouteEvent: Sendable, Equatable {
     /// from the presence it updates (a report without a key keeps the key an earlier report set).
     /// OSC 7501 is the program in the terminal; a hooks report is identified only by its session
     /// id. Screen inference and keyless hooks reports have no writer.
-    static func writer(source: AgentStateSource?, sessionKey: AgentSessionKey?) -> String? {
+    static func writer(source: AgentStateSource?, sessionKey: AgentSessionKey?, programVerified: Bool = false) -> String? {
         switch source {
         case .program:
             return "program"

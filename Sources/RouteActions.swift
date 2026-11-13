@@ -487,14 +487,7 @@ private struct LiveRouteAgentTarget: RouteAgentTarget {
     var canAutoSubmit: Bool { workspace.canAutoSubmitToAgent(panelId: panel.id) }
     var promptHoldKind: String? { panel.surface.activePromptHold()?.kind.rawValue }
     var hasDraftHold: Bool { panel.surface.activeDraftHold() != nil }
-    var writerIdentified: Bool {
-        guard let presence = workspace.panelAgentPresence[panel.id] else { return false }
-        switch presence.source {
-        case .program: return true
-        case .hooks: return !(presence.sessionKey?.sessionId ?? "").isEmpty
-        case .inferred: return false
-        }
-    }
+    var writerIdentified: Bool { workspace.agentWriterIdentified(panelId: panel.id) }
 
     func deliver(_ text: String, submit: Bool) {
         if submit {
@@ -504,6 +497,19 @@ private struct LiveRouteAgentTarget: RouteAgentTarget {
             panel.surface.forceRefresh(reason: "route.send")
         }
         panel.surface.noteDraftEvent(.socketWriteDelivered)
+    }
+}
+
+extension Workspace {
+    /// Whether the panel's agent state comes from a reporter that names itself (see
+    /// `RouteAgentTarget.writerIdentified`).
+    func agentWriterIdentified(panelId: UUID) -> Bool {
+        guard let presence = panelAgentPresence[panelId] else { return false }
+        switch presence.source {
+        case .program: return true
+        case .hooks: return !(presence.sessionKey?.sessionId ?? "").isEmpty
+        case .inferred: return false
+        }
     }
 }
 

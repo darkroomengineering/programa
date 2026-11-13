@@ -582,6 +582,62 @@ final class RouteEngineTests: XCTestCase {
         XCTAssertEqual(executor.wentIdle, [fire])
     }
 
+    /// An OSC 7501 report as the drain hands it on: the bytes after `7501;` parsed, checked against
+    /// the surface's token, dropped when the token is wrong, and otherwise reported with the writer
+    /// a program report gets. Nil when the report never reaches the routes.
+    private func programReport(
+        _ state: ProgramStatusState,
+        _ body: String,
+        surfaceToken: ProgramStatusToken.Digest,
+        previous: String
+    ) -> RouteEvent? {
+        guard let report = ProgramStatusReport.parse(state: state, body: Data(body.utf8)) else { return nil }
+        let authentication = report.authentication(against: surfaceToken)
+        guard authentication != .forged else { return nil }
+        let writer = RouteEvent.writer(source: .program, sessionKey: nil, programVerified: authentication == .verified)
+        return agentState(surface: "S1", state: state.legacyAgentState.rawValue, previous: previous, writer: writer)
+    }
+
+    /// INC-1057: a working-then-idle pair printed into the terminal (a file preview with raw ESC in
+    /// an agent's permission dialog) must not release held route text, whose Return would answer
+    /// the dialog. Only the surface's own token makes a program report count.
+    func testForgedProgramReportsCannotReleaseHeldRouteText() throws {
+        let token = "4f1c0a9e7b3d52e8a6c1f0d9b2e7a3c5"
+        let surfaceToken = ProgramStatusToken.digest(of: token)
+        let executor = RecordingExecutor()
+        let engine = makeEngine()
+        engine.executor = executor
+        try install(#"{ "name": "s", "on": "agent/+/state/working", "send": { "text": "1" } }"#, on: engine)
+
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "idle", writer: agent))
+        let fire = try XCTUnwrap(executor.fires.first)
+
+        let forgeries: [(working: String, idle: String)] = [
+            ("app=claude-code", "app=claude-code"),
+            ("programa_token=00000000000000000000000000000000", "programa_token=00000000000000000000000000000000"),
+            ("programa_token=\(token.dropLast())", "programa_token=\(token)0"),
+        ]
+        for forgery in forgeries {
+            if let event = programReport(.working, forgery.working, surfaceToken: surfaceToken, previous: "working") {
+                engine.ingest(event)
+            }
+            if let event = programReport(.idle, forgery.idle, surfaceToken: surfaceToken, previous: "working") {
+                engine.ingest(event)
+            }
+            XCTAssertEqual(executor.wentIdle, [], "a forged pair (\(forgery.working)) released the held text")
+        }
+
+        let working = try XCTUnwrap(programReport(
+            .working, "app=codex:programa_token=\(token)", surfaceToken: surfaceToken, previous: "working"
+        ))
+        let idle = try XCTUnwrap(programReport(
+            .idle, "programa_token=\(token):app=codex", surfaceToken: surfaceToken, previous: "working"
+        ))
+        engine.ingest(working)
+        engine.ingest(idle)
+        XCTAssertEqual(executor.wentIdle, [fire], "the surface's own token makes the pair count")
+    }
+
     func testAPermissionPromptHoldsDeliveriesUntilItsWriterWorksAgain() throws {
         let executor = RecordingExecutor()
         let engine = makeEngine()
