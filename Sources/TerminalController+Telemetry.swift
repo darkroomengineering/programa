@@ -167,8 +167,11 @@ extension TerminalController {
             return .err(code: "invalid_params", message: "path must be absolute, without . or .. components", data: nil)
         }
 
+        // Off main: resolving touches the file system, which can stall on a network mount. A path
+        // from a shell behind the SSH relay may not exist here and then resolves to nothing.
+        let resolved = RouteEngine.canonicalDirectory(path)
         v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { tabManager, _, sid in
-            tabManager.updateSurfaceDirectory(tabId: workspaceId, surfaceId: sid, directory: path)
+            tabManager.updateSurfaceDirectory(tabId: workspaceId, surfaceId: sid, directory: path, resolvedForRoutes: resolved)
         }
 
         return .ok([
@@ -538,7 +541,8 @@ extension TerminalController {
             SocketEventBroadcaster.shared.publishNeedsInput(
                 workspaceId: workspaceId,
                 surfaceId: sid,
-                payload: payload
+                payload: payload,
+                writer: RouteEvent.writer(source: .hooks, sessionKey: sessionKey)
             )
 
             _ = try? AgentSupervisionRegistry.shared.updateActiveSurface(

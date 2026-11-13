@@ -2346,11 +2346,13 @@ class GhosttyApp {
             // serial queue; serial-then-main keeps each terminal's updates in order.
             Self.reportedDirectoryValidationQueue.async {
                 guard let pwd = Self.validatedReportedDirectory(reportedPwd) else { return }
+                let resolved = RouteEngine.canonicalDirectory(pwd)
                 DispatchQueue.main.async {
                     AppDelegate.shared?.tabManagerFor(tabId: tabId)?.updateSurfaceDirectory(
                         tabId: tabId,
                         surfaceId: surfaceId,
-                        directory: pwd
+                        directory: pwd,
+                        resolvedForRoutes: resolved
                     )
                 }
             }

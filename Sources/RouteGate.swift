@@ -52,8 +52,9 @@ enum RouteDelivery: Sendable, Equatable {
     case running
     /// `send`/`prompt`: the text has not reached the agent yet.
     case waitingForIdle(RouteEvent)
-    /// `prompt` delivered: the turn it started is open.
-    case ownTurn
+    /// `prompt` delivered: the turn it started is open. Only an idle after a `working` report in
+    /// this turn ends it, so an idle left over from before the prompt cannot.
+    case ownTurn(sawWorking: Bool)
 }
 
 enum RouteGateInput: Sendable, Equatable {
@@ -62,6 +63,8 @@ enum RouteGateInput: Sendable, Equatable {
     case deliveryEnded(now: Date)
     /// A `prompt` was submitted: the delivery now waits for the turn it started to end.
     case turnStarted
+    /// The surface reported `working` during a prompt's own turn.
+    case turnWorking
 }
 
 enum RouteCounter: String, Sendable, Equatable {
@@ -90,7 +93,7 @@ enum RouteGate {
         switch (state, input) {
         case (nil, .matched(let event, let now)):
             return admit(event, now: now, cooldownUntil: nil, route: route)
-        case (nil, .wake), (nil, .deliveryEnded), (nil, .turnStarted):
+        case (nil, .wake), (nil, .deliveryEnded), (nil, .turnStarted), (nil, .turnWorking):
             return (nil, [])
 
         case (.debouncing(_, _, let cooldownUntil), .matched(let event, let now)):
@@ -105,7 +108,7 @@ enum RouteGate {
                 return (.coolingDown(until: cooldownUntil), [.count(.throttled), .wake(at: cooldownUntil)])
             }
             return fire(pending, now: now, route: route)
-        case (.debouncing, .deliveryEnded), (.debouncing, .turnStarted):
+        case (.debouncing, .deliveryEnded), (.debouncing, .turnStarted), (.debouncing, .turnWorking):
             return (state, [])
 
         case (.coolingDown(let until), .matched(let event, let now)):
@@ -118,7 +121,7 @@ enum RouteGate {
             return (state, [.count(.throttled)])
         case (.coolingDown(let until), .wake(let now)):
             return now >= until ? (nil, []) : (state, [])
-        case (.coolingDown, .deliveryEnded), (.coolingDown, .turnStarted):
+        case (.coolingDown, .deliveryEnded), (.coolingDown, .turnStarted), (.coolingDown, .turnWorking):
             return (state, [])
 
         case (.delivering, .matched):
@@ -130,8 +133,10 @@ enum RouteGate {
             let (next, effects) = settle(cooldownUntil: cooldownUntil, now: now)
             return (next, [.cancelDelivery, .count(.expired)] + effects)
         case (.delivering(.waitingForIdle, let expiresAt, let cooldownUntil), .turnStarted):
-            return (.delivering(.ownTurn, expiresAt: expiresAt, cooldownUntil: cooldownUntil), [])
-        case (.delivering, .turnStarted):
+            return (.delivering(.ownTurn(sawWorking: false), expiresAt: expiresAt, cooldownUntil: cooldownUntil), [])
+        case (.delivering(.ownTurn(sawWorking: false), let expiresAt, let cooldownUntil), .turnWorking):
+            return (.delivering(.ownTurn(sawWorking: true), expiresAt: expiresAt, cooldownUntil: cooldownUntil), [])
+        case (.delivering, .turnStarted), (.delivering, .turnWorking):
             return (state, [])
         }
     }

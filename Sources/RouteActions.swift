@@ -78,6 +78,9 @@ protocol RouteAgentTarget {
     var promptHoldKind: String? { get }
     /// A person has unsent typed input.
     var hasDraftHold: Bool { get }
+    /// The agent's state comes from a reporter that names itself: OSC 7501 from the program, or
+    /// hooks reports that carry a session id. Screen inference and keyless hooks reports do not.
+    var writerIdentified: Bool { get }
     /// One paste, plus Return when `submit` is true.
     func deliver(_ text: String, submit: Bool)
 }
@@ -95,6 +98,7 @@ struct RouteActionEnvironment {
     var offMain: (@escaping @Sendable () -> Void) -> Void
     var onMain: @Sendable (@escaping @MainActor @Sendable () -> Void) -> Void
     var loginShell: () -> String
+    var now: @MainActor () -> Date = Date.init
 }
 
 /// The one builder of text a route sends to an agent. It substitutes identifier fields only (load
@@ -119,16 +123,26 @@ final class RouteActions: RouteActionExecutor {
     static let shared = RouteActions(environment: .live())
     nonisolated static let maxConcurrentRuns = 4
 
+    private struct QueuedRun {
+        let fire: RouteFire
+        let command: String
+        let engine: RouteEngine
+        let queuedAt: Date
+    }
+
     private let environment: RouteActionEnvironment
-    /// Bounds `run` processes app-wide; `review` does not take a slot.
-    private let runSlots: DispatchSemaphore
+    /// Bounds `run` processes app-wide; `review` does not count.
+    private let maxConcurrentRuns: Int
+    private var runningRuns = 0
+    /// Runs waiting for a slot, oldest first. Waiting holds no thread.
+    private var queuedRuns: [QueuedRun] = []
     /// Workspaces with a route review being opened off main, so two surfaces going idle together
     /// open one panel.
     private var pendingReviews = Set<UUID>()
 
     init(environment: RouteActionEnvironment, maxConcurrentRuns: Int = RouteActions.maxConcurrentRuns) {
         self.environment = environment
-        runSlots = DispatchSemaphore(value: maxConcurrentRuns)
+        self.maxConcurrentRuns = maxConcurrentRuns
     }
 
     func execute(_ fire: RouteFire, engine: RouteEngine) {
@@ -152,9 +166,9 @@ final class RouteActions: RouteActionExecutor {
                 engine.endDelivery(fire, error: "the event's surface is gone")
                 return
             }
-            // `queue` waits for the surface's next idle report: `targetWentIdle`.
+            // `queue` waits for the end of the agent's work: `targetWentIdle`.
             if whenBusy == .queue, target.agentState == .working { return }
-            deliverText(fire, to: target, engine: engine)
+            deliverText(fire, to: target, engine: engine, firedNow: true)
         }
     }
 
@@ -163,10 +177,20 @@ final class RouteActions: RouteActionExecutor {
             engine.endDelivery(fire, error: "the event's surface is gone")
             return
         }
-        deliverText(fire, to: target, engine: engine)
+        deliverText(fire, to: target, engine: engine, firedNow: false)
     }
 
     func cancel(_ fire: RouteFire) {
+        // A run still waiting for a slot is dropped here: its route expired or was reinstalled.
+        if let index = queuedRuns.firstIndex(where: { $0.fire.id == fire.id }) {
+            let queued = queuedRuns.remove(at: index)
+            if queued.engine.isCurrent(fire) {
+                finishRun(fire, failure: .timedOut(fire.route.deliveryTimeout ?? CompiledRoute.defaultDeliveryTimeout), engine: queued.engine)
+            } else {
+                reportStaleRun(fire)
+            }
+            return
+        }
         // SHORTCUT: a cancelled `run` keeps going until it exits or reaches its own timeout,
         // which equals the route's delivery timeout, so only a route reload cancels one early.
         // `send` and `prompt` hold nothing outside the gate, so there is nothing else to stop.
@@ -199,10 +223,12 @@ final class RouteActions: RouteActionExecutor {
         return environment.agentTarget(workspaceId, surfaceId)
     }
 
-    /// Checks and paste in one main hop. A route never answers a prompt or overrides a person's
-    /// draft: either one refuses the delivery. A `prompt` submits only to an agent that can take
-    /// it and then holds its route until the turn ends; anything else ends the delivery at once.
-    private func deliverText(_ fire: RouteFire, to target: any RouteAgentTarget, engine: RouteEngine) {
+    /// Checks and paste in one main hop. Text goes only to an agent whose state reports name their
+    /// writer; a route never answers a prompt or overrides a person's draft. `firedNow` is true
+    /// when the report that fired the route is the one releasing the text. A `prompt` submits only
+    /// to an agent that can take it and then holds its route until the turn ends; anything else
+    /// ends the delivery at once.
+    private func deliverText(_ fire: RouteFire, to target: any RouteAgentTarget, engine: RouteEngine, firedNow: Bool) {
         let template: String
         let wantsSubmit: Bool
         switch fire.route.definition.action {
@@ -210,28 +236,56 @@ final class RouteActions: RouteActionExecutor {
         case .prompt(let text, _): (template, wantsSubmit) = (text, true)
         default: return
         }
-        if let kind = target.promptHoldKind {
-            engine.endDelivery(fire, error: "refused: a \(kind) prompt is showing; nothing was sent")
-            return
-        }
-        if target.hasDraftHold {
-            engine.endDelivery(fire, error: "refused: the surface has unsent typed input; nothing was sent")
+        if let refusal = Self.textRefusal(fire, target: target, engine: engine, firedNow: firedNow) {
+            engine.endDelivery(fire, error: refusal)
             return
         }
         let submit = wantsSubmit && target.canAutoSubmit
         target.deliver(RouteAgentText.render(template, event: fire.event), submit: submit)
         if submit {
-            // SHORTCUT: the own-turn hold stops a route from triggering itself, but two prompt
-            // routes on each other's idle edge still alternate, each at most once per throttleMs.
-            // ceiling: two prompts per throttle window, indefinitely, until someone edits a route.
-            // upgrade: on the first report of such a loop, track route-caused turns per surface
-            // and skip a match whose event a route's own prompt caused.
             engine.turnStarted(fire)
         } else if wantsSubmit {
             engine.endDelivery(fire, error: "pasted without submitting: no agent ready for a prompt")
         } else {
             engine.endDelivery(fire)
         }
+    }
+
+    /// Why text must not go to `target` now, in the order the checks run.
+    private static func textRefusal(
+        _ fire: RouteFire,
+        target: any RouteAgentTarget,
+        engine: RouteEngine,
+        firedNow: Bool
+    ) -> String? {
+        guard target.agentState != nil else {
+            return "refused: the surface has no agent; nothing was sent"
+        }
+        if let kind = target.promptHoldKind {
+            return "refused: a \(kind) prompt is showing; nothing was sent"
+        }
+        if target.hasDraftHold {
+            return "refused: the surface has unsent typed input; nothing was sent"
+        }
+        guard target.writerIdentified else {
+            return "refused: the agent's state reports name no session; nothing was sent"
+        }
+        if let surfaceId = fire.event.fields["surface_id"], let refusal = engine.textDeliveryRefusal(surfaceId: surfaceId) {
+            return refusal
+        }
+        guard firedNow, let surfaceId = fire.event.fields["surface_id"],
+              fire.event.topic.hasPrefix("agent/\(surfaceId)/") else { return nil }
+        // The report releasing the text must name its own writer: a keyless report inherits the
+        // session key of the presence it updates, so the presence alone cannot tell.
+        if fire.event.writer == nil {
+            return "refused: the report that fired this route names no session; nothing was sent"
+        }
+        // A report that both creates the agent's state and fires the route proves nothing about an
+        // agent being there.
+        if fire.event.topic.hasPrefix("agent/\(surfaceId)/state/"), fire.event.fields["previous_state"] == nil {
+            return "refused: the report that fired this route is the first from this agent; nothing was sent"
+        }
+        return nil
     }
 
     // MARK: - review
@@ -266,47 +320,83 @@ final class RouteActions: RouteActionExecutor {
     // MARK: - run
 
     private func run(_ fire: RouteFire, command: String, engine: RouteEngine) {
-        let timeout = fire.route.deliveryTimeout ?? CompiledRoute.defaultDeliveryTimeout
-        let shell = environment.loginShell()
-        let reportedDirectory = fire.event.fields["cwd"]
-        let variables = Self.environmentVariables(for: fire.event)
-        let runCommand = environment.run
-        let onMain = environment.onMain
-        let slots = runSlots
-        environment.offMain {
-            let failure = Self.runWithSlot(
-                slots: slots,
-                timeout: timeout,
-                directory: reportedDirectory,
-                runCommand: { directory, remaining in
-                    runCommand(RouteRunRequest(
-                        shell: shell, command: command, directory: directory, timeout: remaining, environment: variables
-                    ))
-                }
-            )
-            onMain { self.finishRun(fire, failure: failure, engine: engine) }
+        queuedRuns.append(QueuedRun(fire: fire, command: command, engine: engine, queuedAt: environment.now()))
+        startQueuedRuns()
+    }
+
+    /// Starts queued runs while slots are free. Time spent queued counts against each run's
+    /// timeout, so a run that waits too long times out instead of starting late.
+    private func startQueuedRuns() {
+        while runningRuns < maxConcurrentRuns, !queuedRuns.isEmpty {
+            let queued = queuedRuns.removeFirst()
+            guard queued.engine.isCurrent(queued.fire) else {
+                reportStaleRun(queued.fire)
+                continue
+            }
+            let timeout = queued.fire.route.deliveryTimeout ?? CompiledRoute.defaultDeliveryTimeout
+            let remaining = timeout - environment.now().timeIntervalSince(queued.queuedAt)
+            guard remaining > 0 else {
+                finishRun(queued.fire, failure: .timedOut(timeout), engine: queued.engine)
+                continue
+            }
+            launch(queued, timeout: timeout, remaining: remaining)
         }
     }
 
-    /// Waits for a run slot, then runs. The wait counts against the timeout, so a run that never
-    /// gets a slot times out instead of piling up. The directory is resolved again here: it must
-    /// still be an existing directory when the process starts.
-    nonisolated private static func runWithSlot(
-        slots: DispatchSemaphore,
+    private func launch(_ queued: QueuedRun, timeout: TimeInterval, remaining: TimeInterval) {
+        runningRuns += 1
+        let fire = queued.fire
+        let engine = queued.engine
+        let request = RouteRunRequest(
+            shell: environment.loginShell(),
+            command: queued.command,
+            directory: fire.event.fields["cwd"] ?? "",
+            timeout: remaining,
+            environment: Self.environmentVariables(for: fire.event)
+        )
+        let runCommand = environment.run
+        let onMain = environment.onMain
+        environment.offMain {
+            let failure = Self.runResolved(request, timeout: timeout, runCommand: runCommand)
+            onMain {
+                self.runningRuns -= 1
+                self.finishRun(fire, failure: failure, engine: engine)
+                self.startQueuedRuns()
+            }
+        }
+    }
+
+    /// Resolves the directory again just before the spawn: it must still be an existing directory
+    /// when the process starts.
+    nonisolated private static func runResolved(
+        _ request: RouteRunRequest,
         timeout: TimeInterval,
-        directory: String?,
-        runCommand: (_ directory: String, _ remaining: TimeInterval) -> CanonicalSubprocessResult
+        runCommand: (RouteRunRequest) -> CanonicalSubprocessResult
     ) -> RouteRunFailure? {
-        guard let directory = directory.flatMap(RouteEngine.canonicalDirectory) else {
+        guard let directory = RouteEngine.canonicalDirectory(request.directory) else {
             return .launch("the surface's working directory is unknown or does not exist")
         }
-        let start = DispatchTime.now()
-        guard slots.wait(timeout: start + timeout) == .success else { return .timedOut(timeout) }
-        defer { slots.signal() }
-        let waited = TimeInterval(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000_000
-        let remaining = timeout - waited
-        guard remaining > 0 else { return .timedOut(timeout) }
-        return RouteRunFailure(runCommand(directory, remaining), timeout: timeout)
+        var resolved = request
+        resolved.directory = directory
+        return RouteRunFailure(runCommand(resolved), timeout: timeout)
+    }
+
+    /// A queued run whose routes were replaced before it started. Its route's counters went with
+    /// the old routes, so the notification is the only report.
+    private func reportStaleRun(_ fire: RouteFire) {
+        environment.notify(RouteNotification(
+            workspaceId: fire.event.fields["workspace_id"].flatMap(UUID.init(uuidString:)),
+            surfaceId: fire.event.fields["surface_id"].flatMap(UUID.init(uuidString:)),
+            title: String.localizedStringWithFormat(
+                String(localized: "routes.run.failed.title", defaultValue: "Route “%@” failed"),
+                fire.route.name
+            ),
+            subtitle: String(localized: "routes.run.failed.launch", defaultValue: "The command could not start"),
+            body: String(
+                localized: "routes.run.failed.stale",
+                defaultValue: "The routes in programa.json changed before this command could start."
+            )
+        ))
     }
 
     private func finishRun(_ fire: RouteFire, failure: RouteRunFailure?, engine: RouteEngine) {
@@ -377,6 +467,14 @@ private struct LiveRouteAgentTarget: RouteAgentTarget {
     var canAutoSubmit: Bool { workspace.canAutoSubmitToAgent(panelId: panel.id) }
     var promptHoldKind: String? { panel.surface.activePromptHold()?.kind.rawValue }
     var hasDraftHold: Bool { panel.surface.activeDraftHold() != nil }
+    var writerIdentified: Bool {
+        guard let presence = workspace.panelAgentPresence[panel.id] else { return false }
+        switch presence.source {
+        case .program: return true
+        case .hooks: return !(presence.sessionKey?.sessionId ?? "").isEmpty
+        case .inferred: return false
+        }
+    }
 
     func deliver(_ text: String, submit: Bool) {
         if submit {

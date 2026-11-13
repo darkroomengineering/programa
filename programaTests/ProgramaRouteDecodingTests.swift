@@ -154,7 +154,7 @@ final class ProgramaRouteDecodingTests: XCTestCase {
             .send(text: "continue {{surface_id}}", whenBusy: .queue)
         )
         XCTAssertEqual(
-            try onlyRoute(#"{ "name": "n", "on": "agent/#", "throttleMs": 1000, "prompt": { "text": "go", "whenBusy": "steer" } }"#).action,
+            try onlyRoute(#"{ "name": "n", "on": "agent/#", "throttleMs": "1m", "prompt": { "text": "go", "whenBusy": "steer" } }"#).action,
             .prompt(text: "go", whenBusy: .steer)
         )
         XCTAssertEqual(
@@ -300,6 +300,26 @@ final class ProgramaRouteDecodingTests: XCTestCase {
     func testPromptRouteNeedsThrottle() throws {
         try assertIssue(#"{ "name": "n", "on": "agent/#", "prompt": { "text": "go" } }"#, mentions: "needs a 'throttleMs'")
         try assertIssue(#"{ "name": "n", "on": "agent/#", "throttleMs": 0, "prompt": { "text": "go" } }"#, mentions: "needs a 'throttleMs'")
+        try assertIssue(
+            #"{ "name": "n", "on": "agent/#", "throttleMs": 59999, "prompt": { "text": "go" } }"#,
+            mentions: "at least 60000"
+        )
+        XCTAssertNoThrow(try onlyRoute(#"{ "name": "n", "on": "agent/#", "throttleMs": 60000, "prompt": { "text": "go" } }"#))
+    }
+
+    func testWhenRejectsNestedQuantifiers() throws {
+        for pattern in ["(a+)+", "(a*)*", "(\\\\w+\\\\s?)*", "((ab)*c)+", "(x+){2,}", "(?:a+)+$"] {
+            try assertIssue(
+                #"{ "name": "n", "on": "agent/#", "review": {}, "when": { "body": { "regex": "\#(pattern)" } } }"#,
+                mentions: "repeats a group that already repeats"
+            )
+        }
+        for pattern in ["(ab)+", "a+b+", "[a+]+", "\\\\(a+\\\\)+", "(a{2})+", "^/Users/me/work(/|$)", "(?i)fix(es)?"] {
+            XCTAssertNoThrow(
+                try onlyRoute(#"{ "name": "n", "on": "agent/#", "review": {}, "when": { "body": { "regex": "\#(pattern)" } } }"#),
+                pattern
+            )
+        }
     }
 
     func testWhenRejectsUnknownOperatorsAndBadRegexes() throws {

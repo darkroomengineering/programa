@@ -472,7 +472,8 @@ extension ProgramaCLI {
 
                 Counters: matched (topic and `when` held), fired (the action ran), throttled
                 (dropped by throttleMs), busy (dropped while the route's last action was still
-                running) and expired (an action cancelled at its timeout).
+                running, or a prompt route skipped while a route's prompt turn held the surface)
+                and expired (an action cancelled at its timeout).
 
                 Example:
                   programa routes

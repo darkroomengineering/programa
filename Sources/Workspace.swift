@@ -100,6 +100,9 @@ final class Workspace: Identifiable, ObservableObject {
     }
 
     @Published var panelDirectories: [UUID: String] = [:]
+    /// Each panel's last reported directory as event routes see it; see
+    /// `noteResolvedPanelDirectory(panelId:resolved:)`.
+    var resolvedPanelDirectories: [UUID: ResolvedPanelDirectory] = [:]
     @Published var panelTitles: [UUID: String] = [:]
     /// Panels whose `panelTitles` entry came from a real title update (OSC or
     /// session restore), as opposed to the displayTitle placeholder seeded at

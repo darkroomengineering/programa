@@ -18712,6 +18712,23 @@
           }
         }
       }
+    },
+    "routes.run.failed.stale": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The routes in programa.json changed before this command could start."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このコマンドを開始する前に programa.json のルートが変更されました。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -429,6 +429,7 @@ final class SocketEventBroadcaster: @unchecked Sendable {
         state: AgentActivityState?,
         previousState: AgentActivityState?,
         source: AgentStateSource? = nil,
+        writer: String? = nil,
         programStatus: [String: Any]? = nil
     ) {
         let subs = subscribers(for: .agentState)
@@ -444,20 +445,20 @@ final class SocketEventBroadcaster: @unchecked Sendable {
         ]
         if let programStatus { frame["program_status"] = programStatus }
         for sub in subs { sub.enqueue(frame) }
-        // `previous_state` is a route field only; the wire frame does not carry it.
-        if tapped { routeTap.ingest(frame, previousState: previousState) }
+        // `previous_state` and the writer are for routes only; the wire frame carries neither.
+        if tapped { routeTap.ingest(frame, previousState: previousState, writer: writer) }
     }
 
     /// Published on every `agent.needs_input` call, independent of whether the agent-state write
     /// it makes wins precedence, so a consumer gets the hook's prompt text even while OSC 7501
     /// owns the surface's presence. `payload` must never carry OSC 7501 record contents.
-    func publishNeedsInput(workspaceId: UUID, surfaceId: UUID, payload: [String: String]) {
+    func publishNeedsInput(workspaceId: UUID, surfaceId: UUID, payload: [String: String], writer: String? = nil) {
         let subs = subscribers(for: .needsInput)
         let tapped = routeTap.wants(.needsInput)
         guard !subs.isEmpty || tapped else { return }
         let frame = Self.needsInputFrame(workspaceId: workspaceId, surfaceId: surfaceId, payload: payload)
         for sub in subs { sub.enqueue(frame) }
-        if tapped { routeTap.ingest(frame) }
+        if tapped { routeTap.ingest(frame, writer: writer) }
     }
 
     /// The `needs_input` frame. `agent.needs_input` also builds it to ask the route engine whether

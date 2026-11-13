@@ -5,10 +5,30 @@ import Foundation
 struct RouteEvent: Sendable, Equatable {
     let topic: String
     let fields: [String: String]
+    /// Who made an agent report (`RouteEvent.writer(source:sessionKey:)`), or nil when the report
+    /// named no session. Not a field: it never reaches `when`, templates or `run`'s environment.
+    let writer: String?
 
-    init(topic: String, fields: [String: String]) {
+    init(topic: String, fields: [String: String], writer: String? = nil) {
         self.topic = topic
         self.fields = fields.filter { !$0.value.isEmpty }
+        self.writer = writer
+    }
+
+    /// The writer of one agent report, from that report's own source and session key, never
+    /// from the presence it updates (a report without a key keeps the key an earlier report set).
+    /// OSC 7501 is the program in the terminal; a hooks report is identified only by its session
+    /// id. Screen inference and keyless hooks reports have no writer.
+    static func writer(source: AgentStateSource?, sessionKey: AgentSessionKey?) -> String? {
+        switch source {
+        case .program:
+            return "program"
+        case .hooks:
+            guard let sessionKey, let sessionId = sessionKey.sessionId, !sessionId.isEmpty else { return nil }
+            return "hooks:\(sessionKey.provider):\(sessionId)"
+        case .inferred, nil:
+            return nil
+        }
     }
 
     /// What `when` and templates can name: the fields plus `topic`.

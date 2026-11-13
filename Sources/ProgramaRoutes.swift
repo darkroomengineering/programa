@@ -14,6 +14,7 @@ struct ProgramaRouteIssue: Sendable, Equatable {
 
 struct ProgramaRouteDefinition: Sendable, Equatable {
     static let defaultKey = "{{topic}}"
+    static let minimumPromptThrottleMs = 60_000
 
     var name: String
     var on: ProgramaRouteTopicPattern
@@ -113,6 +114,11 @@ struct ProgramaRouteRegex: @unchecked Sendable, Equatable {
                 throw ProgramaRouteValidationError("unknown regex flag '\(flag)'; use i, m, s or x")
             }
         }
+        if Self.nestsQuantifiers(pattern) {
+            throw ProgramaRouteValidationError(
+                "regex '\(pattern)' repeats a group that already repeats, which can take exponential time; rewrite it without the nested quantifier"
+            )
+        }
         do {
             expression = try NSRegularExpression(pattern: pattern, options: options)
         } catch {
@@ -124,6 +130,70 @@ struct ProgramaRouteRegex: @unchecked Sendable, Equatable {
 
     static func == (lhs: ProgramaRouteRegex, rhs: ProgramaRouteRegex) -> Bool {
         lhs.pattern == rhs.pattern && lhs.flags == rhs.flags
+    }
+
+    /// Whether a group that contains `*`, `+` or an open-ended `{n,}`/`{n,m}` is itself repeated
+    /// that way, as in `(a+)+` or `((ab)*c)*`: the shape that backtracks exponentially on a
+    /// near-miss. Escaped characters and bracket expressions are skipped.
+    static func nestsQuantifiers(_ pattern: String) -> Bool {
+        let characters = Array(pattern)
+        // One entry per open group: whether its contents repeat.
+        var groups: [Bool] = []
+        var closedGroupRepeats = false
+        var index = 0
+        while index < characters.count {
+            let character = characters[index]
+            switch character {
+            case "\\":
+                index += 2
+                closedGroupRepeats = false
+                continue
+            case "[":
+                index = Self.indexAfterBracketExpression(characters, from: index)
+                closedGroupRepeats = false
+                continue
+            case "(":
+                groups.append(false)
+                closedGroupRepeats = false
+            case ")":
+                let repeats = groups.popLast() ?? false
+                if repeats, !groups.isEmpty { groups[groups.count - 1] = true }
+                closedGroupRepeats = repeats
+                index += 1
+                continue
+            case "*", "+", "{":
+                let isQuantifier = character != "{" || Self.isRangeQuantifier(characters, at: index)
+                if isQuantifier {
+                    if closedGroupRepeats { return true }
+                    if !groups.isEmpty { groups[groups.count - 1] = true }
+                }
+                closedGroupRepeats = false
+            default:
+                closedGroupRepeats = false
+            }
+            index += 1
+        }
+        return false
+    }
+
+    /// `{n,}` or `{n,m}`: a repetition with a range. `{n}` repeats a fixed number of times.
+    private static func isRangeQuantifier(_ characters: [Character], at index: Int) -> Bool {
+        guard let close = characters[index...].firstIndex(of: "}") else { return false }
+        let body = characters[(index + 1)..<close]
+        return body.contains(",") && body.allSatisfy { $0.isNumber || $0 == "," }
+    }
+
+    private static func indexAfterBracketExpression(_ characters: [Character], from start: Int) -> Int {
+        var index = start + 1
+        if index < characters.count, characters[index] == "^" { index += 1 }
+        // A `]` right after `[` or `[^` is a literal.
+        if index < characters.count, characters[index] == "]" { index += 1 }
+        while index < characters.count {
+            if characters[index] == "\\" { index += 2; continue }
+            if characters[index] == "]" { return index + 1 }
+            index += 1
+        }
+        return index
     }
 }
 
@@ -281,9 +351,12 @@ extension ProgramaRouteDefinition: Decodable {
         let key = try container.decodeIfPresent(String.self, forKey: .key) ?? Self.defaultKey
         try ProgramaRouteField.validateTemplate(key, at: "key")
         let action = try Self.decodeAction(from: container)
-        // A prompt submits text with no person present; the throttle bounds how often.
-        if case .prompt = action, (throttleMs ?? 0) == 0 {
-            throw ProgramaRouteValidationError("a 'prompt' route needs a 'throttleMs' above zero")
+        // A prompt submits text with no person present; the throttle bounds how often, and so how
+        // fast two prompt routes could feed each other.
+        if case .prompt = action, (throttleMs ?? 0) < Self.minimumPromptThrottleMs {
+            throw ProgramaRouteValidationError(
+                "a 'prompt' route needs a 'throttleMs' of at least \(Self.minimumPromptThrottleMs) (1 minute)"
+            )
         }
         self.init(
             name: name,

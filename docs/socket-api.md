@@ -1270,7 +1270,8 @@ CLI: `programa routes` (a table) and `programa --json routes` (this result).
 | `issues[]` | One per `routes` entry that did not load. `index` is its position in the array, or `null` when `routes` is not an array; `name` is `null` when the entry has none. |
 
 Counters and last errors reset whenever the routes are installed again: when the global file's
-settings change, and on every `debug.routes.load`.
+settings change, and on every `debug.routes.load`. `busy` also counts `prompt` matches skipped
+while a route's prompt turn holds the event's surface.
 
 `last_error` is one of:
 
@@ -1282,9 +1283,14 @@ settings change, and on every `debug.routes.load`.
 | `could not start: <reason>` | A `run` command failed to start. |
 | `review: <code>: <message>` | `review.open` failed, for example `review: unavailable: Not a git repository: /path`. |
 | `review: the event names no workspace` | A `review` route on an event without a workspace. |
+| `refused: the surface has no agent; nothing was sent` | A `send` or `prompt` to a surface with no agent state. |
 | `refused: a <kind> prompt is showing; nothing was sent` | A `send` or `prompt` during a permission or sign-in prompt. |
 | `refused: the surface has unsent typed input; nothing was sent` | A `send` or `prompt` while a person has typed unsent input. |
-| `pasted without submitting: no agent ready for a prompt` | A `prompt` to a surface without a known, unblocked, fresh agent. |
+| `refused: the agent's state reports name no session; nothing was sent` | A `send` or `prompt` to an agent known only from screen detection or from hooks reports without a `session_id`. |
+| `refused: waiting for the agent to resume after a permission prompt` | A `send` or `prompt` after a permission or sign-in prompt, before the same writer reported `working`. |
+| `refused: the report that fired this route names no session; nothing was sent` | A `send` or `prompt` fired by an agent report without a `session_id` (OSC 7501 reports count as named). |
+| `refused: the report that fired this route is the first from this agent; nothing was sent` | A `send` or `prompt` fired by the report that created the agent's state. |
+| `pasted without submitting: no agent ready for a prompt` | A `prompt` to an agent that is blocked or stale. |
 | `the agent stopped before the text was delivered` | A queued `send` or `prompt` whose agent state was cleared before it went out. |
 | `the event's surface is gone` | A `send` or `prompt` whose surface no longer exists, or an event with no surface. |
 

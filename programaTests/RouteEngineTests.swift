@@ -60,6 +60,25 @@ private final class RecordingExecutor: RouteActionExecutor {
     }
 }
 
+/// Submits every prompt at once, as the real executor does for an agent that can take it.
+@MainActor
+private final class SubmittingExecutor: RouteActionExecutor {
+    var submitted: [String] = []
+
+    func execute(_ fire: RouteFire, engine: RouteEngine) {
+        guard case .prompt(let text, _) = fire.route.definition.action else {
+            engine.endDelivery(fire)
+            return
+        }
+        submitted.append(text)
+        engine.turnStarted(fire)
+    }
+
+    func cancel(_ fire: RouteFire) {}
+    func reportLoadIssues(_ issues: [ProgramaRouteIssue]) {}
+    func targetWentIdle(_ fire: RouteFire, engine: RouteEngine) {}
+}
+
 @MainActor
 final class RouteEngineTests: XCTestCase {
 
@@ -99,18 +118,19 @@ final class RouteEngineTests: XCTestCase {
         engine.install(routes: config.routes, issues: config.routeIssues, source: source)
     }
 
-    private func needsInput(surface: String, kind: String = "question") -> RouteEvent {
-        RouteEvent(
-            topic: "agent/\(surface)/needs_input/\(kind)",
-            fields: ["workspace_id": "W1", "surface_id": surface, "kind": kind]
-        )
+    private func needsInput(surface: String, kind: String? = "question", writer: String? = nil) -> RouteEvent {
+        var fields = ["workspace_id": "W1", "surface_id": surface]
+        fields["kind"] = kind
+        return RouteEvent(topic: "agent/\(surface)/needs_input/\(kind ?? "unknown")", fields: fields, writer: writer)
     }
 
-    private func agentState(surface: String, state: String, previous: String? = nil) -> RouteEvent {
+    private func agentState(surface: String, state: String, previous: String? = nil, writer: String? = nil) -> RouteEvent {
         var fields = ["workspace_id": "W1", "surface_id": surface, "state": state]
         fields["previous_state"] = previous
-        return RouteEvent(topic: "agent/\(surface)/state/\(state)", fields: fields)
+        return RouteEvent(topic: "agent/\(surface)/state/\(state)", fields: fields, writer: writer)
     }
+
+    private let agent = "hooks:claude-code:session-1"
 
     private func counters(_ engine: RouteEngine, _ name: String, file: StaticString = #filePath, line: UInt = #line) -> RouteCounters? {
         let route = engine.snapshot().routes.first { $0.name == name }
@@ -459,6 +479,16 @@ final class RouteEngineTests: XCTestCase {
         XCTAssertTrue(engine.hasNotifyRoute(matching: needsInput(surface: "S1")))
     }
 
+    func testACallWithNoKindFollowsThePermissionRule() throws {
+        let engine = makeEngine()
+        try install(#"{ "name": "ask", "on": "agent/+/needs_input/#", "throttleMs": "5m", "notify": { "title": "t" } }"#, on: engine)
+        let kindless = needsInput(surface: "S1", kind: nil)
+
+        XCTAssertTrue(engine.hasNotifyRoute(matching: kindless))
+        engine.ingest(kindless)
+        XCTAssertFalse(engine.hasNotifyRoute(matching: kindless), "a throttled call with no kind keeps its banner")
+    }
+
     func testBannerQueryChecksWhenAgainstModelFields() throws {
         let engine = makeEngine { _ in ["worktree": "false"] }
         try install(#"{ "name": "ask", "on": "agent/+/needs_input/#", "when": { "worktree": "true" }, "notify": { "title": "t" } }"#, on: engine)
@@ -468,20 +498,81 @@ final class RouteEngineTests: XCTestCase {
 
     // MARK: - Text deliveries
 
-    func testAnIdleReportHandsAQueuedDeliveryToTheExecutor() throws {
+    func testOnlyTheEndOfWorkFromTheSameWriterReleasesAQueuedDelivery() throws {
         let executor = RecordingExecutor()
         let engine = makeEngine()
         engine.executor = executor
         try install(#"{ "name": "s", "on": "agent/+/needs_input/#", "send": { "text": "go" } }"#, on: engine)
 
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "idle", writer: agent))
         engine.ingest(needsInput(surface: "S1"))
         let fire = try XCTUnwrap(executor.fires.first)
-        engine.ingest(agentState(surface: "S2", state: "idle"))
-        engine.ingest(agentState(surface: "S1", state: "working"))
-        XCTAssertEqual(executor.wentIdle, [], "only the target surface's idle report delivers")
 
-        engine.ingest(agentState(surface: "S1", state: "idle"))
+        engine.ingest(agentState(surface: "S2", state: "idle", previous: "working", writer: agent))
+        engine.ingest(agentState(surface: "S1", state: "idle", previous: "working"))
+        engine.ingest(agentState(surface: "S1", state: "idle", previous: "working", writer: "hooks:claude-code:other"))
+        engine.ingest(agentState(surface: "S1", state: "idle", previous: "blocked", writer: agent))
+        XCTAssertEqual(executor.wentIdle, [], "another surface, a keyless report, another writer, or an idle after blocked")
+
+        engine.ingest(agentState(surface: "S1", state: "idle", previous: "working", writer: agent))
         XCTAssertEqual(executor.wentIdle, [fire])
+    }
+
+    func testAPermissionPromptHoldsDeliveriesUntilItsWriterWorksAgain() throws {
+        let executor = RecordingExecutor()
+        let engine = makeEngine()
+        engine.executor = executor
+        try install(#"{ "name": "s", "on": "agent/+/state/working", "send": { "text": "go" } }"#, on: engine)
+
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "idle", writer: agent))
+        engine.ingest(needsInput(surface: "S1", kind: "permission", writer: agent))
+        XCTAssertEqual(engine.textDeliveryRefusal(surfaceId: "S1"), "refused: waiting for the agent to resume after a permission prompt")
+
+        // A forged or mistaken report: no session, so it neither resumes the agent nor releases text.
+        engine.ingest(agentState(surface: "S1", state: "idle", previous: "blocked"))
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "idle"))
+        engine.ingest(agentState(surface: "S1", state: "idle", previous: "working"))
+        XCTAssertEqual(executor.wentIdle, [])
+        XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S1"))
+
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "idle", writer: agent))
+        XCTAssertNil(engine.textDeliveryRefusal(surfaceId: "S1"))
+        engine.ingest(agentState(surface: "S1", state: "idle", previous: "working", writer: agent))
+        XCTAssertEqual(executor.wentIdle.map(\.id), [executor.fires.first?.id])
+    }
+
+    func testAProgramPermissionPromptAlsoHoldsDeliveries() throws {
+        let engine = makeEngine()
+        try install(#"{ "name": "s", "on": "agent/+/needs_input/#", "send": { "text": "go" } }"#, on: engine)
+        let blocked = RouteEvent(
+            topic: "agent/S1/state/blocked",
+            fields: ["surface_id": "S1", "state": "blocked", "program_status.kind": "permission"],
+            writer: "program"
+        )
+        engine.ingest(blocked)
+        XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S1"))
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "blocked", writer: agent))
+        XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S1"), "only the prompt's own writer resumes it")
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "blocked", writer: "program"))
+        XCTAssertNil(engine.textDeliveryRefusal(surfaceId: "S1"))
+    }
+
+    func testTheProgramsOwnWorkingResumesAfterAHookReportedPrompt() throws {
+        // Programa's hooks report the prompt over the socket; the program's OSC 7501 status owns
+        // the presence and reports the work that follows.
+        let executor = RecordingExecutor()
+        let engine = makeEngine()
+        engine.executor = executor
+        try install(#"{ "name": "s", "on": "agent/+/state/working", "send": { "text": "go" } }"#, on: engine)
+
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "idle", writer: "program"))
+        engine.ingest(needsInput(surface: "S1", kind: "permission", writer: agent))
+        XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S1"))
+
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "blocked", writer: "program"))
+        XCTAssertNil(engine.textDeliveryRefusal(surfaceId: "S1"))
+        engine.ingest(agentState(surface: "S1", state: "idle", previous: "working", writer: "program"))
+        XCTAssertEqual(executor.wentIdle.map(\.id), [executor.fires.first?.id])
     }
 
     func testAClearEndsAQueuedDeliveryWithAnError() throws {
@@ -499,43 +590,74 @@ final class RouteEngineTests: XCTestCase {
         XCTAssertEqual(counters(engine, "s")?.fired, 2, "the route is free again")
     }
 
-    func testAPromptOnTheIdleEdgeCannotTriggerItself() throws {
+    func testAPromptTurnEndsOnlyAfterWorkInThatTurn() throws {
         let executor = RecordingExecutor()
         let engine = makeEngine()
         engine.executor = executor
-        try install(#"{ "name": "p", "on": "agent/+/state/idle", "throttleMs": 1000, "prompt": { "text": "next" } }"#, on: engine)
+        try install(#"{ "name": "p", "on": "agent/+/state/idle", "throttleMs": "1m", "prompt": { "text": "next" } }"#, on: engine)
 
-        engine.ingest(agentState(surface: "S1", state: "idle", previous: "working"))
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "idle", writer: agent))
+        engine.ingest(agentState(surface: "S1", state: "idle", previous: "working", writer: agent))
         engine.turnStarted(try XCTUnwrap(executor.fires.first))
-        engine.ingest(agentState(surface: "S1", state: "working"))
-        clock.advance(by: 5)
-        engine.ingest(agentState(surface: "S1", state: "idle", previous: "working"))
 
+        // An idle that arrives before the turn's own `working` (a late report from the work
+        // before the prompt) does not end the turn.
+        engine.ingest(agentState(surface: "S1", state: "idle", previous: "working", writer: agent))
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "idle", writer: agent))
+        engine.ingest(agentState(surface: "S1", state: "idle", previous: "working", writer: agent))
         XCTAssertEqual(
             counters(engine, "p"),
-            RouteCounters(matched: 2, fired: 1, busy: 1),
-            "the idle that ends the prompt's own turn is busy for its route, not a new fire"
+            RouteCounters(matched: 3, fired: 1, busy: 2),
+            "both idles during the prompt's turn, the one that ends it included, are busy"
         )
         XCTAssertEqual(executor.wentIdle, [], "an own turn is not a queued delivery")
 
-        engine.ingest(agentState(surface: "S1", state: "idle", previous: "working"))
+        clock.advance(by: 61)
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "idle", writer: agent))
+        engine.ingest(agentState(surface: "S1", state: "idle", previous: "working", writer: agent))
         XCTAssertEqual(counters(engine, "p")?.fired, 2, "the turn ended, so the route is free again")
+    }
+
+    func testTwoPromptRoutesCannotFeedEachOther() throws {
+        let executor = SubmittingExecutor()
+        let engine = makeEngine()
+        engine.executor = executor
+        try install(#"""
+        { "name": "a", "on": "agent/+/state/idle", "throttleMs": "1m", "prompt": { "text": "a" } },
+        { "name": "b", "on": "agent/+/state/idle", "throttleMs": "1m", "prompt": { "text": "b" } }
+        """#, on: engine)
+
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "idle", writer: agent))
+        engine.ingest(agentState(surface: "S1", state: "idle", previous: "working", writer: agent))
+        XCTAssertEqual(executor.submitted, ["a"], "b sees the idle while a's prompt holds the surface")
+
+        // Past both throttle windows, so only the open turn can stop b.
+        clock.advance(by: 61)
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "idle", writer: agent))
+        engine.ingest(agentState(surface: "S1", state: "idle", previous: "working", writer: agent))
+        XCTAssertEqual(executor.submitted, ["a"], "the idle that ends a's turn fires no prompt route")
+        XCTAssertEqual(counters(engine, "b")?.busy, 2)
+
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "idle", writer: agent))
+        engine.ingest(agentState(surface: "S1", state: "idle", previous: "working", writer: agent))
+        XCTAssertEqual(executor.submitted, ["a", "a"], "a person's next turn fires the routes again")
     }
 
     func testTurnStartedFromAnOldFireIsIgnored() throws {
         let executor = RecordingExecutor()
         let engine = makeEngine()
         engine.executor = executor
-        try install(#"{ "name": "p", "on": "agent/+/needs_input/#", "throttleMs": 1000, "prompt": { "text": "go" } }"#, on: engine)
+        try install(#"{ "name": "p", "on": "agent/+/needs_input/#", "throttleMs": "1m", "prompt": { "text": "go" } }"#, on: engine)
 
         engine.ingest(needsInput(surface: "S1"))
         let first = try XCTUnwrap(executor.fires.first)
         engine.endDelivery(first)
-        clock.advance(by: 2)
+        clock.advance(by: 61)
         engine.ingest(needsInput(surface: "S1"))
         engine.turnStarted(first)
 
-        engine.ingest(agentState(surface: "S1", state: "idle"))
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "blocked", writer: agent))
+        engine.ingest(agentState(surface: "S1", state: "idle", previous: "working", writer: agent))
         XCTAssertEqual(executor.wentIdle.map(\.id), [executor.fires.last?.id], "the newer fire is still waiting, not in a turn")
     }
 

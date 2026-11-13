@@ -355,7 +355,7 @@ final class RouteGateTests: XCTestCase {
     /// The delivering rows hold whichever delivery the route is in.
     func testEveryDeliveringRowAppliesToEachDelivery() throws {
         let route = try compiled(throttleMs: 900_000, action: .prompt(text: "go", whenBusy: .queue))
-        for delivery in [RouteDelivery.running, .waitingForIdle(event()), .ownTurn] {
+        for delivery in [RouteDelivery.running, .waitingForIdle(event()), .ownTurn(sawWorking: false), .ownTurn(sawWorking: true)] {
             let start = RouteGateState.delivering(delivery, expiresAt: at(600), cooldownUntil: at(900))
             XCTAssertEqual(reduce(start, .matched(event(), now: at(1)), route).0, start, "\(delivery)")
             XCTAssertEqual(reduce(start, .matched(event(), now: at(1)), route).1, [.count(.busy)], "\(delivery)")
@@ -375,11 +375,11 @@ final class RouteGateTests: XCTestCase {
         let route = try compiled(throttleMs: 60_000, action: .prompt(text: "go", whenBusy: .queue))
         let waiting = RouteGateState.delivering(.waitingForIdle(event()), expiresAt: at(600), cooldownUntil: at(60))
         let (state, effects) = reduce(waiting, .turnStarted, route)
-        XCTAssertEqual(state, .delivering(.ownTurn, expiresAt: at(600), cooldownUntil: at(60)), "the expiry and window carry over")
+        XCTAssertEqual(state, .delivering(.ownTurn(sawWorking: false), expiresAt: at(600), cooldownUntil: at(60)), "the expiry and window carry over")
         XCTAssertEqual(effects, [])
 
         for start in [
-            RouteGateState.delivering(.ownTurn, expiresAt: at(600), cooldownUntil: nil),
+            RouteGateState.delivering(.ownTurn(sawWorking: false), expiresAt: at(600), cooldownUntil: nil),
             .delivering(.running, expiresAt: at(600), cooldownUntil: nil),
             .debouncing(pending: event(), deadline: at(2), cooldownUntil: nil),
             .coolingDown(until: at(5)),
@@ -388,6 +388,26 @@ final class RouteGateTests: XCTestCase {
             XCTAssertEqual(reduce(start, .turnStarted, route).1, [], "\(start)")
         }
         XCTAssertNil(reduce(nil, .turnStarted, route).0)
+    }
+
+    func testTurnWorkingMarksOnlyAnOpenTurn() throws {
+        let route = try compiled(throttleMs: 60_000, action: .prompt(text: "go", whenBusy: .queue))
+        let open = RouteGateState.delivering(.ownTurn(sawWorking: false), expiresAt: at(600), cooldownUntil: at(60))
+        let (state, effects) = reduce(open, .turnWorking, route)
+        XCTAssertEqual(state, .delivering(.ownTurn(sawWorking: true), expiresAt: at(600), cooldownUntil: at(60)))
+        XCTAssertEqual(effects, [])
+
+        for start in [
+            RouteGateState.delivering(.ownTurn(sawWorking: true), expiresAt: at(600), cooldownUntil: nil),
+            .delivering(.waitingForIdle(event()), expiresAt: at(600), cooldownUntil: nil),
+            .delivering(.running, expiresAt: at(600), cooldownUntil: nil),
+            .debouncing(pending: event(), deadline: at(2), cooldownUntil: nil),
+            .coolingDown(until: at(5)),
+        ] {
+            XCTAssertEqual(reduce(start, .turnWorking, route).0, start, "\(start)")
+            XCTAssertEqual(reduce(start, .turnWorking, route).1, [], "\(start)")
+        }
+        XCTAssertNil(reduce(nil, .turnWorking, route).0)
     }
 
     func testReviewDoesNotHoldTheRoute() throws {

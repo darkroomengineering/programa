@@ -4,6 +4,12 @@ import Foundation
 // `agent_state`, `needs_input` and `workspace_lifecycle` frame, it resolves the fields the frame
 // lacks, matches the installed routes and drives one `RouteGate` per (route name, key).
 
+/// A reported directory with symlinks and `..` resolved, tied to the report it came from.
+struct ResolvedPanelDirectory: Equatable, Sendable {
+    let reported: String
+    let resolved: String?
+}
+
 /// Where the installed routes came from. `debug.routes.load` installs a `debugOverride`, which
 /// masks the file until it is cleared.
 enum RouteSource: Sendable, Equatable {
@@ -63,7 +69,8 @@ protocol RouteActionExecutor: AnyObject {
     /// its error is kept.
     func cancel(_ fire: RouteFire)
     /// `fire` is a `send` or `prompt` queued behind a working agent, and its surface just reported
-    /// idle. Deliver it now, then call `endDelivery`, or `turnStarted` for a submitted prompt.
+    /// the end of that work (an idle after `working` from the same writer). Deliver it now, then
+    /// call `endDelivery`, or `turnStarted` for a submitted prompt.
     func targetWentIdle(_ fire: RouteFire, engine: RouteEngine)
     /// A changed global file installed with route issues. Called once per file digest.
     func reportLoadIssues(_ issues: [ProgramaRouteIssue])
@@ -98,6 +105,24 @@ final class RouteEngine {
         var source: RouteSource
     }
 
+    /// What text deliveries need from one surface's recent agent reports. Built from the frames
+    /// the tap delivers, so it starts empty at each install and anything unseen counts against a
+    /// delivery.
+    private struct AgentTrack {
+        enum Resume: Equatable {
+            case free
+            /// After a permission or sign-in prompt, deliveries wait for a `working` report from
+            /// the prompt's writer, from any identified writer when the prompt named none, or from
+            /// the program itself: Programa's hooks report a prompt over the socket while the
+            /// program's own OSC 7501 status owns the presence and reports the `working` after it.
+            case awaitingWorking(from: String?)
+        }
+
+        /// Writer of the latest `working` report; nil when it named no session.
+        var lastWorkingWriter: String?
+        var resume = Resume.free
+    }
+
     private let tap: RouteTap?
     private let now: @MainActor () -> Date
     private let scheduleWake: @MainActor (Date, @escaping @MainActor () -> Void) -> Void
@@ -113,6 +138,8 @@ final class RouteEngine {
     /// A late `endDelivery` from an expired fire must not end the newer delivery on its key.
     private var deliveries: [GateKey: RouteFire] = [:]
     private var lastFireId: UInt64 = 0
+    /// Keyed by surface id.
+    private var agentTracks: [String: AgentTrack] = [:]
     /// Bumped on every install, so wakes and delivery ends from an older route set are ignored.
     private var generation: UInt64 = 0
 
@@ -173,6 +200,7 @@ final class RouteEngine {
         let cancelled = Array(deliveries.values)
         deliveries = [:]
         gates = [:]
+        agentTracks = [:]
         generation &+= 1
         source = set.source
         routes = set.routes.map { InstalledRoute(compiled: CompiledRoute($0)) }
@@ -190,14 +218,15 @@ final class RouteEngine {
 
     // MARK: - Events
 
-    /// Matches the routes first, then settles the text deliveries that were already held on the
-    /// event's surface. In that order, the idle that ends a prompt's own turn counts as `busy` for
-    /// its route instead of firing it again, and a delivery this very event fired is not handed
-    /// back as "went idle".
+    /// Matches the routes, then settles the text deliveries that were already held on the
+    /// event's surface, then records the report. In that order, the idle that ends a prompt's own
+    /// turn is still inside that turn when the routes see it, and a delivery this very event fired
+    /// is not handed back as "went idle".
     func ingest(_ tapped: RouteEvent) {
         let heldBefore = Set(deliveries.values.map(\.id))
         match(tapped)
         settleTextDeliveries(after: tapped, heldBefore: heldBefore)
+        track(tapped)
     }
 
     private func match(_ tapped: RouteEvent) {
@@ -206,45 +235,122 @@ final class RouteEngine {
         let event = resolved(tapped)
         let values = event.values
         let at = now()
+        let surfaceId = event.fields["surface_id"]
         for index in candidates where routes[index].compiled.definition.matches(event) {
             routes[index].counters.matched += 1
+            // While a route's prompt holds the surface for its turn, including the idle that ends
+            // it, no prompt route takes an event from it, so two prompt routes cannot feed each
+            // other. Checked per route: an earlier route in this pass may have just submitted.
+            if case .prompt = routes[index].compiled.definition.action,
+               let surfaceId, routeTurnIsOpen(onSurface: surfaceId) {
+                routes[index].counters.record(.busy)
+                continue
+            }
             apply(.matched(event, now: at), to: gateKey(routes[index].compiled.definition, values: values))
         }
     }
 
-    /// An idle report delivers the `send`s and `prompt`s queued on that surface and ends the
-    /// prompt turns open on it; a clear ends both, since the agent is gone.
+    private func routeTurnIsOpen(onSurface surfaceId: String) -> Bool {
+        deliveries.contains { gateKey, fire in
+            guard fire.event.fields["surface_id"] == surfaceId,
+                  case .delivering(.ownTurn, _, _) = gates[gateKey] else { return false }
+            return true
+        }
+    }
+
+    /// On the event's surface: an idle that follows a `working` report from the same identified
+    /// writer delivers the queued `send`s and `prompt`s and ends the prompt turns that saw
+    /// `working`; a `working` report marks the open turns; a clear ends everything, since the agent
+    /// is gone. Any other report leaves the deliveries waiting until they expire.
     private func settleTextDeliveries(after event: RouteEvent, heldBefore: Set<UInt64>) {
         guard event.topic.hasPrefix("agent/"), let surfaceId = event.fields["surface_id"] else { return }
-        let cleared = event.topic.hasSuffix("/state/none")
-        guard cleared || event.topic.hasSuffix("/state/idle") else { return }
+        let state = event.topic.split(separator: "/").last.map(String.init)
+        let isStateReport = event.topic.hasPrefix("agent/\(surfaceId)/state/")
+        guard isStateReport, let state, ["idle", "none", "working"].contains(state) else { return }
+        let releases = state == "idle" && releasesTextDeliveries(event, onSurface: surfaceId)
         for (gateKey, fire) in deliveries
         where heldBefore.contains(fire.id) && fire.event.fields["surface_id"] == surfaceId {
             // An earlier settle in this loop can have moved this gate on.
             guard deliveries[gateKey]?.id == fire.id,
                   case .delivering(let delivery, _, _) = gates[gateKey] else { continue }
-            switch delivery {
-            case .running:
+            switch (delivery, state) {
+            case (.running, _):
                 continue
-            case .ownTurn:
+            case (.ownTurn, "none"):
                 endDelivery(fire)
-            case .waitingForIdle where cleared:
+            case (.ownTurn(sawWorking: false), "working"):
+                if event.writer != nil { apply(.turnWorking, to: gateKey) }
+            case (.ownTurn(sawWorking: true), "idle") where releases:
+                endDelivery(fire)
+            case (.waitingForIdle, "none"):
                 endDelivery(fire, error: "the agent stopped before the text was delivered")
-            case .waitingForIdle:
+            case (.waitingForIdle, "idle") where releases:
                 if let executor {
                     executor.targetWentIdle(fire, engine: self)
                 } else {
                     endDelivery(fire)
                 }
+            default:
+                continue
             }
         }
     }
 
+    /// Whether `idle` is the end of real work: it follows a `working` report, and both came from
+    /// the same identified writer, with no permission prompt still waiting on that agent.
+    private func releasesTextDeliveries(_ idle: RouteEvent, onSurface surfaceId: String) -> Bool {
+        guard let writer = idle.writer, idle.fields["previous_state"] == "working",
+              let track = agentTracks[surfaceId] else { return false }
+        return track.lastWorkingWriter == writer && track.resume == .free
+    }
+
+    /// Records the report for later text deliveries on its surface.
+    private func track(_ event: RouteEvent) {
+        let levels = event.topic.split(separator: "/").map(String.init)
+        guard levels.count == 4, levels[0] == "agent" else { return }
+        let surfaceId = levels[1]
+        var track = agentTracks[surfaceId] ?? AgentTrack()
+        switch (levels[2], levels[3]) {
+        case ("state", "none"):
+            agentTracks.removeValue(forKey: surfaceId)
+            return
+        case ("state", "working"):
+            track.lastWorkingWriter = event.writer
+            if case .awaitingWorking(let from) = track.resume, let writer = event.writer,
+               from == nil || from == writer || writer == "program" {
+                track.resume = .free
+            }
+        case ("state", "blocked"):
+            if ["permission", "auth"].contains(event.fields["program_status.kind"]) {
+                track.resume = .awaitingWorking(from: event.writer)
+            }
+        case ("needs_input", "permission"):
+            track.resume = .awaitingWorking(from: event.writer)
+        default:
+            break
+        }
+        agentTracks[surfaceId] = track
+    }
+
+    /// Why a `send` or `prompt` must not go into `surfaceId` now, from the reports the engine saw.
+    func textDeliveryRefusal(surfaceId: String) -> String? {
+        if case .awaitingWorking = agentTracks[surfaceId]?.resume {
+            return "refused: waiting for the agent to resume after a permission prompt"
+        }
+        return nil
+    }
+
+    /// Whether `fire` belongs to the routes installed now.
+    func isCurrent(_ fire: RouteFire) -> Bool {
+        fire.generation == generation
+    }
+
     /// Whether `tapped`'s built-in `needs_input` banner gives way to a `notify` route. A question
     /// gives way whenever a route matches on topic and `when`, throttled or not, so "once per
-    /// 5 minutes" is what the person sees. A permission prompt gives way only when a route fires
-    /// for this very call: a throttled or debounced route must never hide one. Synchronous, so
-    /// the caller can ask before it posts; the tap's ingest of the same call runs next.
+    /// 5 minutes" is what the person sees. Any other call, a permission prompt or one with no
+    /// kind, gives way only when a route fires for this very call: a throttled or debounced route
+    /// must never hide one. Synchronous, so the caller can ask before it posts; the tap's ingest of
+    /// the same call runs next.
     func hasNotifyRoute(matching tapped: RouteEvent) -> Bool {
         let candidates = routes.map(\.compiled).filter { route in
             guard case .notify = route.definition.action else { return false }
@@ -253,7 +359,7 @@ final class RouteEngine {
         guard !candidates.isEmpty else { return false }
         let event = resolved(tapped)
         let values = event.values
-        let firesOnly = tapped.fields["kind"] == "permission"
+        let firesOnly = tapped.fields["kind"] != "question"
         let at = now()
         return candidates.contains { route in
             guard route.definition.matches(event) else { return false }
@@ -272,7 +378,11 @@ final class RouteEngine {
 
     /// The tapped event plus the fields the model adds. Frame fields win.
     private func resolved(_ tapped: RouteEvent) -> RouteEvent {
-        RouteEvent(topic: tapped.topic, fields: tapped.fields.merging(modelFields(tapped)) { frame, _ in frame })
+        RouteEvent(
+            topic: tapped.topic,
+            fields: tapped.fields.merging(modelFields(tapped)) { frame, _ in frame },
+            writer: tapped.writer
+        )
     }
 
     /// Reports that `fire`'s delivery ended. `error` becomes the route's last error even when the
@@ -287,7 +397,8 @@ final class RouteEngine {
     }
 
     /// Reports that `fire`'s prompt was submitted: the route stays held until the turn it started
-    /// ends, so a route on the idle edge cannot trigger itself.
+    /// ends (an idle after a `working` report in that turn, or a clear), so a route on the idle
+    /// edge cannot trigger itself.
     func turnStarted(_ fire: RouteFire) {
         let gateKey = GateKey(route: fire.route.name, key: fire.key)
         guard deliveries[gateKey]?.id == fire.id else { return }
@@ -360,21 +471,23 @@ final class RouteEngine {
     }
 
     /// Fields an `agent/#` event takes from the model: the surface's directory and branch, and
-    /// whether its workspace came from `worktree.create` or `worktree.open`.
+    /// whether its workspace came from `worktree.create` or `worktree.open`. The directory is the
+    /// one resolved off main when it was reported, so nothing here touches the file system.
     static func resolveModelFields(for event: RouteEvent) -> [String: String] {
         guard event.topic.hasPrefix("agent/"),
               let workspaceId = event.fields["workspace_id"].flatMap(UUID.init(uuidString:)),
               let surfaceId = event.fields["surface_id"].flatMap(UUID.init(uuidString:)),
               let workspace = AppDelegate.shared?.workspaceFor(tabId: workspaceId) else { return [:] }
         var fields = ["worktree": (workspace.worktreeBranch ?? "").isEmpty ? "false" : "true"]
-        fields["cwd"] = workspace.sidebarResolvedDirectory(for: surfaceId).flatMap(canonicalDirectory)
+        fields["cwd"] = workspace.resolvedRouteDirectory(for: surfaceId)
         fields["git_branch"] = workspace.panelGitBranches[surfaceId]?.branch
         return fields
     }
 
     /// `path` with symlinks and `..` resolved, or nil when it is not absolute or not an existing
     /// directory. A reported directory is shell-written and can be `/allowed/../../elsewhere`, so
-    /// `when` and `run` see only this form.
+    /// `when` and `run` see only this form. Touches the file system, which can stall on a network
+    /// mount: call it off main.
     nonisolated static func canonicalDirectory(_ path: String) -> String? {
         guard path.hasPrefix("/"), let resolved = realpath(path, nil) else { return nil }
         defer { free(resolved) }
@@ -458,8 +571,8 @@ final class RouteTap: @unchecked Sendable {
         return wantedClasses.contains(eventClass)
     }
 
-    func ingest(_ frame: [String: Any], previousState: AgentActivityState? = nil) {
-        guard let event = RouteEvent(frame: frame, previousState: previousState) else { return }
+    func ingest(_ frame: [String: Any], previousState: AgentActivityState? = nil, writer: String? = nil) {
+        guard let event = RouteEvent(frame: frame, previousState: previousState, writer: writer) else { return }
         // Never inline: the publishers run on main in the middle of a model mutation, and an
         // action must not run inside it. The main queue is FIFO, so events keep their order.
         DispatchQueue.main.async {
@@ -472,7 +585,7 @@ extension RouteEvent {
     /// The event a route sees for a broadcaster frame, or nil for a frame routes do not take.
     /// Null values are absent, numbers are their decimal string, and `program_status` is
     /// flattened to `program_status.<key>`.
-    init?(frame: [String: Any], previousState: AgentActivityState? = nil) {
+    init?(frame: [String: Any], previousState: AgentActivityState? = nil, writer: String? = nil) {
         var fields: [String: String] = [:]
         for (key, value) in frame where key != "event" {
             if key == "program_status", let status = value as? [String: Any] {
@@ -501,7 +614,7 @@ extension RouteEvent {
         default:
             return nil
         }
-        self.init(topic: topic, fields: fields)
+        self.init(topic: topic, fields: fields, writer: writer)
     }
 
     private static func text(_ value: Any) -> String? {

@@ -174,7 +174,7 @@ change, and also when the app starts with a file that still has issues.
 | `on` | string | Required. The topic pattern, see below. |
 | `when` | object? | Conditions on the event's fields, see below. |
 | `debounceMs` | number or duration? | Handle only the last matching event of a burst, after this long without another match. |
-| `throttleMs` | number or duration? | Fire at most once per window, on the first match. Required, and above zero, for `prompt`. |
+| `throttleMs` | number or duration? | Fire at most once per window, on the first match. Required for `prompt`, at least 60000 (one minute). |
 | `key` | string? | Template for what shares a debounce and throttle window. Default `{{topic}}`. |
 | `notify`, `send`, `prompt`, `run`, `review` | object | The action. A route has exactly one. |
 
@@ -218,11 +218,17 @@ or null is absent. Numbers are their decimal text.
 | `provider`, `title`, `subtitle`, `body` | `needs_input` | free text | Taken from the `agent.needs_input` call. `title` carries the surface's custom title suffix. |
 | `title` | `workspace/…` | free text | The workspace's title. |
 | `ts` | all | identifier | Seconds since 1970, with a fraction. |
-| `cwd` | `agent/…` | free text | The surface's directory with symlinks and `..` resolved. Absent when it is not absolute or not an existing directory. |
+| `cwd` | `agent/…` | free text | The directory the surface's shell last reported (OSC 7 or `surface.report_pwd`), with symlinks and `..` resolved when it was reported. Absent when the surface has not reported one, or the report is not an existing absolute directory. |
 | `git_branch` | `agent/…` | free text | The surface's branch. |
 | `worktree` | `agent/…` | identifier | `"true"` when the surface's workspace was opened by `worktree.create` or `worktree.open`, else `"false"`. |
 
 `cwd`, `git_branch` and `worktree` are absent once the surface's workspace is closed.
+
+Because `cwd` is resolved, it is the real path: on macOS a shell in `/tmp/x` has the `cwd`
+`/private/tmp/x`, and `/var/folders/…` is `/private/var/folders/…`. Anchor a `cwd` regex at the
+start and end it at a separator, so it names exactly the tree you mean:
+`{ "cwd": { "regex": "^/Users/me/work/app(/|$)" } }`. Without the anchor, `/Users/me/work/app`
+also matches `/tmp/Users/me/work/app` and `/Users/me/work/app-old`.
 `previous_state`, `cwd`, `git_branch` and `worktree` exist only for routes: the frames that
 `programa watch-events` prints do not carry them.
 
@@ -244,8 +250,9 @@ Every key of `when` names a field, and every key must hold.
 
 One field can combine several operators, and all of them must hold. An absent field fails every
 condition except `ne` and `exists: false`. A regex sees only the first 4096 UTF-16 units of the
-field. An unknown operator, a regex that does not compile, `flags` without `regex`, or an
-operator object with no condition makes the route fail to load.
+field. An unknown operator, a regex that does not compile, `flags` without `regex`, an operator
+object with no condition, or a regex that repeats a group which already repeats (such as `(a+)+`
+or `(\w+\s?)*`, which can take exponential time) makes the route fail to load.
 
 ### The gate: `debounceMs`, `throttleMs` and `key`
 
@@ -270,7 +277,7 @@ one surface share one. A placeholder for a field the event lacks stays as the li
 | `matched` | events that passed the topic and `when` |
 | `fired` | actions run |
 | `throttled` | matches the throttle dropped |
-| `busy` | matches dropped while the route's last action still held it |
+| `busy` | matches dropped while the route's last action still held it, and `prompt` matches skipped while any route's prompt turn holds the surface |
 | `expired` | deliveries cancelled at their timeout |
 
 ### Actions
@@ -286,10 +293,11 @@ honours `notification.claim_banners`, as the built-in notification does.
 
 A notify route also decides the built-in banner of the `agent.needs_input` call it matches:
 
-- A **question**, or a call with no kind, shows no built-in banner when a notify route matches it
-  on topic and `when`, whether or not the route fires. With `"throttleMs": "5m"`, the person sees
+- A **question** shows no built-in banner when a notify route matches it on topic and `when`,
+  whether or not the route fires. With `"throttleMs": "5m"`, the person sees
   one banner per five minutes, and it is the route's.
-- A **permission** prompt shows no built-in banner only when a notify route fires for that very
+- A **permission** prompt, or a call with no kind, shows no built-in banner only when a notify
+  route fires for that very
   call, so the route's notification is the one shown. A route that is throttling or debouncing
   never hides a permission banner.
 
@@ -316,8 +324,9 @@ event surface's `cwd`. Nothing is shown in a terminal.
   its last error reads `could not start: the surface's working directory is unknown or does not
   exist` and the failure notification below is posted. There is no fallback directory.
 - `timeoutMs` defaults to 600000 (10 minutes). At most 4 route commands run at once across the
-  app. A command waiting for a turn uses up its own timeout while it waits, so one that never
-  gets a turn times out.
+  app; the others wait in order. A command waiting for a turn uses up its own timeout while it
+  waits, so one that never gets a turn times out. A waiting command whose routes change before it
+  starts never runs, and a notification says so.
 - A zero exit is silent. A non-zero exit, a timeout or a failure to start posts a notification
   titled "Route “name” failed" and sets the route's last error. After a non-zero exit, the
   notification's body is the last 600 characters of the command's output (standard output, then
@@ -328,23 +337,44 @@ event surface's `cwd`. Nothing is shown in a terminal.
 **`prompt: { text, whenBusy? }`** pastes `text` and presses Return, which submits it to the
 agent.
 
-- `whenBusy` is `queue` (the default) or `steer`. With `queue`, if the surface's agent is
-  `working` when the route fires, the text waits and goes out when the surface next reports
-  `idle`; if the agent's state is cleared first, or 600 seconds pass, nothing is sent. With
-  `steer`, the text goes out at once.
-- Nothing is sent while the surface shows a permission or sign-in prompt, or while a person has
-  typed unsent input into it. The route records why as its last error. Routes keep to this even
-  when the automation settings let socket writes through.
-- `prompt` presses Return only for an agent Programa knows about that is not blocked and not
-  stale. Anywhere else, a plain shell included, the text is pasted without Return and the last
-  error reads `pasted without submitting: no agent ready for a prompt`.
-- A submitted prompt holds its route until the surface next reports `idle` or its state is
-  cleared, for at most 600 seconds. A route on `agent/+/state/idle` therefore cannot trigger
-  itself: the idle that ends its own turn counts as `busy`.
+Text goes only to an agent, and only to one whose state reports name their writer: a program that
+reports its own status (OSC 7501, as Claude Code does), or hooks whose reports carry a session id
+(the `session_id` of `surface.report_agent_state` and `agent.needs_input`, which Programa's own
+hooks send whenever the agent gives them one). Screen detection and hooks reports without a session id are not enough. Each case
+below refuses the delivery, sends nothing, and records the reason as the route's last error.
+
+- The surface has no agent state, a plain shell for example.
+- The surface shows a permission or sign-in prompt, or a person has typed unsent input into it.
+  Routes keep to this even when the automation settings let socket writes through.
+- The agent's state reports name no session.
+- The agent stopped on a permission or sign-in prompt and has not reported `working` since, from
+  the same writer as the prompt or from the program's own status. A report that only closes the
+  prompt box does not count.
+- The agent report that fired the route names no session.
+- The report that fired the route is the first one from this agent, so nothing shows that an
+  agent is really there.
+
+`whenBusy` is `queue` (the default) or `steer`:
+
+- With `queue`, if the agent is `working` when the route fires, the text waits for the end of that
+  work: an `idle` report that follows a `working` report, both from the same writer. An idle from
+  anyone else, or one that follows `blocked`, does not release it. If the agent's state is cleared
+  first, or 600 seconds pass, nothing is sent. The checks above run again when the text goes out.
+- With `steer`, the text goes out at once.
+
+`prompt` presses Return only for an agent Programa knows about that is not blocked and not stale;
+otherwise the text is pasted without Return and the last error reads `pasted without submitting:
+no agent ready for a prompt`. A submitted prompt holds its route for its turn: until the surface
+reports `idle` after a `working` report in that turn, or its state is cleared, for at most 600
+seconds. While any route's prompt turn holds a surface, including the idle that ends it, no
+`prompt` route fires on that surface's events (they count as `busy`). A prompt route therefore
+cannot trigger itself, and two prompt routes cannot feed each other.
+
 - `text` may use identifier fields only. A free-text placeholder (`{{body}}`, `{{provider}}`,
   `{{cwd}}` and the others marked free text above) makes the route fail to load. A placeholder
   for an absent identifier renders empty.
-- A `prompt` route must set `throttleMs` above zero, which bounds how often it can submit.
+- A `prompt` route must set `throttleMs` to at least 60000 (one minute), which bounds how often it
+  can submit.
 
 ## Layout schema
 

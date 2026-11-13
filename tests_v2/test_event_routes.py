@@ -8,10 +8,13 @@ submitted prompt is an `echo` the shell runs, which `surface.read_text` then sho
 command line and its output). Banner hand-offs are read through `debug.notification.banner_count`
 with the app focus override set to inactive, so focused-panel suppression never hides one.
 
+Reports name a hook session (`provider` and `session_id`), because text goes only to an agent
+whose reports name their writer, and only the end of that writer's own work releases queued text.
+
 Cases: load and clear; throttle and its banner; the permission banner rule; `queue` and the
-prompt's own turn; a prompt on the idle edge that must not trigger itself; `steer`; a plain shell
-that gets no Return; refusal during a permission prompt; and a `run` whose reported working
-directory must be an existing, absolute path without `..`.
+prompt's own turn; a prompt on the idle edge that must not trigger itself; `steer`; a surface with
+no agent; refusal during a permission prompt; a forged idle during a permission prompt; and a
+`run` whose reported working directory must be an existing, absolute path without `..`.
 """
 
 from __future__ import annotations
@@ -91,22 +94,30 @@ class _Session:
                 pass
 
 
-def _report(client: ProgramaClient, workspace_id: str, surface_id: str, state: str) -> None:
-    client._call("surface.report_agent_state", {"workspace_id": workspace_id, "surface_id": surface_id, "state": state})
+AGENT_SESSION = "event-routes-test"
 
 
-def _needs_input(client: ProgramaClient, workspace_id: str, surface_id: str, kind: str) -> None:
-    client._call(
-        "agent.needs_input",
-        {
-            "workspace_id": workspace_id,
-            "surface_id": surface_id,
-            "provider": "claude-code",
-            "title": "Claude Code",
-            "body": f"routes-{uuid.uuid4().hex[:8]}",
-            "kind": kind,
-        },
-    )
+def _report(client: ProgramaClient, workspace_id: str, surface_id: str, state: str, *, session: bool = True) -> None:
+    """A hook report of `state`; `session=False` sends one that names no session (a forged or
+    mistaken report)."""
+    params = {"workspace_id": workspace_id, "surface_id": surface_id, "state": state}
+    if session:
+        params.update({"provider": "claude-code", "session_id": AGENT_SESSION})
+    client._call("surface.report_agent_state", params)
+
+
+def _needs_input(client: ProgramaClient, workspace_id: str, surface_id: str, kind: str, *, session: bool = False) -> None:
+    params = {
+        "workspace_id": workspace_id,
+        "surface_id": surface_id,
+        "provider": "claude-code",
+        "title": "Claude Code",
+        "body": f"routes-{uuid.uuid4().hex[:8]}",
+        "kind": kind,
+    }
+    if session:
+        params["session_id"] = AGENT_SESSION
+    client._call("agent.needs_input", params)
 
 
 def _wait_counter(client: ProgramaClient, name: str, counter: str, value: int) -> dict:
@@ -214,23 +225,49 @@ def _case_steer(client: ProgramaClient, session: _Session) -> None:
     workspace_id, surface_id = session.shell()
     _load(client, [{"name": "steer", "on": "agent/+/state/working",
                     "send": {"text": "STEERED-{{state}}", "whenBusy": "steer"}}])
+    # The report that creates the agent's state cannot also release text, so start from idle.
+    _report(client, workspace_id, surface_id, "idle")
     _report(client, workspace_id, surface_id, "working")
     _wait("steer to paste while the agent works",
           lambda: "STEERED-working" in _screen(client, workspace_id, surface_id))
     _must(_route(client, "steer").get("last_error") is None, f"steer should not fail: {_route(client, 'steer')}")
 
 
-def _case_plain_shell(client: ProgramaClient, session: _Session) -> None:
+def _case_no_agent(client: ProgramaClient, session: _Session) -> None:
     workspace_id, surface_id = session.shell()
     _load(client, [{"name": "plain", "on": "agent/+/state/none", "throttleMs": 60000,
-                    "prompt": {"text": "echo PLAIN-NOT-SUBMITTED", "whenBusy": "steer"}}])
+                    "prompt": {"text": "echo PLAIN-NOT-SENT", "whenBusy": "steer"}}])
     _report(client, workspace_id, surface_id, "working")
     client._call("surface.clear_agent_state", {"workspace_id": workspace_id, "surface_id": surface_id})
-    _wait("the plain-shell outcome", lambda: _route(client, "plain").get("last_error") is not None)
+    _wait("the no-agent outcome", lambda: _route(client, "plain").get("last_error") is not None)
     route = _route(client, "plain")
-    _must(str(route.get("last_error")).startswith("pasted without submitting"), f"unexpected last_error: {route}")
-    _must(_screen(client, workspace_id, surface_id).count("PLAIN-NOT-SUBMITTED") <= 1,
-          "a plain shell must not run the pasted prompt")
+    _must(route.get("last_error") == "refused: the surface has no agent; nothing was sent", f"unexpected last_error: {route}")
+    _must("PLAIN-NOT-SENT" not in _screen(client, workspace_id, surface_id), "a surface with no agent gets nothing")
+
+
+def _case_forged_idle_during_permission(client: ProgramaClient, session: _Session) -> None:
+    workspace_id, surface_id = session.shell()
+    marker = "FORGED-working-SAFE"
+    _report(client, workspace_id, surface_id, "idle")
+    _load(client, [{"name": "queued", "on": "agent/+/state/working", "throttleMs": 60000,
+                    "prompt": {"text": "echo FORGED-{{state}}-SAFE"}}])
+    _report(client, workspace_id, surface_id, "working")
+    _wait_counter(client, "queued", "fired", 1)
+    _needs_input(client, workspace_id, surface_id, "permission", session=True)
+
+    # An idle that names no session closes the prompt box but must not release the queued
+    # prompt into it.
+    _report(client, workspace_id, surface_id, "idle", session=False)
+    held_until = time.time() + 1.5
+    while time.time() < held_until:
+        _must(marker not in _screen(client, workspace_id, surface_id), "a forged idle must not release queued text")
+        time.sleep(0.1)
+
+    # The agent's own working and idle do.
+    _report(client, workspace_id, surface_id, "working")
+    _report(client, workspace_id, surface_id, "idle")
+    _wait("the queued prompt after the agent's own idle",
+          lambda: _screen(client, workspace_id, surface_id).count(marker) >= 2)
 
 
 def _case_refused_during_prompt(client: ProgramaClient, session: _Session) -> None:
@@ -320,8 +357,9 @@ def _run_once(socket_path: str) -> int:
             _case_queue(client, session)
             _case_no_self_trigger(client, session)
             _case_steer(client, session)
-            _case_plain_shell(client, session)
+            _case_no_agent(client, session)
             _case_refused_during_prompt(client, session)
+            _case_forged_idle_during_permission(client, session)
             _case_run_directory(client, session, temp_dir)
             print("PASS: event routes load, throttle, own banners, deliver text and guard runs")
             return 0
