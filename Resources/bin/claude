@@ -217,7 +217,7 @@ HOOKS_JSON='{"hooks":{"SessionStart":[{"matcher":"","hooks":[{"type":"command","
 # older binary that rejects them (#1818). Cache the result per binary
 # path+mtime so the --help subprocess only runs once per binary update.
 _claude_real_mtime="$(stat -f '%m' "$REAL_CLAUDE" 2>/dev/null || stat -c '%Y' "$REAL_CLAUDE" 2>/dev/null || echo 0)"
-_claude_cache_key="${REAL_CLAUDE}:${_claude_real_mtime}"
+_claude_cache_key="2:${REAL_CLAUDE}:${_claude_real_mtime}"
 if [[ "${_PROGRAMA_CLAUDE_FLAGS_CACHE_KEY:-}" == "$_claude_cache_key" ]]; then
     _claude_flags="$_PROGRAMA_CLAUDE_FLAGS_CACHE_VAL"
 else
@@ -228,18 +228,30 @@ else
             _claude_flags+="${_flag} "
         fi
     done
-    # Claude Code 2.1.295+ reports its own OSC 7501 status once Programa answers its probe.
-    if [[ "$("$REAL_CLAUDE" --version 2>/dev/null)" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]] \
-        && (( BASH_REMATCH[1] > 2 || (BASH_REMATCH[1] == 2 && (BASH_REMATCH[2] > 1 || (BASH_REMATCH[2] == 1 && BASH_REMATCH[3] >= 295))) )); then
-        _claude_flags+="program-status "
+    if [[ "$("$REAL_CLAUDE" --version 2>/dev/null)" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+        _claude_version=$(( BASH_REMATCH[1] * 1000000 + BASH_REMATCH[2] * 1000 + BASH_REMATCH[3] ))
+        # Agent teams and --teammate-mode, which `programa claude-teams` passes, arrived in 2.1.32.
+        (( _claude_version >= 2001032 )) && _claude_flags+="agent-teams "
+        # Claude Code 2.1.295+ reports its own OSC 7501 status once Programa answers its probe.
+        (( _claude_version >= 2001295 )) && _claude_flags+="program-status "
     fi
     export _PROGRAMA_CLAUDE_FLAGS_CACHE_KEY="$_claude_cache_key"
     export _PROGRAMA_CLAUDE_FLAGS_CACHE_VAL="$_claude_flags"
 fi
 
-# Claude skips its own status inside tmux/screen, as a background worker, and with terminal
-# title writes disabled; the hooks keep writing it there.
-if [[ "$_claude_flags" == *" program-status "* && -z "${TMUX:-}" && -z "${STY:-}" \
+# Agent teams are on by default (automation.claudeTeamsByDefault): launch through
+# `programa claude-teams`, whose tmux shim opens teammates as Programa panes. An explicit
+# CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS, including 0, is the user's choice, and inside a real
+# tmux or screen the shim would shadow it, so both keep the plain launch.
+USE_TEAMS=0
+if [[ "${PROGRAMA_CLAUDE_TEAMS_DISABLED:-}" != "1" && -z "${CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS+x}" \
+    && -z "${TMUX:-}" && -z "${STY:-}" && "$_claude_flags" == *" agent-teams "* ]]; then
+    USE_TEAMS=1
+fi
+
+# Claude skips its own status inside tmux/screen (including the claude-teams fake TMUX), as a
+# background worker, and with terminal title writes disabled; the hooks keep writing it there.
+if [[ "$_claude_flags" == *" program-status "* && "$USE_TEAMS" == 0 && -z "${TMUX:-}" && -z "${STY:-}" \
     && "${CLAUDE_CODE_SESSION_KIND:-}" != "bg" && -z "${CLAUDE_CODE_DISABLE_TERMINAL_TITLE:-}" ]]; then
     export PROGRAMA_CLAUDE_NATIVE_STATUS=1
 else
@@ -262,11 +274,19 @@ if [[ "$SKIP_MCP_CONFIG" == false && "$_claude_flags" == *" mcp-config "* ]] \
 fi
 
 if [[ "$SKIP_SYSTEM_PROMPT" == false && "$_claude_flags" == *" append-system-prompt "* ]]; then
+    if [[ "$USE_TEAMS" == 1 ]]; then
+        TEAMS_PROMPT="Agent teams are on: teammates you start open as Programa panes."
+    else
+        TEAMS_PROMPT="For coordinated parallel agents, suggest the user restart with \`programa claude-teams\`."
+    fi
     INJECTED_ARGS+=(--append-system-prompt "You are running inside Programa, a terminal built for running coding agents in parallel.
 Before splitting work, running long jobs, or reviewing a diff, read the programa skill (or run \`programa help\`).
 Prefer what it describes: \`programa worktree create\` or agent_spawn with needs_isolation for conflicting edits, \`programa race\` for competing attempts, \`programa review\` for diffs, and \`programa wait-surface\` for long jobs.
-For long-running or parallel work, split a pane (surface_split) or start a sibling agent (agent_spawn) so the user can watch it, and say which pane. For coordinated parallel agents, suggest the user restart with \`programa claude-teams\`.
+For long-running or parallel work, split a pane (surface_split) or start a sibling agent (agent_spawn) so the user can watch it, and say which pane. $TEAMS_PROMPT
 Do not move the user's focus unless they ask.")
 fi
 
+if [[ "$USE_TEAMS" == 1 ]]; then
+    exec "$PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN" --socket "$PROGRAMA_SOCKET_PATH" claude-teams "${INJECTED_ARGS[@]}" "$@"
+fi
 exec "$REAL_CLAUDE" "${INJECTED_ARGS[@]}" "$@"

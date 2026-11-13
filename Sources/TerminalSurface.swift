@@ -1389,6 +1389,9 @@ final class TerminalSurface: Identifiable, ObservableObject {
         if !claudeHooksEnabled {
             setManagedEnvironmentValue("PROGRAMA_CLAUDE_HOOKS_DISABLED", "1")
         }
+        if !ClaudeCodeIntegrationSettings.teamsByDefault() {
+            setManagedEnvironmentValue("PROGRAMA_CLAUDE_TEAMS_DISABLED", "1")
+        }
 
         if let cliBinPath = Bundle.main.resourceURL?.appendingPathComponent("bin").path {
             let currentPath = env["PATH"]

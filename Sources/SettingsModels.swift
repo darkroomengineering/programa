@@ -198,6 +198,16 @@ enum ClaudeCodeIntegrationSettings {
     static func hooksEnabled(defaults: UserDefaults = .standard) -> Bool {
         hooksFlag.isEnabled(defaults: defaults)
     }
+
+    /// `automation.claudeTeamsByDefault`: plain `claude` in a Programa terminal starts with agent
+    /// teams on. Read at terminal spawn, so a change applies to new terminals.
+    static let teamsByDefaultKey = "claudeCodeTeamsByDefault"
+    static let defaultTeamsByDefault = true
+    private static let teamsFlag = UserDefaultsFlag(key: teamsByDefaultKey, defaultValue: defaultTeamsByDefault)
+
+    static func teamsByDefault(defaults: UserDefaults = .standard) -> Bool {
+        teamsFlag.isEnabled(defaults: defaults)
+    }
 }
 
 /// Screen-manifest agent detection (docs/plans/screen-manifest-detection.md): pattern-matches

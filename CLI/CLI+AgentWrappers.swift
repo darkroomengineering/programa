@@ -92,7 +92,10 @@ extension ProgramaCLI {
             termOverrideEnvVar: termOverrideEnvVar,
             extraEnvVars: extraEnvVars
         )
-        guard needsClaudeNodeOptionsRestore else { return }
+        // The claude wrapper already layered on its bundled restore module before handing off;
+        // a second pass would record that merged value as the user's original.
+        guard needsClaudeNodeOptionsRestore,
+              processEnvironment["PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT"] == nil else { return }
         guard let restoreModuleURL = try? createClaudeNodeOptionsRestoreModule() else {
             unsetenv("PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT")
             unsetenv("PROGRAMA_ORIGINAL_NODE_OPTIONS")
@@ -300,6 +303,10 @@ extension ProgramaCLI {
             Usage: programa claude-teams [claude-args...]
 
             Launch Claude Code with agent teams enabled.
+
+            Plain `claude` in a Programa terminal already does this unless
+            automation.claudeTeamsByDefault is off or CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
+            is set. This command always turns teams on.
 
             This command:
               - defaults Claude teammate mode to auto

@@ -44,6 +44,8 @@ struct SettingsView: View {
     @AppStorage(SocketControlSettings.appStorageKey) private var socketControlMode = SocketControlSettings.defaultMode.rawValue
     @AppStorage(ClaudeCodeIntegrationSettings.hooksEnabledKey)
     private var claudeCodeHooksEnabled = ClaudeCodeIntegrationSettings.defaultHooksEnabled
+    @AppStorage(ClaudeCodeIntegrationSettings.teamsByDefaultKey)
+    private var claudeTeamsByDefault = ClaudeCodeIntegrationSettings.defaultTeamsByDefault
     @AppStorage(AgentScreenDetectionSettings.enabledKey)
     private var agentScreenDetectionEnabled = AgentScreenDetectionSettings.defaultEnabled
     @AppStorage(DraftGuardSettings.enabledKey)
@@ -819,6 +821,21 @@ struct SettingsView: View {
             SettingsCardDivider()
 
             SettingsCardRow(
+                String(localized: "settings.agents.claudeTeams", defaultValue: "Claude Agent Teams"),
+                subtitle: claudeTeamsByDefault
+                    ? String(localized: "settings.agents.claudeTeams.subtitleOn", defaultValue: "claude starts with agent teams on, and teammates open as panes.")
+                    : String(localized: "settings.agents.claudeTeams.subtitleOff", defaultValue: "Agent teams start only with programa claude-teams.")
+            ) {
+                Toggle("", isOn: $claudeTeamsByDefault)
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .accessibilityIdentifier("SettingsClaudeTeamsByDefaultToggle")
+            }
+            .managedBySettingsFile(settingsFileStatus.isManaged(ClaudeCodeIntegrationSettings.teamsByDefaultKey))
+
+            SettingsCardDivider()
+
+            SettingsCardRow(
                 String(localized: "settings.agents.holdAgentText", defaultValue: "Protect Unsent Typing"),
                 subtitle: holdAgentTextWhileTyping
                     ? String(localized: "settings.agents.holdAgentText.subtitleOn", defaultValue: "Agents can't send text to a pane while you have unsent typing there.")
@@ -967,6 +984,7 @@ struct SettingsView: View {
         appearanceMode = AppearanceSettings.defaultMode.rawValue
         socketControlMode = SocketControlSettings.defaultMode.rawValue
         claudeCodeHooksEnabled = ClaudeCodeIntegrationSettings.defaultHooksEnabled
+        claudeTeamsByDefault = ClaudeCodeIntegrationSettings.defaultTeamsByDefault
         agentScreenDetectionEnabled = AgentScreenDetectionSettings.defaultEnabled
         holdAgentTextWhileTyping = DraftGuardSettings.defaultEnabled
         protectApprovalPrompts = ApprovalGuardSettings.defaultEnabled

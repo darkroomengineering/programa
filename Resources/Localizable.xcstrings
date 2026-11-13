@@ -4163,13 +4163,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Usage: programa claude-teams [claude-args...]\n\nLaunch Claude Code with agent teams enabled.\n\nThis command:\n  - defaults Claude teammate mode to auto\n  - sets a tmux-like environment so Claude can open Programa helper workspaces\n  - sets CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1\n  - prepends a private tmux shim to PATH\n  - forwards all remaining arguments to claude\n\nThe tmux shim turns supported tmux window/pane commands into nested helper\nworkspaces in the current Programa window.\n\nExamples:\n  programa claude-teams\n  programa claude-teams --continue\n  programa claude-teams --model sonnet"
+            "value": "Usage: programa claude-teams [claude-args...]\n\nLaunch Claude Code with agent teams enabled.\n\nPlain `claude` in a Programa terminal already does this unless\nautomation.claudeTeamsByDefault is off or CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS\nis set. This command always turns teams on.\n\nThis command:\n  - defaults Claude teammate mode to auto\n  - sets a tmux-like environment so Claude can open Programa helper workspaces\n  - sets CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1\n  - prepends a private tmux shim to PATH\n  - forwards all remaining arguments to claude\n\nThe tmux shim turns supported tmux window/pane commands into nested helper\nworkspaces in the current Programa window.\n\nExamples:\n  programa claude-teams\n  programa claude-teams --continue\n  programa claude-teams --model sonnet"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "使用方法: programa claude-teams [claude-args...]\n\nエージェントチームを有効にして Claude Code を起動します。\n\nこのコマンドは次の処理を行います:\n  - Claude のチームメイトモードをデフォルトで auto に設定\n  - Claude が Programa のヘルパーワークスペースを開ける tmux 互換環境を設定\n  - CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 を設定\n  - 専用の tmux シムを PATH の先頭に追加\n  - 残りの引数をすべて claude に渡す\n\ntmux シムは対応する tmux の window/pane コマンドを、現在の Programa\nウインドウ内にあるネストされたヘルパーワークスペースへ変換します。\n\n例:\n  programa claude-teams\n  programa claude-teams --continue\n  programa claude-teams --model sonnet"
+            "value": "使用方法: programa claude-teams [claude-args...]\n\nエージェントチームを有効にして Claude Code を起動します。\n\nPrograma ターミナルでは、automation.claudeTeamsByDefault がオフか\nCLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS が設定されている場合を除き、\n通常の `claude` も同じ動作をします。このコマンドは常にチームを有効にします。\n\nこのコマンドは次の処理を行います:\n  - Claude のチームメイトモードをデフォルトで auto に設定\n  - Claude が Programa のヘルパーワークスペースを開ける tmux 互換環境を設定\n  - CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 を設定\n  - 専用の tmux シムを PATH の先頭に追加\n  - 残りの引数をすべて claude に渡す\n\ntmux シムは対応する tmux の window/pane コマンドを、現在の Programa\nウインドウ内にあるネストされたヘルパーワークスペースへ変換します。\n\n例:\n  programa claude-teams\n  programa claude-teams --continue\n  programa claude-teams --model sonnet"
           }
         }
       }
@@ -9933,6 +9933,57 @@
           "stringUnit": {
             "state": "translated",
             "value": "入力した内容を送信するか消去するまで、エージェントのテキストは送られません。"
+          }
+        }
+      }
+    },
+    "settings.agents.claudeTeams": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Agent Teams"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude エージェントチーム"
+          }
+        }
+      }
+    },
+    "settings.agents.claudeTeams.subtitleOn": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "claude starts with agent teams on, and teammates open as panes."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "claude はエージェントチームを有効にして起動し、チームメイトはペインで開きます。"
+          }
+        }
+      }
+    },
+    "settings.agents.claudeTeams.subtitleOff": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent teams start only with programa claude-teams."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "エージェントチームは programa claude-teams でのみ起動します。"
           }
         }
       }

@@ -6,6 +6,9 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 
 ## [Unreleased]
 
+### Changed
+- Plain `claude` in a Programa terminal now starts with Claude Code agent teams on, the same as `programa claude-teams`, so teammates open as Programa panes. A `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` you set yourself, including `0`, is left alone, and so is `claude` inside your own tmux or screen. Turn it off in Settings > Agents > Claude Agent Teams (`automation.claudeTeamsByDefault`). `programa claude-teams` still works and always turns teams on.
+
 ## [0.7.0] - 2026-11-11
 
 ### Added
