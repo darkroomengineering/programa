@@ -557,6 +557,7 @@ extension Workspace: @preconcurrency BonsplitDelegate {
                 isPinned: pinnedPanelIds.contains(panelId),
                 customColorHex: panelColorHexes[panelId],
                 directory: panelDirectories[panelId],
+                resolvedDirectory: resolvedPanelDirectories[panelId],
                 ttyName: surfaceTTYNames[panelId],
                 cachedTitle: cachedTitle,
                 customTitle: panelCustomTitles[panelId],
@@ -708,6 +709,7 @@ extension Workspace: @preconcurrency BonsplitDelegate {
     /// Aggregate recomputes (recomputeListeningPorts) stay at the call sites.
     private func removeSurfaceMetadata(panelId: UUID, isDetaching: Bool = false) {
         panelDirectories.removeValue(forKey: panelId)
+        resolvedPanelDirectories.removeValue(forKey: panelId)
         panelGitBranches.removeValue(forKey: panelId)
         panelPullRequests.removeValue(forKey: panelId)
         reviewTurns.removeValue(forKey: panelId)

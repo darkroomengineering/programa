@@ -297,6 +297,19 @@ final class ProgramaRouteDecodingTests: XCTestCase {
         XCTAssertNoThrow(try onlyRoute(#"{ "name": "n", "on": "agent/#", "run": { "command": "echo {{not_a_field}}" } }"#))
     }
 
+    func testTextRoutesCannotFireOnlyOnNeedsInput() throws {
+        try assertIssue(
+            #"{ "name": "n", "on": "agent/+/needs_input/#", "send": { "text": "go" } }"#,
+            mentions: "'send' route cannot fire on needs_input events"
+        )
+        try assertIssue(
+            #"{ "name": "n", "on": "agent/+/needs_input/question", "throttleMs": "1m", "prompt": { "text": "go" } }"#,
+            mentions: "'prompt' route cannot fire on needs_input events"
+        )
+        XCTAssertNoThrow(try onlyRoute(#"{ "name": "n", "on": "agent/#", "send": { "text": "go" } }"#))
+        XCTAssertNoThrow(try onlyRoute(#"{ "name": "n", "on": "agent/+/needs_input/#", "notify": { "title": "t" } }"#))
+    }
+
     func testPromptRouteNeedsThrottle() throws {
         try assertIssue(#"{ "name": "n", "on": "agent/#", "prompt": { "text": "go" } }"#, mentions: "needs a 'throttleMs'")
         try assertIssue(#"{ "name": "n", "on": "agent/#", "throttleMs": 0, "prompt": { "text": "go" } }"#, mentions: "needs a 'throttleMs'")

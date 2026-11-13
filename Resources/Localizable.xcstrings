@@ -18729,6 +18729,23 @@
           }
         }
       }
+    },
+    "routes.run.failed.noSlot": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No run slot became free within %lld seconds, so the command never started."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 秒以内に実行枠が空かなかったため、コマンドは開始されませんでした。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

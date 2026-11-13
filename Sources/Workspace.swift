@@ -578,6 +578,8 @@ final class Workspace: Identifiable, ObservableObject {
         let isPinned: Bool
         let customColorHex: String?
         let directory: String?
+        /// The directory event routes see, carried so a moved surface keeps its `cwd`.
+        let resolvedDirectory: ResolvedPanelDirectory?
         let ttyName: String?
         let cachedTitle: String?
         let customTitle: String?
@@ -600,6 +602,7 @@ final class Workspace: Identifiable, ObservableObject {
             isPinned: Bool,
             customColorHex: String?,
             directory: String?,
+            resolvedDirectory: ResolvedPanelDirectory? = nil,
             ttyName: String?,
             cachedTitle: String?,
             customTitle: String?,
@@ -617,6 +620,7 @@ final class Workspace: Identifiable, ObservableObject {
             self.isPinned = isPinned
             self.customColorHex = customColorHex
             self.directory = directory
+            self.resolvedDirectory = resolvedDirectory
             self.ttyName = ttyName
             self.cachedTitle = cachedTitle
             self.customTitle = customTitle
@@ -1387,6 +1391,10 @@ final class Workspace: Identifiable, ObservableObject {
 
         if let directory = detached.directory {
             updatePanelDirectory(panelId: detached.panelId, directory: directory)
+            if let resolved = detached.resolvedDirectory {
+                // Kept only while it still belongs to the directory just set.
+                resolvedPanelDirectories[detached.panelId] = resolved
+            }
         }
         if let ttyName = normalizedSidebarTTYName(detached.ttyName) {
             _ = setSidebarTTYName(panelId: detached.panelId, ttyName: ttyName)
@@ -1434,6 +1442,7 @@ final class Workspace: Identifiable, ObservableObject {
         ) else {
             panels.removeValue(forKey: detached.panelId)
             panelDirectories.removeValue(forKey: detached.panelId)
+            resolvedPanelDirectories.removeValue(forKey: detached.panelId)
             surfaceTTYNames.removeValue(forKey: detached.panelId)
             panelTitles.removeValue(forKey: detached.panelId)
             panelCustomTitles.removeValue(forKey: detached.panelId)

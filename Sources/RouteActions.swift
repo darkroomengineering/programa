@@ -35,6 +35,8 @@ enum RouteRunFailure: Sendable, Equatable {
     case exitStatus(Int32, tail: String)
     case timedOut(TimeInterval)
     case launch(String)
+    /// The command waited for a run slot for its whole timeout and never started.
+    case neverStarted(TimeInterval)
 
     static let outputTailLimit = 600
 
@@ -63,6 +65,8 @@ enum RouteRunFailure: Sendable, Equatable {
         case .timedOut(let timeout):
             return timeout >= 1 ? "timed out after \(Int(timeout)) s" : "timed out after \(Int(timeout * 1000)) ms"
         case .launch(let message): return "could not start: \(message)"
+        case .neverStarted(let timeout):
+            return "never started: no run slot was free within \(Int(timeout)) s"
         }
     }
 }
@@ -185,7 +189,7 @@ final class RouteActions: RouteActionExecutor {
         if let index = queuedRuns.firstIndex(where: { $0.fire.id == fire.id }) {
             let queued = queuedRuns.remove(at: index)
             if queued.engine.isCurrent(fire) {
-                finishRun(fire, failure: .timedOut(fire.route.deliveryTimeout ?? CompiledRoute.defaultDeliveryTimeout), engine: queued.engine)
+                finishRun(fire, failure: .neverStarted(fire.route.deliveryTimeout ?? CompiledRoute.defaultDeliveryTimeout), engine: queued.engine)
             } else {
                 reportStaleRun(fire)
             }
@@ -235,6 +239,13 @@ final class RouteActions: RouteActionExecutor {
         case .send(let text, _): (template, wantsSubmit) = (text, false)
         case .prompt(let text, _): (template, wantsSubmit) = (text, true)
         default: return
+        }
+        // A debounced or queued prompt fires after its match, and two can come due together, so
+        // the one-turn-per-surface rule is checked again here, just before anything is pasted.
+        if wantsSubmit, let surfaceId = fire.event.fields["surface_id"], engine.routeTurnIsOpen(onSurface: surfaceId) {
+            engine.recordBusy(fire)
+            engine.endDelivery(fire)
+            return
         }
         if let refusal = Self.textRefusal(fire, target: target, engine: engine, firedNow: firedNow) {
             engine.endDelivery(fire, error: refusal)
@@ -336,7 +347,7 @@ final class RouteActions: RouteActionExecutor {
             let timeout = queued.fire.route.deliveryTimeout ?? CompiledRoute.defaultDeliveryTimeout
             let remaining = timeout - environment.now().timeIntervalSince(queued.queuedAt)
             guard remaining > 0 else {
-                finishRun(queued.fire, failure: .timedOut(timeout), engine: queued.engine)
+                finishRun(queued.fire, failure: .neverStarted(timeout), engine: queued.engine)
                 continue
             }
             launch(queued, timeout: timeout, remaining: remaining)
@@ -420,6 +431,15 @@ final class RouteActions: RouteActionExecutor {
         case .launch(let message):
             subtitle = String(localized: "routes.run.failed.launch", defaultValue: "The command could not start")
             body = message
+        case .neverStarted(let timeout):
+            subtitle = String(localized: "routes.run.failed.launch", defaultValue: "The command could not start")
+            body = String.localizedStringWithFormat(
+                String(
+                    localized: "routes.run.failed.noSlot",
+                    defaultValue: "No run slot became free within %lld seconds, so the command never started."
+                ),
+                Int64(timeout)
+            )
         }
         environment.notify(RouteNotification(
             workspaceId: fire.event.fields["workspace_id"].flatMap(UUID.init(uuidString:)),

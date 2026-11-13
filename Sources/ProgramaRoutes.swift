@@ -358,6 +358,13 @@ extension ProgramaRouteDefinition: Decodable {
                 "a 'prompt' route needs a 'throttleMs' of at least \(Self.minimumPromptThrottleMs) (1 minute)"
             )
         }
+        // `agent.needs_input` stops the agent for the person, and text waits for its next `working`
+        // (`RouteEngine` resume rule), so text fired only by input requests could never go out.
+        if action.deliversText, RouteEngine.eventClasses(for: [on]) == [.needsInput] {
+            throw ProgramaRouteValidationError(
+                "a '\(action.name)' route cannot fire on needs_input events: the agent is waiting for the person then, so the text would never be delivered; route on agent/+/state/... instead"
+            )
+        }
         self.init(
             name: name,
             on: on,

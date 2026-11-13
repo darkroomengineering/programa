@@ -98,7 +98,9 @@ final class RouteEngineTests: XCTestCase {
             tap: tap,
             now: { clock.now },
             scheduleWake: { date, body in clock.schedule(at: date, body) },
-            modelFields: modelFields
+            modelFields: modelFields,
+            deferWork: { $0() },
+            blockedSurfaces: { [] }
         )
     }
 
@@ -433,9 +435,9 @@ final class RouteEngineTests: XCTestCase {
         XCTAssertEqual(executor.issueReports.count, 2, "a changed file reports even while an override masks it")
     }
 
-    // MARK: - Banner query
+    // MARK: - Banner decision
 
-    func testNotifyRouteOwnsTheBannerForEveryCallItMatches() throws {
+    func testANotifyRouteOwnsTheBannerForEveryQuestionItMatches() throws {
         let engine = makeEngine { _ in ["worktree": "true"] }
         try install(#"""
         { "name": "ask", "on": "agent/+/needs_input/question", "when": { "worktree": "true" },
@@ -443,40 +445,63 @@ final class RouteEngineTests: XCTestCase {
         { "name": "review", "on": "agent/+/needs_input/permission", "review": {} }
         """#, on: engine)
 
-        XCTAssertTrue(engine.hasNotifyRoute(matching: needsInput(surface: "S1")))
-        engine.ingest(needsInput(surface: "S1"))
-        engine.ingest(needsInput(surface: "S1"))
-        XCTAssertEqual(counters(engine, "ask")?.throttled, 1)
-        XCTAssertTrue(engine.hasNotifyRoute(matching: needsInput(surface: "S1")), "a throttled call still shows no built-in banner")
+        XCTAssertTrue(engine.ingestNeedsInput(needsInput(surface: "S1")))
+        XCTAssertTrue(engine.ingestNeedsInput(needsInput(surface: "S1")), "a throttled question still shows no built-in banner")
+        XCTAssertEqual(counters(engine, "ask"), RouteCounters(matched: 2, fired: 1, throttled: 1))
 
         XCTAssertFalse(
-            engine.hasNotifyRoute(matching: needsInput(surface: "S1", kind: "permission")),
+            engine.ingestNeedsInput(needsInput(surface: "S1", kind: "permission")),
             "a permission call that only a review route matches keeps its banner"
         )
-        XCTAssertFalse(engine.hasNotifyRoute(matching: agentState(surface: "S1", state: "idle")))
     }
 
     func testAPermissionBannerGivesWayOnlyToARouteThatFiresForThatCall() throws {
+        let executor = RecordingExecutor()
         let engine = makeEngine()
+        engine.executor = executor
         try install(#"""
-        { "name": "ask", "on": "agent/+/needs_input/#", "throttleMs": "5m", "notify": { "title": "t" } }
+        { "name": "ask", "on": "agent/+/needs_input/#", "key": "{{surface_id}}", "throttleMs": "5m", "notify": { "title": "t" } }
         """#, on: engine)
         let permission = needsInput(surface: "S1", kind: "permission")
 
-        XCTAssertTrue(engine.hasNotifyRoute(matching: permission), "the route fires for this call, so its banner is the one shown")
-        engine.ingest(permission)
-        XCTAssertEqual(counters(engine, "ask")?.fired, 1)
+        XCTAssertTrue(engine.ingestNeedsInput(permission), "the route fires for this call, so its banner is the one shown")
+        XCTAssertEqual(executor.fires.count, 1, "its notification runs after the call's hop")
+        XCTAssertFalse(engine.ingestNeedsInput(permission), "a throttled permission call keeps its built-in banner")
+        XCTAssertTrue(engine.ingestNeedsInput(needsInput(surface: "S1")), "a throttled question stays suppressed")
+    }
 
-        XCTAssertFalse(engine.hasNotifyRoute(matching: permission), "a throttled permission call keeps its built-in banner")
-        XCTAssertTrue(engine.hasNotifyRoute(matching: needsInput(surface: "S1")), "a throttled question stays suppressed")
+    func testABurstOfPermissionCallsKeepsEveryBannerButTheRoutesOwn() throws {
+        // Two calls handled back to back, before any action has run: the second sees the gate the
+        // first one moved.
+        var deferred: [@MainActor () -> Void] = []
+        let clock = clock!
+        let engine = RouteEngine(
+            now: { clock.now },
+            scheduleWake: { date, body in clock.schedule(at: date, body) },
+            modelFields: { _ in [:] },
+            deferWork: { deferred.append($0) },
+            blockedSurfaces: { [] }
+        )
+        let executor = RecordingExecutor()
+        engine.executor = executor
+        try install(#"""
+        { "name": "ask", "on": "agent/+/needs_input/#", "key": "{{surface_id}}", "throttleMs": "5m", "notify": { "title": "t" } }
+        """#, on: engine)
+
+        let first = engine.ingestNeedsInput(needsInput(surface: "S1", kind: "permission"))
+        let second = engine.ingestNeedsInput(needsInput(surface: "S1", kind: "permission"))
+        deferred.forEach { $0() }
+
+        XCTAssertEqual([first, second], [true, false])
+        XCTAssertEqual(executor.fires.count, 1, "one route notification, and the second call keeps its built-in banner")
     }
 
     func testADebouncedPermissionCallKeepsItsBanner() throws {
         let engine = makeEngine()
         try install(#"{ "name": "ask", "on": "agent/+/needs_input/#", "debounceMs": 1000, "notify": { "title": "t" } }"#, on: engine)
 
-        XCTAssertFalse(engine.hasNotifyRoute(matching: needsInput(surface: "S1", kind: "permission")))
-        XCTAssertTrue(engine.hasNotifyRoute(matching: needsInput(surface: "S1")))
+        XCTAssertFalse(engine.ingestNeedsInput(needsInput(surface: "S1", kind: "permission")))
+        XCTAssertTrue(engine.ingestNeedsInput(needsInput(surface: "S1")))
     }
 
     func testACallWithNoKindFollowsThePermissionRule() throws {
@@ -484,16 +509,35 @@ final class RouteEngineTests: XCTestCase {
         try install(#"{ "name": "ask", "on": "agent/+/needs_input/#", "throttleMs": "5m", "notify": { "title": "t" } }"#, on: engine)
         let kindless = needsInput(surface: "S1", kind: nil)
 
-        XCTAssertTrue(engine.hasNotifyRoute(matching: kindless))
-        engine.ingest(kindless)
-        XCTAssertFalse(engine.hasNotifyRoute(matching: kindless), "a throttled call with no kind keeps its banner")
+        XCTAssertTrue(engine.ingestNeedsInput(kindless))
+        XCTAssertFalse(engine.ingestNeedsInput(kindless), "a throttled call with no kind keeps its banner")
     }
 
-    func testBannerQueryChecksWhenAgainstModelFields() throws {
+    func testBannerDecisionChecksWhenAgainstModelFields() throws {
         let engine = makeEngine { _ in ["worktree": "false"] }
         try install(#"{ "name": "ask", "on": "agent/+/needs_input/#", "when": { "worktree": "true" }, "notify": { "title": "t" } }"#, on: engine)
 
-        XCTAssertFalse(engine.hasNotifyRoute(matching: needsInput(surface: "S1")))
+        XCTAssertFalse(engine.ingestNeedsInput(needsInput(surface: "S1")))
+    }
+
+    // MARK: - Regex time limit
+
+    func testACatastrophicRegexIsStoppedAndReported() throws {
+        let regex = try ProgramaRouteRegex(pattern: "^(a|aa)+$", flags: "")
+        let nearMiss = String(repeating: "a", count: 4000) + "b"
+        let start = ProcessInfo.processInfo.systemUptime
+        XCTAssertEqual(regex.evaluate(nearMiss), .timedOut)
+        XCTAssertLessThan(ProcessInfo.processInfo.systemUptime - start, 1.0, "stopped near its 50 ms limit")
+        XCTAssertEqual(regex.evaluate("aaaa"), .matched)
+
+        let engine = makeEngine()
+        try install(#"{ "name": "slow", "on": "agent/#", "when": { "body": { "regex": "^(a|aa)+$" } }, "review": {} }"#, on: engine)
+        engine.ingest(RouteEvent(topic: "agent/S1/needs_input/question", fields: ["surface_id": "S1", "body": nearMiss]))
+        XCTAssertEqual(counters(engine, "slow")?.matched, 0, "a stopped match is no match")
+        XCTAssertEqual(
+            engine.snapshot().routes.first?.lastError,
+            "when.body: the regex ran longer than 50 ms and was stopped; the event did not match"
+        )
     }
 
     // MARK: - Text deliveries
@@ -502,10 +546,9 @@ final class RouteEngineTests: XCTestCase {
         let executor = RecordingExecutor()
         let engine = makeEngine()
         engine.executor = executor
-        try install(#"{ "name": "s", "on": "agent/+/needs_input/#", "send": { "text": "go" } }"#, on: engine)
+        try install(#"{ "name": "s", "on": "agent/+/state/working", "send": { "text": "go" } }"#, on: engine)
 
         engine.ingest(agentState(surface: "S1", state: "working", previous: "idle", writer: agent))
-        engine.ingest(needsInput(surface: "S1"))
         let fire = try XCTUnwrap(executor.fires.first)
 
         engine.ingest(agentState(surface: "S2", state: "idle", previous: "working", writer: agent))
@@ -526,7 +569,7 @@ final class RouteEngineTests: XCTestCase {
 
         engine.ingest(agentState(surface: "S1", state: "working", previous: "idle", writer: agent))
         engine.ingest(needsInput(surface: "S1", kind: "permission", writer: agent))
-        XCTAssertEqual(engine.textDeliveryRefusal(surfaceId: "S1"), "refused: waiting for the agent to resume after a permission prompt")
+        XCTAssertEqual(engine.textDeliveryRefusal(surfaceId: "S1"), "refused: waiting for the agent to resume after it stopped for input")
 
         // A forged or mistaken report: no session, so it neither resumes the agent nor releases text.
         engine.ingest(agentState(surface: "S1", state: "idle", previous: "blocked"))
@@ -543,7 +586,7 @@ final class RouteEngineTests: XCTestCase {
 
     func testAProgramPermissionPromptAlsoHoldsDeliveries() throws {
         let engine = makeEngine()
-        try install(#"{ "name": "s", "on": "agent/+/needs_input/#", "send": { "text": "go" } }"#, on: engine)
+        try install(#"{ "name": "s", "on": "agent/#", "when": { "kind": "question" }, "send": { "text": "go" } }"#, on: engine)
         let blocked = RouteEvent(
             topic: "agent/S1/state/blocked",
             fields: ["surface_id": "S1", "state": "blocked", "program_status.kind": "permission"],
@@ -553,6 +596,85 @@ final class RouteEngineTests: XCTestCase {
         XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S1"))
         engine.ingest(agentState(surface: "S1", state: "working", previous: "blocked", writer: agent))
         XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S1"), "only the prompt's own writer resumes it")
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "blocked", writer: "program"))
+        XCTAssertNil(engine.textDeliveryRefusal(surfaceId: "S1"))
+    }
+
+    func testAHooksOnlyAgentIgnoresAForgedWorkAndIdleAfterAPermissionPrompt() throws {
+        // tmux, or any terminal where only the hooks report: no OSC 7501.
+        let executor = RecordingExecutor()
+        let engine = makeEngine()
+        engine.executor = executor
+        try install(#"{ "name": "p", "on": "agent/+/state/working", "throttleMs": "1m", "prompt": { "text": "go" } }"#, on: engine)
+
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "idle", writer: agent))
+        engine.ingest(agentState(surface: "S1", state: "blocked", previous: "working", writer: agent))
+        engine.ingest(needsInput(surface: "S1", kind: "permission", writer: agent))
+
+        let forger = "hooks:claude-code:made-up"
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "blocked", writer: forger))
+        engine.ingest(agentState(surface: "S1", state: "idle", previous: "working", writer: forger))
+        XCTAssertEqual(executor.wentIdle, [], "a made-up session cannot resume the agent or release the prompt")
+        XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S1"))
+
+        // The real order: the person answers, the agent works again, then goes idle.
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "idle", writer: agent))
+        engine.ingest(agentState(surface: "S1", state: "idle", previous: "working", writer: agent))
+        XCTAssertEqual(executor.wentIdle.map(\.id), [executor.fires.first?.id])
+    }
+
+    func testAWorkingReportOlderThanTheStopDoesNotResume() throws {
+        // The tap delivers `working` asynchronously; `agent.needs_input` records its stop in its
+        // own hop. A `working` published before the stop can therefore arrive after it.
+        let engine = makeEngine()
+        try install(#"{ "name": "s", "on": "agent/+/state/working", "send": { "text": "go" } }"#, on: engine)
+        _ = engine.ingestNeedsInput(RouteEvent(
+            topic: "agent/S1/needs_input/question",
+            fields: ["surface_id": "S1", "kind": "question", "ts": "100.5"],
+            writer: agent
+        ))
+        engine.ingest(RouteEvent(topic: "agent/S1/state/working", fields: ["surface_id": "S1", "state": "working", "ts": "100.25"], writer: agent))
+        XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S1"), "stamped before the stop")
+
+        engine.ingest(RouteEvent(topic: "agent/S1/state/working", fields: ["surface_id": "S1", "state": "working", "ts": "101.0"], writer: agent))
+        XCTAssertNil(engine.textDeliveryRefusal(surfaceId: "S1"))
+    }
+
+    func testASurfaceBlockedWhenRoutesInstallWaitsForTheProgram() throws {
+        let clock = clock!
+        let engine = RouteEngine(
+            now: { clock.now },
+            scheduleWake: { date, body in clock.schedule(at: date, body) },
+            modelFields: { _ in [:] },
+            deferWork: { $0() },
+            blockedSurfaces: { ["S1"] }
+        )
+        try install(#"{ "name": "s", "on": "agent/+/state/working", "send": { "text": "go" } }"#, on: engine)
+
+        XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S1"), "its stop was never seen, so no writer is known")
+        XCTAssertNil(engine.textDeliveryRefusal(surfaceId: "S2"))
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "blocked", writer: agent))
+        XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S1"))
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "blocked", writer: "program"))
+        XCTAssertNil(engine.textDeliveryRefusal(surfaceId: "S1"))
+    }
+
+    func testAQuestionHoldsTextUntilTheAgentWorksAgain() throws {
+        let engine = makeEngine()
+        try install(#"{ "name": "s", "on": "agent/#", "send": { "text": "go" } }"#, on: engine)
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "idle", writer: agent))
+        engine.ingest(agentState(surface: "S1", state: "blocked", previous: "working", writer: agent))
+        XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S1"), "any stop for the person, not only a permission prompt")
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "blocked", writer: agent))
+        XCTAssertNil(engine.textDeliveryRefusal(surfaceId: "S1"))
+    }
+
+    func testAStopWithNoKnownWriterResumesOnlyForTheProgram() throws {
+        let engine = makeEngine()
+        try install(#"{ "name": "s", "on": "agent/#", "send": { "text": "go" } }"#, on: engine)
+        engine.ingest(agentState(surface: "S1", state: "blocked"))
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "blocked", writer: agent))
+        XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S1"), "with no writer to compare, a hook session cannot resume it")
         engine.ingest(agentState(surface: "S1", state: "working", previous: "blocked", writer: "program"))
         XCTAssertNil(engine.textDeliveryRefusal(surfaceId: "S1"))
     }
@@ -579,7 +701,7 @@ final class RouteEngineTests: XCTestCase {
         let executor = RecordingExecutor()
         let engine = makeEngine()
         engine.executor = executor
-        try install(#"{ "name": "s", "on": "agent/+/needs_input/#", "send": { "text": "go" } }"#, on: engine)
+        try install(#"{ "name": "s", "on": "agent/#", "when": { "kind": "question" }, "send": { "text": "go" } }"#, on: engine)
 
         engine.ingest(needsInput(surface: "S1"))
         engine.ingest(agentState(surface: "S1", state: "none"))
@@ -647,13 +769,13 @@ final class RouteEngineTests: XCTestCase {
         let executor = RecordingExecutor()
         let engine = makeEngine()
         engine.executor = executor
-        try install(#"{ "name": "p", "on": "agent/+/needs_input/#", "throttleMs": "1m", "prompt": { "text": "go" } }"#, on: engine)
+        try install(#"{ "name": "p", "on": "agent/#", "when": { "kind": "question" }, "throttleMs": "1m", "prompt": { "text": "go" } }"#, on: engine)
 
-        engine.ingest(needsInput(surface: "S1"))
+        engine.ingest(needsInput(surface: "S1", writer: agent))
         let first = try XCTUnwrap(executor.fires.first)
         engine.endDelivery(first)
         clock.advance(by: 61)
-        engine.ingest(needsInput(surface: "S1"))
+        engine.ingest(needsInput(surface: "S1", writer: agent))
         engine.turnStarted(first)
 
         engine.ingest(agentState(surface: "S1", state: "working", previous: "blocked", writer: agent))
@@ -664,7 +786,7 @@ final class RouteEngineTests: XCTestCase {
     func testATextRouteListensForAgentStateWhateverItsTopic() throws {
         let tap = RouteTap()
         let engine = makeEngine(tap: tap)
-        try install(#"{ "name": "s", "on": "agent/+/needs_input/#", "send": { "text": "go" } }"#, on: engine)
+        try install(#"{ "name": "s", "on": "agent/#", "when": { "kind": "question" }, "send": { "text": "go" } }"#, on: engine)
         XCTAssertTrue(tap.wants(.needsInput))
         XCTAssertTrue(tap.wants(.agentState))
     }

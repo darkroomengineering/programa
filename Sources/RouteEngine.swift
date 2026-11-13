@@ -106,16 +106,21 @@ final class RouteEngine {
     }
 
     /// What text deliveries need from one surface's recent agent reports. Built from the frames
-    /// the tap delivers, so it starts empty at each install and anything unseen counts against a
-    /// delivery.
+    /// the tap delivers; at each install it starts from the surfaces blocked at that moment.
     private struct AgentTrack {
         enum Resume: Equatable {
             case free
-            /// After a permission or sign-in prompt, deliveries wait for a `working` report from
-            /// the prompt's writer, from any identified writer when the prompt named none, or from
-            /// the program itself: Programa's hooks report a prompt over the socket while the
-            /// program's own OSC 7501 status owns the presence and reports the `working` after it.
-            case awaitingWorking(from: String?)
+            /// After the agent stops for the person (a `blocked` report or an `agent.needs_input`
+            /// call), deliveries wait for a `working` report from the writer of that stop (or of
+            /// the last `working` before it, when the stop named none), or from the program itself:
+            /// Programa's hooks report a prompt over the socket while the program's own OSC 7501
+            /// status owns the presence and reports the `working` after it. With no writer known,
+            /// only the program resumes it.
+            ///
+            /// `since` is the stop's `ts`. A `working` report stamped earlier was published before
+            /// the stop and reached the engine late (the tap delivers asynchronously, while
+            /// `agent.needs_input` records its stop in its own hop), so it is ignored.
+            case awaitingWorking(from: String?, since: Double?)
         }
 
         /// Writer of the latest `working` report; nil when it named no session.
@@ -127,6 +132,12 @@ final class RouteEngine {
     private let now: @MainActor () -> Date
     private let scheduleWake: @MainActor (Date, @escaping @MainActor () -> Void) -> Void
     private let modelFields: @MainActor (RouteEvent) -> [String: String]
+    /// Runs actions fired while an `agent.needs_input` call is ingested, after that call's hop.
+    private let deferWork: @MainActor (@escaping @MainActor () -> Void) -> Void
+    /// Surface ids whose agent is `blocked` right now.
+    private let blockedSurfaces: @MainActor () -> [String]
+    /// Collects fires instead of running them, while `ingestNeedsInput` holds the hop.
+    private var deferredFires: [RouteFire]?
 
     /// The global file's latest routes, kept while a debug override masks them.
     private var fileSet = RouteSet(routes: [], issues: [], source: .file(digest: nil))
@@ -147,12 +158,16 @@ final class RouteEngine {
         tap: RouteTap? = nil,
         now: @escaping @MainActor () -> Date = Date.init,
         scheduleWake: @escaping @MainActor (Date, @escaping @MainActor () -> Void) -> Void = RouteEngine.scheduleOnMain(at:_:),
-        modelFields: @escaping @MainActor (RouteEvent) -> [String: String] = RouteEngine.resolveModelFields(for:)
+        modelFields: @escaping @MainActor (RouteEvent) -> [String: String] = RouteEngine.resolveModelFields(for:),
+        deferWork: @escaping @MainActor (@escaping @MainActor () -> Void) -> Void = RouteEngine.runOnMainLater(_:),
+        blockedSurfaces: @escaping @MainActor () -> [String] = RouteEngine.blockedSurfaceIds
     ) {
         self.tap = tap
         self.now = now
         self.scheduleWake = scheduleWake
         self.modelFields = modelFields
+        self.deferWork = deferWork
+        self.blockedSurfaces = blockedSurfaces
     }
 
     // MARK: - Routes
@@ -200,7 +215,12 @@ final class RouteEngine {
         let cancelled = Array(deliveries.values)
         deliveries = [:]
         gates = [:]
-        agentTracks = [:]
+        // Stops from before this install were never seen: a surface blocked now waits for the
+        // program's own `working`, the only report that needs no record of the stop.
+        agentTracks = Dictionary(
+            blockedSurfaces().map { ($0, AgentTrack(resume: .awaitingWorking(from: nil, since: nil))) },
+            uniquingKeysWith: { first, _ in first }
+        )
         generation &+= 1
         source = set.source
         routes = set.routes.map { InstalledRoute(compiled: CompiledRoute($0)) }
@@ -229,15 +249,26 @@ final class RouteEngine {
         track(tapped)
     }
 
-    private func match(_ tapped: RouteEvent) {
+    /// Feeds every matching route's gate. Returns the names of the `notify` routes that matched.
+    @discardableResult
+    private func match(_ tapped: RouteEvent) -> [String] {
         let candidates = routes.indices.filter { routes[$0].compiled.definition.on.matches(topic: tapped.topic) }
-        guard !candidates.isEmpty else { return }
+        guard !candidates.isEmpty else { return [] }
         let event = resolved(tapped)
         let values = event.values
         let at = now()
         let surfaceId = event.fields["surface_id"]
-        for index in candidates where routes[index].compiled.definition.matches(event) {
+        var notifyMatches: [String] = []
+        for index in candidates {
+            let result = routes[index].compiled.definition.evaluate(event)
+            if let field = result.timedOutField {
+                routes[index].lastError = "when.\(field): the regex ran longer than \(Int(ProgramaRouteRegex.timeLimit * 1000)) ms and was stopped; the event did not match"
+            }
+            guard result.matches else { continue }
             routes[index].counters.matched += 1
+            if case .notify = routes[index].compiled.definition.action {
+                notifyMatches.append(routes[index].compiled.name)
+            }
             // While a route's prompt holds the surface for its turn, including the idle that ends
             // it, no prompt route takes an event from it, so two prompt routes cannot feed each
             // other. Checked per route: an earlier route in this pass may have just submitted.
@@ -248,9 +279,12 @@ final class RouteEngine {
             }
             apply(.matched(event, now: at), to: gateKey(routes[index].compiled.definition, values: values))
         }
+        return notifyMatches
     }
 
-    private func routeTurnIsOpen(onSurface surfaceId: String) -> Bool {
+    /// Whether a route's prompt holds `surfaceId` for its turn. A prompt is checked again right
+    /// before it is delivered, since a debounced or queued one fires after its match.
+    func routeTurnIsOpen(onSurface surfaceId: String) -> Bool {
         deliveries.contains { gateKey, fire in
             guard fire.event.fields["surface_id"] == surfaceId,
                   case .delivering(.ownTurn, _, _) = gates[gateKey] else { return false }
@@ -315,17 +349,19 @@ final class RouteEngine {
             agentTracks.removeValue(forKey: surfaceId)
             return
         case ("state", "working"):
+            if case .awaitingWorking(let from, let since) = track.resume {
+                if let since, let ts = event.fields["ts"].flatMap(Double.init), ts < since { return }
+                if let writer = event.writer, writer == from || writer == "program" {
+                    track.resume = .free
+                }
+            }
             track.lastWorkingWriter = event.writer
-            if case .awaitingWorking(let from) = track.resume, let writer = event.writer,
-               from == nil || from == writer || writer == "program" {
-                track.resume = .free
-            }
-        case ("state", "blocked"):
-            if ["permission", "auth"].contains(event.fields["program_status.kind"]) {
-                track.resume = .awaitingWorking(from: event.writer)
-            }
-        case ("needs_input", "permission"):
-            track.resume = .awaitingWorking(from: event.writer)
+        case ("state", "blocked"), ("needs_input", _):
+            // Any stop for the person, whatever its kind: failing closed costs one `working`.
+            track.resume = .awaitingWorking(
+                from: event.writer ?? track.lastWorkingWriter,
+                since: event.fields["ts"].flatMap(Double.init)
+            )
         default:
             break
         }
@@ -335,7 +371,7 @@ final class RouteEngine {
     /// Why a `send` or `prompt` must not go into `surfaceId` now, from the reports the engine saw.
     func textDeliveryRefusal(surfaceId: String) -> String? {
         if case .awaitingWorking = agentTracks[surfaceId]?.resume {
-            return "refused: waiting for the agent to resume after a permission prompt"
+            return "refused: waiting for the agent to resume after it stopped for input"
         }
         return nil
     }
@@ -345,31 +381,47 @@ final class RouteEngine {
         fire.generation == generation
     }
 
-    /// Whether `tapped`'s built-in `needs_input` banner gives way to a `notify` route. A question
-    /// gives way whenever a route matches on topic and `when`, throttled or not, so "once per
-    /// 5 minutes" is what the person sees. Any other call, a permission prompt or one with no
-    /// kind, gives way only when a route fires for this very call: a throttled or debounced route
-    /// must never hide one. Synchronous, so the caller can ask before it posts; the tap's ingest of
-    /// the same call runs next.
-    func hasNotifyRoute(matching tapped: RouteEvent) -> Bool {
-        let candidates = routes.map(\.compiled).filter { route in
-            guard case .notify = route.definition.action else { return false }
-            return route.definition.on.matches(topic: tapped.topic)
-        }
-        guard !candidates.isEmpty else { return false }
-        let event = resolved(tapped)
-        let values = event.values
-        let firesOnly = tapped.fields["kind"] != "question"
-        let at = now()
-        return candidates.contains { route in
-            guard route.definition.matches(event) else { return false }
-            guard firesOnly else { return true }
-            let key = gateKey(route.definition, values: values)
-            return RouteGate.reduce(gates[key], .matched(event, now: at), route: route).1.contains {
-                if case .fire = $0 { return true }
-                return false
+    /// Ingests an `agent.needs_input` call inside the call's own main-thread hop and returns
+    /// whether its built-in banner gives way to a `notify` route. Deciding and moving the gates in
+    /// one step means a burst of calls sharing a throttle window cannot all hide their banners
+    /// behind one route notification. The actions it fires run after the hop, so a route's
+    /// notification lands after the built-in entry.
+    ///
+    /// A question gives way whenever a `notify` route matches it on topic and `when`, throttled or
+    /// not, so "once per 5 minutes" is what the person sees. Any other call, a permission prompt or
+    /// one with no kind, gives way only when a `notify` route fires for this very call.
+    func ingestNeedsInput(_ tapped: RouteEvent) -> Bool {
+        deferredFires = []
+        let heldBefore = Set(deliveries.values.map(\.id))
+        let notifyMatches = match(tapped)
+        settleTextDeliveries(after: tapped, heldBefore: heldBefore)
+        track(tapped)
+        let fires = deferredFires ?? []
+        deferredFires = nil
+        if !fires.isEmpty {
+            // A fire that holds a delivery runs only if the delivery is still the one this call
+            // started: a releasing report handled before this block may have delivered it already.
+            let firedStates = fires.map { ($0, gates[GateKey(route: $0.route.name, key: $0.key)]) }
+            deferWork { [weak self] in
+                guard let self else { return }
+                for (fire, firedState) in firedStates where self.isCurrent(fire) {
+                    if fire.route.deliveryTimeout != nil {
+                        let gateKey = GateKey(route: fire.route.name, key: fire.key)
+                        guard self.deliveries[gateKey]?.id == fire.id, self.gates[gateKey] == firedState else { continue }
+                    }
+                    self.execute(fire)
+                }
             }
         }
+        let fired = Set(fires.map(\.route.name))
+        let question = tapped.fields["kind"] == "question"
+        return notifyMatches.contains { question || fired.contains($0) }
+    }
+
+    /// Counts a fire whose action did not run because a route's prompt holds its surface.
+    func recordBusy(_ fire: RouteFire) {
+        guard isCurrent(fire), let index = routes.firstIndex(where: { $0.compiled.name == fire.route.name }) else { return }
+        routes[index].counters.record(.busy)
     }
 
     private func gateKey(_ definition: ProgramaRouteDefinition, values: [String: String]) -> GateKey {
@@ -447,11 +499,19 @@ final class RouteEngine {
         // After the gate state, deliveries and counters are stored, so a delivery that ends
         // inside `execute` reaches the state the fire left.
         for fire in fires {
-            if let executor {
-                executor.execute(fire, engine: self)
-            } else if route.deliveryTimeout != nil {
-                endDelivery(fire)
+            if deferredFires != nil {
+                deferredFires?.append(fire)
+            } else {
+                execute(fire)
             }
+        }
+    }
+
+    private func execute(_ fire: RouteFire) {
+        if let executor {
+            executor.execute(fire, engine: self)
+        } else if fire.route.deliveryTimeout != nil {
+            endDelivery(fire)
         }
     }
 
@@ -463,6 +523,17 @@ final class RouteEngine {
     }
 
     // MARK: - Production seams
+
+    static func blockedSurfaceIds() -> [String] {
+        guard let contexts = AppDelegate.shared?.mainWindowContexts.values else { return [] }
+        return contexts.flatMap { $0.tabManager.tabs }.flatMap { workspace in
+            workspace.panelAgentPresence.filter { $0.value.state == .blocked }.keys.map(\.uuidString)
+        }
+    }
+
+    static func runOnMainLater(_ body: @escaping @MainActor () -> Void) {
+        DispatchQueue.main.async { MainActor.assumeIsolated { body() } }
+    }
 
     static func scheduleOnMain(at date: Date, _ body: @escaping @MainActor () -> Void) {
         DispatchQueue.main.asyncAfter(deadline: .now() + max(0, date.timeIntervalSinceNow)) {

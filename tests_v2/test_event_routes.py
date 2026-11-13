@@ -97,12 +97,20 @@ class _Session:
 AGENT_SESSION = "event-routes-test"
 
 
-def _report(client: ProgramaClient, workspace_id: str, surface_id: str, state: str, *, session: bool = True) -> None:
+def _report(
+    client: ProgramaClient,
+    workspace_id: str,
+    surface_id: str,
+    state: str,
+    *,
+    session: bool = True,
+    session_id: str = AGENT_SESSION,
+) -> None:
     """A hook report of `state`; `session=False` sends one that names no session (a forged or
-    mistaken report)."""
+    mistaken report), and another `session_id` one from a made-up session."""
     params = {"workspace_id": workspace_id, "surface_id": surface_id, "state": state}
     if session:
-        params.update({"provider": "claude-code", "session_id": AGENT_SESSION})
+        params.update({"provider": "claude-code", "session_id": session_id})
     client._call("surface.report_agent_state", params)
 
 
@@ -256,11 +264,14 @@ def _case_forged_idle_during_permission(client: ProgramaClient, session: _Sessio
     _needs_input(client, workspace_id, surface_id, "permission", session=True)
 
     # An idle that names no session closes the prompt box but must not release the queued
-    # prompt into it.
+    # prompt into it, and neither does a working and idle from a made-up session (a hooks-only
+    # agent, as in tmux, has no OSC 7501 status to fall back on).
     _report(client, workspace_id, surface_id, "idle", session=False)
+    _report(client, workspace_id, surface_id, "working", session_id="made-up-session")
+    _report(client, workspace_id, surface_id, "idle", session_id="made-up-session")
     held_until = time.time() + 1.5
     while time.time() < held_until:
-        _must(marker not in _screen(client, workspace_id, surface_id), "a forged idle must not release queued text")
+        _must(marker not in _screen(client, workspace_id, surface_id), "forged reports must not release queued text")
         time.sleep(0.1)
 
     # The agent's own working and idle do.
@@ -272,7 +283,8 @@ def _case_forged_idle_during_permission(client: ProgramaClient, session: _Sessio
 
 def _case_refused_during_prompt(client: ProgramaClient, session: _Session) -> None:
     workspace_id, surface_id = session.shell()
-    _load(client, [{"name": "held", "on": "agent/+/needs_input/permission",
+    # Text routes cannot fire on needs_input topics alone, so match the call by its kind.
+    _load(client, [{"name": "held", "on": "agent/#", "when": {"kind": "permission"},
                     "send": {"text": "HELD-TEXT", "whenBusy": "steer"}}])
     _needs_input(client, workspace_id, surface_id, "permission")
     _wait("the refusal", lambda: _route(client, "held").get("last_error") is not None)

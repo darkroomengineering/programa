@@ -225,7 +225,9 @@ or null is absent. Numbers are their decimal text.
 `cwd`, `git_branch` and `worktree` are absent once the surface's workspace is closed.
 
 Because `cwd` is resolved, it is the real path: on macOS a shell in `/tmp/x` has the `cwd`
-`/private/tmp/x`, and `/var/folders/…` is `/private/var/folders/…`. Anchor a `cwd` regex at the
+`/private/tmp/x`, and `/var/folders/…` is `/private/var/folders/…`. A directory set any other
+way, such as a session restore, gives no `cwd` until the shell reports its directory, so a `run`
+on that surface is refused until then. Anchor a `cwd` regex at the
 start and end it at a separator, so it names exactly the tree you mean:
 `{ "cwd": { "regex": "^/Users/me/work/app(/|$)" } }`. Without the anchor, `/Users/me/work/app`
 also matches `/tmp/Users/me/work/app` and `/Users/me/work/app-old`.
@@ -252,7 +254,9 @@ One field can combine several operators, and all of them must hold. An absent fi
 condition except `ne` and `exists: false`. A regex sees only the first 4096 UTF-16 units of the
 field. An unknown operator, a regex that does not compile, `flags` without `regex`, an operator
 object with no condition, or a regex that repeats a group which already repeats (such as `(a+)+`
-or `(\w+\s?)*`, which can take exponential time) makes the route fail to load.
+or `(\w+\s?)*`, which can take exponential time) makes the route fail to load. That check cannot
+catch every slow pattern, so each match is also stopped after 50 ms: the condition then counts as
+unmet, and the route's last error names the field.
 
 ### The gate: `debounceMs`, `throttleMs` and `key`
 
@@ -277,7 +281,7 @@ one surface share one. A placeholder for a field the event lacks stays as the li
 | `matched` | events that passed the topic and `when` |
 | `fired` | actions run |
 | `throttled` | matches the throttle dropped |
-| `busy` | matches dropped while the route's last action still held it, and `prompt` matches skipped while any route's prompt turn holds the surface |
+| `busy` | matches dropped while the route's last action still held it, and `prompt` matches or deliveries held back while any route's prompt turn holds the surface |
 | `expired` | deliveries cancelled at their timeout |
 
 ### Actions
@@ -325,7 +329,8 @@ event surface's `cwd`. Nothing is shown in a terminal.
   exist` and the failure notification below is posted. There is no fallback directory.
 - `timeoutMs` defaults to 600000 (10 minutes). At most 4 route commands run at once across the
   app; the others wait in order. A command waiting for a turn uses up its own timeout while it
-  waits, so one that never gets a turn times out. A waiting command whose routes change before it
+  waits, so one that never gets a turn is dropped at its timeout with the last error `never
+  started: no run slot was free within N s`. A waiting command whose routes change before it
   starts never runs, and a notification says so.
 - A zero exit is silent. A non-zero exit, a timeout or a failure to start posts a notification
   titled "Route “name” failed" and sets the route's last error. After a non-zero exit, the
@@ -347,8 +352,10 @@ below refuses the delivery, sends nothing, and records the reason as the route's
 - The surface shows a permission or sign-in prompt, or a person has typed unsent input into it.
   Routes keep to this even when the automation settings let socket writes through.
 - The agent's state reports name no session.
-- The agent stopped on a permission or sign-in prompt and has not reported `working` since, from
-  the same writer as the prompt or from the program's own status. A report that only closes the
+- The agent stopped for input (a `blocked` report, or an `agent.needs_input` call of any kind)
+  and has not reported `working` since, from the writer of that stop or from the program's own
+  status. When the stop named no writer, only the program's own status resumes it, and the same
+  holds for an agent that was already stopped when the routes loaded. A report that only closes the
   prompt box does not count.
 - The agent report that fired the route names no session.
 - The report that fired the route is the first one from this agent, so nothing shows that an
@@ -367,14 +374,18 @@ otherwise the text is pasted without Return and the last error reads `pasted wit
 no agent ready for a prompt`. A submitted prompt holds its route for its turn: until the surface
 reports `idle` after a `working` report in that turn, or its state is cleared, for at most 600
 seconds. While any route's prompt turn holds a surface, including the idle that ends it, no
-`prompt` route fires on that surface's events (they count as `busy`). A prompt route therefore
-cannot trigger itself, and two prompt routes cannot feed each other.
+`prompt` reaches that surface: a match is skipped, and a debounced or queued prompt that comes due
+is dropped; both count as `busy`. A prompt route therefore cannot trigger itself, and two prompt
+routes cannot feed each other.
 
 - `text` may use identifier fields only. A free-text placeholder (`{{body}}`, `{{provider}}`,
   `{{cwd}}` and the others marked free text above) makes the route fail to load. A placeholder
   for an absent identifier renders empty.
 - A `prompt` route must set `throttleMs` to at least 60000 (one minute), which bounds how often it
   can submit.
+- A `send` or `prompt` route whose `on` matches only `needs_input` topics does not load: the agent
+  is waiting for the person at that moment, so the text could never go out. Fire it from an
+  `agent/+/state/…` topic instead.
 
 ## Layout schema
 

@@ -1287,13 +1287,15 @@ while a route's prompt turn holds the event's surface.
 | `timed out after N s` or `timed out after N ms` | A `run` command reached its timeout, waiting for a turn included. |
 | `could not start: the surface's working directory is unknown or does not exist` | A `run` whose event has no resolvable `cwd`. |
 | `could not start: <reason>` | A `run` command failed to start. |
+| `never started: no run slot was free within N s` | A `run` command waited for one of the 4 run slots for its whole timeout. |
+| `when.<field>: the regex ran longer than 50 ms and was stopped; the event did not match` | A `when` regex hit its time limit; the event counted as not matching. |
 | `review: <code>: <message>` | `review.open` failed, for example `review: unavailable: Not a git repository: /path`. |
 | `review: the event names no workspace` | A `review` route on an event without a workspace. |
 | `refused: the surface has no agent; nothing was sent` | A `send` or `prompt` to a surface with no agent state. |
 | `refused: a <kind> prompt is showing; nothing was sent` | A `send` or `prompt` during a permission or sign-in prompt. |
 | `refused: the surface has unsent typed input; nothing was sent` | A `send` or `prompt` while a person has typed unsent input. |
 | `refused: the agent's state reports name no session; nothing was sent` | A `send` or `prompt` to an agent known only from screen detection or from hooks reports without a `session_id`. |
-| `refused: waiting for the agent to resume after a permission prompt` | A `send` or `prompt` after a permission or sign-in prompt, before the same writer reported `working`. |
+| `refused: waiting for the agent to resume after it stopped for input` | A `send` or `prompt` after a `blocked` report or an `agent.needs_input` call, before the writer of that stop (or the program's own status) reported `working`. |
 | `refused: the report that fired this route names no session; nothing was sent` | A `send` or `prompt` fired by an agent report without a `session_id` (OSC 7501 reports count as named). |
 | `refused: the report that fired this route is the first from this agent; nothing was sent` | A `send` or `prompt` fired by the report that created the agent's state. |
 | `pasted without submitting: no agent ready for a prompt` | A `prompt` to an agent that is blocked or stale. |
