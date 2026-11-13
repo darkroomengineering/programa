@@ -1219,6 +1219,23 @@ final class AgentActivityStateTests: XCTestCase {
         XCTAssertEqual(states(reset), ["working trusted=false", "none trusted=false"], "a reset is printed bytes too")
     }
 
+    /// The shell's socket report makes a prompt mark's clear trusted, but not the presence it
+    /// clears: an agent only printed bytes reported hands routes an untrusted `none`.
+    func testAShellPromptClearOfAPrintedAgentHandsRoutesAnUntrustedNone() throws {
+        for (body, trusted) in [("app=forged", false), ("programa_token=", true)] {
+            let f = try promptGateFixture()
+            let report = body == "programa_token=" ? body + f.token : body
+            let events = try routeEvents {
+                f.workspace.updatePanelShellActivityState(panelId: f.panelId, state: .commandRunning)
+                f.drain([try osc(.working, report)])
+                f.workspace.updatePanelShellActivityState(panelId: f.panelId, state: .promptIdle)
+                f.drain([.prompt])
+            }
+            XCTAssertNil(f.workspace.panelAgentPresence[f.panelId], body)
+            XCTAssertEqual(states(events), ["working trusted=\(trusted)", "none trusted=\(trusted)"], body)
+        }
+    }
+
     func testScreenInferenceHandsRoutesUntrustedFrames() throws {
         let f = try promptGateFixture()
         let events = routeEvents {
