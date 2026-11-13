@@ -49,13 +49,14 @@ final class SidebarResizeUITests: XCTestCase {
         XCTAssertTrue(divider.waitForExistence(timeout: 5.0))
         XCTAssertTrue(waitForDividerGeometry(divider, timeout: 5.0), "Expected the sidebar divider to have usable geometry")
 
+        let sidebarMinX = sidebarLeadingEdge(in: app)
         // Stop above half the minimum: a drag past that collapses the sidebar instead.
         let start = dividerCoordinate(divider, in: window)
         let targetWidth = minimumSidebarWidth - 40
-        let offset = targetWidth - (divider.frame.midX - window.frame.minX)
+        let offset = targetWidth - (divider.frame.midX - sidebarMinX)
         start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: offset, dy: 0)))
 
-        let sidebarWidth = max(0, divider.frame.midX - window.frame.minX)
+        let sidebarWidth = max(0, divider.frame.midX - sidebarMinX)
         XCTAssertEqual(
             sidebarWidth,
             minimumSidebarWidth,
@@ -74,12 +75,13 @@ final class SidebarResizeUITests: XCTestCase {
         XCTAssertTrue(divider.waitForExistence(timeout: 5.0))
         XCTAssertTrue(waitForDividerGeometry(divider, timeout: 5.0), "Expected the sidebar divider to have usable geometry")
 
+        let sidebarMinX = sidebarLeadingEdge(in: app)
         let start = dividerCoordinate(divider, in: window)
         let farRight = start.withOffset(CGVector(dx: max(1200, window.frame.width * 2.0), dy: 0))
         start.press(forDuration: 0.1, thenDragTo: farRight)
 
         let windowFrame = window.frame
-        let sidebarWidth = max(0, divider.frame.midX - windowFrame.minX)
+        let sidebarWidth = max(0, divider.frame.midX - sidebarMinX)
         // The cap is a third of the window, but never below the minimum.
         let expectedMaximum = max(minimumSidebarWidth, min(600, windowFrame.width / 3))
         XCTAssertLessThanOrEqual(
@@ -91,6 +93,15 @@ final class SidebarResizeUITests: XCTestCase {
 
     private func sidebarDivider(in app: XCUIApplication) -> XCUIElement {
         app.splitGroups["MainSidebarSplit"].splitters.firstMatch
+    }
+
+    /// The system sidebar floats inside the window (inset from its leading edge on macOS 26),
+    /// so the width runs from the sidebar's own leading edge. Read it before a drag: the
+    /// sidebar's accessibility frame lags the divider while it settles.
+    private func sidebarLeadingEdge(in app: XCUIApplication) -> CGFloat {
+        let sidebar = app.descendants(matching: .any).matching(identifier: "Sidebar").firstMatch
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 5.0), "Expected the sidebar to exist")
+        return sidebar.frame.minX
     }
 
     private func launchedApp() -> XCUIApplication {
