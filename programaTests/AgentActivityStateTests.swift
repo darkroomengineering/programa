@@ -1135,6 +1135,19 @@ final class AgentActivityStateTests: XCTestCase {
         XCTAssertNil(f.workspace.panelAgentPresence[f.panelId], "the agent's signed clear ends it")
     }
 
+    /// A signed agent killed mid-turn where the mark lands before the shell's socket report (fish,
+    /// and bash's background report): the mark leaves the signed view, and the report then ends it.
+    func testTheShellsPromptReportEndsASignedViewAMarkLeftBehind() throws {
+        let f = try promptGateFixture()
+        f.workspace.updatePanelShellActivityState(panelId: f.panelId, state: .commandRunning)
+        f.drain([try osc(.working, "programa_token=\(f.token)")])
+        f.drain([.prompt])
+        XCTAssertEqual(f.workspace.panelAgentPresence[f.panelId]?.route?.state, .working, "the mark alone keeps the view")
+
+        f.workspace.updatePanelShellActivityState(panelId: f.panelId, state: .promptIdle)
+        XCTAssertNil(f.workspace.panelAgentPresence[f.panelId], "the shell's return ends an agent whose record is gone")
+    }
+
     /// The shell runs Claude Code, whose own unsigned status owns the badge, and its Notification
     /// hook arms a permission prompt.
     private func armUnderNativeStatus() throws -> PromptGateFixture {
