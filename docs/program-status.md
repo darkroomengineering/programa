@@ -140,7 +140,8 @@ badge. So on a Claude Code terminal:
 - A signed clear, or a shell prompt the shell integration also reported over the socket, removes
   the badge and ends the routes' view, so a held delivery ends instead of waiting on an agent that
   is gone. An unsigned clear, a prompt the shell did not report, and a reset can be printed, so
-  they remove the program's record but keep the routes' view, and the badge falls back to it. The
+  they remove the program's record but keep the routes' view, and the badge falls back to it.
+  Screen detection losing its match does the same with its own badge. The
   hooks, the pid check or `surface.clear_agent_state` end a fallback to the hooks' view; the
   agent's next signed report, its signed clear or the shell reporting its prompt over the socket
   ends a fallback to a signed one.

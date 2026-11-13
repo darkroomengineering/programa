@@ -436,9 +436,10 @@ extension Workspace {
             closePromptGate(panelId: panelId, by: closer)
             return
         }
-        // Printed bytes (an unsigned clear, a prompt mark the shell did not report, a reset) drop
-        // the program's record but never what a trusted reporter said (INC-1147).
-        let printedClear = source == .program && closer == nil
+        // A clear printed bytes can cause (an unsigned clear, a prompt mark the shell did not
+        // report, a reset, screen detection losing its match) drops its own tier's badge but never
+        // what a trusted reporter said (INC-1147).
+        let printedClear = closer != .agent
         let ownsClear = { (owner: AgentStateSource) in force || (source == .program) == (owner == .program) }
         guard ownsClear(current.source) else {
             // The badge stays, but a clear from the route view's own tier still ends it.
