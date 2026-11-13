@@ -62,6 +62,28 @@ extension ProgramaCLI {
         )
     }
 
+    /// A `working` report with `route_only`: it moves what event routes see of the agent, never
+    /// the badge, for a hook whose badge update the program's own status owns.
+    func reportRouteOnlyWorking(
+        client: SocketClient,
+        provider: String,
+        workspaceId: String,
+        surfaceId: String,
+        sessionId: String? = nil,
+        pid: Int? = nil
+    ) {
+        var params: [String: Any] = [
+            "workspace_id": workspaceId,
+            "surface_id": surfaceId,
+            "state": CLIAgentActivityState.working.rawValue,
+            "provider": provider,
+            "route_only": true,
+        ]
+        if let sessionId, !sessionId.isEmpty { params["session_id"] = sessionId }
+        if let pid { params["pid"] = pid }
+        _ = try? client.sendV2(method: V2MethodNames.surfaceReportAgentState, params: params)
+    }
+
     /// Sends `agent.needs_input` (docs/plans/agent-state-unification.md T2): one atomic
     /// socket call covering the `notification.create_for_target` +
     /// `workspace.set_status` "Needs input" + `surface.report_agent_state` trio a hook

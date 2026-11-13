@@ -283,7 +283,8 @@ final class TerminalSurface: Identifiable, ObservableObject {
     private var reviveDescriptor: TerminalSurfaceReviveDescriptor?
     /// Digest of the `PROGRAMA_STATUS_TOKEN` this surface's shell holds: set at each spawn, or
     /// adopted from the revive descriptor in `init`. OSC 7501 reports are checked against it.
-    private(set) var programStatusTokenDigest: ProgramStatusToken.Digest?
+    /// Settable in the module only so tests can stand in for a spawn, which unit tests never run.
+    var programStatusTokenDigest: ProgramStatusToken.Digest?
     /// restore-replay-residuals (fresh-spawn scrollback collapse): prepared
     /// fallback-restore scrollback text for a FRESH (non-revived) spawn --
     /// e.g. session restore when no escrowed child could be reattached. Fed

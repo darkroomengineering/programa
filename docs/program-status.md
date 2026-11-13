@@ -114,9 +114,16 @@ screen inference.
 For event routes, the same rules apply between signed program reports and hooks, and unsigned
 program reports and screen inference never move the view. Only that view names a writer
 (`program` for signed reports, the hook session for hooks) and only its `working` to `idle`
-releases held `send` or `prompt` text. So on a Claude Code terminal:
+releases held `send` or `prompt` text. Everything else a text route decides also reads that view
+once it exists: whether the agent is busy (`whenBusy: queue`), whether a `prompt` may press
+Return, and which surfaces count as blocked when routes install. A signed root report reaches the
+view as Programa reads it, even when an unsigned report later in the same burst ends up on the
+badge. So on a Claude Code terminal:
 
 - Claude's own unsigned status drives the badge, and its hooks drive routes.
+- While Claude reports its own status, its PreToolUse hook moves only the routes' view to
+  `working` (`surface.report_agent_state` with `route_only: true`), so routes see the agent resume
+  after a permission prompt while the badge stays Claude's.
 - After Esc, Claude reports idle itself and fires no Stop hook: the badge leaves Working, but held
   route text waits for the next turn's Stop hook, or expires.
 - A hook clear (SessionEnd) ends the routes' view even while the badge stays with the program.

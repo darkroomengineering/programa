@@ -3597,6 +3597,9 @@
           },
           "pid": {
             "type": "integer"
+          },
+          "route_only": {
+            "type": "boolean"
           }
         },
         "required": [

@@ -102,7 +102,14 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
         guard let manager = AppDelegate.shared?.tabManagerFor(tabId: key.tabId),
               let workspace = manager.tabs.first(where: { $0.id == key.tabId }),
               let panel = workspace.panels[key.surfaceId] as? TerminalPanel else { return }
+        apply(events, to: panel, in: workspace, manager: manager)
+    }
 
+    /// Applies one drained batch to `panel`: the records, then the root's projection into the
+    /// workspace's agent presence. Internal so tests can run a batch without the app delegate.
+    @MainActor
+    func apply(_ events: [Event], to panel: TerminalPanel, in workspace: Workspace, manager: TabManager) {
+        let key = Key(tabId: workspace.id, surfaceId: panel.id)
         var lastRootState = panel.programStatus.root?.state
         var transitions: [ProgramStatusRecord?] = []
         var projectRoot = false
@@ -140,6 +147,15 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
                     report, verified: authentication == .verified
                 ) {
                     projectRoot = projectRoot || rootTouched
+                    // Only the batch's last root record reaches the badge below, so a signed root
+                    // report goes to the route view as it comes: an unsigned report later in the
+                    // same batch must not hide it from routes.
+                    if authentication == .verified, rootTouched, let state = report.state {
+                        manager.updateSurfaceRouteAgentState(
+                            tabId: key.tabId, surfaceId: key.surfaceId, state: state.legacyAgentState,
+                            source: .program, programVerified: true
+                        )
+                    }
                 }
 #if DEBUG
                 dlog(

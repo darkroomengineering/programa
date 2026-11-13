@@ -1705,6 +1705,20 @@ class TabManager: ObservableObject {
         return true
     }
 
+    /// Moves only what event routes see of a surface's agent (`Workspace.updatePanelRouteAgentState`).
+    func updateSurfaceRouteAgentState(
+        tabId: UUID,
+        surfaceId: UUID,
+        state: AgentActivityState,
+        source: AgentStateSource = .hooks,
+        sessionKey: AgentSessionKey? = nil,
+        programVerified: Bool = false
+    ) {
+        workspace(withId: tabId)?.updatePanelRouteAgentState(
+            panelId: surfaceId, state: state, source: source, sessionKey: sessionKey, programVerified: programVerified
+        )
+    }
+
     /// Clears a previously reported agent activity state for a surface (e.g. on hook
     /// session-end). No-ops if the workspace/panel don't exist.
     func clearSurfaceAgentState(tabId: UUID, surfaceId: UUID, source: AgentStateSource = .hooks) {

@@ -300,32 +300,14 @@ extension Workspace {
             }
         }
 
-        let trusted = source == .hooks || (source == .program && programVerified)
-        var route = current?.route
-        var routeChanged = false
-        if trusted, !Self.programHolds(currentSource: route?.source, currentState: route?.state, against: source, state) {
-            let next = RouteAgentPresence(
-                state: state,
-                source: source,
-                sessionKey: source == .hooks ? sessionKey ?? (route?.source == .hooks ? route?.sessionKey : nil) : nil
-            )
-            routeChanged = next != route
-            route = next
-        }
+        let movedRoute = Self.nextRoute(
+            after: current?.route, state: state, source: source, sessionKey: sessionKey, programVerified: programVerified
+        )
+        let routeChanged = movedRoute != nil && movedRoute != current?.route
+        let route = routeChanged ? movedRoute : current?.route
         let publishRoute = {
             guard routeChanged, let route else { return }
-            SocketEventBroadcaster.shared.publishAgentState(
-                workspaceId: self.id,
-                surfaceId: panelId,
-                state: route.state,
-                previousState: current?.route?.state,
-                source: source,
-                writer: RouteEvent.writer(source: source, sessionKey: sessionKey, programVerified: programVerified),
-                programStatus: source == .program
-                    ? (self.panels[panelId] as? TerminalPanel)?.programStatus.root?.wirePayload
-                    : nil,
-                toSubscribers: false
-            )
+            self.publishRouteAgentState(panelId: panelId, route: route, previous: current?.route?.state, sessionKey: sessionKey)
         }
 
         if Self.programHolds(currentSource: current?.source, currentState: current?.state, against: source, state)
@@ -438,6 +420,68 @@ extension Workspace {
 #if DEBUG
         dlog("surface.agentState.clear workspace=\(id.uuidString.prefix(5)) panel=\(panelId.uuidString.prefix(5))")
 #endif
+    }
+
+    /// Moves only the route view (`AgentPresence.route`), for a trusted report that must not drive
+    /// the badge: a signed OSC 7501 report the drain applied before a later unsigned one in the
+    /// same batch, or Claude Code's PreToolUse hook while Claude reports its own status. A no-op
+    /// without a presence, since the route view lives with it; routes then miss the report and
+    /// fail closed.
+    func updatePanelRouteAgentState(
+        panelId: UUID,
+        state: AgentActivityState,
+        source: AgentStateSource,
+        sessionKey: AgentSessionKey? = nil,
+        programVerified: Bool = false
+    ) {
+        guard let current = panelAgentPresence[panelId],
+              let route = Self.nextRoute(
+                  after: current.route, state: state, source: source, sessionKey: sessionKey, programVerified: programVerified
+              ),
+              route != current.route else { return }
+        panelAgentPresence[panelId]?.route = route
+        publishRouteAgentState(panelId: panelId, route: route, previous: current.route?.state, sessionKey: sessionKey)
+    }
+
+    /// The route view after a report, or nil when the report does not move it: it comes from an
+    /// untrusted reporter, or a signed program holds the view against it.
+    private static func nextRoute(
+        after current: RouteAgentPresence?,
+        state: AgentActivityState,
+        source: AgentStateSource,
+        sessionKey: AgentSessionKey?,
+        programVerified: Bool
+    ) -> RouteAgentPresence? {
+        guard source == .hooks || (source == .program && programVerified),
+              !programHolds(currentSource: current?.source, currentState: current?.state, against: source, state)
+        else { return nil }
+        return RouteAgentPresence(
+            state: state,
+            source: source,
+            sessionKey: source == .hooks ? sessionKey ?? (current?.source == .hooks ? current?.sessionKey : nil) : nil
+        )
+    }
+
+    /// One frame for routes only. The writer comes from the report's own session key, never the
+    /// view's resolved one (`RouteEvent.writer`).
+    private func publishRouteAgentState(
+        panelId: UUID,
+        route: RouteAgentPresence,
+        previous: AgentActivityState?,
+        sessionKey: AgentSessionKey?
+    ) {
+        SocketEventBroadcaster.shared.publishAgentState(
+            workspaceId: id,
+            surfaceId: panelId,
+            state: route.state,
+            previousState: previous,
+            source: route.source,
+            writer: RouteEvent.writer(source: route.source, sessionKey: sessionKey, programVerified: route.source == .program),
+            programStatus: route.source == .program
+                ? (panels[panelId] as? TerminalPanel)?.programStatus.root?.wirePayload
+                : nil,
+            toSubscribers: false
+        )
     }
 
     /// Whether a program presence in `currentState` keeps a report from another tier: always

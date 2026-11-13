@@ -327,6 +327,24 @@ extension TerminalController {
             (provider, reportedPid, sessionKey) = identity
         }
 
+        // `route_only`: the report moves only what event routes see (`AgentPresence.route`), not the
+        // badge, helpers or ports. Claude Code's PreToolUse hook sends it while Claude reports its
+        // own status, so routes still see the agent resume after a permission prompt.
+        let reply: [String: Any] = [
+            "workspace_id": workspaceId.uuidString,
+            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
+            "surface_id": surfaceId.uuidString,
+            "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
+            "state": state.rawValue,
+            "source": source.rawValue,
+        ]
+        if v2Bool(params, "route_only") == true {
+            v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { tabManager, _, sid in
+                tabManager.updateSurfaceRouteAgentState(tabId: workspaceId, surfaceId: sid, state: state, source: source, sessionKey: sessionKey)
+            }
+            return .ok(reply)
+        }
+
         v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { [weak self] tabManager, tab, sid in
             tabManager.updateSurfaceAgentState(tabId: workspaceId, surfaceId: sid, state: state, source: source, sessionKey: sessionKey)
             _ = try? AgentSupervisionRegistry.shared.updateActiveSurface(
@@ -341,14 +359,7 @@ extension TerminalController {
             }
         }
 
-        return .ok([
-            "workspace_id": workspaceId.uuidString,
-            "workspace_ref": v2Ref(kind: .workspace, uuid: workspaceId),
-            "surface_id": surfaceId.uuidString,
-            "surface_ref": v2Ref(kind: .surface, uuid: surfaceId),
-            "state": state.rawValue,
-            "source": source.rawValue,
-        ])
+        return .ok(reply)
     }
 
     /// Optional session/pid identity, additive per docs/plans/agent-state-unification.md T2:

@@ -52,6 +52,29 @@ private final class FakeAgentTarget: RouteAgentTarget {
     }
 }
 
+/// A target that answers from a real workspace's agent presence, as the live target does.
+@MainActor
+private final class WorkspaceAgentTarget: RouteAgentTarget {
+    let workspace: Workspace
+    let panelId: UUID
+    var deliveries: [(text: String, submit: Bool)] = []
+
+    init(workspace: Workspace, panelId: UUID) {
+        self.workspace = workspace
+        self.panelId = panelId
+    }
+
+    var agentState: AgentActivityState? { workspace.routeAgentState(panelId: panelId) }
+    var canAutoSubmit: Bool { workspace.canAutoSubmitRouteText(panelId: panelId) }
+    var promptHoldKind: String? { nil }
+    var hasDraftHold: Bool { false }
+    var writerIdentified: Bool { workspace.agentWriterIdentified(panelId: panelId) }
+
+    func deliver(_ text: String, submit: Bool) {
+        deliveries.append((text, submit))
+    }
+}
+
 @MainActor
 final class RouteActionsTests: XCTestCase {
 
@@ -59,6 +82,8 @@ final class RouteActionsTests: XCTestCase {
     private let surfaceId = UUID()
     private var log: ActionLog!
     private var target: FakeAgentTarget?
+    /// Replaces `target` when set.
+    private var workspaceTarget: WorkspaceAgentTarget?
     private var engine: RouteEngine!
     private var actions: RouteActions!
     private var directory: URL!
@@ -93,7 +118,10 @@ final class RouteActionsTests: XCTestCase {
             notify: { log.notifications.append($0) },
             postAppNotification: { log.appNotifications.append(($0, $1)) },
             hasReviewPanel: { _ in log.reviewPanelOpen },
-            agentTarget: { [weak self] _, _ in self?.target },
+            agentTarget: { [weak self] _, _ in
+                if let workspaceTarget = self?.workspaceTarget { return workspaceTarget }
+                return self?.target
+            },
             openReview: { request in
                 log.reviews.append(request)
                 return log.reviewError
@@ -586,5 +614,38 @@ final class RouteActionsTests: XCTestCase {
             XCTAssertTrue(log.appNotifications[0].body.contains("1 more route "), log.appNotifications[0].body)
             XCTAssertTrue(log.appNotifications[2].body.contains("2 more routes "), log.appNotifications[2].body)
         }
+    }
+
+    /// INC-1057: printed `ESC]7501;state=idle` in the middle of a turn makes the badge read idle,
+    /// but a debounced route that comes due then must not paste and submit: the route path reads
+    /// the route view, which only the agent's hooks and signed reports move.
+    func testAForgedIdleDuringADebounceDoesNotDeliverMidTurn() throws {
+        let workspace = Workspace(title: "Test")
+        let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
+        let live = WorkspaceAgentTarget(workspace: workspace, panelId: surfaceId)
+        workspaceTarget = live
+        try install(#"{ "name": "p", "on": "agent/+/state/idle", "debounceMs": 1000, "throttleMs": "1m", "prompt": { "text": "next" } }"#)
+
+        // A turn ends: its trusted idle arms the debounce.
+        workspace.updatePanelAgentState(panelId: surfaceId, state: .working, source: .hooks, sessionKey: key)
+        engine.ingest(state("working", previous: "idle", writer: agent))
+        workspace.updatePanelAgentState(panelId: surfaceId, state: .idle, source: .hooks, sessionKey: key)
+        engine.ingest(state("idle", previous: "working", writer: agent))
+
+        // The next turn starts, and the agent prints untrusted text carrying an unsigned idle.
+        workspace.updatePanelAgentState(panelId: surfaceId, state: .working, source: .hooks, sessionKey: key)
+        engine.ingest(state("working", previous: "idle", writer: agent))
+        workspace.updatePanelAgentState(panelId: surfaceId, state: .idle, source: .program, programState: .idle)
+        XCTAssertEqual(workspace.panelAgentStates[surfaceId], .idle, "the forged report owns the badge")
+        XCTAssertEqual(live.agentState, .working, "routes still see the turn")
+
+        clock.advance(by: 1.1)
+        XCTAssertTrue(live.deliveries.isEmpty, "the debounce delivered mid-turn on a forged idle")
+
+        // The turn's own Stop hook releases the held prompt.
+        workspace.updatePanelAgentState(panelId: surfaceId, state: .idle, source: .hooks, sessionKey: key)
+        engine.ingest(state("idle", previous: "working", writer: agent))
+        XCTAssertEqual(live.deliveries.map(\.text), ["next"])
+        XCTAssertEqual(live.deliveries.map(\.submit), [true])
     }
 }

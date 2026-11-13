@@ -828,6 +828,63 @@ final class AgentActivityStateTests: XCTestCase {
         XCTAssertEqual(workspace.panelAgentPresence[signed]?.route, RouteAgentPresence(state: .working, source: .program))
         XCTAssertTrue(workspace.agentWriterIdentified(panelId: signed))
     }
+
+    /// INC-1057: Claude Code's PreToolUse hook, while Claude reports its own status, sends a
+    /// route-only working report: routes see the agent resume after a permission prompt, and the
+    /// badge stays Claude's (INC-413).
+    func testRouteOnlyReportMovesTheRouteViewButNeverTheBadge() {
+        let workspace = Workspace(title: "Test")
+        let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
+        let panel = UUID()
+        workspace.updatePanelRouteAgentState(panelId: panel, state: .working, source: .hooks, sessionKey: key)
+        XCTAssertNil(workspace.panelAgentPresence[panel], "a route-only report never creates a badge")
+
+        workspace.updatePanelAgentState(panelId: panel, state: .blocked, source: .hooks, sessionKey: key)
+        workspace.updatePanelAgentState(panelId: panel, state: .blocked, source: .program, programState: .blocked)
+        workspace.updatePanelRouteAgentState(panelId: panel, state: .working, source: .hooks, sessionKey: key)
+        XCTAssertEqual(workspace.panelAgentStates[panel], .blocked)
+        XCTAssertEqual(workspace.panelAgentStateSources[panel], .program)
+        XCTAssertEqual(workspace.panelAgentPresence[panel]?.programState, .blocked)
+        XCTAssertEqual(workspace.panelAgentPresence[panel]?.route, RouteAgentPresence(state: .working, source: .hooks, sessionKey: key))
+        XCTAssertEqual(workspace.routeAgentState(panelId: panel), .working)
+
+        workspace.updatePanelRouteAgentState(panelId: panel, state: .idle, source: .program)
+        workspace.updatePanelRouteAgentState(panelId: panel, state: .idle, source: .inferred)
+        XCTAssertEqual(workspace.panelAgentPresence[panel]?.route?.state, .working, "only trusted reports move the route view")
+    }
+
+    /// INC-1057: the drain puts only a batch's last root record on the badge, so a signed root
+    /// report earlier in the batch goes to the route view as it comes. An unsigned report that
+    /// ends the batch cannot hide it from routes.
+    func testASignedRootReportReachesTheRouteViewWhenAnUnsignedOneEndsTheBatch() throws {
+        let manager = TabManager()
+        let workspace = try XCTUnwrap(manager.selectedWorkspace)
+        let panelId = try XCTUnwrap(workspace.focusedPanelId)
+        let panel = try XCTUnwrap(workspace.panels[panelId] as? TerminalPanel)
+        let token = ProgramStatusToken.generate()
+        panel.surface.programStatusTokenDigest = ProgramStatusToken.digest(of: token)
+        func report(_ state: ProgramStatusState, _ body: String) throws -> ProgramStatusDispatcher.Event {
+            .report(try XCTUnwrap(ProgramStatusReport.parse(state: state, body: Data(body.utf8))))
+        }
+        let dispatcher = ProgramStatusDispatcher.shared
+
+        dispatcher.apply([try report(.working, "programa_token=\(token)")], to: panel, in: workspace, manager: manager)
+        XCTAssertEqual(workspace.panelAgentPresence[panelId]?.route, RouteAgentPresence(state: .working, source: .program))
+
+        dispatcher.apply(
+            [try report(.idle, "programa_token=\(token)"), try report(.working, "app=forged")],
+            to: panel, in: workspace, manager: manager
+        )
+        XCTAssertEqual(workspace.panelAgentStates[panelId], .working, "the batch's last record owns the badge")
+        XCTAssertEqual(workspace.panelAgentPresence[panelId]?.route?.state, .idle, "the signed idle still reached routes")
+        XCTAssertTrue(workspace.agentWriterIdentified(panelId: panelId))
+
+        dispatcher.apply(
+            [try report(.working, "programa_token=ffffffffffffffffffffffffffffffff")],
+            to: panel, in: workspace, manager: manager
+        )
+        XCTAssertEqual(workspace.panelAgentPresence[panelId]?.route?.state, .idle, "a wrong token is dropped")
+    }
 }
 
 @MainActor

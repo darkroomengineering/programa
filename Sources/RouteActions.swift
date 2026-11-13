@@ -484,8 +484,8 @@ private struct LiveRouteAgentTarget: RouteAgentTarget {
     let workspace: Workspace
     let panel: TerminalPanel
 
-    var agentState: AgentActivityState? { workspace.panelAgentPresence[panel.id]?.state }
-    var canAutoSubmit: Bool { workspace.canAutoSubmitToAgent(panelId: panel.id) }
+    var agentState: AgentActivityState? { workspace.routeAgentState(panelId: panel.id) }
+    var canAutoSubmit: Bool { workspace.canAutoSubmitRouteText(panelId: panel.id) }
     var promptHoldKind: String? { panel.surface.activePromptHold()?.kind.rawValue }
     var hasDraftHold: Bool { panel.surface.activeDraftHold() != nil }
     var writerIdentified: Bool { workspace.agentWriterIdentified(panelId: panel.id) }
@@ -507,6 +507,20 @@ extension Workspace {
     /// OSC 7501 report can own the badge.
     func agentWriterIdentified(panelId: UUID) -> Bool {
         panelAgentPresence[panelId]?.route?.writerIdentified ?? false
+    }
+
+    /// The agent's state as routes see it: the route view once a trusted reporter has spoken, so
+    /// printed OSC 7501 bytes cannot make a working agent look idle to a route; else the badge
+    /// (a panel without a route view gets no text: `agentWriterIdentified` is false there).
+    func routeAgentState(panelId: UUID) -> AgentActivityState? {
+        guard let presence = panelAgentPresence[panelId] else { return nil }
+        return presence.route?.state ?? presence.state
+    }
+
+    /// `canAutoSubmitToAgent`, which `deliverTextToAgent` checks again for the badge, and the
+    /// route view is not blocked either.
+    func canAutoSubmitRouteText(panelId: UUID) -> Bool {
+        canAutoSubmitToAgent(panelId: panelId) && routeAgentState(panelId: panelId) != .blocked
     }
 }
 

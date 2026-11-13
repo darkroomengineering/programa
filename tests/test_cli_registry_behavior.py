@@ -1044,8 +1044,10 @@ def main() -> int:
     # Claude Code reports its own OSC 7501 root record and re-sends it only when it changes,
     # so a late async PreToolUse hook that writes "working" after Claude reported idle would
     # pin the pane at Working. With PROGRAMA_CLAUDE_NATIVE_STATUS=1 the hook leaves the root
-    # record and the surface state to Claude; it still clears notifications.
-    def pre_tool_use_writes(native: bool) -> tuple[bytes, list[str]]:
+    # record and the surface state to Claude; it still clears notifications, and it sends a
+    # route-only working report, which moves what event routes see but never the badge
+    # (INC-1057), so routes see the agent resume after a permission prompt.
+    def pre_tool_use_writes(native: bool) -> tuple[bytes, list[dict[str, Any]]]:
         master, slave = os.openpty()
         try:
             with tempfile.TemporaryDirectory(prefix="pcli-", dir="/tmp") as directory:
@@ -1065,7 +1067,7 @@ def main() -> int:
                         capture_output=True, text=True, check=False, timeout=8.0, env=env,
                         start_new_session=True,
                     )
-                methods = [str(frame.get("method")) for frame in recorder.frames]
+                frames = list(recorder.frames)
             os.set_blocking(master, False)
             written = b""
             try:
@@ -1073,7 +1075,7 @@ def main() -> int:
                     written += chunk
             except BlockingIOError:
                 pass
-            return written, methods
+            return written, frames
         finally:
             os.close(master)
             os.close(slave)
@@ -1082,15 +1084,29 @@ def main() -> int:
         return [seq for seq in written.split(b"\x1b]7501;")[1:] if b"id=" not in seq.split(b"\x1b\\")[0]]
 
     state_methods = {"surface.report_agent_state", "agent.event"}
-    hook_written, hook_methods = pre_tool_use_writes(native=False)
+
+    def badge_state_frames(frames: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [frame for frame in frames if frame.get("method") in state_methods
+                and frame.get("params", {}).get("route_only") is not True]
+
+    hook_written, hook_frames = pre_tool_use_writes(native=False)
+    hook_methods = [str(frame.get("method")) for frame in hook_frames]
     check(any(b"state=working" in seq for seq in root_status_writes(hook_written)),
           f"pre-tool-use without native status wrote no root working record: {hook_written!r}")
-    check(state_methods <= set(hook_methods), f"pre-tool-use without native status sent {hook_methods!r}")
-    native_written, native_methods = pre_tool_use_writes(native=True)
+    check(state_methods <= {str(frame.get("method")) for frame in badge_state_frames(hook_frames)},
+          f"pre-tool-use without native status sent {hook_methods!r}")
+    native_written, native_frames = pre_tool_use_writes(native=True)
+    native_methods = [str(frame.get("method")) for frame in native_frames]
     check(root_status_writes(native_written) == [],
           f"pre-tool-use with native status still wrote the root record: {native_written!r}")
-    check(not state_methods & set(native_methods),
-          f"pre-tool-use with native status still reported agent state: {native_methods!r}")
+    check(badge_state_frames(native_frames) == [],
+          f"pre-tool-use with native status still reported agent state: {native_frames!r}")
+    route_only = [frame.get("params", {}) for frame in native_frames
+                  if frame.get("method") == "surface.report_agent_state"
+                  and frame.get("params", {}).get("route_only") is True]
+    check(len(route_only) == 1 and route_only[0].get("state") == "working"
+          and route_only[0].get("session_id") == "native-status-session",
+          f"pre-tool-use with native status sent no route-only working report: {native_frames!r}")
     check("notification.clear" in native_methods,
           f"pre-tool-use with native status stopped clearing notifications: {native_methods!r}")
 

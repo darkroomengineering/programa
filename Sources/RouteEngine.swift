@@ -528,7 +528,8 @@ final class RouteEngine {
     static func blockedSurfaceIds() -> [String] {
         guard let contexts = AppDelegate.shared?.mainWindowContexts.values else { return [] }
         return contexts.flatMap { $0.tabManager.tabs }.flatMap { workspace in
-            workspace.panelAgentPresence.filter { $0.value.state == .blocked }.keys.map(\.uuidString)
+            // The route view when there is one: an unsigned OSC 7501 report can own the badge.
+            workspace.panelAgentPresence.filter { ($0.value.route?.state ?? $0.value.state) == .blocked }.keys.map(\.uuidString)
         }
     }
 
