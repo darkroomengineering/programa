@@ -734,6 +734,8 @@ final class RouteEngineTests: XCTestCase {
         XCTAssertNil(engine.textDeliveryRefusal(surfaceId: "S3"))
         engine.ingest(agentState(surface: "S1", state: "working", previous: "blocked", writer: "hooks:claude-code:made-up"))
         XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S1"), "only the stop's own session resumes it")
+        engine.ingest(RouteEvent(topic: "agent/S1/state/working", fields: ["surface_id": "S1", "state": "working", "ts": "999999.5"], writer: agent))
+        XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S1"), "a working stamped before the install predates the stop")
         engine.ingest(agentState(surface: "S1", state: "working", previous: "blocked", writer: agent))
         XCTAssertNil(engine.textDeliveryRefusal(surfaceId: "S1"))
 

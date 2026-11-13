@@ -218,8 +218,10 @@ final class RouteEngine {
         gates = [:]
         // Stops from before this install were never seen: a surface blocked now waits for a
         // `working` from its route view's writer, or from the program when the view names none.
+        // `since` is the install time: a queued `working` stamped earlier predates the stop.
+        let installedAt = now().timeIntervalSince1970
         agentTracks = Dictionary(
-            blockedSurfaces().map { ($0.id, AgentTrack(resume: .awaitingWorking(from: $0.writer, since: nil))) },
+            blockedSurfaces().map { ($0.id, AgentTrack(resume: .awaitingWorking(from: $0.writer, since: installedAt))) },
             uniquingKeysWith: { first, _ in first }
         )
         generation &+= 1
@@ -530,7 +532,7 @@ final class RouteEngine {
         guard let contexts = AppDelegate.shared?.mainWindowContexts.values else { return [] }
         return contexts.flatMap { $0.tabManager.tabs }.flatMap { workspace in
             // The route view when there is one: an unsigned OSC 7501 report can own the badge, so
-            // the writer never comes from the presence itself.
+            // the writer never comes from the badge.
             workspace.panelAgentPresence.compactMap { entry -> (id: String, writer: String?)? in
                 let route = entry.value.route
                 guard (route?.state ?? entry.value.state) == .blocked else { return nil }
