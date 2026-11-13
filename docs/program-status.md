@@ -142,7 +142,8 @@ badge. So on a Claude Code terminal:
   is gone. An unsigned clear, a prompt the shell did not report, and a reset can be printed, so
   they remove the program's record but keep the routes' view, and the badge falls back to it. The
   hooks, the pid check or `surface.clear_agent_state` end a fallback to the hooks' view; the
-  agent's next signed report or signed clear ends a fallback to a signed one.
+  agent's next signed report, its signed clear or the shell reporting its prompt over the socket
+  ends a fallback to a signed one.
 
 A surface no trusted reporter has spoken for, such as one where only a program prints its own
 status, hands routes its `agent_state` changes without a writer: `notify`, `review` and `run`

@@ -209,11 +209,8 @@ extension TerminalSurface {
         return PersonPromptHold(kind: kind, ageMs: max(0, Int(((now - since) * 1000).rounded())))
     }
 
-    /// True while the agent's prompt of any kind shows and the person has not answered it. It can
-    /// outlast a badge that left `blocked`: printed bytes move the badge but never close the gate.
-    var isPromptShowing: Bool { promptReporter != nil }
-
-    /// Who reported the showing prompt, nil while none shows.
+    /// Who reported the showing prompt, of any kind, nil while none shows. A prompt can outlast a
+    /// badge that left `blocked`: printed bytes move the badge but never close the gate.
     var promptReporter: PromptReporter? {
         guard case .promptShowing(_, _, _, let reporter) = draftGate else { return nil }
         return reporter

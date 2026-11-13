@@ -91,12 +91,16 @@ extension Workspace {
         guard previousState != state else { return false }
         panelShellActivityStates[panelId] = state
         // The shell's own socket report, unlike a printed prompt mark, proves the foreground
-        // program exited. zsh and bash send it before they print the prompt mark, so while the
-        // route view still shows `blocked` it is remembered, and the mark's clear then ends the
-        // prompt (`clearPanelAgentState`). fish sends it in the background, so it can also land
-        // after the mark's clear and end the prompt here.
+        // program exited. zsh sends it before it prints the prompt mark, so while the route view
+        // still shows `blocked` it is remembered, and the mark's clear then ends the prompt
+        // (`clearPanelAgentState`). bash and fish send it in the background, so it can also land
+        // after the mark, whose clear then left a program presence with no record: end it here.
         if state == .promptIdle {
             panelsShellReturnedSincePromptArmed.insert(panelId)
+            if panelAgentPresence[panelId]?.source == .program,
+               (panels[panelId] as? TerminalPanel)?.programStatus.root == nil {
+                clearPanelAgentState(panelId: panelId, source: .program, programClear: .shellPrompt)
+            }
             closePromptGate(panelId: panelId, by: .agent)
         } else {
             panelsShellReturnedSincePromptArmed.remove(panelId)
@@ -477,9 +481,9 @@ extension Workspace {
 
     /// Moves only the route view (`AgentPresence.route`), for a trusted report that must not drive
     /// the badge: a signed OSC 7501 report the drain applied before a later unsigned one in the
-    /// same batch, or Claude Code's PostToolUse hook while Claude reports its own status. A no-op
-    /// without a presence, since the route view lives with it; routes then miss the report and
-    /// fail closed.
+    /// same batch, or Claude Code's PostToolUse hook while Claude reports its own status. Without a
+    /// presence it only arms the prompt gate on `blocked`: the route view lives with the presence,
+    /// so routes miss the report and fail closed.
     ///
     /// It leaves a blocked route view alone unless `resumesBlocked`: only a report that proves the
     /// person answered the prompt may end a stop for input (a hook that runs after the tool, not

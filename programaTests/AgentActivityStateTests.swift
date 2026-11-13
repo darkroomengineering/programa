@@ -1099,7 +1099,7 @@ final class AgentActivityStateTests: XCTestCase {
         let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
         f.workspace.updatePanelAgentState(panelId: f.panelId, state: .blocked, source: .hooks, sessionKey: key)
         f.drain([try osc(.working, "app=claude")])
-        XCTAssertTrue(f.panel.surface.isPromptShowing)
+        XCTAssertNotNil(f.panel.surface.promptReporter)
         XCTAssertTrue(f.workspace.canAutoSubmitToAgent(panelId: f.panelId))
     }
 
