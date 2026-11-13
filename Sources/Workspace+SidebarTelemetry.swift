@@ -288,7 +288,8 @@ extension Workspace {
     /// surface's token). An unsigned program report can own the badge but never the route view,
     /// so routes get their own frames: one per route-view change, carrying that view's previous
     /// state and the report's writer. A panel no trusted reporter has spoken for yet hands routes
-    /// its displayed changes, without a writer.
+    /// its displayed changes, without a writer and untrusted, so `run` and `review` routes skip
+    /// them.
     ///
     /// `promptKind` is what a `blocked` report is waiting on (nil when the reporter did not say).
     /// It goes only to the surface's person-input gate, which refuses socket writes while a
@@ -402,7 +403,8 @@ extension Workspace {
             programStatus: source == .program
                 ? (panels[panelId] as? TerminalPanel)?.programStatus.root?.wirePayload
                 : nil,
-            toRoutes: route == nil
+            toRoutes: route == nil,
+            trusted: reporter == .agent
         )
         publishRoute()
 #if DEBUG
@@ -470,10 +472,11 @@ extension Workspace {
         panelAgentPresence.removeValue(forKey: panelId)
         closePromptGate(panelId: panelId, by: closer)
         AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil, source: nil)
-        // Routes see the clear too: a held delivery ends rather than outliving the agent.
+        // Routes see the clear too: a held delivery ends rather than outliving the agent. A
+        // printed clear reaches them untrusted, so it fires no `run` or `review`.
         SocketEventBroadcaster.shared.publishAgentState(
             workspaceId: id, surfaceId: panelId, state: nil, previousState: current.route?.state ?? current.state,
-            source: nil
+            source: nil, trusted: !printedClear
         )
 #if DEBUG
         dlog("surface.agentState.clear workspace=\(id.uuidString.prefix(5)) panel=\(panelId.uuidString.prefix(5))")

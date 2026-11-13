@@ -432,7 +432,8 @@ final class SocketEventBroadcaster: @unchecked Sendable {
         writer: String? = nil,
         programStatus: [String: Any]? = nil,
         toSubscribers: Bool = true,
-        toRoutes: Bool = true
+        toRoutes: Bool = true,
+        trusted: Bool = true
     ) {
         // Routes can get a frame subscribers do not: they follow `AgentPresence.route`, which only
         // trusted reports move, while subscribers follow the displayed state.
@@ -449,8 +450,8 @@ final class SocketEventBroadcaster: @unchecked Sendable {
         ]
         if let programStatus { frame["program_status"] = programStatus }
         for sub in subs { sub.enqueue(frame) }
-        // `previous_state` and the writer are for routes only; the wire frame carries neither.
-        if tapped { routeTap.ingest(frame, previousState: previousState, writer: writer) }
+        // `previous_state`, the writer and trust are for routes only; the wire frame carries none.
+        if tapped { routeTap.ingest(frame, previousState: previousState, writer: writer, trusted: trusted) }
     }
 
     /// Published on every `agent.needs_input` call, independent of whether the agent-state write

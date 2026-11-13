@@ -8,11 +8,17 @@ struct RouteEvent: Sendable, Equatable {
     /// Who made an agent report (`RouteEvent.writer(source:sessionKey:)`), or nil when the report
     /// named no session. Not a field: it never reaches `when`, templates or `run`'s environment.
     let writer: String?
+    /// Whether a trusted reporter made the event: false for an unsigned program report, screen
+    /// inference and a clear printed bytes can cause. `run` and `review` routes fire only on a
+    /// trusted event. Not keyed on `writer`: a hooks report without a session id has no writer
+    /// and is trusted.
+    let trusted: Bool
 
-    init(topic: String, fields: [String: String], writer: String? = nil) {
+    init(topic: String, fields: [String: String], writer: String? = nil, trusted: Bool = true) {
         self.topic = topic
         self.fields = fields.filter { !$0.value.isEmpty }
         self.writer = writer
+        self.trusted = trusted
     }
 
     /// The writer of one agent report, from that report's own source and session key, never

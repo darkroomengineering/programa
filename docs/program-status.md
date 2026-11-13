@@ -147,8 +147,14 @@ badge. So on a Claude Code terminal:
   ends a fallback to a signed one.
 
 A surface no trusted reporter has spoken for, such as one where only a program prints its own
-status, hands routes its `agent_state` changes without a writer: `notify`, `review` and `run`
-routes still fire on them, and text routes never deliver on them.
+status or only screen detection sees an agent, hands routes its `agent_state` changes without a
+writer and marked as untrusted. `notify` routes fire on them. `run` and `review` routes count the
+match but do not fire, keep their throttle window, and set their last error to a line starting
+with `refused:`. Text routes never deliver on them. The same holds for a clear printed bytes can
+cause (an unsigned clear, a prompt the shell did not report, a reset) and for screen detection's
+clear. A signed clear, a hooks clear and a closed surface stay trusted, so a hooked agent's session
+end still fires `run` and `review` routes on `agent/+/state/none`. A program that wants `run` and
+`review` routes to fire on its status signs its reports with `programa_token`.
 
 `surface.report_agent_state` rejects `source: "program"`.
 

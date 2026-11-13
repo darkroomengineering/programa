@@ -273,6 +273,13 @@ final class RouteEngine {
             if case .notify = routes[index].compiled.definition.action {
                 notifyMatches.append(routes[index].compiled.name)
             }
+            // `run` and `review` act on the surface's directory, which printed bytes can set, so
+            // only a trusted reporter fires them. The gate never sees the event: a forged one
+            // spends no throttle window.
+            if !event.trusted, routes[index].compiled.definition.action.needsTrustedReporter {
+                routes[index].lastError = Self.untrustedRefusal(event)
+                continue
+            }
             // While a route's prompt holds the surface for its turn, including the idle that ends
             // it, no prompt route takes an event from it, so two prompt routes cannot feed each
             // other. Checked per route: an earlier route in this pass may have just submitted.
@@ -437,8 +444,21 @@ final class RouteEngine {
         RouteEvent(
             topic: tapped.topic,
             fields: tapped.fields.merging(modelFields(tapped)) { frame, _ in frame },
-            writer: tapped.writer
+            writer: tapped.writer,
+            trusted: tapped.trusted
         )
+    }
+
+    /// The last error of a `run` or `review` route an untrusted event matched.
+    private static func untrustedRefusal(_ event: RouteEvent) -> String {
+        switch event.fields["source"] {
+        case AgentStateSource.program.rawValue:
+            return "refused: the report was unsigned program status, not a trusted reporter"
+        case AgentStateSource.inferred.rawValue:
+            return "refused: the report came from screen detection, not a trusted reporter"
+        default:
+            return "refused: the clear came from printed output or screen detection, not a trusted reporter"
+        }
     }
 
     /// Reports that `fire`'s delivery ended. `error` becomes the route's last error even when the
@@ -624,6 +644,14 @@ extension ProgramaRouteAction {
         }
     }
 
+    /// `run` and `review` fire only on an event from a trusted reporter (`RouteEvent.trusted`).
+    var needsTrustedReporter: Bool {
+        switch self {
+        case .run, .review: return true
+        case .notify, .send, .prompt: return false
+        }
+    }
+
     var name: String {
         switch self {
         case .notify: return "notify"
@@ -652,11 +680,37 @@ final class RouteTap: @unchecked Sendable {
     func wants(_ eventClass: SocketEventClass) -> Bool {
         lock.lock()
         defer { lock.unlock() }
+#if DEBUG
+        if sinkForTesting != nil { return true }
+#endif
         return wantedClasses.contains(eventClass)
     }
 
-    func ingest(_ frame: [String: Any], previousState: AgentActivityState? = nil, writer: String? = nil) {
-        guard let event = RouteEvent(frame: frame, previousState: previousState, writer: writer) else { return }
+#if DEBUG
+    private var sinkForTesting: (@Sendable (RouteEvent) -> Void)?
+
+    /// Hands every tapped event to `sink`, synchronously and instead of the engine, until called
+    /// with nil.
+    func redirectForTesting(_ sink: (@Sendable (RouteEvent) -> Void)?) {
+        lock.lock()
+        sinkForTesting = sink
+        lock.unlock()
+    }
+#endif
+
+    func ingest(
+        _ frame: [String: Any], previousState: AgentActivityState? = nil, writer: String? = nil, trusted: Bool = true
+    ) {
+        guard let event = RouteEvent(frame: frame, previousState: previousState, writer: writer, trusted: trusted) else { return }
+#if DEBUG
+        lock.lock()
+        let sink = sinkForTesting
+        lock.unlock()
+        if let sink {
+            sink(event)
+            return
+        }
+#endif
         // Never inline: the publishers run on main in the middle of a model mutation, and an
         // action must not run inside it. The main queue is FIFO, so events keep their order.
         DispatchQueue.main.async {
@@ -669,7 +723,7 @@ extension RouteEvent {
     /// The event a route sees for a broadcaster frame, or nil for a frame routes do not take.
     /// Null values are absent, numbers are their decimal string, and `program_status` is
     /// flattened to `program_status.<key>`.
-    init?(frame: [String: Any], previousState: AgentActivityState? = nil, writer: String? = nil) {
+    init?(frame: [String: Any], previousState: AgentActivityState? = nil, writer: String? = nil, trusted: Bool = true) {
         var fields: [String: String] = [:]
         for (key, value) in frame where key != "event" {
             if key == "program_status", let status = value as? [String: Any] {
@@ -698,7 +752,7 @@ extension RouteEvent {
         default:
             return nil
         }
-        self.init(topic: topic, fields: fields, writer: writer)
+        self.init(topic: topic, fields: fields, writer: writer, trusted: trusted)
     }
 
     private static func text(_ value: Any) -> String? {
