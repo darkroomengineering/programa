@@ -121,7 +121,7 @@ final class PersonDraftGateTransitionTests: XCTestCase {
         let shown = next(drafting, .agentPrompt(.permission, at: t0 + 5))
         let expired = next(shown, .expired)
         XCTAssertEqual(expired, .promptShowing(.permission, since: t0 + 5, draft: nil))
-        guard case .promptShowing(let kind, _, _) = expired else { return XCTFail("prompt lost on expiry: \(expired)") }
+        guard case .promptShowing(let kind, _, _, _) = expired else { return XCTFail("prompt lost on expiry: \(expired)") }
         XCTAssertTrue(PersonDraftGate.refusesWrites(kind))
     }
 

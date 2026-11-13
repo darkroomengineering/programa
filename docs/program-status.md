@@ -83,6 +83,10 @@ a report as the agent's own when it is signed:
   and `agent_state` exactly as a program report always has, but it never counts as the agent for
   [event routes](plans/event-routes.md) (see [Authority](#authority)): an unsigned
   working-then-idle pair cannot release a route's `send` or `prompt` text.
+- An unsigned report can start an [approval-prompt refusal](socket-api.md#approval-prompts-agent_awaiting_approval)
+  but never lifts one. An unsigned `working`, `idle` or `clear`, a shell prompt and a reset still
+  change the badge and the records, but socket writes stay refused until the person answers the
+  prompt or another event listed there lifts it, such as a signed `state=clear`.
 - The app keeps only the token's SHA-256 digest and compares digests in constant time, and never
   logs the token. The token still sits in the shell's environment, and signed reports are terminal
   output, so the session's scrollback log on disk holds them as written. The session snapshot keeps
@@ -133,8 +137,14 @@ badge. So on a Claude Code terminal:
 - After Esc, Claude reports idle itself and fires no Stop hook: the badge leaves Working, but held
   route text waits for the next turn's Stop hook, or expires.
 - A hook clear (SessionEnd) ends the routes' view even while the badge stays with the program.
-- Any clear that removes the badge, signed or not (a program clear, a shell prompt, a reset), also
-  ends the routes' view, so a held delivery ends instead of waiting on an agent that is gone.
+- A signed clear, or a shell prompt the shell integration also reported over the socket, removes
+  the badge and ends the routes' view, so a held delivery ends instead of waiting on an agent that
+  is gone. An unsigned clear, a prompt the shell did not report, and a reset can be printed, so
+  they remove the program's record but keep the routes' view, and the badge falls back to it.
+  Screen detection losing its match does the same with its own badge. The
+  hooks, the pid check or `surface.clear_agent_state` end a fallback to the hooks' view; the
+  agent's next signed report, its signed clear or the shell reporting its prompt over the socket
+  ends a fallback to a signed one.
 
 A surface no trusted reporter has spoken for, such as one where only a program prints its own
 status, hands routes its `agent_state` changes without a writer: `notify`, `review` and `run`

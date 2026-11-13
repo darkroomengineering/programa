@@ -742,7 +742,7 @@ final class AgentActivityStateTests: XCTestCase {
         workspace.clearPanelAgentState(panelId: panel)
         XCTAssertNotNil(workspace.panelAgentPresence[panel])
 
-        workspace.clearPanelAgentState(panelId: panel, source: .program)
+        workspace.clearPanelAgentState(panelId: panel, source: .program, programClear: .signed)
         XCTAssertNil(workspace.panelAgentPresence[panel])
 
         workspace.updatePanelAgentState(panelId: panel, state: .working, source: .hooks)
@@ -888,6 +888,297 @@ final class AgentActivityStateTests: XCTestCase {
             to: panel, in: workspace, manager: manager
         )
         XCTAssertEqual(workspace.panelAgentPresence[panelId]?.route?.state, .idle, "a wrong token is dropped")
+    }
+
+    // MARK: - INC-1124: unsigned reports arm the prompt gate but never close it
+
+    @MainActor
+    private struct PromptGateFixture {
+        let manager: TabManager
+        let workspace: Workspace
+        let panelId: UUID
+        let panel: TerminalPanel
+        let token: String
+
+        var hold: ProgramStatusKind? { panel.surface.activePromptHold()?.kind }
+
+        func drain(_ events: [ProgramStatusDispatcher.Event]) {
+            ProgramStatusDispatcher.shared.apply(events, to: panel, in: workspace, manager: manager)
+        }
+    }
+
+    private func promptGateFixture() throws -> PromptGateFixture {
+        let manager = TabManager()
+        let workspace = try XCTUnwrap(manager.selectedWorkspace)
+        let panelId = try XCTUnwrap(workspace.focusedPanelId)
+        let panel = try XCTUnwrap(workspace.panels[panelId] as? TerminalPanel)
+        let token = ProgramStatusToken.generate()
+        panel.surface.setProgramStatusTokenDigestForTesting(ProgramStatusToken.digest(of: token))
+        return PromptGateFixture(manager: manager, workspace: workspace, panelId: panelId, panel: panel, token: token)
+    }
+
+    private func osc(_ state: ProgramStatusState?, _ body: String) throws -> ProgramStatusDispatcher.Event {
+        .report(try XCTUnwrap(ProgramStatusReport.parse(state: state, body: Data(body.utf8))))
+    }
+
+    /// Claude Code's own unsigned status owns the badge while it works, so the Notification hook's
+    /// `blocked` never reaches the badge. It must still arm the prompt gate.
+    func testHooksPermissionArmsTheGateWhileAnUnsignedProgramOwnsTheBadge() throws {
+        let f = try promptGateFixture()
+        let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
+        f.workspace.updatePanelAgentState(panelId: f.panelId, state: .working, source: .hooks, sessionKey: key)
+        f.drain([try osc(.working, "app=claude")])
+        XCTAssertEqual(f.workspace.panelAgentStateSources[f.panelId], .program)
+
+        f.workspace.updatePanelAgentState(
+            panelId: f.panelId, state: .blocked, source: .hooks, sessionKey: key, promptKind: .permission
+        )
+        XCTAssertEqual(f.workspace.panelAgentStates[f.panelId], .working, "the unsigned program keeps the badge")
+        XCTAssertEqual(f.hold, .permission, "the hooks' permission prompt must refuse socket writes")
+    }
+
+    /// Printed bytes can move the badge off `blocked`; they must not lift the refusal or let a
+    /// review comment's implicit Return reach the dialog. A signed report does lift it.
+    func testUnsignedWorkingKeepsAPermissionPromptAndASignedOneLiftsIt() throws {
+        let f = try promptGateFixture()
+        let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
+        f.workspace.updatePanelAgentState(
+            panelId: f.panelId, state: .blocked, source: .hooks, sessionKey: key, promptKind: .permission
+        )
+        XCTAssertEqual(f.hold, .permission)
+
+        f.drain([try osc(.working, "app=forged")])
+        XCTAssertEqual(f.workspace.panelAgentStates[f.panelId], .working, "the unsigned working still drives the badge")
+        XCTAssertEqual(f.hold, .permission, "an unsigned working closed the permission prompt")
+        XCTAssertFalse(f.workspace.canAutoSubmitToAgent(panelId: f.panelId), "an implicit Return would answer the prompt")
+
+        f.drain([try osc(.working, "programa_token=\(f.token)")])
+        XCTAssertNil(f.hold, "a signed working is the agent's own")
+        XCTAssertTrue(f.workspace.canAutoSubmitToAgent(panelId: f.panelId))
+    }
+
+    /// A printed shell prompt mark and an unsigned `state=clear` drop the program's record, but
+    /// neither proves the prompt is gone. `surface.clear_agent_state` still ends it.
+    func testPromptMarkAndUnsignedClearKeepAPermissionPrompt() throws {
+        let f = try promptGateFixture()
+        f.drain([try osc(.blocked, "kind=permission")])
+        XCTAssertEqual(f.hold, .permission, "an unsigned report may arm the prompt")
+
+        f.drain([.prompt])
+        XCTAssertNil(f.workspace.panelAgentPresence[f.panelId], "the prompt mark still drops the record")
+        XCTAssertEqual(f.hold, .permission, "a printed prompt mark closed the permission prompt")
+
+        f.drain([try osc(.blocked, "kind=permission")])
+        f.drain([try osc(nil, "")])
+        XCTAssertNil(f.workspace.panelAgentPresence[f.panelId], "the unsigned clear still drops the record")
+        XCTAssertEqual(f.hold, .permission, "an unsigned clear closed the permission prompt")
+
+        f.manager.clearSurfaceAgentState(tabId: f.workspace.id, surfaceId: f.panelId)
+        XCTAssertNil(f.hold, "surface.clear_agent_state ends the prompt")
+    }
+
+    /// The hooks' SessionEnd writes a signed clear; outside tmux it is what removes the presence,
+    /// so it must end the prompt.
+    func testSignedClearLiftsAPermissionPrompt() throws {
+        let f = try promptGateFixture()
+        f.drain([try osc(.blocked, "kind=permission:programa_token=\(f.token)")])
+        XCTAssertEqual(f.hold, .permission)
+
+        f.drain([try osc(nil, "programa_token=\(f.token)")])
+        XCTAssertNil(f.workspace.panelAgentPresence[f.panelId])
+        XCTAssertNil(f.hold, "the agent's signed clear ends the prompt")
+    }
+
+    /// Printed bytes can arm the gate with an unsigned `blocked`, and that badge outranks hooks. It
+    /// must not pin the gate: a trusted report or clear still ends it.
+    func testAnUnsignedBlockedBadgeNeverPinsThePrompt() throws {
+        let f = try promptGateFixture()
+        let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
+        f.drain([try osc(.blocked, "kind=permission")])
+        XCTAssertEqual(f.hold, .permission)
+        f.workspace.updatePanelAgentState(panelId: f.panelId, state: .working, source: .hooks, sessionKey: key)
+        XCTAssertEqual(f.workspace.panelAgentStates[f.panelId], .blocked, "the unsigned program keeps the badge")
+        XCTAssertNil(f.hold, "the hooks' working ends the prompt")
+
+        f.drain([try osc(.blocked, "kind=permission")])
+        XCTAssertEqual(f.hold, .permission)
+        f.workspace.updatePanelRouteAgentState(
+            panelId: f.panelId, state: .working, source: .hooks, sessionKey: key, resumesBlocked: true
+        )
+        XCTAssertNil(f.hold, "a resume ends the prompt")
+
+        f.drain([try osc(.blocked, "kind=permission")])
+        XCTAssertEqual(f.hold, .permission)
+        f.manager.clearSurfaceAgentState(tabId: f.workspace.id, surfaceId: f.panelId)
+        XCTAssertEqual(f.workspace.panelAgentStates[f.panelId], .blocked, "a hooks clear leaves the program's badge")
+        XCTAssertNil(f.hold, "surface.clear_agent_state ends the prompt")
+    }
+
+    /// Claude Code under native status, killed at a permission prompt without its SessionEnd. The
+    /// shell reports its prompt over the socket first (zsh precmd, bash PROMPT_COMMAND) while the
+    /// hooks' route view is still `blocked`; the prompt mark printed after it then drops the
+    /// program's record. That pair ends the prompt.
+    func testShellPromptReportThenPromptMarkLiftsAPermissionPrompt() throws {
+        let f = try armUnderNativeStatus()
+        f.workspace.updatePanelShellActivityState(panelId: f.panelId, state: .promptIdle)
+        XCTAssertEqual(f.hold, .permission, "the hooks' route view is still blocked")
+        f.drain([.prompt])
+        XCTAssertNil(f.workspace.panelAgentPresence[f.panelId])
+        XCTAssertNil(f.hold, "the shell's socket report and the mark after it end the prompt")
+    }
+
+    /// The mark is printable, so it counts only after the shell's own socket report, and only a
+    /// report made after the prompt armed.
+    func testPromptMarkWithoutAShellPromptReportSinceArmingKeepsThePrompt() throws {
+        let f = try armUnderNativeStatus()
+        f.drain([.prompt])
+        XCTAssertEqual(f.workspace.panelAgentPresence[f.panelId]?.route?.state, .blocked, "the mark wiped the hooks' view")
+        XCTAssertEqual(f.hold, .permission, "a printed mark while the shell runs the agent closed the prompt")
+
+        let g = try promptGateFixture()
+        let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
+        g.workspace.updatePanelShellActivityState(panelId: g.panelId, state: .promptIdle)
+        g.workspace.updatePanelAgentState(panelId: g.panelId, state: .working, source: .hooks, sessionKey: key)
+        g.drain([try osc(.working, "app=claude")])
+        g.workspace.updatePanelAgentState(
+            panelId: g.panelId, state: .blocked, source: .hooks, sessionKey: key, promptKind: .permission
+        )
+        g.drain([.prompt])
+        XCTAssertEqual(g.hold, .permission, "a shell prompt report from before the prompt armed counted")
+    }
+
+    /// Screen detection reads printed text, so it may end only a prompt it detected itself. Printed
+    /// bytes that clear the program's record (a reset, an unsigned clear) and then paint a working
+    /// agent must not end a prompt the hooks reported.
+    func testScreenDetectionNeverEndsAPromptTheHooksReported() throws {
+        let unsignedClear = try osc(nil, "")
+        for clear: ProgramStatusDispatcher.Event in [.resetAll, unsignedClear] {
+            let f = try armUnderNativeStatus()
+            f.drain([clear])
+            f.workspace.updatePanelAgentState(panelId: f.panelId, state: .working, source: .inferred, inferredAgent: "claude-code")
+            XCTAssertEqual(f.hold, .permission, "an inferred working after \(clear) ended the hooks' prompt")
+        }
+
+        let g = try armUnderNativeStatus()
+        g.drain([.resetAll])
+        g.workspace.clearPanelAgentState(panelId: g.panelId, source: .inferred)
+        XCTAssertEqual(g.hold, .permission, "screen detection's clear ended the hooks' prompt")
+
+        let h = try armUnderNativeStatus()
+        h.drain([.resetAll])
+        h.workspace.updatePanelAgentState(
+            panelId: h.panelId, state: .blocked, source: .inferred, inferredAgent: "claude-code", promptKind: .permission
+        )
+        h.workspace.updatePanelAgentState(panelId: h.panelId, state: .working, source: .inferred, inferredAgent: "claude-code")
+        XCTAssertEqual(h.hold, .permission, "screen detection re-reporting the prompt let it end the hooks' prompt")
+    }
+
+    func testScreenDetectionEndsAPromptItDetected() throws {
+        let f = try promptGateFixture()
+        f.workspace.updatePanelAgentState(
+            panelId: f.panelId, state: .blocked, source: .inferred, inferredAgent: "aider", promptKind: .permission
+        )
+        XCTAssertEqual(f.hold, .permission)
+        f.workspace.updatePanelAgentState(panelId: f.panelId, state: .working, source: .inferred, inferredAgent: "aider")
+        XCTAssertNil(f.hold)
+    }
+
+    /// A signed `blocked` early in a batch reaches only the route call; the unsigned report that
+    /// ends the batch owns the badge. The signed prompt must still arm.
+    func testASignedBlockedArmsThePromptWhenAnUnsignedReportEndsTheBatch() throws {
+        let f = try promptGateFixture()
+        f.drain([try osc(.blocked, "kind=permission:programa_token=\(f.token)"), try osc(.working, "app=forged")])
+        XCTAssertEqual(f.workspace.panelAgentStates[f.panelId], .working)
+        XCTAssertEqual(f.hold, .permission, "the signed permission prompt never armed")
+    }
+
+    /// Only a permission or sign-in prompt holds back the implicit Return; a kindless prompt the
+    /// badge already left does not.
+    func testAKindlessPromptDoesNotHoldBackTheImplicitReturn() throws {
+        let f = try promptGateFixture()
+        let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
+        f.workspace.updatePanelAgentState(panelId: f.panelId, state: .blocked, source: .hooks, sessionKey: key)
+        f.drain([try osc(.working, "app=claude")])
+        XCTAssertNotNil(f.panel.surface.promptReporter)
+        XCTAssertTrue(f.workspace.canAutoSubmitToAgent(panelId: f.panelId))
+    }
+
+    /// INC-1147: printed bytes that drop the program's record (a reset, an unsigned clear, a prompt
+    /// mark the shell did not report) leave what the hooks said; the badge falls back to it.
+    func testPrintedClearsKeepTheHooksView() throws {
+        let unsignedClear = try osc(nil, "")
+        for clear: ProgramStatusDispatcher.Event in [.resetAll, unsignedClear, .prompt] {
+            let f = try armUnderNativeStatus()
+            f.drain([clear])
+            let presence = try XCTUnwrap(f.workspace.panelAgentPresence[f.panelId], "\(clear) wiped the hooks' view")
+            XCTAssertEqual(presence.route?.state, .blocked, "\(clear)")
+            XCTAssertEqual(presence.state, .blocked, "\(clear): the badge shows the hooks' view")
+            XCTAssertEqual(presence.source, .hooks, "\(clear)")
+            XCTAssertEqual(f.hold, .permission, "\(clear)")
+
+            f.manager.clearSurfaceAgentState(tabId: f.workspace.id, surfaceId: f.panelId)
+            XCTAssertNil(f.workspace.panelAgentPresence[f.panelId], "\(clear): the hooks' clear still ends it")
+            XCTAssertNil(f.hold, "\(clear)")
+        }
+    }
+
+    /// A signed route view outlives a printed reset too, and the agent's signed clear still ends it
+    /// once its record is gone.
+    func testASignedViewOutlivesAPrintedResetAndEndsOnASignedClear() throws {
+        let f = try promptGateFixture()
+        f.drain([try osc(.working, "programa_token=\(f.token)")])
+        f.drain([.resetAll])
+        XCTAssertEqual(f.workspace.panelAgentPresence[f.panelId]?.route, RouteAgentPresence(state: .working, source: .program))
+        XCTAssertTrue(f.workspace.agentWriterIdentified(panelId: f.panelId))
+
+        f.drain([try osc(nil, "programa_token=\(f.token)")])
+        XCTAssertNil(f.workspace.panelAgentPresence[f.panelId], "the agent's signed clear ends it")
+    }
+
+    /// A signed agent killed mid-turn where the mark lands before the shell's socket report (fish,
+    /// and bash's background report): the mark leaves the signed view, and the report then ends it.
+    func testTheShellsPromptReportEndsASignedViewAMarkLeftBehind() throws {
+        let f = try promptGateFixture()
+        f.workspace.updatePanelShellActivityState(panelId: f.panelId, state: .commandRunning)
+        f.drain([try osc(.working, "programa_token=\(f.token)")])
+        f.drain([.prompt])
+        XCTAssertEqual(f.workspace.panelAgentPresence[f.panelId]?.route?.state, .working, "the mark alone keeps the view")
+
+        f.workspace.updatePanelShellActivityState(panelId: f.panelId, state: .promptIdle)
+        XCTAssertNil(f.workspace.panelAgentPresence[f.panelId], "the shell's return ends an agent whose record is gone")
+    }
+
+    /// Screen detection reads printed text too: its clear drops its own badge but keeps what the
+    /// hooks said.
+    func testScreenDetectionsClearKeepsTheHooksView() throws {
+        let f = try promptGateFixture()
+        let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
+        f.workspace.updatePanelAgentState(
+            panelId: f.panelId, state: .blocked, source: .hooks, sessionKey: key, promptKind: .permission
+        )
+        f.drain([try osc(.done, "app=forged")])
+        f.workspace.updatePanelAgentState(panelId: f.panelId, state: .working, source: .inferred, inferredAgent: "claude-code")
+        XCTAssertEqual(f.workspace.panelAgentStateSources[f.panelId], .inferred)
+
+        f.workspace.clearPanelAgentState(panelId: f.panelId, source: .inferred)
+        XCTAssertEqual(f.workspace.panelAgentPresence[f.panelId]?.route?.state, .blocked, "screen detection's clear wiped the hooks' view")
+        XCTAssertEqual(f.hold, .permission)
+    }
+
+    /// The shell runs Claude Code, whose own unsigned status owns the badge, and its Notification
+    /// hook arms a permission prompt.
+    private func armUnderNativeStatus() throws -> PromptGateFixture {
+        let f = try promptGateFixture()
+        let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
+        f.workspace.updatePanelShellActivityState(panelId: f.panelId, state: .promptIdle)
+        f.workspace.updatePanelShellActivityState(panelId: f.panelId, state: .commandRunning)
+        f.workspace.updatePanelAgentState(panelId: f.panelId, state: .working, source: .hooks, sessionKey: key)
+        f.drain([try osc(.working, "app=claude")])
+        f.workspace.updatePanelAgentState(
+            panelId: f.panelId, state: .blocked, source: .hooks, sessionKey: key, promptKind: .permission
+        )
+        XCTAssertEqual(f.hold, .permission)
+        return f
     }
 }
 

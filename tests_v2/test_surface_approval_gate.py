@@ -8,6 +8,9 @@ prompt, so any write could approve something the person never saw. `force` (the 
 does not get past it; only `answer_prompt: true` does. agent.prompt refuses at once instead of
 holding.
 
+An unsigned OSC 7501 report (printed bytes without the terminal's token) can move the badge off
+`blocked` but never lifts the refusal.
+
 Only an explicit permission/auth prompt refuses. Claude's idle prompt arrives as a `question`,
 and `prompt-agent` to an idle helper must keep working, so `kind=question`,
 `agent.event user-input.requested`, and a kindless `blocked` (needs_input without kind,
@@ -32,6 +35,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import subprocess
 import sys
 import tempfile
 import time
@@ -82,11 +86,13 @@ def _expect_ok(method: str, params: Dict[str, Any], timeout_s: float = 10.0) -> 
     return dict(resp.get("result") or {})
 
 
-def _expect_approval_refusal(method: str, params: Dict[str, Any], surface_id: str, timeout_s: float = 10.0) -> Dict[str, Any]:
-    return _check_approval_refusal(method, _call_full(method, params, timeout_s=timeout_s), surface_id)
+def _expect_approval_refusal(
+    method: str, params: Dict[str, Any], surface_id: str, timeout_s: float = 10.0, source: str = "hooks"
+) -> Dict[str, Any]:
+    return _check_approval_refusal(method, _call_full(method, params, timeout_s=timeout_s), surface_id, source)
 
 
-def _check_approval_refusal(method: str, resp: Dict[str, Any], surface_id: str) -> Dict[str, Any]:
+def _check_approval_refusal(method: str, resp: Dict[str, Any], surface_id: str, source: str = "hooks") -> Dict[str, Any]:
     err = resp.get("error") or {}
     _must(resp.get("ok") is not True, f"{method} was delivered into a pane waiting on a permission prompt: {resp!r}")
     _must(err.get("code") == "agent_awaiting_approval", f"{method} expected agent_awaiting_approval: {resp!r}")
@@ -102,7 +108,7 @@ def _check_approval_refusal(method: str, resp: Dict[str, Any], surface_id: str) 
     _must(data.get("prompt_kind") == "permission", f"{method} prompt_kind should be permission: {data!r}")
     age = data.get("prompt_age_ms")
     _must(isinstance(age, int) and age >= 0, f"{method} prompt_age_ms is not a non-negative int: {data!r}")
-    _must(data.get("agent_state_source") == "hooks", f"{method} agent_state_source should be hooks: {data!r}")
+    _must(data.get("agent_state_source") == source, f"{method} agent_state_source should be {source}: {data!r}")
     _must(data.get("stale") is False, f"{method} a fresh report must not read as stale: {data!r}")
     return data
 
@@ -290,6 +296,124 @@ def _check_not_refused(c: ProgramaClient, workspace_id: str, surface_id: str, ta
     _wait_for(lambda: out in _screen_lines(c, surface_id), timeout_s=10.0)
 
 
+def _agent_row(c: ProgramaClient, workspace_id: str, surface_id: str) -> Dict[str, Any]:
+    rows = (c._call("surface.list", {"workspace_id": workspace_id}) or {}).get("surfaces") or []
+    for row in rows:
+        if str(row.get("id")) == surface_id:
+            return dict(row)
+    raise ProgramaClientError(f"surface {surface_id} not in surface.list: {rows}")
+
+
+def _check_unsigned_working_keeps_refusal(
+    c: ProgramaClient, workspace_id: str, surface_id: str, work_dir: Path
+) -> None:
+    """Text printed in the pane (a file preview in the dialog, say) can carry an unsigned OSC 7501
+    `working`. It moves the badge but must not lift the refusal (INC-1124). The release file is
+    created from this process, never through the socket: any delivered write answers the prompt."""
+    release = f"go{STAMP}"
+    _reopen(c, workspace_id, surface_id)
+    _expect_ok(
+        "surface.send_text",
+        {
+            "surface_id": surface_id,
+            "text": f"while [ ! -e {release} ]; do sleep 0.1; done; printf '\\033]7501;state=working\\033\\\\'; sleep 60\n",
+        },
+    )
+
+    _needs_input("permission")(workspace_id, surface_id)
+    _wait_agent_state(c, workspace_id, surface_id, "blocked")
+    (work_dir / release).touch()
+
+    def unsigned_working_shows() -> bool:
+        row = _agent_row(c, workspace_id, surface_id)
+        return row.get("agent_state") == "working" and row.get("agent_state_source") == "program"
+
+    _wait_for(unsigned_working_shows, timeout_s=10.0)
+
+    _expect_approval_refusal(
+        "surface.send_text", {"surface_id": surface_id, "text": " forged\n"}, surface_id, source="program"
+    )
+    _expect_approval_refusal("surface.send_key", {"surface_id": surface_id, "key": "enter"}, surface_id, source="program")
+    _expect_approval_refusal(
+        "agent.prompt",
+        {"surface_id": surface_id, "text": "forged", "timeout_ms": 5000},
+        surface_id,
+        timeout_s=15.0,
+        source="program",
+    )
+
+    _expect_ok("surface.send_key", {"surface_id": surface_id, "key": "ctrl+c", "answer_prompt": True})
+    _send_text_ok_and_visible(c, surface_id, f"UNS{STAMP}")
+    _clear_agent(c, workspace_id, surface_id)
+
+
+def _clear_agent(c: ProgramaClient, workspace_id: str, surface_id: str) -> None:
+    """Drop the program record and agent state a case left. The test shell may print no prompt
+    mark (OSC 133;A), so an unsigned `working` would outlive its command and outrank the next
+    case's hooks reports. A reset drops the record; the hooks' view it leaves is cleared over the
+    socket."""
+    _expect_ok("surface.send_text", {"surface_id": surface_id, "text": "printf '\\033c'\n"})
+    _wait_for(lambda: _agent_row(c, workspace_id, surface_id).get("program_status") is None, timeout_s=10.0)
+    _expect_ok("surface.clear_agent_state", {"workspace_id": workspace_id, "surface_id": surface_id})
+    _wait_for(lambda: _agent_row(c, workspace_id, surface_id).get("agent_state") is None, timeout_s=5.0)
+
+
+def _check_agent_exit_lifts_refusal(c: ProgramaClient, workspace_id: str, surface_id: str, work_dir: Path) -> None:
+    """Claude Code under native status, killed at a permission prompt without its SessionEnd: the
+    hooks' route view stays `blocked`, the program's unsigned status owns the badge. zsh reports
+    its prompt over the socket before it prints the prompt mark, and that pair must lift the
+    refusal.
+
+    The test shell may run no prompt integration, so this process sends the shell's socket reports
+    itself and the stand-in prints the mark once killed, in zsh's order. The stand-in is killed
+    from this process, never through the socket."""
+    release = f"gx{STAMP}"
+    agent = f"sleep 7{STAMP}"
+    _reopen(c, workspace_id, surface_id)
+    _expect_ok(
+        "surface.send_text",
+        {
+            "surface_id": surface_id,
+            "text": (
+                f"while [ ! -e {release} ]; do sleep 0.1; done; printf '\\033]7501;state=working\\033\\\\'; "
+                f"{agent}; printf '\\033]133;A\\033\\\\'\n"
+            ),
+        },
+    )
+    shell_state = {"workspace_id": workspace_id, "surface_id": surface_id}
+    _expect_ok("surface.report_shell_state", {**shell_state, "state": "running"})
+    _needs_input("permission")(workspace_id, surface_id)
+    _wait_agent_state(c, workspace_id, surface_id, "blocked")
+    (work_dir / release).touch()
+
+    def unsigned_working_shows() -> bool:
+        row = _agent_row(c, workspace_id, surface_id)
+        return row.get("agent_state") == "working" and row.get("agent_state_source") == "program"
+
+    _wait_for(unsigned_working_shows, timeout_s=10.0)
+    _expect_approval_refusal("surface.send_key", {"surface_id": surface_id, "key": "enter"}, surface_id, source="program")
+
+    # The prompt report alone does not lift it: the hooks' view still shows the prompt. Both calls
+    # apply on the main queue in order, so the refusal check sees the report.
+    _expect_ok("surface.report_shell_state", {**shell_state, "state": "prompt"})
+    _expect_approval_refusal("surface.send_key", {"surface_id": surface_id, "key": "enter"}, surface_id, source="program")
+
+    subprocess.run(["pkill", "-f", agent], check=False)
+    tag = f"EXI{STAMP}"
+    last: Dict[str, Any] = {}
+
+    def delivered() -> bool:
+        nonlocal last
+        last = _call_full("surface.send_text", {"surface_id": surface_id, "text": f'echo {tag[:3]}""{tag[3:]}\n'})
+        return last.get("ok") is True
+
+    try:
+        _wait_for(delivered, timeout_s=10.0, step_s=0.2)
+    except Exception as exc:
+        raise ProgramaClientError(f"the refusal outlived the agent's exit: {last!r}") from exc
+    _wait_for(lambda: tag in _screen_lines(c, surface_id), timeout_s=10.0)
+
+
 def main() -> int:
     for var in ("PROGRAMA_WORKSPACE_ID", "PROGRAMA_SURFACE_ID", "PROGRAMA_PANEL_ID", "PROGRAMA_TAB_ID"):
         os.environ.pop(var, None)
@@ -325,6 +449,14 @@ def main() -> int:
             _check_not_refused(c, workspace_id, sid, "u", _agent_event("user-input.requested"))
             _check_not_refused(c, workspace_id, sid, "r", _report_blocked)
             print("  PASS: question, kindless and report_agent_state blocked prompts do not refuse writes")
+
+            # 4. A printed, unsigned OSC 7501 `working` does not lift a permission refusal.
+            _check_unsigned_working_keeps_refusal(c, workspace_id, sid, work_dir)
+            print("  PASS: an unsigned working report keeps the refusal; answer_prompt delivers")
+
+            # 5. The agent exiting at the prompt, as the shell reports it, lifts the refusal.
+            _check_agent_exit_lifts_refusal(c, workspace_id, sid, work_dir)
+            print("  PASS: the shell returning to its prompt lifts the refusal")
     finally:
         if workspace_id:
             try:

@@ -8,7 +8,8 @@ import Bonsplit
 // Only person input moves the draft side of the gate: keyDown, paste, IME/dictation commits and
 // drag-drop in `GhosttyNSView`. Terminal replies (DA1, DSR, OSC 11, focus reports) and socket
 // writes reach the PTY without passing through those sites, so they can never look like typing.
-// The prompt side moves on agent-state reports (`Workspace.updatePanelAgentState`).
+// The prompt side moves on agent-state reports (`Workspace.updatePanelAgentState`): any report
+// can arm it, and only a report printed bytes could not have forged can close it.
 
 /// Unsent person input. Times are `systemUptime` seconds, the clock `NSEvent.timestamp` uses.
 struct PersonDraft: Equatable {
@@ -21,6 +22,14 @@ struct PersonDraft: Equatable {
     }
 }
 
+/// Who reported a prompt. Screen detection reads printed text, so it may end only a prompt that
+/// nothing but screen detection reported (`Workspace.closePromptGate`).
+enum PromptReporter: Equatable {
+    case screen
+    /// Hooks over the socket, or an OSC 7501 report, signed or not.
+    case agent
+}
+
 /// Whether a person has unsent typed input in one terminal surface, and whether the agent in it
 /// is showing a prompt the person has not answered yet.
 enum PersonDraftGate: Equatable {
@@ -29,8 +38,9 @@ enum PersonDraftGate: Equatable {
     case drafting(PersonDraft)
     /// The agent reported a prompt (nil kind: the reporter did not say which). `since` is
     /// `systemUptime` seconds. `draft` is input the person typed before the prompt appeared;
-    /// it is still theirs once the prompt closes.
-    case promptShowing(ProgramStatusKind?, since: TimeInterval, draft: PersonDraft?)
+    /// it is still theirs once the prompt closes. `reportedBy` is `.screen` only while screen
+    /// detection is the one reporter that has reported it.
+    case promptShowing(ProgramStatusKind?, since: TimeInterval, draft: PersonDraft?, reportedBy: PromptReporter = .agent)
 
     /// A draft left alone this long stops holding writes. Without it, text typed and then
     /// erased with Backspace (DEL is not counted as typing) would hold the pane forever.
@@ -47,7 +57,7 @@ enum PersonDraftGate: Equatable {
         case .open:
             switch event {
             case .typed(let at): return .drafting(PersonDraft(since: at, lastKeyAt: at))
-            case .agentPrompt(let kind, let at): return .promptShowing(kind, since: at, draft: nil)
+            case .agentPrompt(let kind, let at, let by): return .promptShowing(kind, since: at, draft: nil, reportedBy: by)
             case .submitted, .cleared, .dismissed, .socketWriteDelivered, .agentPromptClosed, .expired: return .open
             }
         case .drafting(let draft):
@@ -58,12 +68,12 @@ enum PersonDraftGate: Equatable {
                 return .drafting(PersonDraft(since: since, lastKeyAt: at))
             case .submitted, .cleared, .expired:
                 return .open
-            case .agentPrompt(let kind, let at):
-                return .promptShowing(kind, since: at, draft: draft)
+            case .agentPrompt(let kind, let at, let by):
+                return .promptShowing(kind, since: at, draft: draft, reportedBy: by)
             case .dismissed, .socketWriteDelivered, .agentPromptClosed:
                 return state
             }
-        case .promptShowing(let kind, let since, let draft):
+        case .promptShowing(let kind, let since, let draft, let reporter):
             switch event {
             case .submitted where !refusesWrites(kind), .cleared where !refusesWrites(kind):
                 // At a question or kindless prompt the input box is the prompt, so Return sends
@@ -74,13 +84,18 @@ enum PersonDraftGate: Equatable {
                 // the input box; a draft typed before it is still theirs.
                 return draft.map { .drafting($0) } ?? .open
             case .expired:
-                return .promptShowing(kind, since: since, draft: nil)
-            case .agentPrompt(let newKind, let at):
+                return .promptShowing(kind, since: since, draft: nil, reportedBy: reporter)
+            case .agentPrompt(let newKind, let at, let by):
                 // Reporters repeat the same prompt; keep its age unless the kind changed. Any
                 // client can report `blocked` or `question`, so a kind that refuses writes is
                 // never replaced by one that doesn't; only an answer or a close ends it.
                 let resolved = PersonDraftGate.refusesWrites(kind) ? (newKind.flatMap { PersonDraftGate.refusesWrites($0) ? $0 : nil } ?? kind) : (newKind ?? kind)
-                return .promptShowing(resolved, since: resolved == kind ? since : at, draft: draft)
+                // Once an agent reported the prompt, screen detection re-reporting it never
+                // lets screen detection end it.
+                return .promptShowing(
+                    resolved, since: resolved == kind ? since : at, draft: draft,
+                    reportedBy: reporter == .screen ? by : .agent
+                )
             }
         }
     }
@@ -90,7 +105,7 @@ enum PersonDraftGate: Equatable {
         switch self {
         case .open: return nil
         case .drafting(let draft): return draft
-        case .promptShowing(_, _, let draft): return draft
+        case .promptShowing(_, _, let draft, _): return draft
         }
     }
 
@@ -104,7 +119,7 @@ enum PersonDraftGate: Equatable {
     fileprivate func isSameCase(as other: PersonDraftGate) -> Bool {
         switch (self, other) {
         case (.open, .open), (.drafting, .drafting): return true
-        case (.promptShowing(let kind, _, let draft), .promptShowing(let otherKind, _, let otherDraft)):
+        case (.promptShowing(let kind, _, let draft, _), .promptShowing(let otherKind, _, let otherDraft, _)):
             return kind == otherKind && (draft == nil) == (otherDraft == nil)
         default: return false
         }
@@ -114,7 +129,7 @@ enum PersonDraftGate: Equatable {
         switch self {
         case .open: return "open"
         case .drafting: return "drafting"
-        case .promptShowing(let kind, _, let draft):
+        case .promptShowing(let kind, _, let draft, _):
             return "promptShowing(\(kind?.rawValue ?? "unknown")\(draft == nil ? "" : ",draft"))"
         }
     }
@@ -131,8 +146,9 @@ enum PersonDraftEvent: Equatable {
     /// Any socket write went through. Posted after `submitted`/`cleared` for the same write.
     case socketWriteDelivered
     /// The agent reported a prompt (`blocked`). `at` is `systemUptime` seconds.
-    case agentPrompt(ProgramStatusKind?, at: TimeInterval)
-    /// The agent left `blocked`, or its state was cleared.
+    case agentPrompt(ProgramStatusKind?, at: TimeInterval, by: PromptReporter = .agent)
+    /// A trusted report shows the agent no longer `blocked`, a trusted clear removed its state, or
+    /// the shell reported its prompt with nothing `blocked`.
     case agentPromptClosed
     /// The draft went `PersonDraftGate.idleExpiry` seconds without a keystroke.
     case expired
@@ -188,9 +204,16 @@ extension TerminalSurface {
 
     /// The permission or sign-in prompt refusing socket writes at `now`, or nil.
     func activePromptHold(now: TimeInterval = ProcessInfo.processInfo.systemUptime) -> PersonPromptHold? {
-        guard case .promptShowing(let kind?, let since, _) = draftGate,
+        guard case .promptShowing(let kind?, let since, _, _) = draftGate,
               PersonDraftGate.refusesWrites(kind) else { return nil }
         return PersonPromptHold(kind: kind, ageMs: max(0, Int(((now - since) * 1000).rounded())))
+    }
+
+    /// Who reported the showing prompt, of any kind, nil while none shows. A prompt can outlast a
+    /// badge that left `blocked`: printed bytes move the badge but never close the gate.
+    var promptReporter: PromptReporter? {
+        guard case .promptShowing(_, _, _, let reporter) = draftGate else { return nil }
+        return reporter
     }
 
     /// Agent-state hook: the agent reported a prompt of `kind` (every `blocked` report, so a
@@ -198,10 +221,11 @@ extension TerminalSurface {
     func noteAgentPrompt(
         _ kind: ProgramStatusKind?,
         isBlocked: Bool,
+        by reporter: PromptReporter = .agent,
         now: TimeInterval = ProcessInfo.processInfo.systemUptime
     ) {
         expireIdleDraft(now: now)
-        noteDraftEvent(isBlocked ? .agentPrompt(kind, at: now) : .agentPromptClosed)
+        noteDraftEvent(isBlocked ? .agentPrompt(kind, at: now, by: reporter) : .agentPromptClosed)
     }
 
     private func expireIdleDraft(now: TimeInterval) {

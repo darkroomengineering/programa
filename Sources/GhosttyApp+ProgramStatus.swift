@@ -113,6 +113,9 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
         var lastRootState = panel.programStatus.root?.state
         var transitions: [ProgramStatusRecord?] = []
         var projectRoot = false
+        // What last removed the root. A terminal reset or an unsigned clear never proves the
+        // agent's prompt went away; a prompt mark proves it only after the shell's socket report.
+        var rootClear = ProgramRootClear.unsigned
         let touchesChildren = events.contains { event in
             switch event {
             case .report(let report):
@@ -147,6 +150,14 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
                     report, verified: authentication == .verified
                 ) {
                     projectRoot = projectRoot || rootTouched
+                    if rootTouched {
+                        rootClear = report.state == nil && authentication == .verified ? .signed : .unsigned
+                    } else if report.id.isEmpty, report.state == nil, authentication == .verified {
+                        // The agent's own clear projects even with no record left: printed bytes
+                        // may have dropped it while the badge kept a trusted view.
+                        projectRoot = true
+                        rootClear = .signed
+                    }
                     // Only the batch's last root record reaches the badge below, so a signed root
                     // report goes to the route view as it comes, with the authority it would have
                     // there as the last record: an unsigned report later in the same batch must
@@ -154,7 +165,7 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
                     if authentication == .verified, rootTouched, let state = report.state {
                         manager.updateSurfaceRouteAgentState(
                             tabId: key.tabId, surfaceId: key.surfaceId, state: state.legacyAgentState,
-                            source: .program, programVerified: true, resumesBlocked: true
+                            source: .program, programVerified: true, resumesBlocked: true, promptKind: report.kind
                         )
                     }
                 }
@@ -166,12 +177,18 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
                 )
 #endif
             case .prompt:
-                projectRoot = panel.programStatus.dropTransient() || projectRoot
+                if panel.programStatus.dropTransient() {
+                    projectRoot = true
+                    rootClear = .shellPrompt
+                }
 #if DEBUG
                 dlog("programStatus.prompt surface=\(key.surfaceId.uuidString.prefix(5)) records=\(panel.programStatus.count)")
 #endif
             case .resetAll:
-                projectRoot = panel.programStatus.resetAll() || projectRoot
+                if panel.programStatus.resetAll() {
+                    projectRoot = true
+                    rootClear = .unsigned
+                }
 #if DEBUG
                 dlog("programStatus.reset surface=\(key.surfaceId.uuidString.prefix(5))")
 #endif
@@ -202,7 +219,9 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
                 programVerified: root.verified
             )
         } else {
-            manager.clearSurfaceAgentState(tabId: key.tabId, surfaceId: key.surfaceId, source: .program)
+            manager.clearSurfaceAgentState(
+                tabId: key.tabId, surfaceId: key.surfaceId, source: .program, programClear: rootClear
+            )
         }
 
         for root in transitions {
