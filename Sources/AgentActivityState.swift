@@ -50,8 +50,9 @@ enum AgentActivityState: String, Codable, CaseIterable, Sendable {
 enum AgentStateSource: String, Codable, CaseIterable, Sendable {
     case hooks
     case inferred
-    /// OSC 7501 program status reported by the program itself. Outranks hooks while the root
-    /// record is active (see `Workspace.updatePanelAgentState`).
+    /// OSC 7501 program status reported by the program itself. A report carrying the surface's
+    /// token outranks hooks while the root record is active; one without it ranks below hooks (see
+    /// `Workspace.updatePanelAgentState`).
     case program
 
     /// Authority order: program 2, hooks 1, inferred 0.
@@ -89,6 +90,9 @@ struct AgentPresence: Equatable, Sendable {
     /// The root record's state when `source == .program`; `state` holds its legacy projection
     /// (done and error both read as `.idle`). Nil for every other source.
     var programState: ProgramStatusState?
+    /// `source == .program` only: the root record carried the surface's token
+    /// (`ProgramStatusToken`). An unsigned program presence ranks below hooks and names no writer.
+    var programVerified = false
     /// Set by the watchdog sweep once `isStale` first turns true, and reset by every write.
     /// Staleness itself is computed from `lastEventAt`; this stored flag only makes the
     /// transition a real value change, so the `removeDuplicates` sidebar publisher fires.

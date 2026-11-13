@@ -253,11 +253,15 @@ extension Workspace {
     ///   (never reported) or already `.inferred`. If it's `.hooks`, the write is silently
     ///   dropped — belt-and-suspenders: the screen-manifest engine's Phase A should already skip
     ///   sampling a hooks-owned surface, but this is the authoritative guard regardless.
-    /// - `source == .program` (OSC 7501) always writes, and `programState` carries the root
-    ///   record's finer state. While the current presence is `.program`, `.hooks`/`.inferred`
-    ///   writes are dropped if its state is active (working/blocked), and, if it is resting
-    ///   (idle/done/error), accepted only when they report an active state. Accepting only active
-    ///   claims keeps a hook `idle` from overwriting a program `done` badge.
+    /// - `source == .program` (OSC 7501) with `programVerified` (the report carried the surface's
+    ///   token) always writes, and `programState` carries the root record's finer state. While
+    ///   the current presence is a verified `.program`, every other write is dropped if its state
+    ///   is active (working/blocked), and, if it is resting (idle/done/error), accepted only when
+    ///   it reports an active state. Accepting only active claims keeps a hook `idle` from
+    ///   overwriting a program `done` badge.
+    /// - An unverified `.program` write (no token: Claude Code's own status, or bytes anything in
+    ///   the terminal printed) ranks below hooks: it is dropped while hooks own the surface, and
+    ///   hooks always replace it. It still outranks `.inferred` by the rule above.
     ///
     /// `promptKind` is what a `blocked` report is waiting on (nil when the reporter did not say).
     /// It goes only to the surface's person-input gate, which refuses socket writes while a
@@ -293,8 +297,14 @@ extension Workspace {
             }
         }
 
-        if source != .program, let current, current.source == .program,
+        let verifiedProgram = source == .program && programVerified
+        if !verifiedProgram, let current, current.source == .program,
+           current.programVerified || source == .inferred,
            current.state != .idle || state == .idle {
+            return
+        }
+
+        if source == .program, !programVerified, let current, current.source == .hooks {
             return
         }
 
@@ -320,7 +330,8 @@ extension Workspace {
 
         guard current?.state != state || current?.source != source || current?.sessionKey != resolvedSessionKey
                 || current?.inferredAgent != resolvedInferredAgent
-                || current?.programState != programState else {
+                || current?.programState != programState
+                || current?.programVerified != verifiedProgram else {
             // Same state from the same writer: only the liveness clock moves. Without this a
             // long-running agent that keeps reporting `working` would read as stale at the
             // threshold. No wait-registry or socket fan-out, since nothing observable changed.
@@ -339,7 +350,8 @@ extension Workspace {
             lastEventAt: now,
             sessionKey: resolvedSessionKey,
             inferredAgent: resolvedInferredAgent,
-            programState: programState
+            programState: programState,
+            programVerified: verifiedProgram
         )
         // `current == nil` covers a prompt kept armed across a sidebar reset: the agent's next
         // report after that reset is what tells us the box closed.
@@ -358,7 +370,7 @@ extension Workspace {
             state: state,
             previousState: current?.state,
             source: source,
-            writer: RouteEvent.writer(source: source, sessionKey: sessionKey),
+            writer: RouteEvent.writer(source: source, sessionKey: sessionKey, programVerified: verifiedProgram),
             programStatus: source == .program
                 ? (panels[panelId] as? TerminalPanel)?.programStatus.root?.wirePayload
                 : nil
@@ -384,7 +396,7 @@ extension Workspace {
         AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil, source: nil)
         SocketEventBroadcaster.shared.publishAgentState(
             workspaceId: id, surfaceId: panelId, state: nil, previousState: current.state, source: nil,
-            writer: RouteEvent.writer(source: source, sessionKey: nil)
+            writer: RouteEvent.writer(source: source, sessionKey: nil, programVerified: current.programVerified)
         )
 #if DEBUG
         dlog("surface.agentState.clear workspace=\(id.uuidString.prefix(5)) panel=\(panelId.uuidString.prefix(5))")

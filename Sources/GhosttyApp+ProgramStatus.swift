@@ -80,7 +80,8 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
                 // Only a same-state update (progress, text) may replace a queued report; a state
                 // change must reach waiters and notifications even inside one burst.
                 if queued.id == report.id {
-                    guard queued.state == report.state else { break }
+                    // A report with another token must not stand in for a signed one.
+                    guard queued.state == report.state, queued.tokenDigest == report.tokenDigest else { break }
                     events[index] = event
                     return
                 }
@@ -126,7 +127,18 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
             }
             switch event {
             case .report(let report):
-                if case .applied(let rootTouched) = panel.programStatus.apply(report) {
+                // A report with another surface's token, or a guessed one, is dropped whole. One
+                // without a token still shows, but never counts as the agent (see `verified`).
+                let authentication = report.authentication(against: panel.surface.programStatusTokenDigest)
+                guard authentication != .forged else {
+#if DEBUG
+                    dlog("programStatus.forged surface=\(key.surfaceId.uuidString.prefix(5)) id=\(report.id)")
+#endif
+                    continue
+                }
+                if case .applied(let rootTouched) = panel.programStatus.apply(
+                    report, verified: authentication == .verified
+                ) {
                     projectRoot = projectRoot || rootTouched
                 }
 #if DEBUG
@@ -169,7 +181,8 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
                 state: root.state.legacyAgentState,
                 source: .program,
                 programState: root.state,
-                promptKind: root.kind
+                promptKind: root.kind,
+                programVerified: root.verified
             )
         } else {
             manager.clearSurfaceAgentState(tabId: key.tabId, surfaceId: key.surfaceId, source: .program)

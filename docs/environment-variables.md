@@ -64,6 +64,7 @@ Read by the app, the CLI and `programa-mcp`. Modes and discovery are described i
 | `PROGRAMA_AGENT_LAST_SESSIONS_PATH` | Overrides where the agent hooks record the last session each agent ended, which `programa resume` reads. The default is `~/.programa/agent-last-sessions.json`. |
 | `PROGRAMA_CLAUDE_PID` | Process id of the Claude Code instance a hook belongs to. Set by the `claude` wrapper. |
 | `PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN` | `programa` binary the `claude` wrapper's hooks call. |
+| `PROGRAMA_STATUS_TOKEN` | A random secret Programa sets in each terminal's shell. Programa's agent hooks put it in their OSC 7501 reports as `programa_token`, so the app can tell them from status bytes anything else prints. Never forwarded over SSH by Programa: do not add it to `SendEnv`, and the hooks leave it out of reports inside an SSH session. See `docs/program-status.md`. |
 | `PROGRAMA_CLAUDE_NATIVE_STATUS` | `1` when Claude Code reports its own OSC 7501 status (2.1.295 or later, outside tmux/screen, not a background worker). Set by the `claude` wrapper; the hooks then leave that status to Claude. |
 | `_PROGRAMA_CLAUDE_FLAGS_CACHE_KEY`, `_PROGRAMA_CLAUDE_FLAGS_CACHE_VAL` | Which optional flags (`--session-id`, `--mcp-config`, `--append-system-prompt`) and version-gated features (agent teams, Claude's own status) the resolved `claude` binary supports, cached per binary path and mtime by the `claude` wrapper. |
 | `PROGRAMA_ORIGINAL_NODE_OPTIONS`, `PROGRAMA_ORIGINAL_NODE_OPTIONS_PRESENT` | The caller's `NODE_OPTIONS`, saved so the wrappers can restore it. |

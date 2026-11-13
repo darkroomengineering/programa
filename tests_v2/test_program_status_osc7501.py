@@ -60,13 +60,20 @@ def _osc(body: str) -> str:
     return f"printf '{OSC}{body}{ST}'"
 
 
+def _osc_signed(body: str) -> str:
+    """A report carrying the shell's PROGRAMA_STATUS_TOKEN, as Programa's agent hooks send it."""
+    return f"printf '{OSC}{body}:programa_token=%s{ST}' \"$PROGRAMA_STATUS_TOKEN\""
+
+
 def _run(client: ProgramaClient, surface_id: str, command: str) -> None:
     _send_raw(client, surface_id, command + "\n")
 
 
-def _emit_held(client: ProgramaClient, surface_id: str, body: str, hold_s: int = HOLD_S) -> None:
+def _emit_held(
+    client: ProgramaClient, surface_id: str, body: str, hold_s: int = HOLD_S, signed: bool = False
+) -> None:
     """Emit one OSC 7501 and keep the command running so no prompt (133;A) drops the record."""
-    _run(client, surface_id, f"{_osc(body)}; sleep {hold_s}")
+    _run(client, surface_id, f"{_osc_signed(body) if signed else _osc(body)}; sleep {hold_s}")
 
 
 def _emit_marked(client: ProgramaClient, workspace_id: str, surface_id: str, commands: list[str]) -> None:
@@ -197,10 +204,10 @@ def main() -> int:
             _must((row.get("program_status") or {}).get("state") == "error", f"case 4 error must survive a prompt: {row}")
             _must(row.get("agent_state") == "idle", f"case 4 error must read as idle: {row}")
 
-            # 5. Authority. Hooks idle cannot end a program working claim; while the program
-            #    says done, a hooks working is accepted.
+            # 5. Authority. Hooks idle cannot end a signed program working claim; while the
+            #    program says done, a hooks working is accepted.
             _reset(client, workspace_id, surface_id)
-            _emit_held(client, surface_id, "state=working")
+            _emit_held(client, surface_id, "state=working", signed=True)
             _wait(client, workspace_id, surface_id, program_state="working")
             client._call(
                 "surface.report_agent_state",
@@ -210,7 +217,7 @@ def main() -> int:
             _must(row.get("agent_state") == "working", f"case 5 hooks idle must not override program working: {row}")
             _must(row.get("agent_state_source") == "program", f"case 5 source after hooks idle: {row}")
             _reset(client, workspace_id, surface_id)
-            _emit_marked(client, workspace_id, surface_id, [_osc("state=done")])
+            _emit_marked(client, workspace_id, surface_id, [_osc_signed("state=done")])
             _wait(client, workspace_id, surface_id, program_state="done")
             client._call(
                 "surface.report_agent_state",
@@ -219,6 +226,30 @@ def main() -> int:
             row = _surface(client, workspace_id, surface_id)
             _must(row.get("agent_state") == "working", f"case 5 hooks working must win over program done: {row}")
             _must(row.get("agent_state_source") == "hooks", f"case 5 source after hooks working: {row}")
+
+            # 5b. INC-1057: an unsigned report (no token, as any printed bytes) still shows, but
+            #     ranks below hooks, and one with a wrong token is discarded. Case 5 left the
+            #     hooks owning the surface; clear that first.
+            _reset(client, workspace_id, surface_id)
+            client._call("surface.clear_agent_state", {"workspace_id": workspace_id, "surface_id": surface_id})
+            _emit_held(client, surface_id, "state=working")
+            _wait(client, workspace_id, surface_id, program_state="working")
+            _must(_surface(client, workspace_id, surface_id).get("agent_state_source") == "program",
+                  "case 5b an unsigned report should still show")
+            client._call(
+                "surface.report_agent_state",
+                {"workspace_id": workspace_id, "surface_id": surface_id, "state": "idle"},
+            )
+            row = _surface(client, workspace_id, surface_id)
+            _must(row.get("agent_state") == "idle", f"case 5b hooks idle must end an unsigned working claim: {row}")
+            _must(row.get("agent_state_source") == "hooks", f"case 5b source after hooks idle: {row}")
+            _reset(client, workspace_id, surface_id)
+            _emit_marked(client, workspace_id, surface_id, [
+                _osc("state=done:programa_token=00000000000000000000000000000000"),
+            ])
+            row = _surface(client, workspace_id, surface_id)
+            _must(row.get("program_status") is None, f"case 5b a wrong token must discard the report: {row}")
+            client._call("surface.clear_agent_state", {"workspace_id": workspace_id, "surface_id": surface_id})
 
             # 6. A socket client cannot impersonate the terminal tier.
             error_text = ""

@@ -82,8 +82,9 @@ protocol RouteAgentTarget {
     var promptHoldKind: String? { get }
     /// A person has unsent typed input.
     var hasDraftHold: Bool { get }
-    /// The agent's state comes from a reporter that names itself: OSC 7501 from the program, or
-    /// hooks reports that carry a session id. Screen inference and keyless hooks reports do not.
+    /// The agent's state comes from a reporter that names itself: OSC 7501 carrying the surface's
+    /// token, or hooks reports that carry a session id. Screen inference, unsigned OSC 7501 and
+    /// keyless hooks reports do not.
     var writerIdentified: Bool { get }
     /// One paste, plus Return when `submit` is true.
     func deliver(_ text: String, submit: Bool)
@@ -506,7 +507,7 @@ extension Workspace {
     func agentWriterIdentified(panelId: UUID) -> Bool {
         guard let presence = panelAgentPresence[panelId] else { return false }
         switch presence.source {
-        case .program: return true
+        case .program: return presence.programVerified
         case .hooks: return !(presence.sessionKey?.sessionId ?? "").isEmpty
         case .inferred: return false
         }

@@ -23,6 +23,7 @@ repeats, the last value wins.
 | `progress` | Only read when `state` is `working` or `blocked`: an integer from 0 to 100. |
 | `app` | A stable name for the program, 1-32 characters from `A-Za-z0-9_.+-`. A child without `app` uses its nearest ancestor's. |
 | `title`, `msg` | Standard base64 text, padding optional. At most 192 and 2048 decoded bytes, valid UTF-8, no control characters. |
+| `programa_token` | Programa's own extension: the terminal's `PROGRAMA_STATUS_TOKEN`, which marks the report as coming from Programa's agent hooks. See [Signed reports](#signed-reports). |
 
 A report replaces its record completely. A report with an invalid id, invalid text or an unknown
 state is discarded whole. `state=clear` removes the record named by `id` and every descendant
@@ -68,26 +69,53 @@ The root record drives the terminal's own status. Child records show up as helpe
 - `agent_state` projects the root record: `working` and `blocked` map to themselves, and `idle`,
   `done` and `error` map to `idle`. The surface's `agent_state_source` reads `"program"`.
 
+## Signed reports
+
+Anything that reaches the terminal can print an OSC 7501 report, including untrusted text an agent
+shows, such as a file preview with raw escape bytes in a permission dialog. So Programa only takes
+a report as the agent's own when it is signed:
+
+- Each shell Programa spawns gets a random 128-bit `PROGRAMA_STATUS_TOKEN` (32 hex digits) in its
+  environment, next to `PROGRAMA_SURFACE_ID`. Programa's Claude Code, Codex and OpenCode hooks add
+  it to every report as `programa_token=<token>`.
+- A report whose token matches the terminal's is signed. A report with another token is
+  discarded whole. A report without one is unsigned: it still updates the records and the
+  sidebar, but ranks below hooks (see below) and never counts as the agent for
+  [event routes](plans/event-routes.md): an unsigned working-then-idle pair cannot release a
+  route's `send` or `prompt` text.
+- The app keeps only the token's SHA-256 digest and compares digests in constant time, and never
+  logs the token. The token still sits in the shell's environment, and signed reports are terminal
+  output, so the session's scrollback log on disk holds them as written. The session snapshot keeps
+  the digest, so a shell revived after a relaunch keeps signing. A shell recovered without its snapshot entry, or spawned before
+  this release, sends reports Programa cannot check, and they count as unsigned.
+- Programa never forwards the token over SSH, and the hooks leave it out of a report inside an
+  SSH session, so a remote report is unsigned.
+- Claude Code 2.1.295 and later report their own status without the token. Those reports are
+  unsigned, so on a Claude Code terminal the hooks' socket reports own `agent_state`.
+
 ## Authority
 
-OSC 7501 outranks hooks, and hooks outrank screen inference.
+A signed program report outranks hooks, hooks outrank an unsigned program report, and both
+outrank screen inference.
 
-1. A program report always applies.
-2. While the root record is `working` or `blocked`, hook and inferred reports are ignored.
-3. While the root record is `idle`, `done` or `error`, a hook report is accepted only if it says
-   `working` or `blocked`. Then the hook owns the surface's `agent_state`, and the record stays
+1. A signed program report always applies.
+2. While a signed root record is `working` or `blocked`, every other report is ignored.
+3. While a signed root record is `idle`, `done` or `error`, another report is accepted only if it
+   says `working` or `blocked`. Then the hook owns the surface's `agent_state`, and the record stays
    visible in `program_status`.
-4. Screen inference does not run on a surface that a program or a hook owns.
-5. While the program owns the surface, a hook or inferred clear is ignored in every state.
+4. An unsigned program report is ignored while hooks own the surface, and a hook report always
+   replaces it. Against screen inference it follows rules 2 and 3.
+5. Screen inference does not run on a surface that a program or a hook owns.
+6. While the program owns the surface, a hook or inferred clear is ignored in every state.
 
 `surface.report_agent_state` rejects `source: "program"`.
 
-The diagram shows a report for a surface whose `agent_state` the program owns:
+The diagram shows a report for a surface whose `agent_state` a signed program report owns:
 
 ```mermaid
 flowchart TD
   R[Report arrives] --> S{Source}
-  S -->|OSC 7501 program| A[Always applies]
+  S -->|signed OSC 7501| A[Always applies]
   S -->|hook or screen inference| Q{Root record state}
   Q -->|working or blocked| X[Ignored, hook clear too]
   Q -->|idle, done, error| H{Hook says working or blocked?}
@@ -97,7 +125,7 @@ flowchart TD
 
 ## Hooks emit it too
 
-The Claude Code, Codex and OpenCode hooks write OSC 7501 to the terminal as well as reporting to
+The Claude Code, Codex and OpenCode hooks write signed OSC 7501 to the terminal as well as reporting to
 the socket, so the report also reaches a terminal where the socket is out of reach, such as an SSH
 session. The Claude Code hooks also report each subagent as the child record
 `agents/<helper id>`: `working` from SubagentStart and each of its tool calls, `blocked` when it

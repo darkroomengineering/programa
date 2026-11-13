@@ -64,6 +64,10 @@ pub(crate) struct Report {
     pub app: Option<String>,
     pub title: Option<String>,
     pub msg: Option<String>,
+    /// `programa_token`: the macOS app's per-surface secret that marks a report as Programa's own
+    /// hooks (docs/program-status.md). Parsed so both apps read the same format; the Windows app
+    /// sets no token yet, so nothing here checks it, and it never reaches a record or snapshot.
+    pub token: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -95,6 +99,7 @@ pub(crate) fn parse(body: &[u8], terminator: Terminator) -> Option<Command> {
     let mut app = None;
     let mut title = None;
     let mut msg = None;
+    let mut token = None;
     for pair in body.split(|&byte| byte == b':') {
         let Some(eq) = pair.iter().position(|&byte| byte == b'=') else {
             continue;
@@ -139,6 +144,7 @@ pub(crate) fn parse(body: &[u8], terminator: Terminator) -> Option<Command> {
                 }
                 msg = Some(value);
             }
+            b"programa_token" => token = Some(value),
             _ => {}
         }
     }
@@ -166,6 +172,7 @@ pub(crate) fn parse(body: &[u8], terminator: Terminator) -> Option<Command> {
         _ => None,
     };
     let app = app.filter(|value| is_name(value)).map(ascii_string);
+    let token = token.filter(|value| is_name(value)).map(ascii_string);
 
     Some(Command::Report(Report {
         state,
@@ -175,6 +182,7 @@ pub(crate) fn parse(body: &[u8], terminator: Terminator) -> Option<Command> {
         app,
         title,
         msg,
+        token,
     }))
 }
 
@@ -584,10 +592,39 @@ mod tests {
             app: None,
             title: None,
             msg: None,
+            token: None,
         }
     }
 
     // Parser
+
+    #[test]
+    fn reads_the_token_like_a_name_and_keeps_it_out_of_records() {
+        let token = "4f1c0a9e7b3d52e8a6c1f0d9b2e7a3c5";
+        let parsed = report(&format!("state=working:programa_token={token}:app=codex")).unwrap();
+        assert_eq!(parsed.token.as_deref(), Some(token));
+        assert_eq!(parsed.app.as_deref(), Some("codex"));
+        assert_eq!(report("state=idle").unwrap().token, None);
+        assert_eq!(report("state=idle:programa_token=").unwrap().token, None);
+        let too_long = format!("state=idle:programa_token={token}{token}");
+        assert_eq!(report(&too_long).unwrap().token, None);
+        assert_eq!(
+            report("state=idle:programa_token=a:programa_token=b")
+                .unwrap()
+                .token
+                .as_deref(),
+            Some("b")
+        );
+
+        let mut store = Store::default();
+        assert!(store.apply(parsed.clone()));
+        let mut unsigned = parsed;
+        unsigned.token = None;
+        assert!(
+            !store.apply(unsigned),
+            "the token is not part of the record"
+        );
+    }
 
     #[test]
     fn parses_every_key() {

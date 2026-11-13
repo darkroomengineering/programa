@@ -306,7 +306,8 @@ extension Workspace {
             )
             terminalSnapshot = SessionTerminalPanelSnapshot(
                 workingDirectory: panelDirectories[panelId],
-                scrollback: resolvedScrollback
+                scrollback: resolvedScrollback,
+                programStatusTokenDigest: terminalPanel.surface.programStatusTokenDigest
             )
             markdownSnapshot = nil
             reviewSnapshot = nil
@@ -656,7 +657,8 @@ extension Workspace {
             sessionId: snapshot.id.uuidString,
             inPane: paneId,
             workingDirectory: workingDirectory,
-            shellIds: shellIds
+            shellIds: shellIds,
+            programStatusTokenDigest: snapshot.terminal?.programStatusTokenDigest
         ) else {
             return nil
         }
@@ -686,7 +688,8 @@ extension Workspace {
         sessionId: String,
         inPane paneId: PaneID,
         workingDirectory: String?,
-        shellIds: RestoredSessionIdAliases.ShellIds? = nil
+        shellIds: RestoredSessionIdAliases.ShellIds? = nil,
+        programStatusTokenDigest: ProgramStatusToken.Digest? = nil
     ) -> UUID? {
         guard !SessionMachineryGate.isUnitTesting else { return nil }
         let oldSessionId = sessionId
@@ -725,7 +728,8 @@ extension Workspace {
         let reviveDescriptor = TerminalSurfaceReviveDescriptor(
             masterFD: masterFD,
             childPID: Int64(childPID),
-            scrollbackText: scrollbackText
+            scrollbackText: scrollbackText,
+            programStatusTokenDigest: programStatusTokenDigest
         )
 
         guard let terminalPanel = newTerminalSurface(

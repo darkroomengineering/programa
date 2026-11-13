@@ -30,6 +30,9 @@ struct TerminalSurfaceReviveDescriptor {
     /// creation, so the user sees prior output above the now-live session.
     /// Nil if no usable scrollback was available.
     let scrollbackText: String?
+    /// Digest of the `PROGRAMA_STATUS_TOKEN` the revived shell was spawned with, from the session
+    /// snapshot; nil when unknown, so its OSC 7501 reports stay unsigned.
+    var programStatusTokenDigest: ProgramStatusToken.Digest? = nil
 }
 
 final class TerminalSurfaceRegistry {
@@ -278,6 +281,9 @@ final class TerminalSurface: Identifiable, ObservableObject {
     /// `createSurface` copies it into `surfaceConfig` -- see
     /// `TerminalSurfaceReviveDescriptor`'s doc comment.
     private var reviveDescriptor: TerminalSurfaceReviveDescriptor?
+    /// Digest of the `PROGRAMA_STATUS_TOKEN` this surface's shell holds: set at each spawn, or
+    /// adopted from the revive descriptor in `init`. OSC 7501 reports are checked against it.
+    private(set) var programStatusTokenDigest: ProgramStatusToken.Digest?
     /// restore-replay-residuals (fresh-spawn scrollback collapse): prepared
     /// fallback-restore scrollback text for a FRESH (non-revived) spawn --
     /// e.g. session restore when no escrowed child could be reattached. Fed
@@ -455,6 +461,9 @@ final class TerminalSurface: Identifiable, ObservableObject {
         self.initializedForSessionRestore = reviveDescriptor != nil || pendingScrollbackSeedText != nil
         self.additionalEnvironment = Self.mergedNormalizedEnvironment(base: [:], overrides: additionalEnvironment)
         self.reviveDescriptor = reviveDescriptor
+        // Adopted here, not in `createSurface`: a revived panel in a hidden tab may not create its
+        // runtime surface this launch, and an autosave meanwhile must keep the shell's digest.
+        self.programStatusTokenDigest = reviveDescriptor?.programStatusTokenDigest
         self.pendingFreshSeedText = pendingScrollbackSeedText
         // Match Ghostty's own SurfaceView: ensure a non-zero initial frame so the backing layer
         // has non-zero bounds and the renderer can initialize without presenting a blank/stretched
@@ -1345,6 +1354,12 @@ final class TerminalSurface: Identifiable, ObservableObject {
         }
 
         setManagedEnvironmentValue("PROGRAMA_SURFACE_ID", id.uuidString)
+        // A revived shell keeps the token it was spawned with (its digest came from `init`).
+        if consumedReviveDescriptor == nil {
+            let statusToken = ProgramStatusToken.generate()
+            setManagedEnvironmentValue(ProgramStatusToken.environmentKey, statusToken)
+            programStatusTokenDigest = ProgramStatusToken.digest(of: statusToken)
+        }
         setManagedEnvironmentValue("PROGRAMA_WORKSPACE_ID", tabId.uuidString)
         // Backward-compatible shell integration keys used by existing scripts/tests.
         setManagedEnvironmentValue("PROGRAMA_PANEL_ID", id.uuidString)
