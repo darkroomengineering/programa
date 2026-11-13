@@ -52,3 +52,4 @@ test_layout_save_targets_workspace_id.py
 test_surface_wait_exit_on_close.py
 test_surface_resolve_tty_and_agent_spawn_pane.py
 test_pane_launchd_coalition.py
+test_event_routes.py
