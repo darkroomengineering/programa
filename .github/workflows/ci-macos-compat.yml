@@ -4,33 +4,46 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Runs after merge, not on pull requests: the main CI workflow already runs the
-# full unit suite on macos-26 for every PR, so this only adds the oldest
-# supported runner (macos-15), and a break there is caught one merge later.
+# Runs nightly on main, not per merge or on pull requests: the main CI workflow
+# already runs the full unit suite on macos-26 for every PR, so this only adds
+# the oldest supported runner (macos-15), and a break there is caught by the
+# next morning. The changes job skips the macOS run when nothing it covers
+# changed since the previous night.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "Sources/**"
-      - "CLI/**"
-      - "CLI-MCP/**"
-      - "daemon/**"
-      - "programaTests/**"
-      - "vendor/**"
-      - "scripts/**"
-      - ".github/workflows/ci-macos-compat.yml"
-      - "GhosttyTabs.xcodeproj/**"
-      - "ghostty"
-      - "ghostty/**"
-      - ".gitmodules"
-
+  schedule:
+    - cron: "0 6 * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 200
+      - id: check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT_NAME" != "schedule" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git log --since=25.hours --format=%H -- 'Sources/**' 'CLI/**' 'CLI-MCP/**' 'daemon/**' 'programaTests/**' 'vendor/**' 'scripts/**' '.github/workflows/ci-macos-compat.yml' 'GhosttyTabs.xcodeproj/**' 'ghostty' 'ghostty/**' '.gitmodules' | grep -q .; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No covered paths changed in the last 25 hours; skipping."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
   compat-tests:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     strategy:
       matrix:
         include:
