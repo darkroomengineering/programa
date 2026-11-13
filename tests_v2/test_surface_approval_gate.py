@@ -35,6 +35,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import subprocess
 import sys
 import tempfile
 import time
@@ -345,6 +346,48 @@ def _check_unsigned_working_keeps_refusal(
     _send_text_ok_and_visible(c, surface_id, f"UNS{STAMP}")
 
 
+def _check_agent_exit_lifts_refusal(c: ProgramaClient, workspace_id: str, surface_id: str, work_dir: Path) -> None:
+    """Claude Code under native status, killed at a permission prompt without its SessionEnd: the
+    hooks' route view stays `blocked`, the program's unsigned status owns the badge. The shell
+    reports its prompt over the socket before it prints the prompt mark, and that pair must lift
+    the refusal. The agent stand-in is killed from this process, never through the socket."""
+    release = f"gx{STAMP}"
+    agent = f"sleep 7{STAMP}"
+    _reopen(c, workspace_id, surface_id)
+    _expect_ok(
+        "surface.send_text",
+        {
+            "surface_id": surface_id,
+            "text": f"while [ ! -e {release} ]; do sleep 0.1; done; printf '\\033]7501;state=working\\033\\\\'; {agent}\n",
+        },
+    )
+    _needs_input("permission")(workspace_id, surface_id)
+    _wait_agent_state(c, workspace_id, surface_id, "blocked")
+    (work_dir / release).touch()
+
+    def unsigned_working_shows() -> bool:
+        row = _agent_row(c, workspace_id, surface_id)
+        return row.get("agent_state") == "working" and row.get("agent_state_source") == "program"
+
+    _wait_for(unsigned_working_shows, timeout_s=10.0)
+    _expect_approval_refusal("surface.send_key", {"surface_id": surface_id, "key": "enter"}, surface_id, source="program")
+
+    subprocess.run(["pkill", "-f", agent], check=False)
+    tag = f"EXI{STAMP}"
+    last: Dict[str, Any] = {}
+
+    def delivered() -> bool:
+        nonlocal last
+        last = _call_full("surface.send_text", {"surface_id": surface_id, "text": f'echo {tag[:3]}""{tag[3:]}\n'})
+        return last.get("ok") is True
+
+    try:
+        _wait_for(delivered, timeout_s=10.0, step_s=0.2)
+    except Exception as exc:
+        raise ProgramaClientError(f"the refusal outlived the agent's exit: {last!r}") from exc
+    _wait_for(lambda: tag in _screen_lines(c, surface_id), timeout_s=10.0)
+
+
 def main() -> int:
     for var in ("PROGRAMA_WORKSPACE_ID", "PROGRAMA_SURFACE_ID", "PROGRAMA_PANEL_ID", "PROGRAMA_TAB_ID"):
         os.environ.pop(var, None)
@@ -384,6 +427,10 @@ def main() -> int:
             # 4. A printed, unsigned OSC 7501 `working` does not lift a permission refusal.
             _check_unsigned_working_keeps_refusal(c, workspace_id, sid, work_dir)
             print("  PASS: an unsigned working report keeps the refusal; answer_prompt delivers")
+
+            # 5. The agent exiting at the prompt, as the shell reports it, lifts the refusal.
+            _check_agent_exit_lifts_refusal(c, workspace_id, sid, work_dir)
+            print("  PASS: the shell returning to its prompt lifts the refusal")
     finally:
         if workspace_id:
             try:

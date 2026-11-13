@@ -988,6 +988,80 @@ final class AgentActivityStateTests: XCTestCase {
         XCTAssertNil(f.workspace.panelAgentPresence[f.panelId])
         XCTAssertNil(f.hold, "the agent's signed clear ends the prompt")
     }
+
+    /// Printed bytes can arm the gate with an unsigned `blocked`, and that badge outranks hooks. It
+    /// must not pin the gate: a trusted report or clear still ends it.
+    func testAnUnsignedBlockedBadgeNeverPinsThePrompt() throws {
+        let f = try promptGateFixture()
+        let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
+        f.drain([try osc(.blocked, "kind=permission")])
+        XCTAssertEqual(f.hold, .permission)
+        f.workspace.updatePanelAgentState(panelId: f.panelId, state: .working, source: .hooks, sessionKey: key)
+        XCTAssertEqual(f.workspace.panelAgentStates[f.panelId], .blocked, "the unsigned program keeps the badge")
+        XCTAssertNil(f.hold, "the hooks' working ends the prompt")
+
+        f.drain([try osc(.blocked, "kind=permission")])
+        XCTAssertEqual(f.hold, .permission)
+        f.workspace.updatePanelRouteAgentState(
+            panelId: f.panelId, state: .working, source: .hooks, sessionKey: key, resumesBlocked: true
+        )
+        XCTAssertNil(f.hold, "a resume ends the prompt")
+
+        f.drain([try osc(.blocked, "kind=permission")])
+        XCTAssertEqual(f.hold, .permission)
+        f.manager.clearSurfaceAgentState(tabId: f.workspace.id, surfaceId: f.panelId)
+        XCTAssertEqual(f.workspace.panelAgentStates[f.panelId], .blocked, "a hooks clear leaves the program's badge")
+        XCTAssertNil(f.hold, "surface.clear_agent_state ends the prompt")
+    }
+
+    /// Claude Code under native status, killed at a permission prompt without its SessionEnd. The
+    /// shell reports its prompt over the socket first (zsh precmd, bash PROMPT_COMMAND) while the
+    /// hooks' route view is still `blocked`; the prompt mark printed after it then drops the
+    /// program's record. That pair ends the prompt.
+    func testShellPromptReportThenPromptMarkLiftsAPermissionPrompt() throws {
+        let f = try armUnderNativeStatus()
+        f.workspace.updatePanelShellActivityState(panelId: f.panelId, state: .promptIdle)
+        XCTAssertEqual(f.hold, .permission, "the hooks' route view is still blocked")
+        f.drain([.prompt])
+        XCTAssertNil(f.workspace.panelAgentPresence[f.panelId])
+        XCTAssertNil(f.hold, "the shell's socket report and the mark after it end the prompt")
+    }
+
+    /// The mark is printable, so it counts only after the shell's own socket report, and only a
+    /// report made after the prompt armed.
+    func testPromptMarkWithoutAShellPromptReportSinceArmingKeepsThePrompt() throws {
+        let f = try armUnderNativeStatus()
+        f.drain([.prompt])
+        XCTAssertNil(f.workspace.panelAgentPresence[f.panelId])
+        XCTAssertEqual(f.hold, .permission, "a printed mark while the shell runs the agent closed the prompt")
+
+        let g = try promptGateFixture()
+        let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
+        g.workspace.updatePanelShellActivityState(panelId: g.panelId, state: .promptIdle)
+        g.workspace.updatePanelAgentState(panelId: g.panelId, state: .working, source: .hooks, sessionKey: key)
+        g.drain([try osc(.working, "app=claude")])
+        g.workspace.updatePanelAgentState(
+            panelId: g.panelId, state: .blocked, source: .hooks, sessionKey: key, promptKind: .permission
+        )
+        g.drain([.prompt])
+        XCTAssertEqual(g.hold, .permission, "a shell prompt report from before the prompt armed counted")
+    }
+
+    /// The shell runs Claude Code, whose own unsigned status owns the badge, and its Notification
+    /// hook arms a permission prompt.
+    private func armUnderNativeStatus() throws -> PromptGateFixture {
+        let f = try promptGateFixture()
+        let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
+        f.workspace.updatePanelShellActivityState(panelId: f.panelId, state: .promptIdle)
+        f.workspace.updatePanelShellActivityState(panelId: f.panelId, state: .commandRunning)
+        f.workspace.updatePanelAgentState(panelId: f.panelId, state: .working, source: .hooks, sessionKey: key)
+        f.drain([try osc(.working, "app=claude")])
+        f.workspace.updatePanelAgentState(
+            panelId: f.panelId, state: .blocked, source: .hooks, sessionKey: key, promptKind: .permission
+        )
+        XCTAssertEqual(f.hold, .permission)
+        return f
+    }
 }
 
 @MainActor
