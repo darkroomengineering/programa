@@ -113,10 +113,9 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
         var lastRootState = panel.programStatus.root?.state
         var transitions: [ProgramStatusRecord?] = []
         var projectRoot = false
-        // Whether the event that last removed the root was a signed `state=clear`. A printed
-        // prompt mark, a terminal reset or an unsigned clear removes it too, but never proves
-        // the agent's prompt went away.
-        var rootClearVerified = false
+        // What last removed the root. A terminal reset or an unsigned clear never proves the
+        // agent's prompt went away; a prompt mark proves it only after the shell's socket report.
+        var rootClear = ProgramRootClear.unsigned
         let touchesChildren = events.contains { event in
             switch event {
             case .report(let report):
@@ -151,7 +150,9 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
                     report, verified: authentication == .verified
                 ) {
                     projectRoot = projectRoot || rootTouched
-                    if rootTouched { rootClearVerified = report.state == nil && authentication == .verified }
+                    if rootTouched {
+                        rootClear = report.state == nil && authentication == .verified ? .signed : .unsigned
+                    }
                     // Only the batch's last root record reaches the badge below, so a signed root
                     // report goes to the route view as it comes, with the authority it would have
                     // there as the last record: an unsigned report later in the same batch must
@@ -173,7 +174,7 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
             case .prompt:
                 if panel.programStatus.dropTransient() {
                     projectRoot = true
-                    rootClearVerified = false
+                    rootClear = .shellPrompt
                 }
 #if DEBUG
                 dlog("programStatus.prompt surface=\(key.surfaceId.uuidString.prefix(5)) records=\(panel.programStatus.count)")
@@ -181,7 +182,7 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
             case .resetAll:
                 if panel.programStatus.resetAll() {
                     projectRoot = true
-                    rootClearVerified = false
+                    rootClear = .unsigned
                 }
 #if DEBUG
                 dlog("programStatus.reset surface=\(key.surfaceId.uuidString.prefix(5))")
@@ -214,7 +215,7 @@ final class ProgramStatusDispatcher: @unchecked Sendable {
             )
         } else {
             manager.clearSurfaceAgentState(
-                tabId: key.tabId, surfaceId: key.surfaceId, source: .program, programVerified: rootClearVerified
+                tabId: key.tabId, surfaceId: key.surfaceId, source: .program, programClear: rootClear
             )
         }
 

@@ -1723,13 +1723,13 @@ class TabManager: ObservableObject {
     }
 
     /// Clears a previously reported agent activity state for a surface (e.g. on hook
-    /// session-end). No-ops if the workspace/panel don't exist. `programVerified`: a `.program`
-    /// clear came from a signed `state=clear` (`Workspace.clearPanelAgentState`).
+    /// session-end). No-ops if the workspace/panel don't exist. `programClear` says what removed a
+    /// program's root record (`Workspace.clearPanelAgentState`).
     func clearSurfaceAgentState(
-        tabId: UUID, surfaceId: UUID, source: AgentStateSource = .hooks, programVerified: Bool = false
+        tabId: UUID, surfaceId: UUID, source: AgentStateSource = .hooks, programClear: ProgramRootClear = .unsigned
     ) {
         guard let tab = workspace(withId: tabId) else { return }
-        tab.clearPanelAgentState(panelId: surfaceId, source: source, programVerified: programVerified)
+        tab.clearPanelAgentState(panelId: surfaceId, source: source, programClear: programClear)
     }
 
     private func normalizeDirectory(_ directory: String) -> String {

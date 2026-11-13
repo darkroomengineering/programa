@@ -42,6 +42,15 @@ enum SidebarTelemetryLimits {
     }
 }
 
+/// How a program's root record went away, as the prompt gate sees it. Only a signed `state=clear`,
+/// or a shell prompt mark after the shell's own socket report, proves the prompt went with it.
+enum ProgramRootClear {
+    case signed
+    case unsigned
+    /// The OSC 133;A mark that drops `working` and `blocked` records.
+    case shellPrompt
+}
+
 extension Workspace {
     func updatePanelDirectory(panelId: UUID, directory: String) {
         guard let normalized = normalizedSidebarDirectory(directory) else { return }
@@ -82,11 +91,15 @@ extension Workspace {
         guard previousState != state else { return false }
         panelShellActivityStates[panelId] = state
         // The shell's own socket report, unlike a printed prompt mark, proves the foreground
-        // program exited, so it ends a prompt left armed once nothing is `blocked`. zsh sends it
-        // from precmd, before PS1 prints the OSC 133;A mark that drops a program's `blocked`
-        // record, so a program-owned `blocked` badge still holds the gate here.
+        // program exited. zsh and bash send it before they print the prompt mark, so while the
+        // route view still shows `blocked` it is remembered, and the mark's clear then ends the
+        // prompt (`clearPanelAgentState`). fish sends it in the background, so it can also land
+        // after the mark's clear and end the prompt here.
         if state == .promptIdle {
+            panelsShellReturnedSincePromptArmed.insert(panelId)
             closePromptGateIfTrusted(panelId: panelId, trusted: true)
+        } else {
+            panelsShellReturnedSincePromptArmed.remove(panelId)
         }
         // The shell left its prompt, so the banner's Resume could no longer type its line.
         // Only on entering `.commandRunning`: the agent's exit can land while the shell still
@@ -400,13 +413,15 @@ extension Workspace {
     /// a hooks/inferred clear is ignored while the presence is program-owned. `force` removes the
     /// presence whoever owns it (permanent panel close).
     ///
-    /// A `.program` clear ends a showing prompt only when `programVerified` (a `state=clear` that
-    /// carried the surface's token): an unsigned clear, a printed shell prompt mark and a terminal
-    /// reset drop the presence but leave the prompt gate armed.
+    /// A `.program` clear ends a showing prompt only for a signed `state=clear`, or for a prompt
+    /// mark once the shell reported its prompt over the socket since the prompt armed. An unsigned
+    /// clear, a mark alone and a terminal reset drop the presence but leave the prompt gate armed.
     func clearPanelAgentState(
-        panelId: UUID, source: AgentStateSource = .hooks, force: Bool = false, programVerified: Bool = false
+        panelId: UUID, source: AgentStateSource = .hooks, force: Bool = false,
+        programClear: ProgramRootClear = .unsigned
     ) {
-        let trusted = force || source != .program || programVerified
+        let trusted = force || source != .program || programClear == .signed
+            || (programClear == .shellPrompt && panelsShellReturnedSincePromptArmed.contains(panelId))
         guard let current = panelAgentPresence[panelId] else {
             closePromptGateIfTrusted(panelId: panelId, trusted: trusted)
             return
@@ -520,23 +535,26 @@ extension Workspace {
     /// The prompt gate's side of a report, applied after the report moved the presence. Any
     /// `blocked` report arms it, whichever tier sent it and whether or not it reached the badge.
     /// Printed bytes can forge an unsigned report, so only a `trusted` one (anything but an
-    /// unsigned program report) may close it, and only once neither the badge nor the route view
-    /// is `blocked`.
+    /// unsigned program report) may close it, and only while no trusted view is `blocked`.
     private func notePromptGate(
         panelId: UUID, state: AgentActivityState, promptKind: ProgramStatusKind?, trusted: Bool
     ) {
         if state == .blocked {
+            panelsShellReturnedSincePromptArmed.remove(panelId)
             (panels[panelId] as? TerminalPanel)?.surface.noteAgentPrompt(promptKind, isBlocked: true)
         } else {
             closePromptGateIfTrusted(panelId: panelId, trusted: trusted)
         }
     }
 
+    /// A program-owned `blocked` badge never holds the gate: an unsigned one is forgeable, and a
+    /// signed one also shows in the route view.
     private func closePromptGateIfTrusted(panelId: UUID, trusted: Bool) {
+        let presence = panelAgentPresence[panelId]
         guard trusted,
               let surface = (panels[panelId] as? TerminalPanel)?.surface, surface.isPromptShowing,
-              panelAgentPresence[panelId]?.state != .blocked,
-              panelAgentPresence[panelId]?.route?.state != .blocked else { return }
+              presence?.route?.state != .blocked,
+              !(presence?.state == .blocked && presence?.source != .program) else { return }
         surface.noteAgentPrompt(nil, isBlocked: false)
     }
 
@@ -839,6 +857,7 @@ extension Workspace {
         if panelShellActivityStates.keys.contains(where: { !validSurfaceIds.contains($0) }) {
             panelShellActivityStates = panelShellActivityStates.filter { validSurfaceIds.contains($0.key) }
         }
+        panelsShellReturnedSincePromptArmed.formIntersection(validSurfaceIds)
         if panelPullRequests.keys.contains(where: { !validSurfaceIds.contains($0) }) {
             panelPullRequests = panelPullRequests.filter { validSurfaceIds.contains($0.key) }
         }

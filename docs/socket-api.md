@@ -654,8 +654,10 @@ line saying so and exit non-zero, as do the tmux shim's `send-keys`, `paste-buff
 - The refusal lifts when a trusted report says the agent left `blocked`, when the person presses a
   key at the prompt (Return, Escape, Ctrl+C, or any typed key), when a write with `answer_prompt`
   is delivered, when `surface.clear_agent_state` runs, when the agent's hooks clear its state as it
-  exits, when Programa's shell integration reports the shell back at its prompt with nothing
-  `blocked`, and while the setting below is off. There is no timer: a prompt left alone for an hour
+  exits, when Programa's shell integration reports over the socket that the shell is back at its
+  prompt (if the agent's hooks still show it `blocked`, the prompt mark the shell prints next ends
+  it), and while the setting below is off. A shell prompt report from before the prompt appeared
+  does not count, and a printed prompt mark alone never ends it. There is no timer: a prompt left alone for an hour
   still needs the person. `workspace.reset_sidebar` clears the badge but keeps a showing permission
   or sign-in prompt refused until one of these events.
 - Trusted reports are the socket reports (hooks, `surface.report_agent_state`, `agent.event`),
@@ -663,7 +665,8 @@ line saying so and exit non-zero, as do the tmux shim's `send-keys`, `paste-buff
   Any report can start a refusal, but an unsigned OSC 7501 report never lifts one: text printed in
   the pane can forge it. An unsigned `working`, `idle` or `state=clear`, a printed shell prompt
   mark and a terminal reset still move or clear `agent_state`, so `agent_state` can read `working`
-  while writes are still refused. A program that prints its own unsigned status, or a hooked agent
+  while writes are still refused. The reverse holds too: an unsigned `blocked` in `agent_state`
+  does not keep a refusal up once a trusted report or `surface.clear_agent_state` lifts it. A program that prints its own unsigned status, or a hooked agent
   inside plain SSH, stays refused after its prompt closes until the person presses a key, a write
   passes `answer_prompt`, or another event above happens.
 - A later `question` or kindless `blocked` report does not replace a showing permission or
