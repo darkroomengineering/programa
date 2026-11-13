@@ -13,8 +13,8 @@ whose reports name their writer, and only the end of that writer's own work rele
 
 Cases: load and clear; throttle and its banner; the permission banner rule; `queue` and the
 prompt's own turn; a prompt on the idle edge that must not trigger itself; `steer`; a surface with
-no agent; refusal during a permission prompt; a forged idle during a permission prompt; and a
-`run` whose reported working directory must be an existing, absolute path without `..`.
+no agent; refusal during a permission prompt; a forged idle during a permission prompt; routes
+installed while the agent is stopped for input; and a `run` whose reported working directory must be an existing, absolute path without `..`.
 """
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ from typing import Any, Callable
 sys.path.insert(0, str(Path(__file__).parent))
 from programa_client import ProgramaClient, ProgramaClientError  # noqa: E402
 from v2_support import must as _must  # noqa: E402
+from v2_support import surface_agent_state as _surface_agent_state  # noqa: E402
 
 DEFAULT_SOCKET_PATHS = ["/tmp/programa-debug.sock", "/tmp/programa.sock"]
 # Generous: CI runners are slow, and every wait polls for its condition instead of sleeping.
@@ -294,6 +295,27 @@ def _case_refused_during_prompt(client: ProgramaClient, session: _Session) -> No
     _must("HELD-TEXT" not in _screen(client, workspace_id, surface_id), "nothing may be sent during a prompt")
 
 
+def _case_installed_while_blocked(client: ProgramaClient, session: _Session) -> None:
+    workspace_id, surface_id = session.shell()
+    marker = "INSTALLED-BLOCKED-working"
+    _report(client, workspace_id, surface_id, "working")
+    _needs_input(client, workspace_id, surface_id, "permission", session=True)
+    # The stop must predate the install, or the routes see it happen and record its writer.
+    _wait("the permission stop", lambda: _surface_agent_state(client, workspace_id, surface_id) == "blocked")
+    _load(client, [{"name": "late", "on": "agent/+/state/working",
+                    "send": {"text": "INSTALLED-BLOCKED-{{state}}", "whenBusy": "steer"}}])
+
+    # The same session's resume frees the inherited stop; the next working delivers.
+    _report(client, workspace_id, surface_id, "working")
+    _report(client, workspace_id, surface_id, "idle")
+    _report(client, workspace_id, surface_id, "working")
+    try:
+        _wait("the route's text after the agent resumed",
+              lambda: marker in _screen(client, workspace_id, surface_id))
+    except ProgramaClientError as exc:
+        raise ProgramaClientError(f"{exc}: {_route(client, 'late')}") from exc
+
+
 def _surface_directory(client: ProgramaClient, surface_id: str) -> str | None:
     """The surface's directory as the app holds it, from `system.tree`."""
     def find(node: Any) -> str | None:
@@ -372,6 +394,7 @@ def _run_once(socket_path: str) -> int:
             _case_no_agent(client, session)
             _case_refused_during_prompt(client, session)
             _case_forged_idle_during_permission(client, session)
+            _case_installed_while_blocked(client, session)
             _case_run_directory(client, session, temp_dir)
             print("PASS: event routes load, throttle, own banners, deliver text and guard runs")
             return 0

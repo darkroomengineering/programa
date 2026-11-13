@@ -717,23 +717,32 @@ final class RouteEngineTests: XCTestCase {
         XCTAssertNil(engine.textDeliveryRefusal(surfaceId: "S1"))
     }
 
-    func testASurfaceBlockedWhenRoutesInstallWaitsForTheProgram() throws {
+    func testASurfaceBlockedWhenRoutesInstallWaitsForItsRouteViewsWriter() throws {
         let clock = clock!
+        let agent = self.agent
         let engine = RouteEngine(
             now: { clock.now },
             scheduleWake: { date, body in clock.schedule(at: date, body) },
             modelFields: { _ in [:] },
             deferWork: { $0() },
-            blockedSurfaces: { ["S1"] }
+            blockedSurfaces: { [(id: "S1", writer: agent), (id: "S2", writer: nil)] }
         )
         try install(#"{ "name": "s", "on": "agent/+/state/working", "send": { "text": "go" } }"#, on: engine)
 
-        XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S1"), "its stop was never seen, so no writer is known")
-        XCTAssertNil(engine.textDeliveryRefusal(surfaceId: "S2"))
+        XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S1"), "its stop predates the install")
+        XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S2"))
+        XCTAssertNil(engine.textDeliveryRefusal(surfaceId: "S3"))
+        engine.ingest(agentState(surface: "S1", state: "working", previous: "blocked", writer: "hooks:claude-code:made-up"))
+        XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S1"), "only the stop's own session resumes it")
+        engine.ingest(RouteEvent(topic: "agent/S1/state/working", fields: ["surface_id": "S1", "state": "working", "ts": "999999.5"], writer: agent))
+        XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S1"), "a working stamped before the install predates the stop")
         engine.ingest(agentState(surface: "S1", state: "working", previous: "blocked", writer: agent))
-        XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S1"))
-        engine.ingest(agentState(surface: "S1", state: "working", previous: "blocked", writer: "program"))
         XCTAssertNil(engine.textDeliveryRefusal(surfaceId: "S1"))
+
+        engine.ingest(agentState(surface: "S2", state: "working", previous: "blocked", writer: agent))
+        XCTAssertNotNil(engine.textDeliveryRefusal(surfaceId: "S2"), "with no writer to compare, a hook session cannot resume it")
+        engine.ingest(agentState(surface: "S2", state: "working", previous: "blocked", writer: "program"))
+        XCTAssertNil(engine.textDeliveryRefusal(surfaceId: "S2"))
     }
 
     func testAQuestionHoldsTextUntilTheAgentWorksAgain() throws {
