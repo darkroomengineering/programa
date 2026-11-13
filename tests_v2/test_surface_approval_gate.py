@@ -344,13 +344,29 @@ def _check_unsigned_working_keeps_refusal(
 
     _expect_ok("surface.send_key", {"surface_id": surface_id, "key": "ctrl+c", "answer_prompt": True})
     _send_text_ok_and_visible(c, surface_id, f"UNS{STAMP}")
+    _clear_agent(c, workspace_id, surface_id)
+
+
+def _clear_agent(c: ProgramaClient, workspace_id: str, surface_id: str) -> None:
+    """Drop the program record and agent state a case left. The test shell may print no prompt
+    mark (OSC 133;A), so an unsigned `working` would outlive its command and outrank the next
+    case's hooks reports. A reset drops the record; the hooks' view it leaves is cleared over the
+    socket."""
+    _expect_ok("surface.send_text", {"surface_id": surface_id, "text": "printf '\\033c'\n"})
+    _wait_for(lambda: _agent_row(c, workspace_id, surface_id).get("program_status") is None, timeout_s=10.0)
+    _expect_ok("surface.clear_agent_state", {"workspace_id": workspace_id, "surface_id": surface_id})
+    _wait_for(lambda: _agent_row(c, workspace_id, surface_id).get("agent_state") is None, timeout_s=5.0)
 
 
 def _check_agent_exit_lifts_refusal(c: ProgramaClient, workspace_id: str, surface_id: str, work_dir: Path) -> None:
     """Claude Code under native status, killed at a permission prompt without its SessionEnd: the
-    hooks' route view stays `blocked`, the program's unsigned status owns the badge. The shell
-    reports its prompt over the socket before it prints the prompt mark, and that pair must lift
-    the refusal. The agent stand-in is killed from this process, never through the socket."""
+    hooks' route view stays `blocked`, the program's unsigned status owns the badge. zsh reports
+    its prompt over the socket before it prints the prompt mark, and that pair must lift the
+    refusal.
+
+    The test shell may run no prompt integration, so this process sends the shell's socket reports
+    itself and the stand-in prints the mark once killed, in zsh's order. The stand-in is killed
+    from this process, never through the socket."""
     release = f"gx{STAMP}"
     agent = f"sleep 7{STAMP}"
     _reopen(c, workspace_id, surface_id)
@@ -358,9 +374,14 @@ def _check_agent_exit_lifts_refusal(c: ProgramaClient, workspace_id: str, surfac
         "surface.send_text",
         {
             "surface_id": surface_id,
-            "text": f"while [ ! -e {release} ]; do sleep 0.1; done; printf '\\033]7501;state=working\\033\\\\'; {agent}\n",
+            "text": (
+                f"while [ ! -e {release} ]; do sleep 0.1; done; printf '\\033]7501;state=working\\033\\\\'; "
+                f"{agent}; printf '\\033]133;A\\033\\\\'\n"
+            ),
         },
     )
+    shell_state = {"workspace_id": workspace_id, "surface_id": surface_id}
+    _expect_ok("surface.report_shell_state", {**shell_state, "state": "running"})
     _needs_input("permission")(workspace_id, surface_id)
     _wait_agent_state(c, workspace_id, surface_id, "blocked")
     (work_dir / release).touch()
@@ -370,6 +391,11 @@ def _check_agent_exit_lifts_refusal(c: ProgramaClient, workspace_id: str, surfac
         return row.get("agent_state") == "working" and row.get("agent_state_source") == "program"
 
     _wait_for(unsigned_working_shows, timeout_s=10.0)
+    _expect_approval_refusal("surface.send_key", {"surface_id": surface_id, "key": "enter"}, surface_id, source="program")
+
+    # The prompt report alone does not lift it: the hooks' view still shows the prompt. Both calls
+    # apply on the main queue in order, so the refusal check sees the report.
+    _expect_ok("surface.report_shell_state", {**shell_state, "state": "prompt"})
     _expect_approval_refusal("surface.send_key", {"surface_id": surface_id, "key": "enter"}, surface_id, source="program")
 
     subprocess.run(["pkill", "-f", agent], check=False)
