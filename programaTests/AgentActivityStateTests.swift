@@ -1148,6 +1148,23 @@ final class AgentActivityStateTests: XCTestCase {
         XCTAssertNil(f.workspace.panelAgentPresence[f.panelId], "the shell's return ends an agent whose record is gone")
     }
 
+    /// Screen detection reads printed text too: its clear drops its own badge but keeps what the
+    /// hooks said.
+    func testScreenDetectionsClearKeepsTheHooksView() throws {
+        let f = try promptGateFixture()
+        let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
+        f.workspace.updatePanelAgentState(
+            panelId: f.panelId, state: .blocked, source: .hooks, sessionKey: key, promptKind: .permission
+        )
+        f.drain([try osc(.done, "app=forged")])
+        f.workspace.updatePanelAgentState(panelId: f.panelId, state: .working, source: .inferred, inferredAgent: "claude-code")
+        XCTAssertEqual(f.workspace.panelAgentStateSources[f.panelId], .inferred)
+
+        f.workspace.clearPanelAgentState(panelId: f.panelId, source: .inferred)
+        XCTAssertEqual(f.workspace.panelAgentPresence[f.panelId]?.route?.state, .blocked, "screen detection's clear wiped the hooks' view")
+        XCTAssertEqual(f.hold, .permission)
+    }
+
     /// The shell runs Claude Code, whose own unsigned status owns the badge, and its Notification
     /// hook arms a permission prompt.
     private func armUnderNativeStatus() throws -> PromptGateFixture {
