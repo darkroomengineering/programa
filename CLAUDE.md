@@ -145,12 +145,12 @@ tail -f "$(cat /tmp/programa-last-debug-log-path 2>/dev/null || echo /tmp/progra
 
 ## Regression test commit policy
 
-When adding a regression test for a bug fix, use a two-commit structure so CI proves the test catches the bug:
+When adding a regression test for a bug fix, use a two-commit structure so the history shows the test on its own:
 
-1. **Commit 1:** Add the failing test only (no fix). CI should go red.
-2. **Commit 2:** Add the fix. CI should go green.
+1. **Commit 1:** Add the failing test only (no fix).
+2. **Commit 2:** Add the fix.
 
-This makes it visible in the GitHub PR UI (Commits tab, check statuses) that the test genuinely fails without the fix.
+Push both commits together and let CI run once, on the fix. Do not push or dispatch CI for the test-only commit: a red run on it costs a full macOS run for little extra signal.
 
 ## Debug menu
 
