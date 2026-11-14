@@ -478,6 +478,8 @@ Response (`ok: true`):
   reads `idle` (or no state): the person answers it (any key, Esc included), a socket write is
   delivered to the surface, the agent's own report ends it, or the shell returns to its prompt.
   A printed `idle` during ordinary work, with no prompt showing, still resolves the wait.
+  A prompt that only screen detection saw closes when the screen stops matching it, and
+  printed output can cause that, so the hold is firm only for a prompt the agent reported.
   A held wait that the prompt's closing releases reads agent_state as it stands then, so a
   printed `idle` left over from the prompt resolves it as the agent starts on the answer;
   trust it no more than any other printed `idle`.
