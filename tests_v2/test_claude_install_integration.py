@@ -35,6 +35,7 @@ EXPECTED_EVENTS = [
     "UserPromptSubmit",
     "PreToolUse",
     "PostToolUse",
+    "PostToolUseFailure",
 ]
 
 
@@ -79,6 +80,12 @@ def test_fresh_install(cli: str) -> None:
                 any(CLAUDE_HOOK_MARKER in cmd for cmd in commands),
                 f"expected a '{CLAUDE_HOOK_MARKER}' command for {event}, got: {commands}",
             )
+        # A failed tool fires PostToolUseFailure instead of PostToolUse; it resumes the same way.
+        failure_commands = _hooks_commands(hooks, "PostToolUseFailure")
+        _must(
+            any(f"{CLAUDE_HOOK_MARKER} post-tool-use" in cmd for cmd in failure_commands),
+            f"PostToolUseFailure should run the post-tool-use hook, got: {failure_commands}",
+        )
 
         print("  PASS: fresh install writes every lifecycle hook event")
 
