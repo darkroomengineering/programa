@@ -213,14 +213,14 @@ fi
 # - PostToolUse/PostToolUseFailure: the one resume, clearing "Needs input" after a prompt was
 #   answered (synchronous, so it lands before the next tool's prompt; see runClaudePostToolUse)
 # - SubagentStart/SubagentStop: adds and finishes helpers in the sidebar helpers popover
-HOOKS_JSON='{"hooks":{"SessionStart":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook session-start","timeout":10}]}],"Stop":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook stop","timeout":10}]}],"SessionEnd":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook session-end","timeout":1}]}],"Notification":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook notification","timeout":10}]}],"UserPromptSubmit":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook prompt-submit","timeout":10}]}],"PreToolUse":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook pre-tool-use","timeout":5,"async":true}]}],"PostToolUse":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook post-tool-use","timeout":5}]}],"PostToolUseFailure":[{"matcher":"*","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook post-tool-use","timeout":5}]}],"SubagentStart":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook subagent-start","timeout":5}]}],"SubagentStop":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook subagent-stop","timeout":5}]}]}}'
+HOOKS_JSON='{"hooks":{"SessionStart":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook session-start","timeout":10}]}],"Stop":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook stop","timeout":10}]}],"SessionEnd":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook session-end","timeout":1}]}],"Notification":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook notification","timeout":10}]}],"UserPromptSubmit":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook prompt-submit","timeout":10}]}],"PreToolUse":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook pre-tool-use","timeout":5,"async":true}]}],"PostToolUse":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook post-tool-use","timeout":5}]}],"SubagentStart":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook subagent-start","timeout":5}]}],"SubagentStop":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook subagent-stop","timeout":5}]}]}}'
 
 # Detect which optional flags the resolved claude binary supports. Some
 # environments (e.g. nvm not yet initialized in a fresh tab) may resolve to an
 # older binary that rejects them (#1818). Cache the result per binary
 # path+mtime so the --help subprocess only runs once per binary update.
 _claude_real_mtime="$(stat -f '%m' "$REAL_CLAUDE" 2>/dev/null || stat -c '%Y' "$REAL_CLAUDE" 2>/dev/null || echo 0)"
-_claude_cache_key="2:${REAL_CLAUDE}:${_claude_real_mtime}"
+_claude_cache_key="3:${REAL_CLAUDE}:${_claude_real_mtime}"
 if [[ "${_PROGRAMA_CLAUDE_FLAGS_CACHE_KEY:-}" == "$_claude_cache_key" ]]; then
     _claude_flags="$_PROGRAMA_CLAUDE_FLAGS_CACHE_VAL"
 else
@@ -234,12 +234,19 @@ else
     if [[ "$("$REAL_CLAUDE" --version 2>/dev/null)" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
         _claude_version=$(( BASH_REMATCH[1] * 1000000 + BASH_REMATCH[2] * 1000 + BASH_REMATCH[3] ))
         # Agent teams and --teammate-mode, which `programa claude-teams` passes, arrived in 2.1.32.
-        (( _claude_version >= 2001032 )) && _claude_flags+="agent-teams "
+        # PostToolUseFailure is in the 2.1.0 changelog; gating it with teams errs on the late side.
+        (( _claude_version >= 2001032 )) && _claude_flags+="agent-teams post-tool-use-failure "
         # Claude Code 2.1.295+ reports its own OSC 7501 status once Programa answers its probe.
         (( _claude_version >= 2001295 )) && _claude_flags+="program-status "
     fi
     export _PROGRAMA_CLAUDE_FLAGS_CACHE_KEY="$_claude_cache_key"
     export _PROGRAMA_CLAUDE_FLAGS_CACHE_VAL="$_claude_flags"
+fi
+
+# An older Claude Code may reject a --settings blob naming a hook event it does not know.
+if [[ "$_claude_flags" == *" post-tool-use-failure "* ]]; then
+    _post_tool_use_failure_hook='"PostToolUseFailure":[{"matcher":"*","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook post-tool-use","timeout":5}]}]'
+    HOOKS_JSON="${HOOKS_JSON%\}\}},${_post_tool_use_failure_hook}}}"
 fi
 
 # Agent teams are on by default (automation.claudeTeamsByDefault): launch through
