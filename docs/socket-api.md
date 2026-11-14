@@ -478,6 +478,9 @@ Response (`ok: true`):
   reads `idle` (or no state): the person answers it (any key, Esc included), a socket write is
   delivered to the surface, the agent's own report ends it, or the shell returns to its prompt.
   A printed `idle` during ordinary work, with no prompt showing, still resolves the wait.
+  A held wait that the prompt's closing releases reads agent_state as it stands then, so a
+  printed `idle` left over from the prompt resolves it as the agent starts on the answer;
+  trust it no more than any other printed `idle`.
 - `working` — the surface's agent_state is `working`.
 - `blocked` — the surface's agent_state is `blocked` (a hook reported a permission/approval/
   question prompt — see #164).
