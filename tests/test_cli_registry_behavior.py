@@ -1055,7 +1055,7 @@ def main() -> int:
                             "PROGRAMA_CLAUDE_NATIVE_STATUS"):
                     env.pop(key, None)
                 env.update(hook_env, PROGRAMA_CLAUDE_HOOK_STATE_PATH=str(Path(directory) / "sessions.json"),
-                           TTY=os.ttyname(slave))
+                           TTY=os.ttyname(slave), TMPDIR=directory)
                 if native:
                     env["PROGRAMA_CLAUDE_NATIVE_STATUS"] = "1"
                 with SocketRecorder(directory) as recorder:
@@ -1148,6 +1148,88 @@ def main() -> int:
         check(events == ["item.completed"], f"{label} without native status sent agent events {events!r}")
         check("notification.clear" in resume_methods,
               f"{label} without native status did not clear notifications: {resume_methods!r}")
+
+    # The async PreToolUse can land after a helper's own permission prompt marked its child record
+    # blocked, so the helper's child `working` comes from the synchronous PostToolUse instead.
+    def child_status_writes(written: bytes) -> list[bytes]:
+        heads = [seq.split(b"\x1b\\")[0] for seq in written.split(b"\x1b]7501;")[1:]]
+        return [head for head in heads if b"id=agents/" in head]
+
+    helper_call = {"session_id": "native-status-session", "agent_id": HELPER_AGENT_ID, "agent_type": "Explore",
+                   "tool_name": "Bash", "tool_input": {"command": "ls"}, "tool_use_id": "toolu_helper"}
+    helper_pre_written, _ = tool_hook_writes(native=False, event="pre-tool-use", payload=helper_call)
+    check(child_status_writes(helper_pre_written) == [],
+          f"a helper's pre-tool-use wrote its child record: {helper_pre_written!r}")
+    helper_post_written, _ = tool_hook_writes(native=False, event="post-tool-use", payload=helper_call)
+    helper_children = child_status_writes(helper_post_written)
+    check(len(helper_children) == 1 and b"state=working" in helper_children[0],
+          f"a helper's post-tool-use wrote no working child record: {helper_post_written!r}")
+
+    # A finished tool resumes only the stop it answers. The PermissionRequest hook records which
+    # agent asked for which tool and input; a PostToolUse from another agent, or for another tool
+    # call, sends nothing while that request is open, so a parallel helper's finished Read cannot
+    # flip a showing dialog back to Working or clear its notification. With no recorded request a
+    # finished tool still resumes.
+    resume_methods_set = {"surface.report_agent_state", "agent.event", "notification.clear"}
+    with tempfile.TemporaryDirectory(prefix="pcli-", dir="/tmp") as directory:
+        keyed_env = dict(hook_env, PROGRAMA_CLAUDE_HOOK_STATE_PATH=str(Path(directory) / "sessions.json"),
+                         TMPDIR=directory, PROGRAMA_CLAUDE_NATIVE_STATUS="0")
+        with SocketRecorder(directory) as recorder:
+            def keyed_hook(event: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
+                before = len(recorder.frames)
+                ran = run_cli(recorder.path, ["claude-hook", event], env_overrides=keyed_env,
+                              input_text=json.dumps({"session_id": "keyed-session", **payload}))
+                check(ran.returncode == 0, f"claude-hook {event} failed: {merged_output(ran)!r}")
+                return recorder.frames[before:]
+
+            def tool_call(agent_id: str | None, command: str, **extra: Any) -> dict[str, Any]:
+                call: dict[str, Any] = {"tool_name": "Bash", "tool_input": {"command": command}, **extra}
+                if agent_id is not None:
+                    call["agent_id"] = agent_id
+                return call
+
+            def check_held(label: str, frames: list[dict[str, Any]]) -> None:
+                sent = [m for m in methods_of(frames) if m in resume_methods_set]
+                check(not sent, f"{label} resumed a stop it did not raise: {frames!r}")
+
+            def check_resumed(label: str, frames: list[dict[str, Any]]) -> None:
+                reports = state_reports(frames)
+                check(any(r.get("state") == "working" and r.get("surface_id") == SURFACE_ID for r in reports),
+                      f"{label} sent no working report: {frames!r}")
+                check("notification.clear" in methods_of(frames), f"{label} did not clear notifications: {frames!r}")
+
+            check_resumed("a post-tool-use with no recorded request",
+                          keyed_hook("post-tool-use", tool_call(HELPER_AGENT_ID, "a", tool_use_id="toolu_first")))
+            requested = keyed_hook("permission-request", tool_call(HELPER_AGENT_ID, "a"))
+            check(not set(methods_of(requested)) & (resume_methods_set | {"agent.needs_input"}),
+                  f"permission-request reported to the app: {requested!r}")
+            check_held("another helper's post-tool-use",
+                       keyed_hook("post-tool-use", tool_call(DESCENDANT_AGENT_ID, "a", tool_use_id="toolu_other")))
+            check_held("the main agent's post-tool-use during a helper's request",
+                       keyed_hook("post-tool-use", tool_call(None, "a", tool_use_id="toolu_main")))
+            check_held("the same helper's post-tool-use for other input",
+                       keyed_hook("post-tool-use", tool_call(HELPER_AGENT_ID, "b", tool_use_id="toolu_b")))
+            check_resumed("the requesting helper's post-tool-use",
+                          keyed_hook("post-tool-use", tool_call(HELPER_AGENT_ID, "a", tool_use_id="toolu_a")))
+            check_resumed("a post-tool-use after the request was answered",
+                          keyed_hook("post-tool-use", tool_call(DESCENDANT_AGENT_ID, "a", tool_use_id="toolu_next")))
+
+            keyed_hook("permission-request", tool_call(None, "main"))
+            check_held("a helper's post-tool-use during the main agent's request",
+                       keyed_hook("post-tool-use", tool_call(HELPER_AGENT_ID, "main", tool_use_id="toolu_helper")))
+            check_resumed("the main agent's post-tool-use for its request",
+                          keyed_hook("post-tool-use", tool_call(None, "main", tool_use_id="toolu_main_ok")))
+
+            keyed_hook("permission-request", tool_call(HELPER_AGENT_ID, "fails"))
+            check_resumed("a matching PostToolUseFailure",
+                          keyed_hook("post-tool-use", tool_call(HELPER_AGENT_ID, "fails", tool_use_id="toolu_fail",
+                                                                hook_event_name="PostToolUseFailure",
+                                                                error="Exit code 1", is_interrupt=False)))
+
+            keyed_hook("permission-request", tool_call(HELPER_AGENT_ID, "denied"))
+            keyed_hook("prompt-submit", {})
+            check_resumed("a post-tool-use after the next prompt",
+                          keyed_hook("post-tool-use", tool_call(DESCENDANT_AGENT_ID, "x", tool_use_id="toolu_after")))
 
     if failures:
         print(f"FAIL: {len(failures)} CLI registry behavior assertion(s) failed")
