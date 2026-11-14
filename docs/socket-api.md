@@ -469,6 +469,20 @@ Response (`ok: true`):
   almost always means "not currently busy" — which is true of a bare terminal too. This is the
   one asymmetry versus `working`/`blocked`, which both require an actual explicit report; there
   is nothing to observe in the no-state case for those.
+
+  An `idle` wait never resolves while the surface shows a prompt the person has not answered
+  (a permission, sign-in or question prompt, or one of unknown kind), whatever agent_state
+  reads. Printed bytes can move agent_state to `idle` (an unsigned OSC 7501 report), so a
+  program printing `idle` during a permission prompt would otherwise tell an orchestrator to
+  type its next prompt into the dialog. The wait resolves when the prompt closes and agent_state
+  reads `idle` (or no state): the person answers it (any key, Esc included), a socket write is
+  delivered to the surface, the agent's own report ends it, or the shell returns to its prompt.
+  A printed `idle` during ordinary work, with no prompt showing, still resolves the wait.
+  A prompt that only screen detection saw closes when the screen stops matching it, and
+  printed output can cause that, so the hold is firm only for a prompt the agent reported.
+  A held wait that the prompt's closing releases reads agent_state as it stands then, so a
+  printed `idle` left over from the prompt resolves it as the agent starts on the answer;
+  trust it no more than any other printed `idle`.
 - `working` — the surface's agent_state is `working`.
 - `blocked` — the surface's agent_state is `blocked` (a hook reported a permission/approval/
   question prompt — see #164).
@@ -499,7 +513,8 @@ does for child-exit) at a fixed ~100ms interval on the connection's own thread; 
 `agent_state` off the single main-thread mutation point for `Workspace.panelAgentStates`
 (`Workspace.updatePanelAgentState`/`clearPanelAgentState`, always called from
 `TerminalController+Telemetry.swift`'s `v2SurfaceReportAgentState`/`v2SurfaceClearAgentState` via
-`DispatchQueue.main.async`).
+`DispatchQueue.main.async`), plus the surface's prompt closing (`TerminalSurface.noteDraftEvent`),
+which releases the `idle` waits a prompt held.
 
 Each `system.tree` surface item also has `shell_state`: `promptIdle`, `commandRunning`, `unknown`, or `null` when the shell has no integration. `programa resume` only types into a pane whose `shell_state` is `promptIdle` unless `--force` is passed.
 
@@ -774,7 +789,10 @@ A. **Refuse at an approval prompt.** If the agent waits on a permission or sign-
 3. **Wait for idle.** Having observed `working`, wait — for the *remaining* overall
    `timeout_ms` budget — for `agent_state` to reach `idle` (the same no-state-is-idle rule as
    `surface.wait` applies: a hook that clears its own state on session end also counts).
-   Resolves with `working_observed: true`.
+   Resolves with `working_observed: true`. As in `surface.wait`, `idle` does not count while the
+   surface shows a prompt the person has not answered, so a printed `idle` during a permission
+   prompt keeps the call waiting until the prompt closes. The settle in step 0 waits for `idle`
+   the same way.
 4. **Timeout.** If step 3's wait exceeds the remaining budget, the call fails with
    `{"code": "timeout", ...}` — the agent started working but never finished in time.
 

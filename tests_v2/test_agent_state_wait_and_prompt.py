@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -27,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from programa_client import ProgramaClient, ProgramaClientError  # noqa: E402
 from v2_support import must as _must
 from v2_support import report_agent_state as _report_agent_state
+from v2_support import wait_for as _wait_for
 from pane_resize_test_support import (  # noqa: E402
     wait_for_surface_command_roundtrip as _wait_for_surface_command_roundtrip,
 )
@@ -198,6 +200,96 @@ def _test_agent_prompt_no_working_within_grace(client: ProgramaClient, workspace
     _must(1.0 <= elapsed <= 6.0, f"expected to resolve around the 1.5s grace window, took {elapsed:.2f}s")
 
 
+def _report_hooks_state(socket_path: str, workspace_id: str, surface_id: str, state: str) -> None:
+    """A hooks report that names a session, as Claude Code's hooks send it."""
+    with ProgramaClient(socket_path) as bg_client:
+        bg_client._call(
+            "surface.report_agent_state",
+            {
+                "workspace_id": workspace_id,
+                "surface_id": surface_id,
+                "state": state,
+                "provider": "claude-code",
+                "session_id": "inc-1125-session",
+            },
+        )
+
+
+def _agent_row(client: ProgramaClient, workspace_id: str, surface_id: str) -> dict:
+    rows = (client._call("surface.list", {"workspace_id": workspace_id}) or {}).get("surfaces") or []
+    for row in rows:
+        if str(row.get("id")) == surface_id:
+            return dict(row)
+    raise ProgramaClientError(f"surface {surface_id} not in surface.list: {rows}")
+
+
+def _test_idle_wait_holds_while_a_prompt_shows(socket_path: str, client: ProgramaClient, workspace_id: str, surface_id: str) -> None:
+    """INC-1125: text printed during a permission prompt can carry an unsigned OSC 7501 `idle`. It
+    moves the badge, but an idle wait must not resolve while the prompt shows, or an orchestrator
+    sends its next prompt into the dialog. The agent's own reports after the answer release it.
+    The release file is created from this process: any socket write delivered to the surface
+    answers the prompt."""
+    work_dir = Path(tempfile.mkdtemp(prefix="programa_idle_wait_"))
+    release = work_dir / "go"
+    try:
+        _report_hooks_state(socket_path, workspace_id, surface_id, "working")
+        _wait_for(lambda: _agent_row(client, workspace_id, surface_id).get("agent_state") == "working", timeout_s=5.0)
+        client._call(
+            "surface.send_text",
+            {
+                "surface_id": surface_id,
+                "text": f"while [ ! -e '{release}' ]; do sleep 0.1; done; printf '\\033]7501;state=idle\\033\\\\'; sleep 60\n",
+            },
+        )
+        client._call(
+            "agent.needs_input",
+            {
+                "workspace_id": workspace_id,
+                "surface_id": surface_id,
+                "provider": "claude-code",
+                "title": "Claude Code",
+                "body": "inc-1125 permission",
+                "kind": "permission",
+            },
+        )
+        _wait_for(lambda: _agent_row(client, workspace_id, surface_id).get("agent_state") == "blocked", timeout_s=5.0)
+        release.touch()
+
+        def unsigned_idle_shows() -> bool:
+            row = _agent_row(client, workspace_id, surface_id)
+            return row.get("agent_state") == "idle" and row.get("agent_state_source") == "program"
+
+        _wait_for(unsigned_idle_shows, timeout_s=10.0)
+
+        try:
+            result = _surface_wait_agent_state(client, workspace_id, surface_id, agent_state="idle", timeout_ms=1_500)
+            raise AssertionError(f"an idle wait resolved while the permission prompt shows: {result}")
+        except ProgramaClientError as exc:
+            _must("timeout" in str(exc).lower(), f"expected the idle wait to time out, got: {exc}")
+
+        # The person answered: Claude's hooks report the next turn, then its end. The trusted
+        # `working` also closes the prompt gate.
+        _report_hooks_state(socket_path, workspace_id, surface_id, "working")
+        _wait_for(lambda: _agent_row(client, workspace_id, surface_id).get("agent_state") == "working", timeout_s=5.0)
+        thread = threading.Thread(
+            target=lambda: (time.sleep(1.0), _report_hooks_state(socket_path, workspace_id, surface_id, "idle"))
+        )
+        thread.start()
+        try:
+            result = _surface_wait_agent_state(client, workspace_id, surface_id, agent_state="idle", timeout_ms=8_000)
+        finally:
+            thread.join(timeout=5.0)
+        _must(result.get("waited") is True, f"expected the idle wait to block until the hooks' idle, got {result}")
+        _must(result.get("state") == "idle", f"expected state=idle, got {result}")
+        client._call("surface.send_key", {"surface_id": surface_id, "key": "ctrl+c"})
+    finally:
+        release.unlink(missing_ok=True)
+        try:
+            work_dir.rmdir()
+        except OSError:
+            pass
+
+
 def _run_once(socket_path: str) -> int:
     workspace_id = ""
     try:
@@ -226,6 +318,10 @@ def _run_once(socket_path: str) -> int:
             no_agent_surface_id = client.new_surface(panel_type="terminal")
             _wait_for_surface_command_roundtrip(client, workspace_id, no_agent_surface_id)
             _test_agent_prompt_no_working_within_grace(client, workspace_id, no_agent_surface_id)
+
+            prompt_gate_surface_id = client.new_surface(panel_type="terminal")
+            _wait_for_surface_command_roundtrip(client, workspace_id, prompt_gate_surface_id)
+            _test_idle_wait_holds_while_a_prompt_shows(socket_path, client, workspace_id, prompt_gate_surface_id)
 
             client.close_workspace(workspace_id)
             workspace_id = ""

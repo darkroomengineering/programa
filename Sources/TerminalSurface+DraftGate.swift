@@ -116,6 +116,13 @@ enum PersonDraftGate: Equatable {
 
     var isDrafting: Bool { draft != nil }
 
+    /// True while the agent shows a prompt the person has not answered, of any kind. An `idle`
+    /// wait holds while it is true (`AgentStateWaitCondition`).
+    var isPromptShowing: Bool {
+        if case .promptShowing = self { return true }
+        return false
+    }
+
     fileprivate func isSameCase(as other: PersonDraftGate) -> Bool {
         switch (self, other) {
         case (.open, .open), (.drafting, .drafting): return true

@@ -37,7 +37,9 @@
 //        never installed for this surface.
 //   3. Once "working" is observed, wait (for the remaining overall `timeout_ms` budget) for the
 //      surface's agent_state to reach "idle" (or clear entirely -- see surface.wait's no-state
-//      rule) and resolve with `working_observed: true`.
+//      rule) and resolve with `working_observed: true`. Like every idle wait here (step 2's fallback only reports the badge), including
+//      step 0's settle, it does not count while the surface shows a prompt the person has not
+//      answered; the prompt closing re-checks it.
 //   4. If step 3's wait exceeds the overall timeout, the call fails with `timeout` -- the agent
 //      started working but never finished within the requested budget. `timeout` always means
 //      the prompt was sent; `draft_in_progress` and `agent_awaiting_approval` always mean it was not.
@@ -298,7 +300,7 @@ extension TerminalController {
                 return
             }
             let currentState = ws.panelAgentStates[surfaceIdOut]
-            if AgentStateWaitCondition.idle.isSatisfied(by: currentState) {
+            if AgentStateWaitCondition.idle.isSatisfied(by: currentState, promptShowing: ws.panelPromptShowing(surfaceIdOut)) {
                 resolvedState = currentState
             } else {
                 idleWaiterToken = AgentStateWaitRegistry.shared.addWaiter(surfaceId: surfaceIdOut, condition: .idle) { state, _ in
@@ -430,7 +432,9 @@ extension TerminalController {
                     gone = true
                     return
                 }
-                if AgentStateWaitCondition.working.isSatisfied(by: ws.panelAgentStates[surfaceId]) {
+                if AgentStateWaitCondition.working.isSatisfied(
+                    by: ws.panelAgentStates[surfaceId], promptShowing: ws.panelPromptShowing(surfaceId)
+                ) {
                     sawWorking = true
                 } else if graceEnd > Date() {
                     workingToken = AgentStateWaitRegistry.shared.addWaiter(surfaceId: surfaceId, condition: .working) { _, _ in
@@ -454,7 +458,9 @@ extension TerminalController {
                         gone = true
                         return
                     }
-                    if !AgentStateWaitCondition.idle.isSatisfied(by: ws.panelAgentStates[surfaceId]) {
+                    if !AgentStateWaitCondition.idle.isSatisfied(
+                        by: ws.panelAgentStates[surfaceId], promptShowing: ws.panelPromptShowing(surfaceId)
+                    ) {
                         idleToken = AgentStateWaitRegistry.shared.addWaiter(surfaceId: surfaceId, condition: .idle) { _, _ in
                             settleIdle.signal()
                         }

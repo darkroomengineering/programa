@@ -677,7 +677,8 @@ final class Workspace: Identifiable, ObservableObject {
             PortsHubStore.shared.detachedPanelFinalized(panelId: panelId)
             AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: sourceWorkspaceId, surfaceId: panelId)
             if let agentPresence {
-                AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil, source: nil)
+                // The panel is closed, so no prompt holds its idle waits.
+                AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil, source: nil, promptShowing: false)
                 SocketEventBroadcaster.shared.publishAgentState(
                     workspaceId: sourceWorkspaceId,
                     surfaceId: panelId,

@@ -97,9 +97,13 @@ enum AgentStateWaitCondition: String {
     /// require an actual explicit report; no-state never satisfies those (there is nothing to
     /// observe). `any_change` never counts as "already satisfied" -- by definition it resolves
     /// on the *next* transition after registration, not the state at registration time.
-    func isSatisfied(by state: AgentActivityState?) -> Bool {
+    ///
+    /// `promptShowing` is the surface's prompt gate (`PersonDraftGate.isPromptShowing`). No state
+    /// satisfies `idle` while it is true (INC-1125): printed bytes can move the badge to `idle`
+    /// during a permission prompt, and a caller that trusted it would type into the dialog.
+    func isSatisfied(by state: AgentActivityState?, promptShowing: Bool) -> Bool {
         switch self {
-        case .idle: return state == .idle || state == nil
+        case .idle: return !promptShowing && (state == .idle || state == nil)
         case .working: return state == .working
         case .blocked: return state == .blocked
         case .anyChange: return false
@@ -107,13 +111,13 @@ enum AgentStateWaitCondition: String {
     }
 
     /// Whether a *transition* to `newState` should fire a registered waiter. Differs from
-    /// `isSatisfied(by:)` in exactly one case: `any_change` is never satisfied by the state at
+    /// `isSatisfied(by:promptShowing:)` in exactly one case: `any_change` is never satisfied by the state at
     /// registration time, but every subsequent transition fires it. Do not use `isSatisfied`
     /// in `AgentStateWaitRegistry.notify`: `any_change` waiters would never fire
     /// (tests_v2/test_agent_state_wait_and_prompt.py covers this).
-    func firesOn(transitionTo newState: AgentActivityState?) -> Bool {
+    func firesOn(transitionTo newState: AgentActivityState?, promptShowing: Bool) -> Bool {
         if self == .anyChange { return true }
-        return isSatisfied(by: newState)
+        return isSatisfied(by: newState, promptShowing: promptShowing)
     }
 }
 
@@ -126,7 +130,9 @@ enum AgentStateWaitCondition: String {
 /// which are only ever called from `TerminalController+Telemetry.swift`'s
 /// `v2SurfaceReportAgentState`/`v2SurfaceClearAgentState` inside `v2ScheduleSurfaceTelemetryMutation`
 /// (always `DispatchQueue.main.async`). `Workspace.resetSidebarContext()` also clears
-/// `panelAgentStates` directly and notifies this registry for the same reason.
+/// `panelAgentStates` directly and notifies this registry for the same reason. The one other
+/// caller is `TerminalSurface.noteDraftEvent` on main, when the surface's prompt gate stops
+/// showing a prompt: an `idle` wait the prompt held resolves then (`notifyPromptClosed`).
 ///
 /// Unlike `SurfaceExitWaitRegistry` (a one-shot terminal event), agent state can transition many
 /// times and different waiters on the same surface can be watching for different conditions, so
@@ -184,17 +190,38 @@ final class AgentStateWaitRegistry: @unchecked Sendable {
 #endif
 
     /// Called from the single main-thread mutation point whenever `surfaceId`'s agent state
-    /// changes (including transitioning to `nil` on clear/reset). Fires every waiter whose
-    /// condition `newState` satisfies and leaves the rest registered. `source` is the additive
-    /// screen-manifest-detection sibling (docs/plans/screen-manifest-detection.md) -- `nil` iff
-    /// `newState` is `nil`.
-    func notify(surfaceId: UUID, newState: AgentActivityState?, source: AgentStateSource?) {
+    /// changes (including transitioning to `nil` on clear/reset), through
+    /// `Workspace.notifyAgentStateWaiters`. Fires every waiter whose condition `newState` satisfies
+    /// and leaves the rest registered; `idle` waiters stay registered while `promptShowing`.
+    /// `source` is the additive screen-manifest-detection sibling
+    /// (docs/plans/screen-manifest-detection.md) -- `nil` iff `newState` is `nil`.
+    func notify(surfaceId: UUID, newState: AgentActivityState?, source: AgentStateSource?, promptShowing: Bool) {
+        fire(surfaceId: surfaceId, newState: newState, source: source) {
+            $0.firesOn(transitionTo: newState, promptShowing: promptShowing)
+        }
+    }
+
+    /// Called when `surfaceId`'s prompt gate stops showing a prompt (`Workspace.panelPromptClosed`),
+    /// with the unchanged agent state. Fires only the `idle` waiters the prompt held: no state
+    /// changed, so `any_change` waiters stay registered.
+    func notifyPromptClosed(surfaceId: UUID, state: AgentActivityState?, source: AgentStateSource?) {
+        fire(surfaceId: surfaceId, newState: state, source: source) {
+            $0 == .idle && $0.isSatisfied(by: state, promptShowing: false)
+        }
+    }
+
+    private func fire(
+        surfaceId: UUID,
+        newState: AgentActivityState?,
+        source: AgentStateSource?,
+        when fires: (AgentStateWaitCondition) -> Bool
+    ) {
         lock.lock()
         let current = waiters[surfaceId] ?? []
         var fired: [Entry] = []
         var remaining: [Entry] = []
         for entry in current {
-            if entry.condition.firesOn(transitionTo: newState) {
+            if fires(entry.condition) {
                 fired.append(entry)
             } else {
                 remaining.append(entry)
@@ -371,7 +398,7 @@ extension TerminalController {
 
             if let agentStateCondition {
                 let currentState = ws.panelAgentStates[surfaceId]
-                if agentStateCondition.isSatisfied(by: currentState) {
+                if agentStateCondition.isSatisfied(by: currentState, promptShowing: ws.panelPromptShowing(surfaceId)) {
                     alreadySatisfied = true
                     resolvedAgentState = currentState
                     resolvedAgentStateSource = ws.panelAgentStateSources[surfaceId]
