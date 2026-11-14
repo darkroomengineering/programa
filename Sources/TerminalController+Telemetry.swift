@@ -362,13 +362,15 @@ extension TerminalController {
             tabManager.updateSurfaceAgentState(
                 tabId: workspaceId, surfaceId: sid, state: state, source: source, sessionKey: sessionKey, endsStop: endsStop
             )
-            // A held report leaves the supervision record blocked too.
-            guard endsStop || !tab.panelAgentStopped(sid) else { return }
-            _ = try? AgentSupervisionRegistry.shared.updateActiveSurface(
-                workspaceId: workspaceId,
-                surfaceId: sid,
-                state: AgentTaskState(state)
-            )
+            // A held report leaves the supervision record blocked too; the pid bookkeeping below
+            // still runs.
+            if endsStop || !tab.panelAgentStopped(sid) {
+                _ = try? AgentSupervisionRegistry.shared.updateActiveSurface(
+                    workspaceId: workspaceId,
+                    surfaceId: sid,
+                    state: AgentTaskState(state)
+                )
+            }
             if let reportedPid, let provider, let pidKey = Self.agentPIDKey(forProvider: provider) {
                 if tab.setSidebarAgentPID(key: pidKey, pid: reportedPid) {
                     self?.refreshTrackedAgentPorts(for: tab)
