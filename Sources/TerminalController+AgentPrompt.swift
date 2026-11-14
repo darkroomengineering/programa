@@ -298,7 +298,7 @@ extension TerminalController {
                 return
             }
             let currentState = ws.panelAgentStates[surfaceIdOut]
-            if AgentStateWaitCondition.idle.isSatisfied(by: currentState) {
+            if AgentStateWaitCondition.idle.isSatisfied(by: currentState, promptShowing: ws.panelPromptShowing(surfaceIdOut)) {
                 resolvedState = currentState
             } else {
                 idleWaiterToken = AgentStateWaitRegistry.shared.addWaiter(surfaceId: surfaceIdOut, condition: .idle) { state, _ in
@@ -430,7 +430,9 @@ extension TerminalController {
                     gone = true
                     return
                 }
-                if AgentStateWaitCondition.working.isSatisfied(by: ws.panelAgentStates[surfaceId]) {
+                if AgentStateWaitCondition.working.isSatisfied(
+                    by: ws.panelAgentStates[surfaceId], promptShowing: ws.panelPromptShowing(surfaceId)
+                ) {
                     sawWorking = true
                 } else if graceEnd > Date() {
                     workingToken = AgentStateWaitRegistry.shared.addWaiter(surfaceId: surfaceId, condition: .working) { _, _ in
@@ -454,7 +456,9 @@ extension TerminalController {
                         gone = true
                         return
                     }
-                    if !AgentStateWaitCondition.idle.isSatisfied(by: ws.panelAgentStates[surfaceId]) {
+                    if !AgentStateWaitCondition.idle.isSatisfied(
+                        by: ws.panelAgentStates[surfaceId], promptShowing: ws.panelPromptShowing(surfaceId)
+                    ) {
                         idleToken = AgentStateWaitRegistry.shared.addWaiter(surfaceId: surfaceId, condition: .idle) { _, _ in
                             settleIdle.signal()
                         }

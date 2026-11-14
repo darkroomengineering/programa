@@ -399,7 +399,7 @@ extension Workspace {
         // agent.prompt's internal working/idle watch (#166 task 3) -- see
         // AgentStateWaitRegistry's doc comment in TerminalController+SurfaceWait.swift for why
         // this is the single safe place to fire from.
-        AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: state, source: source)
+        notifyAgentStateWaiters(panelId: panelId, state: state, source: source)
         SocketEventBroadcaster.shared.publishAgentState(
             workspaceId: id,
             surfaceId: panelId,
@@ -477,7 +477,7 @@ extension Workspace {
             panelAgentPresence[panelId] = AgentPresence(
                 state: route.state, source: route.source, lastEventAt: Date(), sessionKey: route.sessionKey, route: route
             )
-            AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: route.state, source: route.source)
+            notifyAgentStateWaiters(panelId: panelId, state: route.state, source: route.source)
             SocketEventBroadcaster.shared.publishAgentState(
                 workspaceId: id, surfaceId: panelId, state: route.state, previousState: current.state,
                 source: route.source, writer: nil, programStatus: nil, toRoutes: false, trusted: false
@@ -486,7 +486,7 @@ extension Workspace {
         }
         panelAgentPresence.removeValue(forKey: panelId)
         closePromptGate(panelId: panelId, by: closer)
-        AgentStateWaitRegistry.shared.notify(surfaceId: panelId, newState: nil, source: nil)
+        notifyAgentStateWaiters(panelId: panelId, state: nil, source: nil)
         // Routes see the clear too: a held delivery ends rather than outliving the agent. It
         // fires `run` and `review` only when both the clear and the agent it ends came from a
         // trusted reporter: a printed `working` that the shell's own prompt report then clears is
@@ -614,6 +614,25 @@ extension Workspace {
               closer == .agent || reporter == .screen,
               !panelAgentStopped(panelId) else { return }
         surface.noteAgentPrompt(nil, isBlocked: false)
+    }
+
+    /// Whether the panel's prompt gate shows a prompt the person has not answered. An `idle` wait
+    /// holds while it does (INC-1125).
+    func panelPromptShowing(_ panelId: UUID) -> Bool {
+        (panels[panelId] as? TerminalPanel)?.surface.draftGate.isPromptShowing ?? false
+    }
+
+    func notifyAgentStateWaiters(panelId: UUID, state: AgentActivityState?, source: AgentStateSource?) {
+        AgentStateWaitRegistry.shared.notify(
+            surfaceId: panelId, newState: state, source: source, promptShowing: panelPromptShowing(panelId)
+        )
+    }
+
+    /// The panel's prompt gate stopped showing a prompt: the person answered it (Esc included), a
+    /// socket write was delivered, or a trusted report closed it. Releases the `idle` waits it held.
+    func panelPromptClosed(_ panelId: UUID) {
+        let presence = panelAgentPresence[panelId]
+        AgentStateWaitRegistry.shared.notifyPromptClosed(surfaceId: panelId, state: presence?.state, source: presence?.source)
     }
 
     /// Whether a program presence in `currentState` keeps a report from another tier: always
@@ -791,7 +810,7 @@ extension Workspace {
         }
         panelAgentPresence.removeAll()
         for (surfaceId, presence) in clearedPresences {
-            AgentStateWaitRegistry.shared.notify(surfaceId: surfaceId, newState: nil, source: nil)
+            notifyAgentStateWaiters(panelId: surfaceId, state: nil, source: nil)
             SocketEventBroadcaster.shared.publishAgentState(
                 workspaceId: id, surfaceId: surfaceId, state: nil, previousState: presence.route?.state ?? presence.state,
                 source: nil, trusted: presence.hasTrustedOrigin

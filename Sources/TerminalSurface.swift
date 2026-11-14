@@ -260,7 +260,14 @@ final class TerminalSurface: Identifiable, ObservableObject {
 #if DEBUG
         logDraftGateTransition(from: draftGate, to: next, event: event)
 #endif
+        // Two enum case checks: this runs on every keystroke of a draft.
+        let closesPrompt = draftGate.isPromptShowing && !next.isPromptShowing
         draftGate = next
+        if closesPrompt {
+            // Every caller is on the main thread: keyDown, IME, drag-drop, socket writes inside
+            // their main hop, and the workspace's own agent-state updates.
+            MainActor.assumeIsolated { owningWorkspace()?.panelPromptClosed(id) }
+        }
     }
     private var backgroundSurfaceStartQueued = false
     private var surfaceCallbackContext: Unmanaged<GhosttySurfaceCallbackContext>?
