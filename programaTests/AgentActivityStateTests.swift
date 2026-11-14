@@ -488,8 +488,8 @@ final class AgentActivityStateTests: XCTestCase {
         XCTAssertEqual(indicator?.label, String(localized: "sidebar.agentIndicator.needsInput", defaultValue: "Needs input"))
     }
 
-    /// A hook reporting `working` after `blocked` (the pre-tool-use / Stop / turn.completed
-    /// resume path) must clear blocked while keeping the `.hooks` source, per the clearing
+    /// A hook reporting `working` after `blocked` (the post-tool-use / prompt-submit resume
+    /// path, with no `resumed: false`) must clear blocked while keeping the `.hooks` source, per the clearing
     /// rules in section 3 of the plan.
     func testWorkingReportAfterBlockedClearsBlockedKeepsHooksSource() {
         let workspace = Workspace(title: "Test")
