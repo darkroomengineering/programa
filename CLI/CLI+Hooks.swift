@@ -1047,7 +1047,7 @@ extension ProgramaCLI {
         ])
     }
 
-    private func resolvePreferredWorkspaceIdForClaudeHook(
+    func resolvePreferredWorkspaceIdForClaudeHook(
         preferred: String?,
         fallback: String?,
         client: SocketClient
@@ -1064,7 +1064,7 @@ extension ProgramaCLI {
         return try resolveWorkspaceIdForClaudeHook(fallback, client: client)
     }
 
-    private func resolvePreferredSurfaceIdForClaudeHook(
+    func resolvePreferredSurfaceIdForClaudeHook(
         preferred: String?,
         fallback: String?,
         workspaceId: String,

@@ -62,20 +62,27 @@ extension ProgramaCLI {
         )
     }
 
-    /// Claude Code's PostToolUse, and PostToolUseFailure for a tool that failed: the tool ran, so
-    /// any permission prompt before it was answered. It is the one hook that ends a stop for input
-    /// in both modes. It must be synchronous: Claude waits for it before the next tool, so its
-    /// report lands before that tool's permission prompt can. PreToolUse is async and could land
-    /// after it, so it never resumes. A denied tool fires neither hook; the next turn's
-    /// UserPromptSubmit ends that stop.
+    /// Claude Code's PostToolUse, and PostToolUseFailure for a tool that failed: a tool finished,
+    /// and it is the one hook that ends a stop for input in both modes. Any finished tool in the
+    /// session ends it, a parallel helper's included; nothing ties it to the tool that stopped. It
+    /// must be synchronous: Claude waits for it before the next tool, so its report lands before
+    /// that tool's permission prompt can. PreToolUse is async and could land after it, so it never
+    /// resumes. A denied tool fires neither hook; the next turn's UserPromptSubmit ends that stop.
     ///
     /// Without native status it reports the resume in full: the signed root `working` record,
     /// `working` and `item.completed`. While Claude reports its own status
-    /// (which owns the badge), it tells only event routes the agent resumed.
+    /// (which owns the badge), it tells only event routes the agent resumed. It resolves its
+    /// target like the Notification hook, and clears notifications even without a surface.
     func runClaudePostToolUse(_ ctx: AgentHookContext) {
+        let client = ctx.client
         let session = ctx.parsed.sessionId.flatMap { ctx.store.lookup(sessionId: $0) }
-        guard let workspaceId = [session?.workspaceId, ctx.workspaceArg].compactMap({ $0 }).first(where: isUUID),
-              let surfaceId = [session?.surfaceId, ctx.surfaceArg].compactMap({ $0 }).first(where: isUUID) else { return }
+        guard let workspaceId = try? resolvePreferredWorkspaceIdForClaudeHook(
+            preferred: session?.workspaceId, fallback: ctx.workspaceArg, client: client
+        ) else { return }
+        defer { _ = try? client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": workspaceId]) }
+        guard let surfaceId = try? resolvePreferredSurfaceIdForClaudeHook(
+            preferred: session?.surfaceId, fallback: ctx.surfaceArg, workspaceId: workspaceId, client: client
+        ) else { return }
         if claudeReportsOwnStatus {
             reportRouteOnlyWorking(
                 client: ctx.client, provider: "claude-code", workspaceId: workspaceId, surfaceId: surfaceId,
@@ -87,7 +94,6 @@ extension ProgramaCLI {
                 surfaceId: surfaceId, state: .working, sessionId: ctx.parsed.sessionId, pid: session?.pid
             )
         }
-        _ = try? ctx.client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": workspaceId])
     }
 
     /// A `working` report with `route_only`: it moves what event routes see of the agent, never
