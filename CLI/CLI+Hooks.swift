@@ -909,6 +909,7 @@ extension ProgramaCLI {
     }
 
     private func runClaudeSubagentStop(_ ctx: AgentHookContext) {
+        forgetClaudeSubagentPermissionRequest(rawInput: ctx.rawInput)
         let client = ctx.client
         let mappedSession = ctx.parsed.sessionId.flatMap { ctx.store.lookup(sessionId: $0) }
         guard let externalAgentId = firstString(in: ctx.parsed.object ?? [:], keys: ["agent_id"]),

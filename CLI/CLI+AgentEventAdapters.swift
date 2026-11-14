@@ -309,6 +309,16 @@ extension ProgramaCLI {
         }
     }
 
+    /// Claude Code's SubagentStop: the helper ended, so a request it raised, say for a tool the
+    /// user denied, is no longer up. It only drops that record; the next finished tool decides
+    /// whether the stop ends. Without an `agent_id` it drops nothing.
+    func forgetClaudeSubagentPermissionRequest(rawInput: String) {
+        guard let request = ClaudePermissionRequest(rawInput: rawInput), request.owner != "main",
+              case .trusted(let directory) = ClaudePermissionRequest.openDirectory(create: false) else { return }
+        defer { close(directory) }
+        unlinkat(directory, request.fileName, 0)
+    }
+
     /// The prompt, the turn or the session ended, so none of this session's requests is still
     /// up. Only the reporting session's records go: a nested `claude -p` in the same terminal
     /// must not drop its parent's.

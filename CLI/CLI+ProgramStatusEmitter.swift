@@ -170,7 +170,9 @@ extension ProgramaCLI {
         case "subagent-start" where command == "claude-hook":
             emitClaudeSubagentStatus(parseClaudeHookInput(rawInput: readAgentHookStdin()), scope: scope, state: "working")
         case "subagent-stop" where command == "claude-hook":
-            emitClaudeSubagentStatus(parseClaudeHookInput(rawInput: readAgentHookStdin()), scope: scope, state: "done")
+            let rawInput = readAgentHookStdin()
+            forgetClaudeSubagentPermissionRequest(rawInput: rawInput)
+            emitClaudeSubagentStatus(parseClaudeHookInput(rawInput: rawInput), scope: scope, state: "done")
         case "pre-tool-use" where command == "claude-hook":
             // Nothing: PreToolUse is async and can land after its own tool's prompt, so neither
             // the root record nor a helper's child record goes back to working here.
