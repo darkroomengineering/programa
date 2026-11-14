@@ -1165,11 +1165,13 @@ def main() -> int:
     check(len(helper_children) == 1 and b"state=working" in helper_children[0],
           f"a helper's post-tool-use wrote no working child record: {helper_post_written!r}")
 
-    # A finished tool resumes only the stop it answers. The PermissionRequest hook records which
-    # agent asked for which tool and input; a PostToolUse from another agent, or for another tool
-    # call, sends nothing while that request is open, so a parallel helper's finished Read cannot
-    # flip a showing dialog back to Working or clear its notification. With no recorded request a
-    # finished tool still resumes.
+    # A finished tool ends a stop for input only once no agent still waits on a permission request.
+    # The PermissionRequest hook records each agent's open request, and that agent's next finished
+    # tool resolves it, even when another hook's `updatedInput` or an edit in the dialog changed the
+    # tool's input. While another agent's request is open a finished tool sends nothing, so a
+    # parallel helper's finished Read cannot flip a showing dialog back to Working or clear its
+    # notification. With no recorded request a finished tool resumes. A nested session's Stop or
+    # SessionEnd drops only its own requests, online and with programa unreachable.
     resume_methods_set = {"surface.report_agent_state", "agent.event", "notification.clear"}
     with tempfile.TemporaryDirectory(prefix="pcli-", dir="/tmp") as directory:
         keyed_env = dict(hook_env, PROGRAMA_CLAUDE_HOOK_STATE_PATH=str(Path(directory) / "sessions.json"),
@@ -1207,10 +1209,8 @@ def main() -> int:
                        keyed_hook("post-tool-use", tool_call(DESCENDANT_AGENT_ID, "a", tool_use_id="toolu_other")))
             check_held("the main agent's post-tool-use during a helper's request",
                        keyed_hook("post-tool-use", tool_call(None, "a", tool_use_id="toolu_main")))
-            check_held("the same helper's post-tool-use for other input",
-                       keyed_hook("post-tool-use", tool_call(HELPER_AGENT_ID, "b", tool_use_id="toolu_b")))
-            check_resumed("the requesting helper's post-tool-use",
-                          keyed_hook("post-tool-use", tool_call(HELPER_AGENT_ID, "a", tool_use_id="toolu_a")))
+            check_resumed("the requesting helper's post-tool-use with changed input",
+                          keyed_hook("post-tool-use", tool_call(HELPER_AGENT_ID, "b", tool_use_id="toolu_b")))
             check_resumed("a post-tool-use after the request was answered",
                           keyed_hook("post-tool-use", tool_call(DESCENDANT_AGENT_ID, "a", tool_use_id="toolu_next")))
 
@@ -1230,6 +1230,38 @@ def main() -> int:
             keyed_hook("prompt-submit", {})
             check_resumed("a post-tool-use after the next prompt",
                           keyed_hook("post-tool-use", tool_call(DESCENDANT_AGENT_ID, "x", tool_use_id="toolu_after")))
+
+            keyed_hook("permission-request", tool_call(HELPER_AGENT_ID, "first"))
+            keyed_hook("permission-request", tool_call(DESCENDANT_AGENT_ID, "second"))
+            check_held("the second helper's post-tool-use while the first helper's request is open",
+                       keyed_hook("post-tool-use", tool_call(DESCENDANT_AGENT_ID, "second", tool_use_id="toolu_2nd")))
+            check_resumed("the first helper's post-tool-use once no request is left",
+                          keyed_hook("post-tool-use", tool_call(HELPER_AGENT_ID, "first", tool_use_id="toolu_1st")))
+
+            keyed_hook("permission-request", tool_call(HELPER_AGENT_ID, "parent"))
+            keyed_hook("stop", {"session_id": "nested-session"})
+            keyed_hook("session-end", {"session_id": "nested-session"})
+            check_held("a post-tool-use after a nested session ended",
+                       keyed_hook("post-tool-use", tool_call(None, "x", tool_use_id="toolu_nested")))
+            keyed_hook("stop", {})
+            check_resumed("a post-tool-use after the parent session's stop",
+                          keyed_hook("post-tool-use", tool_call(None, "x", tool_use_id="toolu_parent")))
+
+            dead_socket = os.path.join(directory, "missing.sock")
+
+            def dead_hook(event: str, payload: dict[str, Any]) -> None:
+                ran = run_cli(dead_socket, ["claude-hook", event], env_overrides=dict(keyed_env, TMUX="1"),
+                              input_text=json.dumps({"session_id": "keyed-session", **payload}))
+                check(ran.returncode == 0 and ran.stdout.strip() == "OK",
+                      f"claude-hook {event} on a dead socket failed: {merged_output(ran)!r}")
+
+            dead_hook("permission-request", tool_call(HELPER_AGENT_ID, "offline"))
+            dead_hook("stop", {"session_id": "nested-session"})
+            check_held("a post-tool-use after a nested session's offline stop",
+                       keyed_hook("post-tool-use", tool_call(None, "x", tool_use_id="toolu_offline_nested")))
+            dead_hook("stop", {})
+            check_resumed("a post-tool-use after the parent session's offline stop",
+                          keyed_hook("post-tool-use", tool_call(None, "x", tool_use_id="toolu_offline_parent")))
 
     if failures:
         print(f"FAIL: {len(failures)} CLI registry behavior assertion(s) failed")
