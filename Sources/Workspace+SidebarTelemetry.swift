@@ -295,6 +295,11 @@ extension Workspace {
     /// It goes only to the surface's person-input gate, which refuses socket writes while a
     /// permission or sign-in prompt shows (TerminalSurface+DraftGate.swift). Any `blocked` report
     /// arms that gate; an unsigned program report never closes it (`notePromptGate`).
+    ///
+    /// `endsStop: false` marks a report that cannot prove a prompt was answered (Claude Code's
+    /// async PreToolUse hook, `resumed: false` on the wire): while the badge or the route view is
+    /// `blocked` it changes nothing, not the badge, the route view, the prompt gate or the
+    /// liveness clock.
     func updatePanelAgentState(
         panelId: UUID,
         state: AgentActivityState,
@@ -305,8 +310,10 @@ extension Workspace {
         programState: ProgramStatusState? = nil,
         promptKind: ProgramStatusKind? = nil,
         programVerified: Bool = false,
+        endsStop: Bool = true,
         at now: Date = Date()
     ) {
+        if !endsStop, panelAgentStopped(panelId) { return }
         let current = panelAgentPresence[panelId]
 
         // Before the precedence guards: which tier owns the badge says nothing about which
@@ -413,6 +420,12 @@ extension Workspace {
             "panel=\(panelId.uuidString.prefix(5)) state=\(state.rawValue) source=\(source.rawValue)"
         )
 #endif
+    }
+
+    /// Whether the panel's agent is stopped for input, on the badge or in the route view.
+    func panelAgentStopped(_ panelId: UUID) -> Bool {
+        let presence = panelAgentPresence[panelId]
+        return presence?.state == .blocked || presence?.route?.state == .blocked
     }
 
     /// Clears a surface's agent presence. A `.program` clear removes only program-owned presence;

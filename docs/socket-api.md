@@ -1239,6 +1239,11 @@ never `agent_state`, the badge, helpers or ports, and it leaves a blocked route 
 `resumed: true` says the sender knows the prompt was answered. Claude Code's PostToolUse hook sends
 both while Claude reports its own status (`docs/program-status.md`, Authority).
 
+On a plain (not `route_only`) `working` report, `resumed: false` says the sender cannot know the
+prompt was answered: while the surface's `agent_state` or its routes' view is `blocked`, the report
+changes nothing. Otherwise it applies like any `working`. Claude Code's async PreToolUse hook sends
+it. A report that omits `resumed` ends a stop as any `working` does.
+
 ## `agent.needs_input` (docs/plans/agent-state-unification.md)
 
 Atomically reports a surface as blocked on user input and posts the matching notification, in one

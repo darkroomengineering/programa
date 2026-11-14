@@ -779,20 +779,10 @@ extension ProgramaCLI {
         let client = ctx.client
         let mappedSession = ctx.parsed.sessionId.flatMap { ctx.store.lookup(sessionId: $0) }
 
-        // Deliberately best-effort, for the same reason as the surfaceId resolution
-        // further down. A throw here would abort the hook before any of the three
-        // independent clears below, while Claude Code continued with a stale red
-        // "blocked" badge that nothing would clear.
-        //
-        // Nothing recovers from that. There is no TTL or watchdog on agent state, and
-        // AgentScreenDetectionEngine deliberately refuses to touch a surface a hook has
-        // claimed (its `hooksOwned` guard), so the terminal can be visibly running a
-        // command while the sidebar still reads "Claude needs your permission" until the
-        // session ends.
-        //
-        // Falling back to the identifiers the Notification hook recorded is the whole
-        // point: those are the exact workspace and surface it marked blocked, so they
-        // are the right things to clear even when a live re-resolution is unavailable.
+        // Deliberately best-effort, like the surfaceId resolution further down: a throw here
+        // would abort the hook before its report and status update below. Falling back to the
+        // identifiers the Notification hook recorded keeps them aimed at the workspace and
+        // surface it marked, even when a live re-resolution is unavailable.
         let resolvedWorkspaceId = (try? resolvePreferredWorkspaceIdForClaudeHook(
             preferred: mappedSession?.workspaceId,
             fallback: ctx.workspaceArg,
@@ -801,7 +791,7 @@ extension ProgramaCLI {
             ?? nonEmptyClaudeHookIdentifier(mappedSession?.workspaceId).flatMap { isUUID($0) ? $0 : nil }
             ?? nonEmptyClaudeHookIdentifier(ctx.workspaceArg).flatMap { isUUID($0) ? $0 : nil }
 
-        // Only when there is genuinely no workspace to name is there nothing to clear.
+        // Only when there is genuinely no workspace to name is there nothing to report.
         guard let workspaceId = resolvedWorkspaceId else { return }
         let claudePid = mappedSession?.pid
 
@@ -830,10 +820,8 @@ extension ProgramaCLI {
         }
         clearPendingQuestion(ctx, mappedSession)
 
-        // Best-effort, not `try`: a throw would abort the hook before the three clears
-        // below and leave the blocked badge lit while Claude runs. Only reportAgentState
-        // needs a surface; the notification and status clears are workspace-scoped and
-        // must still run.
+        // Best-effort, not `try`: only the report needs a surface; the status update below is
+        // workspace-scoped and must still run.
         let surfaceId = try? resolvePreferredSurfaceIdForClaudeHook(
             preferred: mappedSession?.surfaceId,
             fallback: ctx.surfaceArg,
@@ -841,13 +829,12 @@ extension ProgramaCLI {
             client: client
         )
 
-        // Clear the badge first, unless Claude reports its own state: this hook is async, and a
+        // This hook is async and can land after its own tool's permission prompt, so it never
+        // ends a stop (runClaudePostToolUse does). Silent while Claude reports its own state: a
         // late "working" would override Claude's idle after an Esc (claudeReportsOwnStatus).
         if let surfaceId, !claudeReportsOwnStatus {
-            reportAgentStateAndEvent(client: client, provider: "claude-code", eventType: "item.started", workspaceId: workspaceId, surfaceId: surfaceId, state: .working, sessionId: ctx.parsed.sessionId, pid: claudePid)
+            reportClaudePreToolUseWorking(client: client, workspaceId: workspaceId, surfaceId: surfaceId, sessionId: ctx.parsed.sessionId, pid: claudePid)
         }
-
-        _ = try? client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": workspaceId])
 
         // The sidebar badge (SidebarAgentIndicator) carries "Working" on its own; the
         // metadata-row status entry is opt-in verbose detail only, and only when there's

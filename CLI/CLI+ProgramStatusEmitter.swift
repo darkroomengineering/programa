@@ -169,8 +169,10 @@ extension ProgramaCLI {
         case "subagent-stop" where command == "claude-hook":
             emitClaudeSubagentStatus(parseClaudeHookInput(rawInput: readAgentHookStdin()), scope: scope, state: "done")
         case "pre-tool-use" where command == "claude-hook":
-            emitProgramStatus(state: "working", app: app)
+            // No root `working`: PreToolUse is async and never ends a stop; PostToolUse does.
             emitClaudeSubagentStatus(parseClaudeHookInput(rawInput: readAgentHookStdin()), scope: scope, state: "working")
+        case "post-tool-use" where command == "claude-hook":
+            emitProgramStatus(state: "working", app: app)
         case "prompt-submit", "pre-tool-use":
             emitProgramStatus(state: "working", app: app)
         case "stop":

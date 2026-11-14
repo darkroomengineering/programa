@@ -51,7 +51,7 @@ extension ProgramaCLI {
         transcriptPath: String? = nil
     ) {
         switch eventType {
-        case "turn.started", "item.started": emitProgramStatus(state: "working", app: provider)
+        case "turn.started", "item.started", "item.completed": emitProgramStatus(state: "working", app: provider)
         case "turn.completed": emitProgramStatus(state: "done", app: provider)
         default: break
         }
@@ -62,20 +62,32 @@ extension ProgramaCLI {
         )
     }
 
-    /// Claude Code's PostToolUse: the tool ran, so any permission prompt before it was answered.
-    /// While Claude reports its own status (which owns the badge, and keeps PreToolUse silent), it
-    /// tells event routes the agent resumed. It must be a synchronous hook: Claude waits for it
-    /// before the next tool, so its report lands before that tool's permission prompt can, which
-    /// is what lets it end a stop for input. PreToolUse is async and could land after it.
+    /// Claude Code's PostToolUse, and PostToolUseFailure for a tool that failed: the tool ran, so
+    /// any permission prompt before it was answered. It is the one hook that ends a stop for input
+    /// in both modes. It must be synchronous: Claude waits for it before the next tool, so its
+    /// report lands before that tool's permission prompt can. PreToolUse is async and could land
+    /// after it, so it never resumes. A denied tool fires neither hook; the next turn's
+    /// UserPromptSubmit ends that stop.
+    ///
+    /// Without native status it reports the resume in full: the signed root `working` record,
+    /// `working` and `item.completed`. While Claude reports its own status
+    /// (which owns the badge), it tells only event routes the agent resumed.
     func runClaudePostToolUse(_ ctx: AgentHookContext) {
-        guard claudeReportsOwnStatus else { return }
         let session = ctx.parsed.sessionId.flatMap { ctx.store.lookup(sessionId: $0) }
         guard let workspaceId = [session?.workspaceId, ctx.workspaceArg].compactMap({ $0 }).first(where: isUUID),
               let surfaceId = [session?.surfaceId, ctx.surfaceArg].compactMap({ $0 }).first(where: isUUID) else { return }
-        reportRouteOnlyWorking(
-            client: ctx.client, provider: "claude-code", workspaceId: workspaceId, surfaceId: surfaceId,
-            sessionId: ctx.parsed.sessionId, pid: session?.pid, resumed: true
-        )
+        if claudeReportsOwnStatus {
+            reportRouteOnlyWorking(
+                client: ctx.client, provider: "claude-code", workspaceId: workspaceId, surfaceId: surfaceId,
+                sessionId: ctx.parsed.sessionId, pid: session?.pid, resumed: true
+            )
+        } else {
+            reportAgentStateAndEvent(
+                client: ctx.client, provider: "claude-code", eventType: "item.completed", workspaceId: workspaceId,
+                surfaceId: surfaceId, state: .working, sessionId: ctx.parsed.sessionId, pid: session?.pid
+            )
+        }
+        _ = try? ctx.client.sendV2(method: V2MethodNames.notificationClear, params: ["workspace_id": workspaceId])
     }
 
     /// A `working` report with `route_only`: it moves what event routes see of the agent, never
@@ -90,14 +102,42 @@ extension ProgramaCLI {
         pid: Int? = nil,
         resumed: Bool = false
     ) {
+        var flags: [String: Any] = ["route_only": true]
+        if resumed { flags["resumed"] = true }
+        reportWorking(
+            client: client, provider: provider, workspaceId: workspaceId, surfaceId: surfaceId,
+            sessionId: sessionId, pid: pid, flags: flags
+        )
+    }
+
+    /// Claude Code's PreToolUse without native status: a `working` report with `resumed: false`.
+    /// It keeps the liveness clock moving where the hooks own the badge (tmux, agent teams) but
+    /// never ends a stop for input: the hook is async and can land after its own tool's prompt.
+    func reportClaudePreToolUseWorking(
+        client: SocketClient, workspaceId: String, surfaceId: String, sessionId: String?, pid: Int?
+    ) {
+        reportWorking(
+            client: client, provider: "claude-code", workspaceId: workspaceId, surfaceId: surfaceId,
+            sessionId: sessionId, pid: pid, flags: ["resumed": false]
+        )
+    }
+
+    private func reportWorking(
+        client: SocketClient,
+        provider: String,
+        workspaceId: String,
+        surfaceId: String,
+        sessionId: String?,
+        pid: Int?,
+        flags: [String: Any]
+    ) {
         var params: [String: Any] = [
             "workspace_id": workspaceId,
             "surface_id": surfaceId,
             "state": CLIAgentActivityState.working.rawValue,
             "provider": provider,
-            "route_only": true,
         ]
-        if resumed { params["resumed"] = true }
+        params.merge(flags) { _, flag in flag }
         if let sessionId, !sessionId.isEmpty { params["session_id"] = sessionId }
         if let pid { params["pid"] = pid }
         _ = try? client.sendV2(method: V2MethodNames.surfaceReportAgentState, params: params)

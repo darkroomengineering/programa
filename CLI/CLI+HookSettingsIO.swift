@@ -72,6 +72,7 @@ extension ProgramaCLI {
         let event: String
         let timeout: Int
         let isAsync: Bool
+        var matcher = ""
     }
 
     /// The lifecycle events the runtime wrapper's HOOKS_JSON injects
@@ -83,8 +84,10 @@ extension ProgramaCLI {
         ClaudeHookEventSpec(name: "Notification", event: "notification", timeout: 10, isAsync: false),
         ClaudeHookEventSpec(name: "UserPromptSubmit", event: "prompt-submit", timeout: 10, isAsync: false),
         ClaudeHookEventSpec(name: "PreToolUse", event: "pre-tool-use", timeout: 5, isAsync: true),
-        // Synchronous on purpose: see `runClaudePostToolUse`.
+        // Synchronous on purpose: PostToolUse is the one hook that ends a stop for input, and a
+        // failed tool fires PostToolUseFailure instead. See `runClaudePostToolUse`.
         ClaudeHookEventSpec(name: "PostToolUse", event: "post-tool-use", timeout: 5, isAsync: false),
+        ClaudeHookEventSpec(name: "PostToolUseFailure", event: "post-tool-use", timeout: 5, isAsync: false, matcher: "*"),
         ClaudeHookEventSpec(name: "SubagentStart", event: "subagent-start", timeout: 5, isAsync: false),
         ClaudeHookEventSpec(name: "SubagentStop", event: "subagent-stop", timeout: 5, isAsync: false)
     ]
@@ -103,7 +106,7 @@ extension ProgramaCLI {
                 hookEntry["async"] = true
             }
             hooks[spec.name] = [[
-                "matcher": "",
+                "matcher": spec.matcher,
                 "hooks": [hookEntry]
             ] as [String: Any]]
         }
