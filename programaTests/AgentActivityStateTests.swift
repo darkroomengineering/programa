@@ -1110,6 +1110,50 @@ final class AgentActivityStateTests: XCTestCase {
         XCTAssertTrue(f.workspace.canAutoSubmitToAgent(panelId: f.panelId))
     }
 
+    /// INC-1125: a printed `idle` under a permission prompt moves the badge but must not release
+    /// an idle wait, or an orchestrator sends its next prompt into the dialog. The person's
+    /// answer (Esc here) releases it; it releases nothing else.
+    func testAnIdleWaitHoldsWhileAPromptShowsUntilThePersonAnswers() throws {
+        let original = AppDelegate.shared
+        let app = AppDelegate()
+        AppDelegate.shared = app
+        defer { AppDelegate.shared = original }
+        let f = try promptGateFixture()
+        app.tabManager = f.manager
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 500, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+        app.registerMainWindow(window, windowId: UUID(), tabManager: f.manager, sidebarState: SidebarState(), sidebarSelectionState: SidebarSelectionState())
+        defer { withExtendedLifetime(window) {} }
+
+        let key = AgentSessionKey(provider: "claude-code", sessionId: "session-1", pid: nil)
+        f.workspace.updatePanelAgentState(panelId: f.panelId, state: .working, source: .hooks, sessionKey: key)
+        f.workspace.updatePanelAgentState(
+            panelId: f.panelId, state: .blocked, source: .hooks, sessionKey: key, promptKind: .permission
+        )
+        XCTAssertEqual(f.hold, .permission)
+
+        var idleFired: [AgentActivityState?] = []
+        let idleToken = AgentStateWaitRegistry.shared.addWaiter(surfaceId: f.panelId, condition: .idle) { state, _ in
+            idleFired.append(state)
+        }
+        defer { AgentStateWaitRegistry.shared.removeWaiter(surfaceId: f.panelId, token: idleToken) }
+
+        f.drain([try osc(.idle, "app=forged")])
+        XCTAssertEqual(f.workspace.panelAgentStates[f.panelId], .idle, "the unsigned idle still drives the badge")
+        XCTAssertEqual(f.hold, .permission, "an unsigned idle closed the permission prompt")
+        XCTAssertTrue(idleFired.isEmpty, "a printed idle released an idle wait while the permission prompt shows")
+
+        var anyChangeFired = false
+        let anyChangeToken = AgentStateWaitRegistry.shared.addWaiter(surfaceId: f.panelId, condition: .anyChange) { _, _ in
+            anyChangeFired = true
+        }
+        defer { AgentStateWaitRegistry.shared.removeWaiter(surfaceId: f.panelId, token: anyChangeToken) }
+
+        f.panel.surface.noteDraftEvent(.dismissed)
+        XCTAssertNil(f.hold)
+        XCTAssertEqual(idleFired, [.idle], "the person's answer must release the held idle wait")
+        XCTAssertFalse(anyChangeFired, "answering the prompt changed no agent state")
+    }
+
     /// INC-1147: printed bytes that drop the program's record (a reset, an unsigned clear, a prompt
     /// mark the shell did not report) leave what the hooks said; the badge falls back to it.
     func testPrintedClearsKeepTheHooksView() throws {
