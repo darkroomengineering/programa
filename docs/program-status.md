@@ -131,21 +131,25 @@ badge. So on a Claude Code terminal:
   `working` (`surface.report_agent_state` with `route_only` and `resumed`), so routes see the agent
   resume while the badge stays Claude's. Without native status it sends the signed root `working`
   record, `working` and `item.completed`. A subagent's child record goes back to `working` here too.
-- The resume is keyed to the tool call that raised the permission request. Claude's
-  PermissionRequest hook records the session, the agent (a subagent's id, or the main agent), the
-  tool and a digest of its input for the terminal. While that record exists, only a PostToolUse
-  with the same session, agent, tool and input ends the stop and clears its notification; any
-  other finished tool, such as one a parallel helper ran while the prompt was up, sends nothing.
-  For AskUserQuestion only the tool is compared, since the finished call may report the user's
-  answers in its input. The UserPromptSubmit, Stop and SessionEnd hooks drop the record. Two
-  limits remain: with no recorded request (a Claude Code older than 2.1.32, or a persistent hook
-  install without the PermissionRequest hook) any finished tool still ends the stop, and two
-  identical calls (same agent, tool and input) cannot be told apart.
+- The resume waits until no agent in the terminal has a permission request open. Claude's
+  PermissionRequest hook records one pending request per agent (a subagent's id, or the main
+  agent) and session. One agent runs its tools one at a time, so the next tool that agent finishes
+  means its request was answered: the tool ran, or the user denied it and the agent moved on. That
+  PostToolUse drops the agent's own request, even when another hook's `updatedInput` or an edit in
+  the dialog changed the tool's input. It ends the stop and clears its notification only if no
+  other agent's request is left; otherwise it sends nothing, so a tool a parallel helper finishes
+  while another agent's prompt is up changes nothing. The UserPromptSubmit, Stop and SessionEnd
+  hooks drop the requests of their own session only, so a nested `claude -p` in the same terminal
+  leaves its parent's alone. With no recorded request (a Claude Code older than 2.1.32, or a
+  persistent hook install without the PermissionRequest hook) any finished tool ends the stop.
+  The requests live in a per-terminal directory under `TMPDIR`; if that directory is not a real
+  directory owned by the user with no group or other access, finished tools never end the stop.
 - The async PreToolUse hook can land after its own tool's prompt went up, so it never ends a stop.
   While Claude reports its own status it reports nothing. Without it, it sends one `working` with
   `resumed: false`, which keeps the liveness clock moving but changes nothing while the routes'
   view, or a badge no program owns, is `blocked`. A denied tool fires no hook at all, so after a
-  denial the stop lasts until the next prompt's UserPromptSubmit hook or the turn's Stop hook.
+  denial the stop lasts until that agent finishes another tool while no other request is open, the
+  next prompt's UserPromptSubmit hook, or the turn's Stop hook.
 - Only a report that claims the prompt was answered ends a stop for input in the routes' view: a
   hooks report, a signed program report, or a route-only report marked `resumed`. A route-only
   report without it never moves a blocked view, and neither does a `working` with `resumed: false`.
@@ -194,7 +198,8 @@ flowchart TD
 The Claude Code, Codex and OpenCode hooks write signed OSC 7501 to the terminal as well as reporting to
 the socket, so the report also reaches a terminal where the socket is out of reach, such as an SSH
 session. The Claude Code hooks also report each subagent as the child record
-`agents/<helper id>`: `working` from SubagentStart and each tool call that finishes, `blocked` when it
+`agents/<helper id>`: `working` from SubagentStart and each tool call that finishes while no other agent's permission
+request is open, `blocked` when it
 asks for permission or input, and `done` with the first line of its report. Its `title` is the task
 description Claude gave it, or its agent type. They emit only when `PROGRAMA_SURFACE_ID` is set, and they skip emission inside tmux
 (`TMUX` is set), where the sequence would need passthrough and can reach the wrong pane.
