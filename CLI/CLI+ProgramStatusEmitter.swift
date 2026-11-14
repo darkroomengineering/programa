@@ -164,7 +164,7 @@ extension ProgramaCLI {
         let subcommand = ["active": "session-start", "idle": "stop", "notify": "notification"][raw] ?? raw
         let scope = ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"]
         if command == "claude-hook", ["prompt-submit", "stop", "session-end"].contains(subcommand) {
-            forgetClaudePermissionRequest()
+            forgetClaudePermissionRequests(rawInput: readAgentHookStdin())
         }
         switch subcommand {
         case "subagent-start" where command == "claude-hook":

@@ -542,7 +542,7 @@ extension ProgramaCLI {
             rawInput: rawInput
         )
         if hook.provider == "claude-code", ["prompt-submit", "stop", "session-end"].contains(subcommand) {
-            forgetClaudePermissionRequest()
+            forgetClaudePermissionRequests(rawInput: rawInput)
         }
 
         do {
