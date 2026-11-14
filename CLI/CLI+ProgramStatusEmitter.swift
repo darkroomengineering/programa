@@ -163,16 +163,25 @@ extension ProgramaCLI {
         let raw = commandArgs.first?.lowercased() ?? ""
         let subcommand = ["active": "session-start", "idle": "stop", "notify": "notification"][raw] ?? raw
         let scope = ProcessInfo.processInfo.environment["PROGRAMA_WORKSPACE_ID"]
+        if command == "claude-hook", ["prompt-submit", "stop", "session-end"].contains(subcommand) {
+            forgetClaudePermissionRequest()
+        }
         switch subcommand {
         case "subagent-start" where command == "claude-hook":
             emitClaudeSubagentStatus(parseClaudeHookInput(rawInput: readAgentHookStdin()), scope: scope, state: "working")
         case "subagent-stop" where command == "claude-hook":
             emitClaudeSubagentStatus(parseClaudeHookInput(rawInput: readAgentHookStdin()), scope: scope, state: "done")
         case "pre-tool-use" where command == "claude-hook":
-            // No root `working`: PreToolUse is async and never ends a stop; PostToolUse does.
-            emitClaudeSubagentStatus(parseClaudeHookInput(rawInput: readAgentHookStdin()), scope: scope, state: "working")
+            // Nothing: PreToolUse is async and can land after its own tool's prompt, so neither
+            // the root record nor a helper's child record goes back to working here.
+            break
         case "post-tool-use" where command == "claude-hook":
+            let rawInput = readAgentHookStdin()
+            guard claudeToolEndsStop(rawInput: rawInput) else { break }
+            emitClaudeSubagentStatus(parseClaudeHookInput(rawInput: rawInput), scope: scope, state: "working")
             emitProgramStatus(state: "working", app: app)
+        case "permission-request" where command == "claude-hook":
+            recordClaudePermissionRequest(rawInput: readAgentHookStdin())
         case "prompt-submit", "pre-tool-use":
             emitProgramStatus(state: "working", app: app)
         case "stop":

@@ -127,17 +127,25 @@ badge. So on a Claude Code terminal:
 - Claude's own unsigned status drives the badge, and its hooks drive routes.
 - The PostToolUse hook, and PostToolUseFailure for a tool that failed, is the one hook that ends a
   stop for input. It runs when a tool finishes, and it is synchronous, so its report lands before
-  the next tool's prompt can. It does not prove that the stopped tool's prompt was answered: any
-  tool that finishes in the session ends the stop, including one a parallel helper ran while the
-  prompt was still up. While Claude reports its own status it moves only the routes' view to
+  the next tool's prompt can. While Claude reports its own status it moves only the routes' view to
   `working` (`surface.report_agent_state` with `route_only` and `resumed`), so routes see the agent
   resume while the badge stays Claude's. Without native status it sends the signed root `working`
-  record, `working` and `item.completed`.
+  record, `working` and `item.completed`. A subagent's child record goes back to `working` here too.
+- The resume is keyed to the tool call that raised the permission request. Claude's
+  PermissionRequest hook records the session, the agent (a subagent's id, or the main agent), the
+  tool and a digest of its input for the terminal. While that record exists, only a PostToolUse
+  with the same session, agent, tool and input ends the stop and clears its notification; any
+  other finished tool, such as one a parallel helper ran while the prompt was up, sends nothing.
+  For AskUserQuestion only the tool is compared, since the finished call may report the user's
+  answers in its input. The UserPromptSubmit, Stop and SessionEnd hooks drop the record. Two
+  limits remain: with no recorded request (a Claude Code older than 2.1.32, or a persistent hook
+  install without the PermissionRequest hook) any finished tool still ends the stop, and two
+  identical calls (same agent, tool and input) cannot be told apart.
 - The async PreToolUse hook can land after its own tool's prompt went up, so it never ends a stop.
   While Claude reports its own status it reports nothing. Without it, it sends one `working` with
   `resumed: false`, which keeps the liveness clock moving but changes nothing while the routes'
   view, or a badge no program owns, is `blocked`. A denied tool fires no hook at all, so after a
-  denial the stop lasts until the next PostToolUse or the next prompt's UserPromptSubmit hook.
+  denial the stop lasts until the next prompt's UserPromptSubmit hook or the turn's Stop hook.
 - Only a report that claims the prompt was answered ends a stop for input in the routes' view: a
   hooks report, a signed program report, or a route-only report marked `resumed`. A route-only
   report without it never moves a blocked view, and neither does a `working` with `resumed: false`.
@@ -186,7 +194,7 @@ flowchart TD
 The Claude Code, Codex and OpenCode hooks write signed OSC 7501 to the terminal as well as reporting to
 the socket, so the report also reaches a terminal where the socket is out of reach, such as an SSH
 session. The Claude Code hooks also report each subagent as the child record
-`agents/<helper id>`: `working` from SubagentStart and each of its tool calls, `blocked` when it
+`agents/<helper id>`: `working` from SubagentStart and each tool call that finishes, `blocked` when it
 asks for permission or input, and `done` with the first line of its report. Its `title` is the task
 description Claude gave it, or its agent type. They emit only when `PROGRAMA_SURFACE_ID` is set, and they skip emission inside tmux
 (`TMUX` is set), where the sequence would need passthrough and can reach the wrong pane.
