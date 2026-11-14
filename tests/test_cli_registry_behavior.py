@@ -1263,6 +1263,27 @@ def main() -> int:
             check_resumed("a post-tool-use after the parent session's offline stop",
                           keyed_hook("post-tool-use", tool_call(None, "x", tool_use_id="toolu_offline_parent")))
 
+            # A helper that ends, say after a denied tool, drops its own request at SubagentStop.
+            # SubagentStop never resumes itself; the next finished tool decides.
+            keyed_hook("permission-request", tool_call(HELPER_AGENT_ID, "denied"))
+            keyed_hook("permission-request", tool_call(DESCENDANT_AGENT_ID, "answered"))
+            check_held("the ended helper's subagent-stop",
+                       keyed_hook("subagent-stop", {"agent_id": HELPER_AGENT_ID, "agent_type": "Explore"}))
+            check_resumed("the other helper's post-tool-use after the first helper ended",
+                          keyed_hook("post-tool-use", tool_call(DESCENDANT_AGENT_ID, "answered", tool_use_id="toolu_end")))
+
+            keyed_hook("permission-request", tool_call(None, "main"))
+            keyed_hook("subagent-stop", {"agent_type": "Explore"})
+            check_held("a helper's post-tool-use after a subagent-stop without an agent id",
+                       keyed_hook("post-tool-use", tool_call(HELPER_AGENT_ID, "x", tool_use_id="toolu_noid")))
+            check_resumed("the main agent's post-tool-use after a subagent-stop without an agent id",
+                          keyed_hook("post-tool-use", tool_call(None, "main", tool_use_id="toolu_main_done")))
+
+            dead_hook("permission-request", tool_call(HELPER_AGENT_ID, "offline-denied"))
+            dead_hook("subagent-stop", {"agent_id": HELPER_AGENT_ID, "agent_type": "Explore"})
+            check_resumed("a post-tool-use after a helper's offline subagent-stop",
+                          keyed_hook("post-tool-use", tool_call(None, "x", tool_use_id="toolu_offline_end")))
+
     if failures:
         print(f"FAIL: {len(failures)} CLI registry behavior assertion(s) failed")
         for failure in failures:
