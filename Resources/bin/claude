@@ -212,8 +212,8 @@ fi
 #   latency, so it can land after its own tool's prompt)
 # - PostToolUse/PostToolUseFailure: the one resume, clearing "Needs input" after a prompt was
 #   answered (synchronous, so it lands before the next tool's prompt; see runClaudePostToolUse)
-# - PermissionRequest: records which agent's tool call a prompt waits on, so only that call's
-#   PostToolUse ends the stop (see claudeToolEndsStop)
+# - PermissionRequest: records which agent has a prompt open, so a finished tool ends the stop
+#   only once no agent's request is left (see claudeToolEndsStop)
 # - SubagentStart/SubagentStop: adds and finishes helpers in the sidebar helpers popover
 HOOKS_JSON='{"hooks":{"SessionStart":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook session-start","timeout":10}]}],"Stop":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook stop","timeout":10}]}],"SessionEnd":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook session-end","timeout":1}]}],"Notification":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook notification","timeout":10}]}],"UserPromptSubmit":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook prompt-submit","timeout":10}]}],"PreToolUse":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook pre-tool-use","timeout":5,"async":true}]}],"PostToolUse":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook post-tool-use","timeout":5}]}],"SubagentStart":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook subagent-start","timeout":5}]}],"SubagentStop":[{"matcher":"","hooks":[{"type":"command","command":"\"${PROGRAMA_CLAUDE_HOOK_PROGRAMA_BIN:-programa}\" claude-hook subagent-stop","timeout":5}]}]}}'
 

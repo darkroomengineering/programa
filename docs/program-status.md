@@ -138,9 +138,11 @@ badge. So on a Claude Code terminal:
   PostToolUse drops the agent's own request, even when another hook's `updatedInput` or an edit in
   the dialog changed the tool's input. It ends the stop and clears its notification only if no
   other agent's request is left; otherwise it sends nothing, so a tool a parallel helper finishes
-  while another agent's prompt is up changes nothing. The UserPromptSubmit, Stop and SessionEnd
-  hooks drop the requests of their own session only, so a nested `claude -p` in the same terminal
-  leaves its parent's alone. With no recorded request (a Claude Code older than 2.1.32, or a
+  while another agent's prompt is up changes nothing. A helper's SubagentStop drops that helper's
+  request too, such as one for a tool the user denied before it ended, but it never ends the stop
+  itself: the next finished tool does. The UserPromptSubmit, Stop and SessionEnd hooks drop the
+  requests of their own session only, so a nested `claude -p` in the same terminal leaves its
+  parent's alone. With no recorded request (a Claude Code older than 2.1.32, or a
   persistent hook install without the PermissionRequest hook) any finished tool ends the stop.
   The requests live in a per-terminal directory under `TMPDIR`; if that directory is not a real
   directory owned by the user with no group or other access, finished tools never end the stop.
