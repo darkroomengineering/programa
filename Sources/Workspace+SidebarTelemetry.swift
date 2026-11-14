@@ -295,6 +295,11 @@ extension Workspace {
     /// It goes only to the surface's person-input gate, which refuses socket writes while a
     /// permission or sign-in prompt shows (TerminalSurface+DraftGate.swift). Any `blocked` report
     /// arms that gate; an unsigned program report never closes it (`notePromptGate`).
+    ///
+    /// `endsStop: false` marks a report that cannot prove a prompt was answered (Claude Code's
+    /// async PreToolUse hook, `resumed: false` on the wire): while a trusted view is `blocked`
+    /// (`panelAgentStopped`) it keeps only the session bookkeeping and changes nothing else, not
+    /// the badge, the route view, the prompt gate or the liveness clock.
     func updatePanelAgentState(
         panelId: UUID,
         state: AgentActivityState,
@@ -305,6 +310,7 @@ extension Workspace {
         programState: ProgramStatusState? = nil,
         promptKind: ProgramStatusKind? = nil,
         programVerified: Bool = false,
+        endsStop: Bool = true,
         at now: Date = Date()
     ) {
         let current = panelAgentPresence[panelId]
@@ -325,6 +331,7 @@ extension Workspace {
                 LeftoverProcessReaper.shared.trackAgent(pid: pid)
             }
         }
+        if !endsStop, panelAgentStopped(panelId) { return }
 
         let movedRoute = Self.nextRoute(
             after: current?.route, state: state, source: source, sessionKey: sessionKey, programVerified: programVerified
@@ -413,6 +420,14 @@ extension Workspace {
             "panel=\(panelId.uuidString.prefix(5)) state=\(state.rawValue) source=\(source.rawValue)"
         )
 #endif
+    }
+
+    /// Whether a trusted view says the panel's agent is stopped for input: the route view, or a
+    /// badge no program owns. A program-owned `blocked` badge does not count: an unsigned one is
+    /// forgeable, and a signed one also shows in the route view.
+    func panelAgentStopped(_ panelId: UUID) -> Bool {
+        let presence = panelAgentPresence[panelId]
+        return presence?.route?.state == .blocked || (presence?.state == .blocked && presence?.source != .program)
     }
 
     /// Clears a surface's agent presence. A `.program` clear removes only program-owned presence;
@@ -590,16 +605,14 @@ extension Workspace {
     }
 
     /// Closes a showing prompt for `closer`: never for nil (printed bytes), for `.screen` only a
-    /// prompt screen detection alone reported, and only while no trusted view is `blocked`. A
-    /// program-owned `blocked` badge never holds it: an unsigned one is forgeable, and a signed
-    /// one also shows in the route view.
+    /// prompt screen detection alone reported, and only while no trusted view is `blocked`
+    /// (`panelAgentStopped`).
     private func closePromptGate(panelId: UUID, by closer: PromptReporter?) {
         let presence = panelAgentPresence[panelId]
         guard let closer,
               let surface = (panels[panelId] as? TerminalPanel)?.surface, let reporter = surface.promptReporter,
               closer == .agent || reporter == .screen,
-              presence?.route?.state != .blocked,
-              !(presence?.state == .blocked && presence?.source != .program) else { return }
+              !panelAgentStopped(panelId) else { return }
         surface.noteAgentPrompt(nil, isBlocked: false)
     }
 

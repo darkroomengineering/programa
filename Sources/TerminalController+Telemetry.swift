@@ -354,13 +354,23 @@ extension TerminalController {
             return .ok(reply)
         }
 
+        // A plain `working` with `resumed: false` cannot end a stop for input: Claude Code's async
+        // PreToolUse hook sends it, and it can land after its own tool's permission prompt went up.
+        // It applies normally while nothing is stopped. A report that omits `resumed` ends a stop.
+        let endsStop = state != .working || v2Bool(params, "resumed") != false
         v2ScheduleSurfaceTelemetryMutation(workspaceId: workspaceId, surfaceId: surfaceId) { [weak self] tabManager, tab, sid in
-            tabManager.updateSurfaceAgentState(tabId: workspaceId, surfaceId: sid, state: state, source: source, sessionKey: sessionKey)
-            _ = try? AgentSupervisionRegistry.shared.updateActiveSurface(
-                workspaceId: workspaceId,
-                surfaceId: sid,
-                state: AgentTaskState(state)
+            tabManager.updateSurfaceAgentState(
+                tabId: workspaceId, surfaceId: sid, state: state, source: source, sessionKey: sessionKey, endsStop: endsStop
             )
+            // A held report leaves the supervision record blocked too; the pid bookkeeping below
+            // still runs.
+            if endsStop || !tab.panelAgentStopped(sid) {
+                _ = try? AgentSupervisionRegistry.shared.updateActiveSurface(
+                    workspaceId: workspaceId,
+                    surfaceId: sid,
+                    state: AgentTaskState(state)
+                )
+            }
             if let reportedPid, let provider, let pidKey = Self.agentPIDKey(forProvider: provider) {
                 if tab.setSidebarAgentPID(key: pidKey, pid: reportedPid) {
                     self?.refreshTrackedAgentPorts(for: tab)

@@ -125,15 +125,22 @@ view as Programa reads it, even when an unsigned report later in the same burst 
 badge. So on a Claude Code terminal:
 
 - Claude's own unsigned status drives the badge, and its hooks drive routes.
-- While Claude reports its own status, its PostToolUse hook moves only the routes' view to
+- The PostToolUse hook, and PostToolUseFailure for a tool that failed, is the one hook that ends a
+  stop for input. It runs when a tool finishes, and it is synchronous, so its report lands before
+  the next tool's prompt can. It does not prove that the stopped tool's prompt was answered: any
+  tool that finishes in the session ends the stop, including one a parallel helper ran while the
+  prompt was still up. While Claude reports its own status it moves only the routes' view to
   `working` (`surface.report_agent_state` with `route_only` and `resumed`), so routes see the agent
-  resume after a permission prompt while the badge stays Claude's. PostToolUse runs only after the
-  tool did, so the prompt was answered, and it is a synchronous hook, so its report lands before the
-  next tool's prompt can. The async PreToolUse hook could land after that prompt, so it reports
-  nothing here.
-- Only a report that proves the prompt was answered ends a stop for input in the routes' view: a
+  resume while the badge stays Claude's. Without native status it sends the signed root `working`
+  record, `working` and `item.completed`.
+- The async PreToolUse hook can land after its own tool's prompt went up, so it never ends a stop.
+  While Claude reports its own status it reports nothing. Without it, it sends one `working` with
+  `resumed: false`, which keeps the liveness clock moving but changes nothing while the routes'
+  view, or a badge no program owns, is `blocked`. A denied tool fires no hook at all, so after a
+  denial the stop lasts until the next PostToolUse or the next prompt's UserPromptSubmit hook.
+- Only a report that claims the prompt was answered ends a stop for input in the routes' view: a
   hooks report, a signed program report, or a route-only report marked `resumed`. A route-only
-  report without it never moves a blocked view.
+  report without it never moves a blocked view, and neither does a `working` with `resumed: false`.
 - After Esc, Claude reports idle itself and fires no Stop hook: the badge leaves Working, but held
   route text waits for the next turn's Stop hook, or expires.
 - A hook clear (SessionEnd) ends the routes' view even while the badge stays with the program.

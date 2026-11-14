@@ -414,6 +414,28 @@ def _check_agent_exit_lifts_refusal(c: ProgramaClient, workspace_id: str, surfac
     _wait_for(lambda: tag in _screen_lines(c, surface_id), timeout_s=10.0)
 
 
+def _check_unproven_working_keeps_stop(c: ProgramaClient, workspace_id: str, surface_id: str) -> None:
+    """Claude Code's PreToolUse hook is async and can land after its own tool's permission prompt
+    went up (INC-1127). Its `working` carries `resumed: false`, which never ends a stop for input:
+    the pane stays blocked and writes stay refused. The same report without `resumed` (PostToolUse,
+    Codex, any other client) still ends it."""
+    _clear_agent(c, workspace_id, surface_id)
+    _reopen(c, workspace_id, surface_id)
+    _needs_input("permission")(workspace_id, surface_id)
+    _wait_agent_state(c, workspace_id, surface_id, "blocked")
+
+    report = {"workspace_id": workspace_id, "surface_id": surface_id, "state": "working", "provider": "claude-code"}
+    _expect_ok("surface.report_agent_state", {**report, "resumed": False})
+    # The refusal check runs on the main queue after the report applied, so it sees the report.
+    _expect_approval_refusal("surface.send_text", {"surface_id": surface_id, "text": f" held{STAMP}\n"}, surface_id)
+    state = _agent_state(c, workspace_id, surface_id)
+    _must(state == "blocked", f"a working report marked resumed false ended the stop: agent_state={state!r}")
+
+    _expect_ok("surface.report_agent_state", report)
+    _wait_agent_state(c, workspace_id, surface_id, "working")
+    _send_text_ok_and_visible(c, surface_id, f"RES{STAMP}")
+
+
 def main() -> int:
     for var in ("PROGRAMA_WORKSPACE_ID", "PROGRAMA_SURFACE_ID", "PROGRAMA_PANEL_ID", "PROGRAMA_TAB_ID"):
         os.environ.pop(var, None)
@@ -457,6 +479,10 @@ def main() -> int:
             # 5. The agent exiting at the prompt, as the shell reports it, lifts the refusal.
             _check_agent_exit_lifts_refusal(c, workspace_id, sid, work_dir)
             print("  PASS: the shell returning to its prompt lifts the refusal")
+
+            # 6. A `working` that cannot prove the prompt was answered keeps the stop (INC-1127).
+            _check_unproven_working_keeps_stop(c, workspace_id, sid)
+            print("  PASS: a working report marked resumed false keeps the refusal; without it the pane reopens")
     finally:
         if workspace_id:
             try:
