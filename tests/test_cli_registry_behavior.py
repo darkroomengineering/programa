@@ -1311,6 +1311,16 @@ def main() -> int:
             check(len(approval) == 1 and approval[0].get("kind") == "permission",
                   f"a permission_prompt after the question closed was not a permission: {approval!r}")
 
+            # A declined question fires no post-tool-use. Another tool's PermissionRequest, which
+            # runs before its Notification, still closes the question.
+            saved_hook("pre-tool-use", {"tool_name": "AskUserQuestion", "tool_input": {
+                "questions": [{"question": "Which two?", "options": [{"label": "B"}]}]}})
+            saved_hook("permission-request", {"tool_name": "Bash", "tool_input": {"command": "ls"}})
+            declined = needs_input(saved_hook("notification", {
+                "notification_type": "permission_prompt", "message": "Claude needs your permission to use Bash"}))
+            check(len(declined) == 1 and declined[0].get("kind") == "permission",
+                  f"a Bash approval after a declined question was not a permission: {declined!r}")
+
             saved_hook("stop", {})
             stale = needs_input(saved_hook("notification", {
                 "notification_type": "permission_prompt", "message": "Claude needs your attention"}))
