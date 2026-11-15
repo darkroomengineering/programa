@@ -1947,10 +1947,6 @@ class GhosttyApp {
 
     private func focusDirection(from direction: ghostty_action_goto_split_e) -> NavigationDirection? {
         switch direction {
-        // For previous/next, we use left/right as a reasonable default
-        // Bonsplit doesn't have cycle-based navigation
-        case GHOSTTY_GOTO_SPLIT_PREVIOUS: return .left
-        case GHOSTTY_GOTO_SPLIT_NEXT: return .right
         case GHOSTTY_GOTO_SPLIT_UP: return .up
         case GHOSTTY_GOTO_SPLIT_DOWN: return .down
         case GHOSTTY_GOTO_SPLIT_LEFT: return .left
@@ -2225,9 +2221,20 @@ class GhosttyApp {
             }
             return true
         case GHOSTTY_ACTION_GOTO_SPLIT:
+            let gotoDirection = action.action.goto_split
+            // Previous/next cycle through every pane in tree order, wrapping at the ends.
+            if gotoDirection == GHOSTTY_GOTO_SPLIT_PREVIOUS || gotoDirection == GHOSTTY_GOTO_SPLIT_NEXT {
+                guard let tabId = callbackTabId else { return false }
+                let forward = gotoDirection == GHOSTTY_GOTO_SPLIT_NEXT
+                return performOnMain {
+                    guard let app = AppDelegate.shared,
+                          let tabManager = app.tabManagerFor(tabId: tabId) ?? app.tabManager else { return false }
+                    return tabManager.cycleSplitFocus(tabId: tabId, forward: forward)
+                }
+            }
             guard let tabId = callbackTabId,
                   let surfaceId = callbackSurfaceId,
-                  let direction = focusDirection(from: action.action.goto_split) else {
+                  let direction = focusDirection(from: gotoDirection) else {
                 return false
             }
             return performOnMain {
