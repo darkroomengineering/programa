@@ -70,9 +70,10 @@ import Bonsplit
 /// so it can't reproduce cursor position, scroll region, alt-screen state,
 /// or styling exactly. To fix that without replaying a long arbitrary tail,
 /// each writer also captures a periodic screen "frame": a VT-formatted dump
-/// of the CURRENT SCREEN ONLY (`write_screen_file:copy,vt`'s `.screen`
-/// location in ghostty — the visible viewport, not the scrollback history;
-/// see `ghostty/src/Surface.zig` `writeScreenFile`), the same styled export
+/// of the whole screen, scrollback history included and untruncated
+/// (`write_screen_file:copy,vt` uses ghostty's `.screen` location, which
+/// starts at the oldest scrollback row; see `ghostty/src/Surface.zig`
+/// `writeScreenFile` and `ghostty/src/terminal/point.zig`), the same styled export
 /// already used at quit/autosave for scrollback snapshots
 /// (`TerminalController.readTerminalTextFromVTExportForSnapshot`).
 /// - Cadence: at most once every `SessionWALPolicy.frameCaptureInterval`
@@ -123,6 +124,14 @@ import Bonsplit
 /// `SessionPersistencePolicy` ANSI-safe truncation path as clean-quit
 /// scrollback, so this is purely an alternative source of the same kind of
 /// text, not a parallel restore path.
+///
+/// ## Restore seed
+/// Restore feeds that text to the new surface before its PTY tee registers,
+/// so the new session's own WAL never records it. `seedRestoredFrame` writes
+/// it as the new session's first frame (`walOffset: 0`) so the next restore
+/// still has it when the pane stays quiet or its tab is never shown. A seed
+/// is refused once the session has a frame or WAL bytes, and the first
+/// periodic frame replaces it.
 ///
 /// ## Cleanup
 /// - A finalized user close deletes its session directory. Shutdown and
@@ -511,7 +520,8 @@ struct SessionWALPaths {
     /// Stable inode used with `flock(2)` to serialize app/holder filesystem
     /// mutations across process boundaries.
     let lockURL: URL
-    /// Committed frame: a VT-formatted dump of the current screen, written
+    /// Committed frame: a VT-formatted dump of the screen and its scrollback
+    /// (or a restore seed, see `SessionWALCore.seedFrame`), written
     /// atomically via `frameNextURL` + fsync + `rename(2)`.
     let frameURL: URL
     /// Staging path for the next frame write, renamed over `frameURL` once
