@@ -542,8 +542,8 @@ extension Workspace {
                 localized: "session_recovery.freshShell.notice",
                 defaultValue: "A new shell was started because the previous process could not be reconnected."
             )
-            let preparedSeedText = (SessionFreshSpawnScrollbackSeed.preparedText(for: scrollbackText) ?? "")
-                + "\r\n" + recoveryNotice + "\r\n"
+            let preparedScrollback = SessionFreshSpawnScrollbackSeed.preparedText(for: scrollbackText)
+            let preparedSeedText = (preparedScrollback ?? "") + "\r\n" + recoveryNotice + "\r\n"
             // Fresh spawn only: a reattached pane (above) still has its agent running.
             let resumeInput = Self.autoResumeInput(
                 for: snapshot,
@@ -558,6 +558,11 @@ extension Workspace {
                 initialInput: resumeInput
             ) else {
                 return nil
+            }
+            // Seed what the terminal was fed, not the raw source: the next launch
+            // usually reattaches this shell and replays the frame unsanitized.
+            if preparedScrollback != nil {
+                SessionWALStore.shared.seedRestoredFrame(sessionId: terminalPanel.id.uuidString, text: preparedSeedText)
             }
             let fallbackScrollback = SessionPersistencePolicy.truncatedScrollback(scrollbackText)
             if let fallbackScrollback {
@@ -740,6 +745,9 @@ extension Workspace {
         ) else {
             dilog("escrow.reattach", "session=\(oldSessionId.prefix(8)) outcome=fallback reason=panel_creation_failed")
             return nil
+        }
+        if let scrollbackText {
+            SessionWALStore.shared.seedRestoredFrame(sessionId: terminalPanel.id.uuidString, text: scrollbackText)
         }
 
         // This old session's directory has now been given its one chance to
