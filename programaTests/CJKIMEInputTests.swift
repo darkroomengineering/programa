@@ -239,6 +239,19 @@ final class CJKIMEMarkedTextTests: XCTestCase {
         XCTAssertFalse(view.hasMarkedText(), "Marked text should be cleared after kanji confirmation")
     }
 
+    func testJapaneseConversionBackspaceReplacesOnlyRequestedMarkedSubrange() {
+        let view = GhosttyNSView(frame: .zero)
+
+        view.setMarkedText("日本語", selectedRange: NSRange(location: 0, length: 3), replacementRange: NSRange(location: NSNotFound, length: 0))
+
+        // During conversion AppKit can express Backspace as an empty
+        // replacement over one character of the existing marked text.
+        view.setMarkedText("", selectedRange: NSRange(location: 0, length: 0), replacementRange: NSRange(location: 2, length: 1))
+
+        XCTAssertTrue(view.hasMarkedText())
+        XCTAssertEqual(view.markedRange(), NSRange(location: 0, length: 2))
+    }
+
     // MARK: - unmarkText clears composition state
 
     func testUnmarkTextClearsCompositionState() {
