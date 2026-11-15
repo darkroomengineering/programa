@@ -280,6 +280,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         if case .restoring = startupSessionState { return true }
         return false
     }
+    /// True only when it is safe to enumerate the window and tab tree: the startup
+    /// restore decision has resolved and no restore pass is populating a tab manager.
+    /// False before the decision (including while it waits on the signing secret) and
+    /// during the restore, when the tree is half-built.
+    var didCompleteInitialSessionRestore: Bool {
+        didAttemptStartupSessionRestore && !isApplyingStartupSessionRestore
+    }
     let sessionPersistenceQueue = DispatchQueue(
         label: "com.darkroom.programa.app.sessionPersistence",
         qos: .utility
