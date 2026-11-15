@@ -61,7 +61,7 @@ jobs:
       PROGRAMA_DERIVED_DATA_DIR: ${{ github.workspace }}/.ci-derived-data-app
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           submodules: recursive
 
@@ -206,7 +206,7 @@ jobs:
       SHARD_COUNT: 3
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           submodules: recursive
 
@@ -312,7 +312,7 @@ jobs:
       PROGRAMA_IDLE_CPU_BUDGET_PCT: "8.0"
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Download build artifact
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
@@ -377,7 +377,7 @@ jobs:
       UI_CLASSES: ${{ github.event_name == 'workflow_dispatch' && inputs.ui_classes || '' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           submodules: recursive
 

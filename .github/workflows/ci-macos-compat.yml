@@ -24,7 +24,7 @@ jobs:
     outputs:
       run: ${{ steps.check.outputs.run }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
       - id: check
@@ -71,7 +71,7 @@ jobs:
       PROGRAMA_DERIVED_DATA_DIR: ${{ github.workspace }}/.ci-derived-data-compat
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           submodules: recursive
 

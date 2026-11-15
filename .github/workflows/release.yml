@@ -56,7 +56,7 @@ jobs:
       superseded: ${{ steps.provenance.outputs.superseded }}
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # For workflow_run, github.ref/github.sha resolve to the default branch's
           # workflow definition, not the commit that triggered CI. Pin to the exact
@@ -180,7 +180,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout release revision
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.release-identity.outputs.target_sha }}
           path: app
@@ -188,7 +188,7 @@ jobs:
           fetch-depth: 0
 
       - name: Checkout shipit
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: darkroomengineering/shipit
           ref: ab6747cf4bb751c4210d77062abbcbda5bdb41b2
@@ -228,7 +228,7 @@ jobs:
       TARGET_SHA: ${{ needs.release-identity.outputs.target_sha }}
     steps:
       - name: Checkout release revision
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.release-identity.outputs.target_sha }}
           submodules: recursive
@@ -578,7 +578,7 @@ jobs:
       TARGET_SHA: ${{ needs.release-identity.outputs.target_sha }}
     steps:
       - name: Checkout release revision
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.release-identity.outputs.target_sha }}
 
@@ -750,7 +750,7 @@ jobs:
       WINDOWS_BUILT: ${{ needs.build-windows.result == 'success' }}
     steps:
       - name: Checkout release revision
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.release-identity.outputs.target_sha }}
 
@@ -909,7 +909,7 @@ jobs:
       queue: max
     steps:
       - name: Checkout CI-validated revision
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
