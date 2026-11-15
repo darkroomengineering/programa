@@ -93,6 +93,8 @@
 			A1D000000000000000000007 /* CLI+Handoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D000000000000000000006 /* CLI+Handoff.swift */; };
 			A1D000000000000000000005 /* PaneHandoffFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D000000000000000000003 /* PaneHandoffFormatter.swift */; };
 			A1D000000000000000000004 /* PaneHandoffFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D000000000000000000003 /* PaneHandoffFormatter.swift */; };
+			TPEV00000000000000000002 /* TerminalPathEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = TPEV00000000000000000001 /* TerminalPathEnvironment.swift */; };
+			TPEV00000000000000000003 /* TerminalPathEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = TPEV00000000000000000001 /* TerminalPathEnvironment.swift */; };
 			A1D000000000000000000002 /* TerminalController+SurfacePaste.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D000000000000000000001 /* TerminalController+SurfacePaste.swift */; };
 			B6F200000000000000000002 /* TerminalController+SurfaceConditionalSend.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6F200000000000000000001 /* TerminalController+SurfaceConditionalSend.swift */; };
 			A2CV0000000000000000000A /* CommandPaletteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2CV0000000000000000000B /* CommandPaletteView.swift */; };
@@ -576,6 +578,7 @@
 			A1D000000000000000000008 /* CommandPaletteView+PaneHandoff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandPaletteView+PaneHandoff.swift"; sourceTree = "<group>"; };
 			A1D000000000000000000006 /* CLI+Handoff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Handoff.swift"; sourceTree = "<group>"; };
 			A1D000000000000000000003 /* PaneHandoffFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneHandoffFormatter.swift; sourceTree = "<group>"; };
+			TPEV00000000000000000001 /* TerminalPathEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalPathEnvironment.swift; sourceTree = "<group>"; };
 			A1D000000000000000000001 /* TerminalController+SurfacePaste.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+SurfacePaste.swift"; sourceTree = "<group>"; };
 			B6F200000000000000000001 /* TerminalController+SurfaceConditionalSend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TerminalController+SurfaceConditionalSend.swift"; sourceTree = "<group>"; };
 			A2CV0000000000000000000B /* CommandPaletteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteView.swift; sourceTree = "<group>"; };
@@ -1038,6 +1041,7 @@
 				NRPA00010 /* SettingsView.swift */,
 				THTM0001 /* TerminalThemeStore.swift */,
 				A1D000000000000000000003 /* PaneHandoffFormatter.swift */,
+				TPEV00000000000000000001 /* TerminalPathEnvironment.swift */,
 					REND0001A1B2C3D4E5F60719 /* RendererRealization.swift */,
 					A5FF0017 /* SettingDefinition.swift */,
 					A5001012 /* ContentView.swift */,
@@ -1659,6 +1663,7 @@
 					NRPA00009 /* SettingsView.swift in Sources */,
 					THTM0002 /* TerminalThemeStore.swift in Sources */,
 					A1D000000000000000000004 /* PaneHandoffFormatter.swift in Sources */,
+					TPEV00000000000000000002 /* TerminalPathEnvironment.swift in Sources */,
 					REND0002A1B2C3D4E5F60719 /* RendererRealization.swift in Sources */,
 					A5FF0007 /* SettingDefinition.swift in Sources */,
 					A5001002 /* ContentView.swift in Sources */,
@@ -2012,6 +2017,7 @@
 					B9000037A1B2C3D4E5F60719 /* CLI+Themes.swift in Sources */,
 					THTM0003 /* TerminalThemeStore.swift in Sources */,
 					A1D000000000000000000005 /* PaneHandoffFormatter.swift in Sources */,
+					TPEV00000000000000000003 /* TerminalPathEnvironment.swift in Sources */,
 				B9000039A1B2C3D4E5F60719 /* CLI+Tree.swift in Sources */,
 				7B3F9A10C2D4E5F6A7B8000A /* CLI+Ports.swift in Sources */,
 				WTST000005 /* CLI+Storage.swift in Sources */,
