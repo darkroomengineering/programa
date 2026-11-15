@@ -932,20 +932,29 @@ enum SessionWALCore {
         _ text: String, meta: SessionFrameMeta, to paths: SessionWALPaths
     ) throws {
         try withProcessLock(paths: paths) {
-            guard FileManager.default.createFile(atPath: paths.frameNextURL.path, contents: nil) else {
-                throw CoreError.cannotCommitFrame
-            }
-            let handle = try FileHandle(forWritingTo: paths.frameNextURL)
-            defer { try? handle.close() }
-            try handle.truncate(atOffset: 0)
-            try handle.write(contentsOf: Data(text.utf8))
-            try handle.synchronize()
-            guard atomicRename(from: paths.frameNextURL, to: paths.frameURL) else {
-                throw CoreError.cannotCommitFrame
-            }
-            let data = try metaEncoder.encode(meta)
-            try data.write(to: paths.frameMetaURL, options: .atomic)
+            try writeFrameUnlocked(text, meta: meta, paths: paths)
         }
+    }
+
+    /// Caller holds the session lock. Never call `withProcessLock` from here:
+    /// a second `flock(LOCK_EX)` on a new descriptor in the same process
+    /// blocks forever.
+    private static func writeFrameUnlocked(
+        _ text: String, meta: SessionFrameMeta, paths: SessionWALPaths
+    ) throws {
+        guard FileManager.default.createFile(atPath: paths.frameNextURL.path, contents: nil) else {
+            throw CoreError.cannotCommitFrame
+        }
+        let handle = try FileHandle(forWritingTo: paths.frameNextURL)
+        defer { try? handle.close() }
+        try handle.truncate(atOffset: 0)
+        try handle.write(contentsOf: Data(text.utf8))
+        try handle.synchronize()
+        guard atomicRename(from: paths.frameNextURL, to: paths.frameURL) else {
+            throw CoreError.cannotCommitFrame
+        }
+        let data = try metaEncoder.encode(meta)
+        try data.write(to: paths.frameMetaURL, options: .atomic)
     }
 
     private static func withProcessLock<T>(
