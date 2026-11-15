@@ -1284,6 +1284,46 @@ def main() -> int:
             check_resumed("a post-tool-use after a helper's offline subagent-stop",
                           keyed_hook("post-tool-use", tool_call(None, "x", tool_use_id="toolu_offline_end")))
 
+    # Saved session state never overrides a live Notification hook. A question left open by
+    # AskUserQuestion is closed by the next finished tool, so a later permission_prompt is a real
+    # approval (kind permission, never question). A Stop's saved "Completed" never replaces a
+    # classified Permission subtitle, and a new prompt drops the previous turn's saved message.
+    with tempfile.TemporaryDirectory(prefix="pcli-", dir="/tmp") as directory:
+        saved_env = dict(hook_env, PROGRAMA_CLAUDE_HOOK_STATE_PATH=str(Path(directory) / "sessions.json"),
+                         TMPDIR=directory, PROGRAMA_CLAUDE_NATIVE_STATUS="0")
+        with SocketRecorder(directory) as recorder:
+            def saved_hook(event: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
+                before = len(recorder.frames)
+                ran = run_cli(recorder.path, ["claude-hook", event], env_overrides=saved_env,
+                              input_text=json.dumps({"session_id": "saved-state-session", "cwd": "/tmp/proj", **payload}))
+                check(ran.returncode == 0, f"claude-hook {event} failed: {merged_output(ran)!r}")
+                return recorder.frames[before:]
+
+            def needs_input(frames: list[dict[str, Any]]) -> list[dict[str, Any]]:
+                return [f.get("params", {}) for f in frames if f.get("method") == "agent.needs_input"]
+
+            saved_hook("session-start", {})
+            saved_hook("pre-tool-use", {"tool_name": "AskUserQuestion", "tool_input": {
+                "questions": [{"question": "Which one?", "options": [{"label": "A"}]}]}})
+            saved_hook("post-tool-use", {"tool_name": "AskUserQuestion", "tool_input": {}})
+            approval = needs_input(saved_hook("notification", {
+                "notification_type": "permission_prompt", "message": "Claude needs your permission to use Bash"}))
+            check(len(approval) == 1 and approval[0].get("kind") == "permission",
+                  f"a permission_prompt after the question closed was not a permission: {approval!r}")
+
+            saved_hook("stop", {})
+            stale = needs_input(saved_hook("notification", {
+                "notification_type": "permission_prompt", "message": "Claude needs your attention"}))
+            check(len(stale) == 1 and stale[0].get("kind") == "permission",
+                  f"a saved Completed replaced a classified Permission: {stale!r}")
+
+            saved_hook("stop", {})
+            saved_hook("prompt-submit", {})
+            fresh = needs_input(saved_hook("notification", {
+                "notification_type": "idle_prompt", "message": "Claude needs your attention"}))
+            check(len(fresh) == 1 and "Completed" not in json.dumps(fresh[0]) and "completed" not in json.dumps(fresh[0]),
+                  f"a new prompt kept the previous turn's saved message: {fresh!r}")
+
     if failures:
         print(f"FAIL: {len(failures)} CLI registry behavior assertion(s) failed")
         for failure in failures:
