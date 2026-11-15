@@ -2757,6 +2757,26 @@ final class WorkspaceTerminalFocusRecoveryTests: XCTestCase {
         )
     }
 
+    func testCycleFocusVisitsPanesInTreeOrderAndWraps() {
+        let workspace = Workspace()
+        guard let firstId = workspace.focusedPanelId,
+              let secondPanel = workspace.newTerminalSplit(from: firstId, orientation: .horizontal),
+              let thirdPanel = workspace.newTerminalSplit(from: secondPanel.id, orientation: .vertical) else {
+            XCTFail("Expected three terminal panes")
+            return
+        }
+        XCTAssertEqual(workspace.focusedPanelId, thirdPanel.id)
+
+        workspace.cycleFocus(forward: true)
+        XCTAssertEqual(workspace.focusedPanelId, firstId, "Next from the last pane wraps to the first")
+        workspace.cycleFocus(forward: true)
+        XCTAssertEqual(workspace.focusedPanelId, secondPanel.id)
+        workspace.cycleFocus(forward: false)
+        XCTAssertEqual(workspace.focusedPanelId, firstId)
+        workspace.cycleFocus(forward: false)
+        XCTAssertEqual(workspace.focusedPanelId, thirdPanel.id, "Previous from the first pane wraps to the last")
+    }
+
     func testTerminalClickRecoversSplitActiveStateWhenFocusCallbackIsSuppressed() {
         let workspace = Workspace()
         guard let leftPanelId = workspace.focusedPanelId,
