@@ -386,6 +386,18 @@ final class SessionWALCoreTests: XCTestCase {
         XCTAssertEqual(SessionWALCore.readFrameAndDelta(at: paths), "RESTORED\r\nlive output")
     }
 
+    func testSeedKeepsLaterOutputThatStartsWithDigits() throws {
+        let paths = makePaths()
+        try seedMeta(at: paths)
+        XCTAssertTrue(try SessionWALCore.seedFrame("RESTORED\r\n", to: paths))
+        _ = try SessionWALCore.append(Data("42x42 grid".utf8), to: paths, synchronize: true)
+        XCTAssertEqual(
+            SessionWALCore.readFrameAndDelta(at: paths),
+            "RESTORED\r\n42x42 grid",
+            "output recorded from the start of the WAL was never cut, so no leading bytes may be trimmed"
+        )
+    }
+
     func testSeedNeverReplacesAnExistingFrame() throws {
         let paths = makePaths()
         try writeFrame("CAPTURED", offset: 0, generation: 0, at: paths)
