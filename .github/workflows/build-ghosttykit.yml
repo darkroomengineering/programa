@@ -96,14 +96,14 @@ jobs:
       # on every run, so a cache hit never skips the checksum.
       - name: Cache zig toolchain tarball
         if: steps.check-release.outputs.exists == 'false'
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/programa-zig-dist
           key: zig-dist-macos-arm64-${{ steps.zig-version.outputs.version }}
 
       - name: Cache Zig packages
         if: steps.check-release.outputs.exists == 'false'
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/zig
           key: zig-packages-${{ hashFiles('ghostty/build.zig.zon', 'ghostty/build.zig.zon.json') }}

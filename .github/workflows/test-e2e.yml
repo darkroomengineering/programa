@@ -145,7 +145,7 @@ jobs:
       # Restore only: this job builds an arbitrary dispatched ref, so it must not
       # write caches that main and release runs later restore.
       - name: Restore Swift packages cache
-        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .ci-source-packages
           key: spm-${{ inputs.runner || 'macos-15' }}-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
