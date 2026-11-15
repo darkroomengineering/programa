@@ -2262,6 +2262,11 @@ class TerminalController {
     private func v2RefreshKnownRefs() {
         guard let app = AppDelegate.shared else { return }
 
+        // Refreshing is an optimization (refs otherwise mint lazily). A socket command
+        // arriving during launch can reach this while session restore is still building
+        // the window/tab tree, and enumerating that half-built tree faults.
+        guard app.didCompleteInitialSessionRestore else { return }
+
         var liveWindowIds = Set<UUID>()
         var liveWorkspaceIds = Set<UUID>()
         var livePaneIds = Set<UUID>()
