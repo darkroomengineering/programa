@@ -372,6 +372,65 @@ final class SessionWALCoreTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: paths.frameURL, encoding: .utf8), "PRIVATE-FRAME")
     }
 
+    func testSeedReplaysAloneWhenSessionHasNoWAL() throws {
+        let paths = makePaths()
+        XCTAssertTrue(try SessionWALCore.seedFrame("RESTORED-HISTORY\r\n", to: paths))
+        XCTAssertEqual(SessionWALCore.readFrameAndDelta(at: paths), "RESTORED-HISTORY\r\n")
+    }
+
+    func testSeedReplaysBeforeOutputWrittenAfterIt() throws {
+        let paths = makePaths()
+        try seedMeta(at: paths)
+        XCTAssertTrue(try SessionWALCore.seedFrame("RESTORED\r\n", to: paths))
+        _ = try SessionWALCore.append(Data("live output".utf8), to: paths, synchronize: true)
+        XCTAssertEqual(SessionWALCore.readFrameAndDelta(at: paths), "RESTORED\r\nlive output")
+    }
+
+    func testSeedKeepsLaterOutputThatStartsWithDigits() throws {
+        let paths = makePaths()
+        try seedMeta(at: paths)
+        XCTAssertTrue(try SessionWALCore.seedFrame("RESTORED\r\n", to: paths))
+        _ = try SessionWALCore.append(Data("42x42 grid".utf8), to: paths, synchronize: true)
+        XCTAssertEqual(
+            SessionWALCore.readFrameAndDelta(at: paths),
+            "RESTORED\r\n42x42 grid",
+            "output recorded from the start of the WAL was never cut, so no leading bytes may be trimmed"
+        )
+    }
+
+    func testSeedNeverReplacesAnExistingFrame() throws {
+        let paths = makePaths()
+        try writeFrame("CAPTURED", offset: 0, generation: 0, at: paths)
+        XCTAssertFalse(try SessionWALCore.seedFrame("SEED", to: paths))
+        XCTAssertEqual(SessionWALCore.readFrameAndDelta(at: paths), "CAPTURED")
+    }
+
+    func testSeedRefusedOnceTheWALHasBytes() throws {
+        let paths = makePaths()
+        _ = try SessionWALCore.append(Data("prompt> ".utf8), to: paths, synchronize: true)
+        XCTAssertFalse(try SessionWALCore.seedFrame("SEED", to: paths))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.frameURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.frameMetaURL.path))
+    }
+
+    func testSeedWritesNothingWhilePersistenceIsDisabled() throws {
+        let paths = makePaths()
+        _ = try SessionScrollbackPolicyStore.transition(enabled: false, at: policyPaths)
+        XCTAssertFalse(try SessionWALCore.seedFrame("PRIVATE-SEED", to: paths))
+        assertNoContent(at: paths)
+    }
+
+    func testSeedLongerThanTheCapKeepsItsTail() throws {
+        let paths = makePaths()
+        let cap = SessionPersistencePolicy.maxScrollbackCharactersPerTerminal
+        let text = "HEAD-" + String(repeating: "x", count: cap) + "-TAIL"
+        XCTAssertTrue(try SessionWALCore.seedFrame(text, to: paths))
+        let stored = try String(contentsOf: paths.frameURL, encoding: .utf8)
+        XCTAssertEqual(stored.count, cap)
+        XCTAssertTrue(stored.hasSuffix("-TAIL"))
+        XCTAssertFalse(stored.contains("HEAD-"))
+    }
+
     private func attemptContentWrite(at paths: SessionWALPaths, generation: UUID) throws {
         _ = try SessionWALCore.append(Data("PRIVATE-WAL".utf8), to: paths,
                                       synchronize: true, capturedGeneration: generation)
@@ -521,6 +580,32 @@ final class SessionWALTeardownRetentionTests: XCTestCase {
         XCTAssertFalse(
             FileManager.default.fileExists(atPath: session.paths.sessionDirectory.path),
             "a finalized user close must remove recovery state so the closed terminal does not return on relaunch"
+        )
+    }
+
+    func testFinalCloseRemovesSeededSessionThatNeverRegisteredAWriter() throws {
+        let id = UUID().uuidString
+        let sessionDirectory = try XCTUnwrap(SessionWALPaths.make(sessionId: id)).sessionDirectory
+        let policyRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("programa-seed-close-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: policyRoot, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: sessionDirectory)
+            try? FileManager.default.removeItem(at: policyRoot)
+        }
+        let policyPaths = SessionScrollbackPolicyPaths(snapshotFileURL: policyRoot.appendingPathComponent("snapshot.json"))
+        _ = try SessionScrollbackPolicyStore.transition(enabled: true, at: policyPaths)
+        let paths = SessionWALPaths(sessionDirectory: sessionDirectory, policyPaths: policyPaths)
+        XCTAssertTrue(try SessionWALCore.seedFrame("RESTORED", to: paths))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: paths.frameURL.path))
+
+        let closed = expectation(description: "final close completed")
+        SessionWALStore.shared.unregister(surface: nil, surfaceId: id, deleteDirectory: true) { closed.fulfill() }
+        wait(for: [closed], timeout: 5.0)
+
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: sessionDirectory.path),
+            "a closed terminal's seeded scrollback must not wait for the orphan sweep"
         )
     }
 

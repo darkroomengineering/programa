@@ -2717,7 +2717,7 @@ class TerminalController {
 
     /// Core of the VT screen export: swaps the general pasteboard, runs
     /// `write_screen_file:copy,vt` (ghostty's `.screen` location — the
-    /// current visible viewport, not scrollback history; see
+    /// whole screen from the oldest scrollback row; see
     /// `ghostty/src/Surface.zig` `writeScreenFile`), reads the resulting
     /// temp file, and restores the pasteboard. Takes a `performBindingAction`
     /// closure rather than a `TerminalPanel` directly so callers that only
@@ -2778,7 +2778,7 @@ class TerminalController {
     }
 
     /// Session-WAL periodic frame capture (issue #181 layer L1): a
-    /// VT-formatted dump of the current screen only, for a live surface
+    /// VT-formatted dump of the screen and its scrollback, for a live surface
     /// looked up by id. See `SessionWALStore`'s "Periodic frame capture"
     /// doc comment for the cadence/idle-skip/atomic-write contract this
     /// feeds. Reuses the exact same export core already used at

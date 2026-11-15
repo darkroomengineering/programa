@@ -1059,6 +1059,14 @@ final class TerminalSurface: Identifiable, ObservableObject {
 #endif
             GhosttySurfaceUserdataRegistry.release(callbackContext)
             tapContext?.release()
+            // A restored tab never shown still owns a session directory (restore
+            // seed, deferred-revive escrow stamp) that a final close must remove.
+            Self.unregisterSessionWALForTeardown(
+                surface: nil,
+                surfaceId: surfaceIdForTap,
+                reason: reason,
+                isApplicationTerminating: isApplicationTerminating
+            )
             return
         }
 
