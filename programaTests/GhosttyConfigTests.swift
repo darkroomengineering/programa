@@ -1099,6 +1099,53 @@ final class GhosttyTerminalStartupEnvironmentTests: XCTestCase {
         XCTAssertEqual(merged["COLORTERM"], TerminalSurface.managedColorTerm)
         XCTAssertEqual(merged["TERM_PROGRAM"], TerminalSurface.managedTerminalProgram)
     }
+
+    // Foundation and String(cString:) decode malformed inherited PATH bytes
+    // as U+FFFD; re-exporting them hands strict tools an invalid PATH.
+    private let malformedPathComponent = "\u{FFFD}u[\u{FFFD}\u{0008}`\u{FFFD}-\u{FFFD}(\u{FFFD}"
+
+    func testStartupPathDropsMalformedComponentsWhenPrependingCLIBin() {
+        XCTAssertEqual(
+            TerminalPathEnvironment.startupPath(
+                prependingDirectory: "/Applications/Programa.app/Contents/Resources/bin",
+                to: "/usr/bin:\(malformedPathComponent):/bin"
+            ),
+            "/Applications/Programa.app/Contents/Resources/bin:/usr/bin:/bin"
+        )
+    }
+
+    func testStartupPathSanitizesPathThatAlreadyContainsCLIBin() {
+        let cliBin = "/Applications/Programa.app/Contents/Resources/bin"
+        XCTAssertEqual(
+            TerminalPathEnvironment.startupPath(
+                prependingDirectory: cliBin,
+                to: "\(cliBin):/usr/bin:\(malformedPathComponent)"
+            ),
+            "\(cliBin):/usr/bin"
+        )
+    }
+
+    func testStartupPathLeavesCleanPathContainingCLIBinAlone() {
+        let cliBin = "/Applications/Programa.app/Contents/Resources/bin"
+        XCTAssertNil(
+            TerminalPathEnvironment.startupPath(prependingDirectory: cliBin, to: "/usr/bin:\(cliBin)::/bin")
+        )
+        XCTAssertEqual(
+            TerminalPathEnvironment.startupPath(prependingDirectory: cliBin, to: "/usr/bin::/bin"),
+            "\(cliBin):/usr/bin::/bin"
+        )
+        XCTAssertEqual(TerminalPathEnvironment.startupPath(prependingDirectory: cliBin, to: ""), cliBin)
+    }
+
+    func testPrependingUniqueEntriesDropsMalformedComponents() {
+        XCTAssertEqual(
+            TerminalPathEnvironment.prependingUniqueEntries(
+                ["/tmp/programa-tmux-shim"],
+                to: "/usr/bin:\(malformedPathComponent):/usr/bin:/bin"
+            ),
+            "/tmp/programa-tmux-shim:/usr/bin:/bin"
+        )
+    }
 }
 
 final class TitlebarDoubleClickPreferenceTests: XCTestCase {
