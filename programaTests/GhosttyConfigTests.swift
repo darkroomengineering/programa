@@ -4015,3 +4015,34 @@ final class SidebarGlassMigrationTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: "sidebarPreset"), SidebarPresetOption.nativeSidebar.rawValue)
     }
 }
+
+final class NSColorDarkenLightenColorSpaceTests: XCTestCase {
+    func testDarkenCatalogColorConvertsToSRGBFirst() throws {
+        let source = try XCTUnwrap(NSColor.systemBlue.usingColorSpace(.sRGB))
+        let result = try XCTUnwrap(NSColor.systemBlue.darken(by: 0.2).usingColorSpace(.sRGB))
+        XCTAssertLessThan(result.blueComponent, source.blueComponent)
+        XCTAssertEqual(result.alphaComponent, source.alphaComponent, accuracy: 0.0001)
+    }
+
+    func testDarkenGrayscaleColorConvertsToSRGBFirst() throws {
+        let gray = NSColor(calibratedWhite: 0.8, alpha: 0.6)
+        let source = try XCTUnwrap(gray.usingColorSpace(.sRGB))
+        let result = try XCTUnwrap(gray.darken(by: 0.25).usingColorSpace(.sRGB))
+        XCTAssertLessThan(result.redComponent, source.redComponent)
+        XCTAssertEqual(result.alphaComponent, source.alphaComponent, accuracy: 0.0001)
+    }
+
+    func testLightenGrayscaleColorConvertsToSRGBFirst() throws {
+        let gray = NSColor(calibratedWhite: 0.2, alpha: 1)
+        let source = try XCTUnwrap(gray.usingColorSpace(.sRGB))
+        let result = try XCTUnwrap(gray.lighten(by: 0.1).usingColorSpace(.sRGB))
+        XCTAssertGreaterThan(result.redComponent, source.redComponent)
+    }
+
+    func testDarkenAndLightenReturnPatternColorUnchanged() {
+        let pattern = NSColor(patternImage: NSImage(size: NSSize(width: 1, height: 1)))
+        XCTAssertNil(pattern.usingColorSpace(.sRGB))
+        XCTAssertTrue(pattern.darken(by: 0.2) === pattern)
+        XCTAssertTrue(pattern.lighten(by: 0.2) === pattern)
+    }
+}
