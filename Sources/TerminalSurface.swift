@@ -2702,7 +2702,63 @@ final class TerminalSurface: Identifiable, ObservableObject {
         keyEvent.unshifted_codepoint = 0
         keyEvent.composing = false
         keyEvent.text = nil
-        _ = ghostty_surface_key(surface, keyEvent)
+
+        // Ghostty derives both the legacy C0 byte and Kitty's CSI-u sequence from a
+        // letter key's character, so it needs the text and unshifted codepoint even
+        // with Ctrl held.
+        let letterText = Self.canonicalLetterText(keycode: keycode, mods: mods)
+        if let letterText {
+            keyEvent.unshifted_codepoint = letterText.lowercased().unicodeScalars.first?.value ?? 0
+            letterText.withCString { ptr in
+                keyEvent.text = ptr
+                _ = ghostty_surface_key(surface, keyEvent)
+            }
+        } else {
+            _ = ghostty_surface_key(surface, keyEvent)
+        }
+
+        // A named key is a complete stroke; let Ghostty decide whether the negotiated
+        // protocol reports the release. A press can tear down the runtime surface, so
+        // only release into the same one.
+        if self.surface == surface {
+            keyEvent.action = GHOSTTY_ACTION_RELEASE
+            keyEvent.text = nil
+            _ = ghostty_surface_key(surface, keyEvent)
+        }
+    }
+
+    private static func canonicalLetterText(keycode: UInt32, mods: ghostty_input_mods_e) -> String? {
+        let letter: String
+        switch Int(keycode) {
+        case kVK_ANSI_A: letter = "a"
+        case kVK_ANSI_B: letter = "b"
+        case kVK_ANSI_C: letter = "c"
+        case kVK_ANSI_D: letter = "d"
+        case kVK_ANSI_E: letter = "e"
+        case kVK_ANSI_F: letter = "f"
+        case kVK_ANSI_G: letter = "g"
+        case kVK_ANSI_H: letter = "h"
+        case kVK_ANSI_I: letter = "i"
+        case kVK_ANSI_J: letter = "j"
+        case kVK_ANSI_K: letter = "k"
+        case kVK_ANSI_L: letter = "l"
+        case kVK_ANSI_M: letter = "m"
+        case kVK_ANSI_N: letter = "n"
+        case kVK_ANSI_O: letter = "o"
+        case kVK_ANSI_P: letter = "p"
+        case kVK_ANSI_Q: letter = "q"
+        case kVK_ANSI_R: letter = "r"
+        case kVK_ANSI_S: letter = "s"
+        case kVK_ANSI_T: letter = "t"
+        case kVK_ANSI_U: letter = "u"
+        case kVK_ANSI_V: letter = "v"
+        case kVK_ANSI_W: letter = "w"
+        case kVK_ANSI_X: letter = "x"
+        case kVK_ANSI_Y: letter = "y"
+        case kVK_ANSI_Z: letter = "z"
+        default: return nil
+        }
+        return mods.rawValue & GHOSTTY_MODS_SHIFT.rawValue != 0 ? letter.uppercased() : letter
     }
 
     func requestBackgroundSurfaceStartIfNeeded() {
