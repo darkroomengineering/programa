@@ -171,7 +171,8 @@ enum GhosttyPasteboardHelper {
     }
 
     static func writeString(_ string: String, to location: ghostty_clipboard_e) {
-        guard let pasteboard = pasteboard(for: location) else { return }
+        // An empty OSC 52 write (`ESC ] 52 ; c ; BEL`) carries nothing to paste; writing it would only wipe what the user copied.
+        guard !string.isEmpty, let pasteboard = pasteboard(for: location) else { return }
         pasteboard.clearContents()
         pasteboard.setString(string, forType: .string)
     }
