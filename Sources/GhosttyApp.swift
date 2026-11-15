@@ -1011,6 +1011,16 @@ class GhosttyApp {
                 logLabel: "card layout padding default"
             )
         }
+        // Upstream Ghostty now defaults copy-on-select to the selection
+        // clipboard on macOS. Programa keeps selection and clipboard separate,
+        // so default it off. Loaded BEFORE the user's config files so a
+        // user-set copy-on-select still wins.
+        loadInlineGhosttyConfig(
+            "copy-on-select = false",
+            into: config,
+            prefix: "programa-copy-on-select",
+            logLabel: "copy-on-select default"
+        )
         ghostty_config_load_default_files(config)
         loadLegacyGhosttyConfigIfNeeded(config)
         ghostty_config_load_recursive_files(config)
