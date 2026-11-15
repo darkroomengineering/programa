@@ -928,6 +928,39 @@ enum SessionWALCore {
         } ?? false
     }
 
+    /// Records restored scrollback as the session's first frame
+    /// (`walOffset: 0`), so restore can later replay it followed by every WAL
+    /// byte written since. Returns false without writing when persistence is
+    /// off or the session already has a frame or WAL bytes, so a seed never
+    /// replaces captured content. The text is capped like quit-time
+    /// scrollback (`SessionPersistencePolicy.truncatedScrollback`).
+    @discardableResult
+    static func seedFrame(
+        _ text: String,
+        to paths: SessionWALPaths,
+        now: Date = Date(),
+        capturedGeneration: UUID? = nil
+    ) throws -> Bool {
+        guard let truncated = SessionPersistencePolicy.truncatedScrollback(text) else { return false }
+        return try SessionScrollbackPolicyStore.withContentPermission(
+            at: paths.policyPaths, capturedGeneration: capturedGeneration
+        ) {
+            try withProcessLock(paths: paths) {
+                guard !FileManager.default.fileExists(atPath: paths.frameMetaURL.path),
+                      fileSize(at: paths.walURL) == 0,
+                      fileSize(at: paths.walRotatedURL) == 0 else { return false }
+                let meta = SessionFrameMeta(
+                    sessionId: paths.sessionDirectory.lastPathComponent,
+                    capturedAt: now,
+                    walOffset: 0,
+                    walGeneration: readMetaUnlocked(paths: paths)?.walGeneration ?? 0
+                )
+                try writeFrameUnlocked(truncated, meta: meta, paths: paths)
+                return true
+            }
+        } ?? false
+    }
+
     private static func writeFrameAllowed(
         _ text: String, meta: SessionFrameMeta, to paths: SessionWALPaths
     ) throws {
@@ -1392,6 +1425,24 @@ final class SessionWALStore {
     private func readFrameAndDeltaScrollbackText(sessionId: String) -> String? {
         guard let paths = SessionWALPaths.make(sessionId: sessionId) else { return nil }
         return SessionWALCore.readFrameAndDelta(at: paths)
+    }
+
+    /// Restore replays scrollback into a new surface before its PTY tee
+    /// registers, so the new session's WAL never records that text. Seeding it
+    /// as the new session's first frame keeps it for the next restore, even if
+    /// the pane prints nothing or its tab is never shown. Enqueue only: the
+    /// truncation and I/O run on `writeQueue`.
+    func seedRestoredFrame(sessionId: String, text: String) {
+        guard !SessionMachineryGate.isUnitTesting else { return }
+        writeQueue.async { [weak self] in
+            guard let self, self.capturePolicy.enabled,
+                  let paths = SessionWALPaths.make(sessionId: sessionId) else { return }
+            do {
+                try SessionWALCore.seedFrame(text, to: paths, capturedGeneration: self.capturePolicy.generation)
+            } catch {
+                dilog("session.wal", "seed_failed session=\(sessionId.prefix(8)) error=\(error)")
+            }
+        }
     }
 
     /// Deletes one specific old session's directory once its restore
