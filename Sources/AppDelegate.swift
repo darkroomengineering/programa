@@ -4038,6 +4038,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         _ = Self.didInstallWindowKeyEquivalentSwizzle
         _ = Self.didInstallWindowFirstResponderSwizzle
         _ = Self.didInstallWindowSendEventSwizzle
+        SwiftUIKeyViewProxyResponderGuard.install()
     }
 
     private func installShortcutMonitor() {

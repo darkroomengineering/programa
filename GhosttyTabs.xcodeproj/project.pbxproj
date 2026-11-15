@@ -214,6 +214,7 @@
 			NRAD1006 /* CLIInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRAD0006 /* CLIInstaller.swift */; };
 			NRAD1007 /* MenuBarIconRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRAD0007 /* MenuBarIconRenderer.swift */; };
 			NRAD1008 /* WindowSwizzles.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRAD0008 /* WindowSwizzles.swift */; };
+			U2KV1002A1B2C3D4E5F60718 /* SwiftUIKeyViewProxyResponderGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = U2KV1001A1B2C3D4E5F60718 /* SwiftUIKeyViewProxyResponderGuard.swift */; };
 			A5FF0031 /* AppDelegate+UITestCmdClick.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0021 /* AppDelegate+UITestCmdClick.swift */; };
 			A5FF0032 /* AppDelegate+UITestStressWorkspaces.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0022 /* AppDelegate+UITestStressWorkspaces.swift */; };
 			A5FF0033 /* AppDelegate+UITestHarnesses.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0023 /* AppDelegate+UITestHarnesses.swift */; };
@@ -698,6 +699,7 @@
 		NRAD0006 /* CLIInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIInstaller.swift; sourceTree = "<group>"; };
 		NRAD0007 /* MenuBarIconRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarIconRenderer.swift; sourceTree = "<group>"; };
 		NRAD0008 /* WindowSwizzles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowSwizzles.swift; sourceTree = "<group>"; };
+		U2KV1001A1B2C3D4E5F60718 /* SwiftUIKeyViewProxyResponderGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftUIKeyViewProxyResponderGuard.swift; sourceTree = "<group>"; };
 		A5FF0021 /* AppDelegate+UITestCmdClick.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+UITestCmdClick.swift"; sourceTree = "<group>"; };
 		A5FF0022 /* AppDelegate+UITestStressWorkspaces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+UITestStressWorkspaces.swift"; sourceTree = "<group>"; };
 		A5FF0023 /* AppDelegate+UITestHarnesses.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate+UITestHarnesses.swift"; sourceTree = "<group>"; };
@@ -1199,6 +1201,7 @@
 				NRAD0006 /* CLIInstaller.swift */,
 				NRAD0007 /* MenuBarIconRenderer.swift */,
 				NRAD0008 /* WindowSwizzles.swift */,
+				U2KV1001A1B2C3D4E5F60718 /* SwiftUIKeyViewProxyResponderGuard.swift */,
 				A5FF0021 /* AppDelegate+UITestCmdClick.swift */,
 				A5FF0022 /* AppDelegate+UITestStressWorkspaces.swift */,
 				A5FF0023 /* AppDelegate+UITestHarnesses.swift */,
@@ -1819,6 +1822,7 @@
 				NRAD1006 /* CLIInstaller.swift in Sources */,
 				NRAD1007 /* MenuBarIconRenderer.swift in Sources */,
 				NRAD1008 /* WindowSwizzles.swift in Sources */,
+				U2KV1002A1B2C3D4E5F60718 /* SwiftUIKeyViewProxyResponderGuard.swift in Sources */,
 				A5FF0031 /* AppDelegate+UITestCmdClick.swift in Sources */,
 				A5FF0032 /* AppDelegate+UITestStressWorkspaces.swift in Sources */,
 				A5FF0033 /* AppDelegate+UITestHarnesses.swift in Sources */,
