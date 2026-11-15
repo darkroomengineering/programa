@@ -601,7 +601,9 @@ extension ProgramaCLI {
     private func agentHookPromptSubmit(_ hook: AgentHookProvider, _ ctx: AgentHookContext) throws {
         let mapped = ctx.parsed.sessionId.flatMap { ctx.store.lookup(sessionId: $0) }
         clearPendingQuestion(ctx, mapped)
-        if let sessionId = ctx.parsed.sessionId { try? ctx.store.clearSavedMessage(sessionId: sessionId) }
+        if let sessionId = ctx.parsed.sessionId, mapped?.lastBody != nil || mapped?.lastSubtitle != nil {
+            try? ctx.store.clearSavedMessage(sessionId: sessionId)
+        }
         let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
             preferred: mapped?.workspaceId, fallback: ctx.workspaceArg, client: ctx.client
         )
