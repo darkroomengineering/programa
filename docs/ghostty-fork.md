@@ -13,10 +13,10 @@ When we change the fork, update this document and the parent submodule SHA.
 
 ## Current fork changes
 
-The pinned fork head is `7d480edf4` on the fork branch `franco/inc-591-ghostty-vt-1.0.0`: a merge of
-upstream `ghostty-org/ghostty` tag `vt-1.0.0` (`0fa3d577a`) into the previous pin `7e4b75eef`. Never
-delete the branch: the pin and its xcframework release point at it. It builds with Zig 0.17.0 and
-carries eleven patch groups: display-link restart, resize stale-frame mitigation, OSC 99
+The pinned fork head is `e4b6b6bc6` on the fork branch `inc-1279-merge-upstream`, which is also the
+fork's `main`. It is a merge of upstream `ghostty-org/ghostty` `main` (`7fa26e8b6`) into the previous
+pin `957dbd797`. Never delete the branch: the pin and its xcframework release point at it. It builds
+with Zig 0.17.1 and carries eleven patch groups: display-link restart, resize stale-frame mitigation, OSC 99
 notification dispatch, color scheme mode 2031, keyboard copy mode selection API, layer-background
 flag, occluded-surface throttle, offscreen renderer realization, session introspection and revival
 APIs (which include the PTY tee), the OSC 7501 apprt action, and the macOS responsibility disclaim.
@@ -332,3 +332,13 @@ ancestor). Literal conflicts were in `include/ghostty.h`, `include/ghostty/vt/{g
 - Offscreen renderer realization now calls upstream's `displayRealized`/`displayUnrealized` and
   `releaseGpuResources`.
 - `config.url.test.url regex` fails both before and after the merge; it is not a merge regression.
+
+### November 15, 2026 upstream sync (INC-1279)
+
+Merged upstream `main` (`7fa26e8b6`) into `957dbd797` with no conflicts and no change to the fork
+patches or the C API (`include/ghostty.h`). The merge moves the minimum Zig version to 0.17.1;
+`scripts/zig-macos-aarch64.sha256` carries its checksum.
+
+Upstream changed `copy-on-select` to default to the selection clipboard on macOS. Programa loads
+`copy-on-select = false` before the user's config files (`loadDefaultConfigFilesWithLegacyFallback`
+in `Sources/GhosttyApp.swift`), so selecting text still does not copy it unless the user opts in.
