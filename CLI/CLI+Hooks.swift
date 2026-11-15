@@ -137,7 +137,7 @@ final class ClaudeHookSessionStore {
 
     func clearSavedMessage(sessionId: String) throws {
         let normalized = normalizeSessionId(sessionId)
-        guard !normalized.isEmpty else { return }
+        guard lookup(sessionId: normalized)?.lastBody != nil else { return }  // lock-free: a corrupt store stays untouched
         try withLockedState { state in
             state.sessions[normalized]?.lastSubtitle = nil
             state.sessions[normalized]?.lastBody = nil
@@ -601,9 +601,7 @@ extension ProgramaCLI {
     private func agentHookPromptSubmit(_ hook: AgentHookProvider, _ ctx: AgentHookContext) throws {
         let mapped = ctx.parsed.sessionId.flatMap { ctx.store.lookup(sessionId: $0) }
         clearPendingQuestion(ctx, mapped)
-        if let sessionId = ctx.parsed.sessionId, mapped?.lastBody != nil || mapped?.lastSubtitle != nil {
-            try? ctx.store.clearSavedMessage(sessionId: sessionId)
-        }
+        if let sessionId = ctx.parsed.sessionId { try? ctx.store.clearSavedMessage(sessionId: sessionId) }
         let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
             preferred: mapped?.workspaceId, fallback: ctx.workspaceArg, client: ctx.client
         )
