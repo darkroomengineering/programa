@@ -554,6 +554,19 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
     }
 }
 
+final class GhosttyNumericLocaleTests: XCTestCase {
+    func testPinProcessNumericLocaleRestoresPOSIXNumericCategory() throws {
+        let previous = setlocale(LC_NUMERIC, nil).map { String(cString: $0) }
+        defer { if let previous { _ = setlocale(LC_NUMERIC, previous) } }
+
+        guard setlocale(LC_NUMERIC, "de_DE.UTF-8") != nil else {
+            throw XCTSkip("de_DE.UTF-8 is unavailable on this runner")
+        }
+        XCTAssertTrue(GhosttyApp.pinProcessNumericLocale())
+        XCTAssertEqual(setlocale(LC_NUMERIC, nil).map { String(cString: $0) }, "C")
+    }
+}
+
 final class TerminalKeyboardCopyModeActionTests: XCTestCase {
     func testCopyModeBypassAllowsOnlyCommandShortcuts() {
         XCTAssertTrue(terminalKeyboardCopyModeShouldBypassForShortcut(modifierFlags: [.command]))

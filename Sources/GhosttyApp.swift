@@ -690,11 +690,24 @@ class GhosttyApp {
     }
     #endif
 
+    /// Pins only `LC_NUMERIC` to the POSIX locale for this process. A
+    /// comma-decimal numeric locale makes AppKit/CoreUI symbol rasterization
+    /// crash. Ghostty still sees the user's locale through `LANG`, and child
+    /// processes inherit the environment, not this in-process override.
+    @discardableResult
+    static func pinProcessNumericLocale() -> Bool {
+        setlocale(LC_NUMERIC, "C") != nil
+    }
+
     private func initializeGhostty() {
         // Ensure TUI apps can use colors even if NO_COLOR is set in the launcher env.
         if getenv("NO_COLOR") != nil {
             unsetenv("NO_COLOR")
         }
+
+        // Ghostty may apply the user's locale during initialization. Restore the
+        // CoreUI-safe numeric locale on every exit, including failures.
+        defer { Self.pinProcessNumericLocale() }
 
         let result = ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv)
         if result != GHOSTTY_SUCCESS {
