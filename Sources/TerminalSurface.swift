@@ -1426,9 +1426,8 @@ final class TerminalSurface: Identifiable, ObservableObject {
                 ?? getenv("PATH").map { String(cString: $0) }
                 ?? ProcessInfo.processInfo.environment["PATH"]
                 ?? ""
-            if !currentPath.split(separator: ":").contains(Substring(cliBinPath)) {
-                let separator = currentPath.isEmpty ? "" : ":"
-                setManagedEnvironmentValue("PATH", "\(cliBinPath)\(separator)\(currentPath)")
+            if let path = TerminalPathEnvironment.startupPath(prependingDirectory: cliBinPath, to: currentPath) {
+                setManagedEnvironmentValue("PATH", path)
             }
         }
 
