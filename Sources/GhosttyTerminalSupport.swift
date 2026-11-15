@@ -117,7 +117,7 @@ enum GhosttyPasteboardHelper {
         name: NSPasteboard.Name("com.mitchellh.ghostty.selection")
     )
     private static let utf8PlainTextType = NSPasteboard.PasteboardType("public.utf8-plain-text")
-    private static let shellEscapeCharacters = "\\ ()[]{}<>\"'`!#$&;|*?\t"
+    private static let shellEscapeCharacters = "\\ ()[]{}<>\"'`!#$&;|*?~\t"
     private static let temporaryImageFilenamePrefix = "clipboard-"
     private static let objectReplacementCharacter = Character(UnicodeScalar(0xFFFC)!)
 

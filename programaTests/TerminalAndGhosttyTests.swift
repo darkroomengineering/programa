@@ -538,6 +538,37 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
         XCTAssertEqual(escaped, "/tmp/Screen\\ Shot.png")
     }
 
+    func testInsertedPathWithLiteralTildeResolvesInZsh() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("programa-tilde-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let target = root
+            .appendingPathComponent("~md", isDirectory: true)
+            .appendingPathComponent("Mobile Documents", isDirectory: true)
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = [
+            "-f", "-c",
+            "cd -- \(GhosttyPasteboardHelper.escapeForShell("~md/Mobile Documents")) && pwd -P",
+        ]
+        process.currentDirectoryURL = root
+        process.standardOutput = output
+        process.standardError = Pipe()
+        try process.run()
+        process.waitUntilExit()
+
+        let printed = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertEqual(process.terminationStatus, 0)
+        XCTAssertEqual(
+            URL(fileURLWithPath: printed).resolvingSymlinksInPath(),
+            target.resolvingSymlinksInPath()
+        )
+    }
+
     func testEmptyClipboardWriteKeepsExistingContents() {
         let pasteboard = GhosttyPasteboardHelper.pasteboard(for: GHOSTTY_CLIPBOARD_SELECTION)
         let kept = "kept-\(UUID().uuidString)"
