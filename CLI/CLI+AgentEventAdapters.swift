@@ -79,7 +79,7 @@ extension ProgramaCLI {
     /// A helper's child record goes back to `working` here, not at its async PreToolUse, which
     /// could land after the helper's own prompt marked that record blocked.
     func runClaudePostToolUse(_ ctx: AgentHookContext) {
-        if let sessionId = ctx.parsed.sessionId { try? ctx.store.clearPendingQuestion(sessionId: sessionId) }
+        clearClaudePendingQuestion(ctx)
         guard claudeToolEndsStop(rawInput: ctx.rawInput) else { return }
         emitClaudeSubagentStatus(ctx.parsed, scope: ctx.workspaceArg, state: "working")
         let client = ctx.client
@@ -282,6 +282,21 @@ extension ProgramaCLI {
     /// carries no agent, and this hook is the one that names it. A later request from the same
     /// agent replaces its record: that agent's tools run one at a time, so the earlier request
     /// was already answered.
+    /// A request for any tool but AskUserQuestion means the question dialog is closed, even one
+    /// the user declined (which fires no PostToolUse). This hook is synchronous and runs before the
+    /// request's Notification, so that Notification never reads the question and reports a
+    /// `question` the socket may type into.
+    func runClaudePermissionRequest(_ ctx: AgentHookContext) {
+        if ctx.parsed.object?["tool_name"] as? String != "AskUserQuestion" { clearClaudePendingQuestion(ctx) }
+        recordClaudePermissionRequest(rawInput: ctx.rawInput)
+    }
+
+    /// Lock-free read first: these hooks run on every tool, and most have no question to clear.
+    func clearClaudePendingQuestion(_ ctx: AgentHookContext) {
+        guard let sessionId = ctx.parsed.sessionId, ctx.store.lookup(sessionId: sessionId)?.pendingQuestion != nil else { return }
+        try? ctx.store.clearPendingQuestion(sessionId: sessionId)
+    }
+
     func recordClaudePermissionRequest(rawInput: String) {
         guard let request = ClaudePermissionRequest(rawInput: rawInput),
               case .trusted(let directory) = ClaudePermissionRequest.openDirectory(create: true) else { return }
