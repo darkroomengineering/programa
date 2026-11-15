@@ -31,7 +31,7 @@ permissions:
   id-token: write
 
 env:
-  CREATE_DMG_VERSION: 8.0.0
+  CREATE_DMG_VERSION: 8.1.0
 
 concurrency:
   group: ${{ format('programa-release-{0}-{1}', github.run_id, github.run_attempt) }}

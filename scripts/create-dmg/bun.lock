@@ -5,7 +5,7 @@
     "": {
       "name": "programa-create-dmg-toolchain",
       "dependencies": {
-        "create-dmg": "8.0.0",
+        "create-dmg": "8.1.0",
       },
     },
   },
@@ -36,7 +36,7 @@
 
     "color-convert": ["color-convert@0.5.3", "", {}, "sha512-RwBeO/B/vZR3dfKL1ye/vx8MHZ40ugzpyfeVG5GsiuGnrlMWe2o8wxBbLCpw9CsxV+wHuzYlCiWnybrIA0ling=="],
 
-    "create-dmg": ["create-dmg@8.0.0", "", { "dependencies": { "appdmg": "^0.6.6", "execa": "^9.6.1", "icns-lib": "^1.0.1", "meow": "^14.0.0", "ora": "^9.1.0", "plist": "^3.1.0", "tempy": "^3.1.1" }, "bin": { "create-dmg": "cli.js" } }, "sha512-S6kWzN7dJZsybEnUiz94V8cpn2mm++EUEs4iarohlApAmFDgr+NwD0FQ0DnbdZmbfx0AM22OyyV9U/xxKxs/WQ=="],
+    "create-dmg": ["create-dmg@8.1.0", "", { "dependencies": { "appdmg": "^0.6.6", "execa": "^9.6.1", "icns-lib": "^1.0.1", "meow": "^14.0.0", "ora": "^9.1.0", "plist": "^3.1.0", "tempy": "^3.1.1" }, "bin": { "create-dmg": "cli.js" } }, "sha512-O/r2pqZE5wgZ/mabUkD+/lt5hQs4VX+YhbFhcIj84ecg8AL+oMAoMjekNJkVVpx5UspTxNDqBxvnWI2VqSW92g=="],
 
     "cross-spawn": ["cross-spawn@7.0.6", "", { "dependencies": { "path-key": "^3.1.0", "shebang-command": "^2.0.0", "which": "^2.0.1" } }, "sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA=="],
 
