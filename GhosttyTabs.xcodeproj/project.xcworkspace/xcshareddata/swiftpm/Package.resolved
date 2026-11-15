@@ -105,8 +105,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/mattt/swift-toml",
       "state" : {
-        "revision" : "8227201d741c82183c9b0531a7d9ec7fa9240a2f",
-        "version" : "2.1.0"
+        "revision" : "6bb8b940f8caa4106c517b5ccd26739cb03e43bd",
+        "version" : "2.1.1"
       }
     }
   ],
