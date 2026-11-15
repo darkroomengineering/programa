@@ -135,6 +135,15 @@ final class ClaudeHookSessionStore {
         }
     }
 
+    func clearSavedMessage(sessionId: String) throws {
+        let normalized = normalizeSessionId(sessionId)
+        guard !normalized.isEmpty else { return }
+        try withLockedState { state in
+            state.sessions[normalized]?.lastSubtitle = nil
+            state.sessions[normalized]?.lastBody = nil
+        }
+    }
+
     func consume(
         sessionId: String?,
         workspaceId: String?,
@@ -493,7 +502,8 @@ extension ProgramaCLI {
     }
 
     /// An open AskUserQuestion wins over whatever the notification says. Otherwise a generic
-    /// "needs your attention" notification takes the message the preceding hook saved.
+    /// "needs your attention" notification takes the message the preceding hook saved, unless
+    /// the notification itself classified as a permission request.
     private func savedBodyNotification(
         _ summary: (subtitle: String, body: String),
         session: ClaudeHookSessionRecord?
@@ -501,7 +511,7 @@ extension ProgramaCLI {
         var summary = summary
         if let question = session?.pendingQuestion {
             summary = (subtitle: "Waiting", body: question)
-        } else if let session,
+        } else if summary.subtitle != "Permission", let session,
            let savedBody = session.lastBody, !savedBody.isEmpty,
            summary.body.contains("needs your attention") || summary.body.contains("needs your input") {
             summary = (subtitle: session.lastSubtitle ?? summary.subtitle, body: savedBody)
@@ -591,6 +601,7 @@ extension ProgramaCLI {
     private func agentHookPromptSubmit(_ hook: AgentHookProvider, _ ctx: AgentHookContext) throws {
         let mapped = ctx.parsed.sessionId.flatMap { ctx.store.lookup(sessionId: $0) }
         clearPendingQuestion(ctx, mapped)
+        if let sessionId = ctx.parsed.sessionId { try? ctx.store.clearSavedMessage(sessionId: sessionId) }
         let workspaceId = try resolvePreferredWorkspaceIdForClaudeHook(
             preferred: mapped?.workspaceId, fallback: ctx.workspaceArg, client: ctx.client
         )

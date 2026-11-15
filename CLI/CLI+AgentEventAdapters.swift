@@ -79,6 +79,7 @@ extension ProgramaCLI {
     /// A helper's child record goes back to `working` here, not at its async PreToolUse, which
     /// could land after the helper's own prompt marked that record blocked.
     func runClaudePostToolUse(_ ctx: AgentHookContext) {
+        if let sessionId = ctx.parsed.sessionId { try? ctx.store.clearPendingQuestion(sessionId: sessionId) }
         guard claudeToolEndsStop(rawInput: ctx.rawInput) else { return }
         emitClaudeSubagentStatus(ctx.parsed, scope: ctx.workspaceArg, state: "working")
         let client = ctx.client
