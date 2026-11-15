@@ -792,7 +792,7 @@ class GhosttyApp {
                     chosen = value
                 }
             }
-            guard let chosen else { return }
+            guard let chosen, !chosen.isEmpty else { return }
 
             guard confirm else {
                 GhosttyPasteboardHelper.writeString(chosen, to: location)
