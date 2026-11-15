@@ -775,14 +775,22 @@ enum SessionWALCore {
                 return nil
             }
             var delta = currentWalData.subdata(in: Int(frameMeta.walOffset)..<currentWalData.count)
+            // Offset 0 in generation 0 (a restore seed) is the start of the
+            // session's output, not a cut; no rotation has cut it either.
+            var isCut = frameMeta.walOffset > 0 || frameMeta.walGeneration > 0
             if delta.count > walCapBytes {
                 delta = delta.suffix(Int(walCapBytes))
+                isCut = true
             }
             // Both raw byte cuts above (`walOffset` and the suffix cap) can
             // land mid-escape-sequence or mid-UTF-8-scalar. Trim once, here,
             // after both cuts are applied -- this single call site covers
-            // whichever cut produced the leading edge of `delta`.
-            delta = trimTornLeadingBytes(delta)
+            // whichever cut produced the leading edge of `delta`. Uncut data
+            // is left alone: the torn-CSI heuristic would eat legitimate
+            // leading text such as "42x42 grid".
+            if isCut {
+                delta = trimTornLeadingBytes(delta)
+            }
             guard !delta.isEmpty else { return frameText }
             return frameText + String(decoding: delta, as: UTF8.self)
         }
