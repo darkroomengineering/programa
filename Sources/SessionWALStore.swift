@@ -1533,7 +1533,13 @@ final class SessionWALStore {
     }
 
     private func stopWriter(surfaceId: String, deleteDirectory: Bool) {
-        guard let writer = writersBySurfaceId.removeValue(forKey: surfaceId) else { return }
+        guard let writer = writersBySurfaceId.removeValue(forKey: surfaceId) else {
+            // A restore seed can create the directory before the tee registers.
+            if deleteDirectory, let paths = SessionWALPaths.make(sessionId: surfaceId) {
+                try? FileManager.default.removeItem(at: paths.sessionDirectory)
+            }
+            return
+        }
         drain(writer: writer, forceWALSync: true)
         if deleteDirectory {
             try? FileManager.default.removeItem(at: writer.paths.sessionDirectory)
