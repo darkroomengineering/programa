@@ -690,11 +690,24 @@ class GhosttyApp {
     }
     #endif
 
+    /// Pins only `LC_NUMERIC` to the POSIX locale for this process. A
+    /// comma-decimal numeric locale makes AppKit/CoreUI symbol rasterization
+    /// crash. Ghostty still sees the user's locale through `LANG`, and child
+    /// processes inherit the environment, not this in-process override.
+    @discardableResult
+    static func pinProcessNumericLocale() -> Bool {
+        setlocale(LC_NUMERIC, "C") != nil
+    }
+
     private func initializeGhostty() {
         // Ensure TUI apps can use colors even if NO_COLOR is set in the launcher env.
         if getenv("NO_COLOR") != nil {
             unsetenv("NO_COLOR")
         }
+
+        // Ghostty may apply the user's locale during initialization. Restore the
+        // CoreUI-safe numeric locale on every exit, including failures.
+        defer { Self.pinProcessNumericLocale() }
 
         let result = ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv)
         if result != GHOSTTY_SUCCESS {
@@ -792,7 +805,7 @@ class GhosttyApp {
                     chosen = value
                 }
             }
-            guard let chosen else { return }
+            guard let chosen, !chosen.isEmpty else { return }
 
             guard confirm else {
                 GhosttyPasteboardHelper.writeString(chosen, to: location)
@@ -1011,6 +1024,16 @@ class GhosttyApp {
                 logLabel: "card layout padding default"
             )
         }
+        // Upstream Ghostty now defaults copy-on-select to the selection
+        // clipboard on macOS. Programa keeps selection and clipboard separate,
+        // so default it off. Loaded BEFORE the user's config files so a
+        // user-set copy-on-select still wins.
+        loadInlineGhosttyConfig(
+            "copy-on-select = false",
+            into: config,
+            prefix: "programa-copy-on-select",
+            logLabel: "copy-on-select default"
+        )
         ghostty_config_load_default_files(config)
         loadLegacyGhosttyConfigIfNeeded(config)
         ghostty_config_load_recursive_files(config)

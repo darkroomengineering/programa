@@ -285,16 +285,53 @@
       "params": {
         "additionalProperties": false,
         "properties": {
+          "base": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "initial_command": {
+            "type": "string"
+          },
           "initial_env": {
             "additionalProperties": {
               "type": "string"
             },
             "type": "object"
           },
-          "path": {}
+          "layout": {
+            "type": "string"
+          },
+          "needs_isolation": {
+            "type": "boolean"
+          },
+          "parent_agent_id": {
+            "type": "string"
+          },
+          "parent_workspace_id": {
+            "format": "handle-ref (e.g. workspace:3) or raw UUID",
+            "type": "string"
+          },
+          "path": {},
+          "repository_path": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "session": {
+            "type": "string"
+          },
+          "task": {
+            "type": "string"
+          }
         },
         "required": [
-          "initial_env"
+          "parent_workspace_id"
         ],
         "type": "object"
       },

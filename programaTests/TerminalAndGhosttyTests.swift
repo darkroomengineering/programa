@@ -569,9 +569,32 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
         )
     }
 
+    func testEmptyClipboardWriteKeepsExistingContents() {
+        let pasteboard = GhosttyPasteboardHelper.pasteboard(for: GHOSTTY_CLIPBOARD_SELECTION)
+        let kept = "kept-\(UUID().uuidString)"
+        GhosttyPasteboardHelper.writeString(kept, to: GHOSTTY_CLIPBOARD_SELECTION)
+        XCTAssertEqual(pasteboard?.string(forType: .string), kept)
+
+        GhosttyPasteboardHelper.writeString("", to: GHOSTTY_CLIPBOARD_SELECTION)
+        XCTAssertEqual(pasteboard?.string(forType: .string), kept)
+    }
+
     func testInsertedPathSingleQuotesEmbeddedNewlinesBeforePaste() {
         let escaped = GhosttyPasteboardHelper.escapeForShell("/tmp/Screen\nShot\r.png")
         XCTAssertEqual(escaped, "'/tmp/Screen\nShot\r.png'")
+    }
+}
+
+final class GhosttyNumericLocaleTests: XCTestCase {
+    func testPinProcessNumericLocaleRestoresPOSIXNumericCategory() throws {
+        let previous = setlocale(LC_NUMERIC, nil).map { String(cString: $0) }
+        defer { if let previous { _ = setlocale(LC_NUMERIC, previous) } }
+
+        guard setlocale(LC_NUMERIC, "de_DE.UTF-8") != nil else {
+            throw XCTSkip("de_DE.UTF-8 is unavailable on this runner")
+        }
+        XCTAssertTrue(GhosttyApp.pinProcessNumericLocale())
+        XCTAssertEqual(setlocale(LC_NUMERIC, nil).map { String(cString: $0) }, "C")
     }
 }
 

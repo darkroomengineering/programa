@@ -1558,7 +1558,6 @@ class TerminalController {
     }
 
     /// Unix clients carry the listener policy captured when they were accepted.
-    /// Mobile Bridge sessions are admitted independently by pairing and its method allow-list.
     func handleClient(_ socket: Int32, peerPid: pid_t? = nil, source: SocketConnectionSource) {
         // Owns this connection's writes (both ordinary v2 responses and any #167 subscription
         // event pushes) and its subscription lifecycle. `teardown()` (which tears down any
