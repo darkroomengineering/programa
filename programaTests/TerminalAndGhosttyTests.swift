@@ -538,6 +538,16 @@ final class GhosttyPasteboardHelperTests: XCTestCase {
         XCTAssertEqual(escaped, "/tmp/Screen\\ Shot.png")
     }
 
+    func testEmptyClipboardWriteKeepsExistingContents() {
+        let pasteboard = GhosttyPasteboardHelper.pasteboard(for: GHOSTTY_CLIPBOARD_SELECTION)
+        let kept = "kept-\(UUID().uuidString)"
+        GhosttyPasteboardHelper.writeString(kept, to: GHOSTTY_CLIPBOARD_SELECTION)
+        XCTAssertEqual(pasteboard?.string(forType: .string), kept)
+
+        GhosttyPasteboardHelper.writeString("", to: GHOSTTY_CLIPBOARD_SELECTION)
+        XCTAssertEqual(pasteboard?.string(forType: .string), kept)
+    }
+
     func testInsertedPathSingleQuotesEmbeddedNewlinesBeforePaste() {
         let escaped = GhosttyPasteboardHelper.escapeForShell("/tmp/Screen\nShot\r.png")
         XCTAssertEqual(escaped, "'/tmp/Screen\nShot\r.png'")
