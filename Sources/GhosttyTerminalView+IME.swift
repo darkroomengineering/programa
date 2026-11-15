@@ -234,13 +234,28 @@ extension GhosttyNSView: NSTextInputClient {
             )
         }
 #endif
+        let incoming: NSAttributedString
         switch string {
         case let v as NSAttributedString:
-            markedText = NSMutableAttributedString(attributedString: v)
+            incoming = v
         case let v as String:
-            markedText = NSMutableAttributedString(string: v)
+            incoming = NSAttributedString(string: v)
         default:
-            break
+            return
+        }
+
+        // replacementRange is relative to the start of the current marked text.
+        // Japanese IMEs use a subrange (an empty one for Backspace) during
+        // conversion, so keep the rest of the preedit.
+        if markedText.length > 0,
+           replacementRange.location != NSNotFound,
+           replacementRange.location >= 0,
+           replacementRange.length >= 0,
+           replacementRange.location <= markedText.length,
+           replacementRange.length <= markedText.length - replacementRange.location {
+            markedText.replaceCharacters(in: replacementRange, with: incoming)
+        } else {
+            markedText = NSMutableAttributedString(attributedString: incoming)
         }
 
         // If we're not in a keyDown event, sync preedit immediately.
