@@ -281,6 +281,7 @@ struct AgentHookContext {
     let store: ClaudeHookSessionStore
     let workspaceArg: String?
     let surfaceArg: String?
+    let rawInput: String
 }
 
 /// Everything that differs between the Claude Code, Codex and OpenCode hooks. The
@@ -356,7 +357,7 @@ extension ProgramaCLI {
             title: "Claude Code",
             statusKey: "claude_code",
             ack: "OK",
-            helpLine: "programa claude-hook <session-start|stop|session-end|notification|prompt-submit|pre-tool-use|subagent-start|subagent-stop> [--workspace <id|index>] [--surface <id|index>]",
+            helpLine: "programa claude-hook <session-start|stop|session-end|notification|prompt-submit|pre-tool-use|post-tool-use|permission-request|subagent-start|subagent-stop> [--workspace <id|index>] [--surface <id|index>]",
             requiresSurfaceEnv: false,
             stateFileName: nil,
             taskHost: "claude",
@@ -383,6 +384,7 @@ extension ProgramaCLI {
             extraEvents: [
                 "pre-tool-use": { self.runClaudePreToolUse($0) },
                 "post-tool-use": { self.runClaudePostToolUse($0) },
+                "permission-request": { self.recordClaudePermissionRequest(rawInput: $0.rawInput) },
                 "subagent-start": { self.runClaudeSubagentStart($0) },
                 "subagent-stop": { self.runClaudeSubagentStop($0) },
             ]
@@ -536,8 +538,12 @@ extension ProgramaCLI {
                 } ?? env
             ),
             workspaceArg: hookWsFlag ?? env["PROGRAMA_WORKSPACE_ID"],
-            surfaceArg: optionValue(hookArgs, name: "--surface") ?? (hookWsFlag == nil ? env["PROGRAMA_SURFACE_ID"] : nil)
+            surfaceArg: optionValue(hookArgs, name: "--surface") ?? (hookWsFlag == nil ? env["PROGRAMA_SURFACE_ID"] : nil),
+            rawInput: rawInput
         )
+        if hook.provider == "claude-code", ["prompt-submit", "stop", "session-end"].contains(subcommand) {
+            forgetClaudePermissionRequests(rawInput: rawInput)
+        }
 
         do {
             switch subcommand {
@@ -775,7 +781,6 @@ extension ProgramaCLI {
     /// Claude-only: clears "Needs input" status and notification when Claude resumes work
     /// (e.g. after permission grant). Runs async so it doesn't block tool execution.
     private func runClaudePreToolUse(_ ctx: AgentHookContext) {
-        emitClaudeSubagentStatus(ctx.parsed, scope: ctx.workspaceArg, state: "working")
         let client = ctx.client
         let mappedSession = ctx.parsed.sessionId.flatMap { ctx.store.lookup(sessionId: $0) }
 
@@ -904,6 +909,7 @@ extension ProgramaCLI {
     }
 
     private func runClaudeSubagentStop(_ ctx: AgentHookContext) {
+        forgetClaudeSubagentPermissionRequest(rawInput: ctx.rawInput)
         let client = ctx.client
         let mappedSession = ctx.parsed.sessionId.flatMap { ctx.store.lookup(sessionId: $0) }
         guard let externalAgentId = firstString(in: ctx.parsed.object ?? [:], keys: ["agent_id"]),

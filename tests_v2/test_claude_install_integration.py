@@ -36,6 +36,7 @@ EXPECTED_EVENTS = [
     "PreToolUse",
     "PostToolUse",
     "PostToolUseFailure",
+    "PermissionRequest",
 ]
 
 
@@ -85,6 +86,12 @@ def test_fresh_install(cli: str) -> None:
         _must(
             any(f"{CLAUDE_HOOK_MARKER} post-tool-use" in cmd for cmd in failure_commands),
             f"PostToolUseFailure should run the post-tool-use hook, got: {failure_commands}",
+        )
+        # PermissionRequest records which tool call a permission stop waits on.
+        request_commands = _hooks_commands(hooks, "PermissionRequest")
+        _must(
+            any(f"{CLAUDE_HOOK_MARKER} permission-request" in cmd for cmd in request_commands),
+            f"PermissionRequest should run the permission-request hook, got: {request_commands}",
         )
 
         print("  PASS: fresh install writes every lifecycle hook event")

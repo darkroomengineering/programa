@@ -1255,7 +1255,8 @@ watchdog and port scanning; a report without them still works and is left unkeye
 (anything else is `invalid_params`). Such a report moves only what event routes see of the agent,
 never `agent_state`, the badge, helpers or ports, and it leaves a blocked route view alone unless
 `resumed: true` says the sender claims the prompt was answered. Claude Code's PostToolUse hook sends
-both while Claude reports its own status (`docs/program-status.md`, Authority).
+both while Claude reports its own status, and only once no agent in the terminal still has a
+permission request open (`docs/program-status.md`, Authority).
 
 On a plain (not `route_only`) `working` report, `resumed: false` says the sender cannot know the
 prompt was answered: while the surface's routes' view, or an `agent_state` no program reports, is

@@ -88,6 +88,8 @@ extension ProgramaCLI {
         // failed tool fires PostToolUseFailure instead. See `runClaudePostToolUse`.
         ClaudeHookEventSpec(name: "PostToolUse", event: "post-tool-use", timeout: 5, isAsync: false),
         ClaudeHookEventSpec(name: "PostToolUseFailure", event: "post-tool-use", timeout: 5, isAsync: false, matcher: "*"),
+        // Records which agent has a permission request open; see `claudeToolEndsStop`.
+        ClaudeHookEventSpec(name: "PermissionRequest", event: "permission-request", timeout: 5, isAsync: false, matcher: "*"),
         ClaudeHookEventSpec(name: "SubagentStart", event: "subagent-start", timeout: 5, isAsync: false),
         ClaudeHookEventSpec(name: "SubagentStop", event: "subagent-stop", timeout: 5, isAsync: false)
     ]
