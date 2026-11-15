@@ -926,6 +926,7 @@ class GhosttyApp {
                 prefix: "programa-layer-bg",
                 logLabel: "layer background (fallback)"
             )
+            loadScrollbackLimitDefault(into: fallbackConfig, logLabel: "scrollback limit default (fallback)")
             usesHostLayerBackground = true
             ghostty_config_finalize(fallbackConfig)
             updateDefaultBackground(from: fallbackConfig, source: "initialize.fallbackConfig")
@@ -1007,6 +1008,19 @@ class GhosttyApp {
         return !String(cString: backgroundImage).isEmpty
     }
 
+    // Ghostty's own cap is 50 MB of scrollback per terminal, which adds up
+    // fast across many long-running panes. Load this BEFORE the user's config
+    // files so a user-set scrollback-limit-bytes (or legacy scrollback-limit)
+    // still wins.
+    private func loadScrollbackLimitDefault(into config: ghostty_config_t, logLabel: String) {
+        loadInlineGhosttyConfig(
+            "scrollback-limit-bytes = 10000000",
+            into: config,
+            prefix: "programa-scrollback-limit",
+            logLabel: logLabel
+        )
+    }
+
     private func loadDefaultConfigFilesWithLegacyFallback(_ config: ghostty_config_t) {
         // The card layout rounds the terminal card to a corner concentric with
         // the window (18pt); ghostty's stock window-padding (2) lets glyphs sit
@@ -1034,6 +1048,7 @@ class GhosttyApp {
             prefix: "programa-copy-on-select",
             logLabel: "copy-on-select default"
         )
+        loadScrollbackLimitDefault(into: config, logLabel: "scrollback limit default")
         ghostty_config_load_default_files(config)
         loadLegacyGhosttyConfigIfNeeded(config)
         ghostty_config_load_recursive_files(config)

@@ -53,16 +53,17 @@ Common symptoms:
 
 ## High memory use
 
-Most of Programa's memory is terminal history. Each terminal keeps up to 50 MB of scrollback,
-so ten terminals that have printed a lot of output can hold about 500 MB between them. For a
+Most of Programa's memory is terminal history. Each terminal keeps up to 10 MB of scrollback,
+so ten terminals that have printed a lot of output can hold up to about 100 MB between them. For a
 few seconds after a burst of output, panes you are not looking at can add more, until Programa
 releases their rendered frames about 30 seconds after they were last visible.
 
-To keep less history, lower the cap in your Ghostty config (`~/.config/ghostty/config`). It
-applies to terminals opened after the change:
+To change how much history each terminal keeps, set the cap in your Ghostty config
+(`~/.config/ghostty/config`); your value replaces Programa's 10 MB default. It applies to
+terminals opened after the change. For example, to keep 5 MB per terminal:
 
 ```
-scrollback-limit-bytes = 10000000
+scrollback-limit-bytes = 5000000
 ```
 
 `scrollback-limit-lines` sets a line count instead; when both are set, the first limit reached
