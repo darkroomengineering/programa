@@ -808,6 +808,12 @@ jobs:
           APP="$(./scripts/locate-built-app.sh --configuration Debug --primary 'Programa DEV' --derived-data-root "$PROGRAMA_DERIVED_DATA_DIR")"
           python3 tests_v2/test_scrollback_privacy_recovery.py --app "$APP"
 
+      - name: Verify a quiet restored pane keeps its scrollback
+        run: |
+          set -euo pipefail
+          APP="$(./scripts/locate-built-app.sh --configuration Debug --primary 'Programa DEV' --derived-data-root "$PROGRAMA_DERIVED_DATA_DIR")"
+          python3 tests_v2/test_restored_scrollback_survives_relaunch.py --app "$APP"
+
       - name: Cleanup virtual display
         if: always()
         run: |
