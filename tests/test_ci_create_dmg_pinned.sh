@@ -17,7 +17,7 @@ printf '%s\n' "$@" > "${TEST_BUN_LOG:?}"
 EOF
 chmod +x "$BUN_STUB"
 
-CREATE_DMG_VERSION=8.0.0 \
+CREATE_DMG_VERSION=8.1.0 \
 PROGRAMA_BUN_COMMAND="$BUN_STUB" \
 TEST_BUN_LOG="$BUN_LOG" \
 TEST_BUN_CWD="$BUN_CWD" \
@@ -44,7 +44,7 @@ done
   echo "FAIL: Bun install directory lacks package.json or committed bun.lock" >&2
   exit 1
 }
-node - "${INSTALL_DIR}/package.json" "${INSTALL_DIR}/bun.lock" 8.0.0 <<'NODE'
+node - "${INSTALL_DIR}/package.json" "${INSTALL_DIR}/bun.lock" 8.1.0 <<'NODE'
 const fs = require("node:fs");
 const [packagePath, lockPath, expectedVersion] = process.argv.slice(2);
 const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
