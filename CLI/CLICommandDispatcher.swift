@@ -165,9 +165,6 @@ struct CLICommandDispatcher {
             explicitPassword: socketPasswordArg
         )
         return
-    case "aside":
-        try cli.runAside(arguments: commandArgs)
-        return
     case "browsee":
         try cli.runBrowsee(arguments: commandArgs)
         return

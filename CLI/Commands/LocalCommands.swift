@@ -123,24 +123,6 @@ extension ProgramaCLI {
                 execute: nil
             ),
             CommandDescriptor(
-                names: ["aside"],
-                helpLines: ["aside <status|install-mcp|uninstall-mcp> [--with-devtools] [--yes]"],
-                connectionPolicy: .local,
-                detailedUsage: """
-                Usage: programa aside <status|install-mcp|uninstall-mcp> [--with-devtools] [--yes]
-
-                Detect the Aside agent browser CLI and register its MCP server with
-                Claude Code and Codex. `status` reports the detected aside binary,
-                the DevTools endpoint if Aside is running, and each client's
-                registration state. `install-mcp` runs `claude mcp add` / `codex mcp add`
-                for each detected client; `--with-devtools` also registers a
-                chrome-devtools-mcp server pointed at Aside's DevTools port.
-                `uninstall-mcp` removes both. `--yes`/`-y` skips the confirmation prompt.
-                """,
-                grammar: CLIArgumentGrammar(booleanOptions: ["yes", "y", "with-devtools"], minPositionals: 1, maxPositionals: 1),
-                execute: nil
-            ),
-            CommandDescriptor(
                 names: ["browsee"],
                 helpLines: ["browsee <status|install-mcp|uninstall-mcp|mcp> [--session <id>] [--yes]"],
                 connectionPolicy: .local,

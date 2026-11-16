@@ -3195,11 +3195,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     @discardableResult
-    func openAsideMCPInstaller(event: NSEvent? = nil, debugSource: String = "unspecified") -> UUID? {
-        openWorkspaceRunning("programa aside install-mcp --with-devtools\n", event: event, debugSource: debugSource)
-    }
-
-    @discardableResult
     func openBrowseeMCPInstaller(event: NSEvent? = nil, debugSource: String = "unspecified") -> UUID? {
         openWorkspaceRunning("programa browsee install-mcp\n", event: event, debugSource: debugSource)
     }

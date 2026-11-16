@@ -98,7 +98,7 @@ Full v2 method list by area (authoritative source: `Sources/V2CommandCatalog.swi
 - **Sidebar metadata** (workspace-scoped): `workspace.set_status`/`clear_status`/`list_status`, `workspace.log`/`clear_log`/`list_log`, `workspace.set_progress`/`clear_progress`, `workspace.sidebar_state`, `workspace.clear_agent_pid`/`set_agent_pid`, `workspace.report_meta_block`/`clear_meta_block`/`list_meta_blocks`, `workspace.reset_sidebar`.
 - **Notification**: `notification.create`, `notification.create_for_surface`, `notification.create_for_target`, `notification.list`, `notification.clear`.
 - **App**: `app.focus_override.set`, `app.simulate_active`, `app.reload_config`, `app.browsers` (lists installed/running browsers + system default; see `Sources/Panels/BrowserAvailability.swift`).
-- **Browser**: `browser.open_split` (focus-intent varies), `browser.navigate`, `browser.back`, `browser.forward`, `browser.reload`, `browser.url.get`, `browser.focus_webview` (focus-intent), `browser.is_webview_focused`, `browser.focus` (focus-intent, element-level), `browser.tab.switch` (focus-intent). Full agent-browser-shaped surface (`browser.snapshot`, `.click`, `.fill`, `.screenshot`, `.console.list`, `.tab.new/close`, etc.) documented in `docs/aside-browser.md`; Playwright-shaped network/viewport/raw-input methods return `not_supported` (no CDP under `WKWebView`).
+- **Browser**: `browser.open_split` (focus-intent varies), `browser.navigate`, `browser.back`, `browser.forward`, `browser.reload`, `browser.url.get`, `browser.focus_webview` (focus-intent), `browser.is_webview_focused`, `browser.focus` (focus-intent, element-level), `browser.tab.switch` (focus-intent). Full agent-browser-shaped surface (`browser.snapshot`, `.click`, `.fill`, `.screenshot`, `.console.list`, `.tab.new/close`, etc.); Playwright-shaped network/viewport/raw-input methods return `not_supported` (no CDP under `WKWebView`).
 - **Review** (`review.*`, docs/plans/diff-review-panel.md — see §5): `review.open` (focus-intent, opt-in), `review.refresh`, `review.comment.add`, `review.comment.remove`, `review.comment.list`, `review.send_comments`.
 - **Markdown**: `markdown.open` (app-chrome, not MCP-exposed).
 - **Subscriptions**: `subscribe` (`classes`: `agent_state`|`output`|`workspace_lifecycle`; `surface_ids` required for `output`), `unsubscribe`. Push frames use a bare `{"event": ...}` shape, not the request/response envelope; 256-event drop-oldest queue per subscription with a `{"event":"dropped","count"}` marker frame.
@@ -129,7 +129,7 @@ DEBUG-only hint file at `/tmp/programa-last-socket-path`, else `/tmp/programa-de
 (DEBUG) / `/tmp/programa.sock` (release). Full top-level command name list, in the order declared
 in `commandDescriptors()` (`CLI/programa.swift`, one `CommandDescriptor` per name group):
 `welcome`, `shortcuts`, `feedback`, `themes`, `claude-teams`, `omo`, `omx`, `omc`, `codex`,
-`claude`, `opencode`, `aside`, `ping`, `version`, `capabilities`, `rpc`, `identify`,
+`claude`, `opencode`, `browsee`, `ping`, `version`, `capabilities`, `rpc`, `identify`,
 `list-windows`, `current-window`, `new-window`, `focus-window`, `close-window`,
 `move-workspace-to-window`, `reorder-workspace`, `workspace-action`, `worktree`,
 `agent-detection`, `race`, `layout`, `snapshot`, `list-workspaces`, `new-workspace`, `new-split`,
@@ -145,7 +145,7 @@ in `commandDescriptors()` (`CLI/programa.swift`, one `CommandDescriptor` per nam
 `CLI/CLI+TmuxCompat.swift`), `markdown`, `review`, `recap`, `browser` (with legacy flat aliases
 `open-browser`, `navigate`, `browser-back`, `browser-forward`, `browser-reload`, `get-url`,
 `focus-webview`, `is-webview-focused`), `help`. Command families with their own subcommand sets:
-`CLI/CLI+Aside.swift`, `CLI/CLI+Browser.swift` (49-verb agent-browser-shaped surface), `CLI/CLI+Review.swift`, `CLI/CLI+Markdown.swift`,
+`CLI/CLI+Browsee.swift`, `CLI/CLI+Browser.swift` (49-verb agent-browser-shaped surface), `CLI/CLI+Review.swift`, `CLI/CLI+Markdown.swift`,
 `CLI/CLI+Recap.swift`, `CLI/CLI+Themes.swift`, `CLI/CLI+AgentWrappers.swift` (`claude`, `codex`,
 `opencode` install/uninstall-integration), `CLI/CLI+Hooks.swift`/`CLI/CLI+HookCommands.swift`.
 Notifications CLI subset is also documented standalone in `docs/notifications.md`: `programa
@@ -220,11 +220,11 @@ open|refresh|comment|send`. Socket family listed in §3.
 
 ## 6. Browser panel
 
-**Two distinct browser surfaces** (`docs/aside-browser.md`): Programa's embedded panel
+**Two distinct browser surfaces** (`docs/browsee.md`): Programa's embedded panel
 (`WKWebView`-based, per-workspace profile, socket-driven `browser.*`) for local
-previews/smoke-tests/DOM inspection that an agent reads back without leaving the pane; and Aside
-(`aside.com`, Chromium-based, external app) for logged-in/private-session work, registered as an
-MCP server for Claude Code/Codex via `programa aside install-mcp`.
+previews/smoke-tests/DOM inspection that an agent reads back without leaving the pane; and browsee
+(Darkroom's agent browser, external app) for logged-in/private-session work, registered as an
+MCP server for Claude Code/Codex via `programa browsee install-mcp`.
 
 Embedded browser source: `Sources/Panels/BrowserPanel.swift` + companions
 (`+Automation.swift`, `+DeveloperTools.swift`, `+Focus.swift`, `+Navigation.swift`, `+Theme.swift`,

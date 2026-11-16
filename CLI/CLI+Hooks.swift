@@ -2050,15 +2050,11 @@ extension ProgramaCLI {
 
     ## Browser work
 
-    Do not reach for a Chrome extension. Programa has no built-in browser; browser work goes through Aside.
+    Do not reach for a Chrome extension. Programa has no built-in browser; browser work goes through browsee.
 
-    - **Previews, smoke tests, screenshots, DOM checks, console errors, logged-in sites, private dashboards, CI logs:** use Aside through its MCP server if it is registered (tools from the `aside` server, or `aside-devtools` for raw Chrome DevTools control), or delegate a whole task from the shell:
-
-      ```bash
-      aside "Open the staging dashboard and tell me whether the last deploy is green"
-      ```
-
-      `programa aside status` says whether Aside is installed and registered; `programa aside install-mcp` registers it with Claude Code and Codex. Do not run the installer yourself unless the user asks, it edits their agent config.
+    - **Previews, smoke tests, screenshots, DOM checks, console errors, logged-in sites, private dashboards, CI logs:** use the tools of the `browsee` MCP server if it is registered. They open tabs in browsee, read them and click. You see only the tabs you opened, and browsee asks the user before purchases, deletes, sign-ins and closing their tabs. A closed browsee starts in the background.
+    - If browsee refuses the connection, ask the user to turn on "Let other apps control my tabs" in browsee > Settings > Agents.
+    - `programa browsee status` says whether browsee is installed, running and registered; `programa browsee install-mcp` registers it with Claude Code and Codex. Do not run the installer yourself unless the user asks, it edits their agent config.
 
     ## Reference
 

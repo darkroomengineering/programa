@@ -11076,23 +11076,6 @@
         }
       }
     },
-    "menu.file.installAsideMCP": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Install Aside Browser MCP…"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aside ブラウザ MCP をインストール…"
-          }
-        }
-      }
-    },
     "menu.file.installBrowseeMCP": {
       "extractionState": "manual",
       "localizations": {

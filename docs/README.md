@@ -20,7 +20,6 @@
 - [agent-skill.md](agent-skill.md): the installable agent skill.
 - [agent-usage.md](agent-usage.md): what token data Claude Code and Codex record, and `programa usage`.
 - [agent-detection-manifests.md](agent-detection-manifests.md): the manifest format for screen-based agent detection.
-- [aside-browser.md](aside-browser.md): Using the Aside browser from agents in Programa panes.
 - [browsee.md](browsee.md): Letting agents in Programa panes drive browsee tabs.
 
 ## Building, testing and releasing
