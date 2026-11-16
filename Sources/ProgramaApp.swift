@@ -497,11 +497,11 @@ struct programaApp: App {
 
                 Button(
                     String(
-                        localized: "menu.file.installAsideMCP",
-                        defaultValue: "Install Aside Browser MCP…"
+                        localized: "menu.file.installBrowseeMCP",
+                        defaultValue: "Install browsee MCP…"
                     )
                 ) {
-                    AppDelegate.shared?.openAsideMCPInstaller(debugSource: "menu.installAsideMCP")
+                    AppDelegate.shared?.openBrowseeMCPInstaller(debugSource: "menu.installBrowseeMCP")
                 }
             }
 

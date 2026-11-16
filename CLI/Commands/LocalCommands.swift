@@ -123,21 +123,31 @@ extension ProgramaCLI {
                 execute: nil
             ),
             CommandDescriptor(
-                names: ["aside"],
-                helpLines: ["aside <status|install-mcp|uninstall-mcp> [--with-devtools] [--yes]"],
+                names: ["browsee"],
+                helpLines: ["browsee <status|install-mcp|uninstall-mcp|mcp> [--session <id>] [--yes]"],
                 connectionPolicy: .local,
                 detailedUsage: """
-                Usage: programa aside <status|install-mcp|uninstall-mcp> [--with-devtools] [--yes]
+                Usage: programa browsee <status|install-mcp|uninstall-mcp|mcp> [--session <id>] [--yes]
 
-                Detect the Aside agent browser CLI and register its MCP server with
-                Claude Code and Codex. `status` reports the detected aside binary,
-                the DevTools endpoint if Aside is running, and each client's
-                registration state. `install-mcp` runs `claude mcp add` / `codex mcp add`
-                for each detected client; `--with-devtools` also registers a
-                chrome-devtools-mcp server pointed at Aside's DevTools port.
-                `uninstall-mcp` removes both. `--yes`/`-y` skips the confirmation prompt.
+                Let Claude Code and Codex drive browsee tabs. `install-mcp` registers a
+                `browsee` MCP server with each client found on PATH (`claude mcp add
+                --scope user`, `codex mcp add`), replacing a `browsee` entry that runs
+                anything else; `uninstall-mcp` removes it. `status`
+                reports where browsee is, whether it is running and what is registered.
+                `--yes`/`-y` skips the confirmation prompt.
+
+                `mcp` is the server the clients run: it starts browsee in the background
+                when it is closed, waits up to 8 seconds for it, then runs browsee-mcp.
+                Inside a Programa pane the session is `programa-<surface id>`, so each
+                pane's agent sees only the tabs it opened; elsewhere, and in Codex, it is
+                `programa`. `--session` overrides it. browsee serves these sessions only
+                while "Let other apps control my tabs" is on in its Agents settings.
                 """,
-                grammar: CLIArgumentGrammar(booleanOptions: ["yes", "y", "with-devtools"], minPositionals: 1, maxPositionals: 1),
+                grammar: CLIArgumentGrammar(valueOptions: ["session"], booleanOptions: ["yes", "y"], minPositionals: 1, maxPositionals: 2, shortFlags: ["-y"], validate: { command, parsed in
+                    guard parsed.positional.count == 1 || parsed.positional[1] == "-y" else {
+                        throw CLIError(message: "\(command): unexpected arguments: \(parsed.positional[1])")
+                    }
+                }),
                 execute: nil
             ),
         ]

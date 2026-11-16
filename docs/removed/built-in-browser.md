@@ -31,7 +31,7 @@ Agents drove it through 72 `browser.*` socket methods (navigate, click, fill, ty
 
 ## What stayed, and compatibility
 
-- External browser detection (`app.browsers`, `PROGRAMA_DEFAULT_BROWSER`) and the Aside integration (`programa aside`) stayed; agents that need a browser use an external one.
+- External browser detection (`app.browsers`, `PROGRAMA_DEFAULT_BROWSER`) stayed; agents that need a browser use an external one, such as browsee (`docs/browsee.md`).
 - Every link now opens through `ExternalOpenPolicy.open`, which hands http, https and mailto to macOS and asks first for anything else.
 - Saved sessions decode their panels one at a time, so an old snapshot with a browser pane restores everything else and drops that pane. `programa.json` layouts skip `browser` surfaces; a pane left empty becomes a terminal so the split keeps its shape.
 - Markdown panels still use their own plain WKWebView for Mermaid diagrams.

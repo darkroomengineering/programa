@@ -1,7 +1,7 @@
 import Foundation
 
 /// Plans registering the bundled `programa-mcp` server with Codex through `codex mcp add`,
-/// the same way `programa aside install-mcp` registers Aside. Claude Code needs no
+/// the same way `programa browsee install-mcp` registers browsee. Claude Code needs no
 /// registration: the `claude` wrapper passes the server to each session it starts.
 /// Pure so the decision table can be exercised without spawning Codex.
 struct CodexMCPRegistrationPlan: Equatable {
