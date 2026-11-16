@@ -6,6 +6,9 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 
 ## [Unreleased]
 
+### Added
+- `programa browsee install-mcp` registers browsee with Claude Code and Codex, so an agent in a Programa pane can open, read and click browsee tabs. Each pane's agent gets its own browsee session and sees only the tabs it opened, and when browsee is closed it starts in the background. It needs "Let other apps control my tabs" on in browsee. `File > Install browsee MCP…` runs it too. See `docs/browsee.md`.
+
 ### Changed
 - Plain `claude` in a Programa terminal now starts with Claude Code agent teams on, the same as `programa claude-teams`, so teammates open as Programa panes. A `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` you set yourself, including `0`, is left alone, and so is `claude` inside your own tmux or screen. Turn it off in Settings > Agents > Claude Agent Teams (`automation.claudeTeamsByDefault`). `programa claude-teams` still works and always turns teams on.
 - Each terminal now keeps at most 10 MB of scrollback instead of Ghostty's 50 MB, so many long-running panes use far less memory. A `scrollback-limit-bytes` in your Ghostty config still wins. See `docs/troubleshooting.md`.

@@ -3199,6 +3199,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         openWorkspaceRunning("programa aside install-mcp --with-devtools\n", event: event, debugSource: debugSource)
     }
 
+    @discardableResult
+    func openBrowseeMCPInstaller(event: NSEvent? = nil, debugSource: String = "unspecified") -> UUID? {
+        openWorkspaceRunning("programa browsee install-mcp\n", event: event, debugSource: debugSource)
+    }
+
     private func openWorkspaceRunning(
         _ terminalInput: String,
         inFocusedDirectory: Bool = false,

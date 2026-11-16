@@ -140,6 +140,33 @@ extension ProgramaCLI {
                 grammar: CLIArgumentGrammar(booleanOptions: ["yes", "y", "with-devtools"], minPositionals: 1, maxPositionals: 1),
                 execute: nil
             ),
+            CommandDescriptor(
+                names: ["browsee"],
+                helpLines: ["browsee <status|install-mcp|uninstall-mcp|mcp> [--session <id>] [--yes]"],
+                connectionPolicy: .local,
+                detailedUsage: """
+                Usage: programa browsee <status|install-mcp|uninstall-mcp|mcp> [--session <id>] [--yes]
+
+                Let Claude Code and Codex drive browsee tabs. `install-mcp` registers a
+                `browsee` MCP server with each client found on PATH (`claude mcp add
+                --scope user`, `codex mcp add`); `uninstall-mcp` removes it. `status`
+                reports where browsee is, whether it is running and what is registered.
+                `--yes`/`-y` skips the confirmation prompt.
+
+                `mcp` is the server the clients run: it starts browsee in the background
+                when it is closed, waits up to 8 seconds for it, then runs browsee-mcp.
+                Inside a Programa pane the session is `programa-<surface id>`, so each
+                pane's agent sees only the tabs it opened; elsewhere, and in Codex, it is
+                `programa`. `--session` overrides it. browsee serves these sessions only
+                while "Let other apps control my tabs" is on in its Agents settings.
+                """,
+                grammar: CLIArgumentGrammar(valueOptions: ["session"], booleanOptions: ["yes", "y"], minPositionals: 1, maxPositionals: 2, shortFlags: ["-y"], validate: { command, parsed in
+                    guard parsed.positional.count == 1 || parsed.positional[1] == "-y" else {
+                        throw CLIError(message: "\(command): unexpected arguments: \(parsed.positional[1])")
+                    }
+                }),
+                execute: nil
+            ),
         ]
     }
 }

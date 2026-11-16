@@ -11093,6 +11093,23 @@
         }
       }
     },
+    "menu.file.installBrowseeMCP": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Install browsee MCP…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "browsee MCP をインストール…"
+          }
+        }
+      }
+    },
     "settings.material.contentBackground": {
       "extractionState": "manual",
       "localizations": {

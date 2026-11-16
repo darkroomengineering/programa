@@ -503,6 +503,15 @@ struct programaApp: App {
                 ) {
                     AppDelegate.shared?.openAsideMCPInstaller(debugSource: "menu.installAsideMCP")
                 }
+
+                Button(
+                    String(
+                        localized: "menu.file.installBrowseeMCP",
+                        defaultValue: "Install browsee MCP…"
+                    )
+                ) {
+                    AppDelegate.shared?.openBrowseeMCPInstaller(debugSource: "menu.installBrowseeMCP")
+                }
             }
 
             // Close tab/workspace
