@@ -28,14 +28,16 @@ enum BrowseeApp {
         (app as NSString).appendingPathComponent("Contents/MacOS/browsee-mcp")
     }
 
-    /// browsee moves a socket whose path does not fit `sun_path` to a hashed name under
-    /// `/tmp/browsee-<uid>/`; nil then, and the caller skips the probe.
-    // SHORTCUT: no probe for home folders longer than ~50 bytes. ceiling: such a user gets
-    // browsee-mcp's own "is browsee running?" error instead of a launch. upgrade: read the
-    // fallback path from the link contract once browsee publishes it (H1).
-    static func socketPath(home: String) -> String? {
-        let path = (home as NSString).appendingPathComponent(socketRelativePath)
-        return path.utf8.count < sunPathBytes ? path : nil
+    /// The sockets whose answer means browsee runs. A socket path that does not fit `sun_path`
+    /// moves to a hashed name in browsee's fallback folder, `/tmp/browsee-<uid>/` (`socket_path`
+    /// in browsee-mcp). Only browsee's MCP sockets live there, so any socket in it counts.
+    static func probePaths(home: String, fallbackFolder: String, listFolder: (String) -> [String]) -> [String] {
+        let natural = (home as NSString).appendingPathComponent(socketRelativePath)
+        if natural.utf8.count < sunPathBytes { return [natural] }
+        return listFolder(fallbackFolder)
+            .filter { $0.hasSuffix(".sock") }
+            .sorted()
+            .map { (fallbackFolder as NSString).appendingPathComponent($0) }
     }
 
     /// `programa-<surface id>` inside a Programa pane, so each pane's agent sees only the tabs
@@ -78,6 +80,28 @@ struct BrowseeMCPPlan {
 
 extension ProgramaCLI {
     private var browseeHome: String { Self.integrationExpandTilde("~") }
+
+    private var browseeFallbackFolder: String {
+        #if DEBUG
+        // Tests keep their sockets out of the real fallback folder. Release builds ignore it.
+        if let folder = ProcessInfo.processInfo.environment["PROGRAMA_BROWSEE_SOCKET_FOLDER_FOR_TESTING"], !folder.isEmpty {
+            return folder
+        }
+        #endif
+        return "/tmp/browsee-\(geteuid())"
+    }
+
+    /// The folder's entries, or none unless it is a directory this user owns, as browsee requires.
+    private func browseeOwnedFolderEntries(_ folder: String) -> [String] {
+        var info = stat()
+        guard lstat(folder, &info) == 0, info.st_mode & S_IFMT == S_IFDIR, info.st_uid == geteuid() else { return [] }
+        return (try? FileManager.default.contentsOfDirectory(atPath: folder)) ?? []
+    }
+
+    private func browseeIsRunning() -> Bool {
+        BrowseeApp.probePaths(home: browseeHome, fallbackFolder: browseeFallbackFolder, listFolder: browseeOwnedFolderEntries)
+            .contains { browseeSocketAccepts($0) }
+    }
 
     private func browseeAppPath() -> String? {
         BrowseeApp.appPath(home: browseeHome) { FileManager.default.isExecutableFile(atPath: $0) }
@@ -134,13 +158,13 @@ extension ProgramaCLI {
         guard let app = browseeAppPath() else {
             throw CLIError(message: "browsee is not installed: no browsee.app in ~/Applications or /Applications.")
         }
-        if let socketPath = BrowseeApp.socketPath(home: browseeHome), !browseeSocketAccepts(socketPath) {
+        if !browseeIsRunning() {
             try launchBrowseeInBackground()
             let deadline = Date().addingTimeInterval(BrowseeApp.launchWait)
             var running = false
             while !running, Date() < deadline {
                 usleep(200_000)
-                running = browseeSocketAccepts(socketPath)
+                running = browseeIsRunning()
             }
             guard running else {
                 throw CLIError(message: "browsee did not start within \(Int(BrowseeApp.launchWait)) seconds. Open browsee, then restart this agent.")
@@ -184,9 +208,7 @@ extension ProgramaCLI {
         case "status":
             let app = browseeAppPath()
             print("browsee: \(app ?? "not found, install browsee.app in /Applications")")
-            if let socketPath = BrowseeApp.socketPath(home: browseeHome) {
-                print("Running: \(browseeSocketAccepts(socketPath) ? "yes" : "no") (\(socketPath))")
-            }
+            print("Running: \(browseeIsRunning() ? "yes" : "no")")
             browseePrintClientStatus("Claude Code", executable: resolveClaudeExecutable(searchPath: searchPath))
             browseePrintClientStatus("Codex", executable: resolveCodexExecutable(searchPath: searchPath))
             print("Agents reach browsee only while \"Let other apps control my tabs\" is on in browsee > Settings > Agents.")

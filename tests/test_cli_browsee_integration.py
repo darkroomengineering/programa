@@ -8,9 +8,14 @@ browsee's socket does not answer it starts browsee with `open -g -b com.darkroom
 waits for the socket, and fails with a clear error if it never answers. Nothing but the
 helper ever writes to stdout, which is the agent's MCP channel.
 
+When HOME is so long that browsee's socket path does not fit the 104-byte sun_path, browsee
+keeps its socket under a hashed name in its fallback folder, and any socket answering there
+counts as browsee running.
+
 Runs a copy of the built Debug CLI under a temporary HOME with fake `claude`, `codex`,
-`browsee-mcp` and `open` (through PROGRAMA_BROWSEE_OPEN_FOR_TESTING). No app, no real
-browsee and no real agent are involved.
+`browsee-mcp` and `open` (PROGRAMA_BROWSEE_OPEN_FOR_TESTING), and a private fallback folder
+(PROGRAMA_BROWSEE_SOCKET_FOLDER_FOR_TESTING). No app, no real browsee and no real agent are
+involved.
 """
 
 from __future__ import annotations
@@ -66,9 +71,9 @@ def make_executable(path: Path, text: str) -> None:
 
 
 class Sandbox:
-    def __init__(self, root: str, with_browsee: bool = True) -> None:
+    def __init__(self, root: str, with_browsee: bool = True, long_home: bool = False) -> None:
         self.root = Path(root)
-        self.home = self.root / "home"
+        self.home = self.root / ("home-" + "x" * 48 if long_home else "home")
         self.home.mkdir(parents=True)
         bin_dir = self.root / "bundle-bin"
         bin_dir.mkdir()
@@ -83,8 +88,13 @@ class Sandbox:
         make_executable(self.opener, FAKE_OPEN)
         self.state = self.root / "state"
         self.state.mkdir()
-        self.socket_path = self.home / "Library/Application Support/browsee/mcp.sock"
-        self.socket_path.parent.mkdir(parents=True)
+        self.fallback = self.root / "fallback"
+        self.fallback.mkdir(mode=0o700)
+        natural = self.home / "Library/Application Support/browsee/mcp.sock"
+        natural.parent.mkdir(parents=True)
+        fits = len(str(natural).encode()) < 104
+        self.socket_fits = fits
+        self.socket_path = natural if fits else self.fallback / "5f1d3c2b9a8e7d6c.sock"
         self.listener: socket.socket | None = None
 
     def calls(self, client: str) -> list[str]:
@@ -117,6 +127,7 @@ class Sandbox:
             HOME=str(self.home), CFFIXED_USER_HOME=str(self.home), FAKE_STATE=str(self.state),
             PATH=f"{self.fake_bin}:/usr/bin:/bin", PROGRAMA_SOCKET=sock, PROGRAMA_SOCKET_PATH=sock,
             PROGRAMA_BROWSEE_OPEN_FOR_TESTING=str(self.opener),
+            PROGRAMA_BROWSEE_SOCKET_FOLDER_FOR_TESTING=str(self.fallback),
         )
         if surface is not None:
             env["PROGRAMA_SURFACE_ID"] = surface
@@ -201,7 +212,16 @@ class BrowseeIntegrationTests(unittest.TestCase):
                 self.assertEqual(box.log("helper.log"), [f"--session {expected}"])
 
     def test_mcp_starts_a_closed_browsee_in_the_background_and_waits_for_it(self) -> None:
-        box = self.sandbox()
+        for long_home in (False, True):
+            with self.subTest(long_home=long_home):
+                self.check_launch_then_handoff(long_home)
+
+    def check_launch_then_handoff(self, long_home: bool) -> None:
+        tmp = tempfile.TemporaryDirectory(prefix="pcli-browsee-", dir="/tmp")
+        self.addCleanup(tmp.cleanup)
+        box = Sandbox(tmp.name, long_home=long_home)
+        self.addCleanup(box.close)
+        self.assertEqual(box.socket_fits, not long_home, "the long HOME must push the socket past sun_path")
         open_log = box.state / "open.log"
 
         def browsee_starts_when_opened() -> None:
@@ -218,6 +238,16 @@ class BrowseeIntegrationTests(unittest.TestCase):
         self.assertOK(proc)
         self.assertEqual(box.log("open.log"), ["-g -b com.darkroom.browsee"])
         self.assertEqual(proc.stdout, "helper-stdout\n")
+        self.assertEqual(box.log("helper.log"), [f"--session programa-{SURFACE_ID}"])
+
+    def test_mcp_with_a_long_home_finds_a_running_browsee_in_the_fallback_folder(self) -> None:
+        box = self.sandbox(long_home=True)
+        self.assertFalse(box.socket_fits)
+        (box.fallback / "stale.sock").touch()
+        box.start_browsee()
+        proc = box.run("mcp", surface=SURFACE_ID)
+        self.assertOK(proc)
+        self.assertEqual(box.log("open.log"), [], "a running browsee is not launched again")
         self.assertEqual(box.log("helper.log"), [f"--session programa-{SURFACE_ID}"])
 
     def test_mcp_fails_clearly_when_browsee_never_starts(self) -> None:
