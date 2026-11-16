@@ -13,14 +13,16 @@ When we change the fork, update this document and the parent submodule SHA.
 
 ## Current fork changes
 
-The pinned fork head is `e4b6b6bc6` on the fork branch `inc-1279-merge-upstream`, which is also the
-fork's `main`. It is a merge of upstream `ghostty-org/ghostty` `main` (`7fa26e8b6`) into the previous
-pin `957dbd797`. Never delete the branch: the pin and its xcframework release point at it. It builds
-with Zig 0.17.1 and carries eleven patch groups: display-link restart, resize stale-frame mitigation, OSC 99
+The pinned fork head is `60f5a29b7` on the fork branch `inc-1281-fork-patches`, which is also the
+fork's `main`. It sits on `e4b6b6bc6` (branch `inc-1279-merge-upstream`), a merge of upstream
+`ghostty-org/ghostty` `main` (`7fa26e8b6`) into the previous pin `957dbd797`. Never delete either
+branch: the pins and their xcframework releases point at them. It builds with Zig 0.17.1 and carries
+eleven patch groups: display-link restart, resize stale-frame mitigation, OSC 99
 notification dispatch, color scheme mode 2031, keyboard copy mode selection API, layer-background
 flag, occluded-surface throttle, offscreen renderer realization, session introspection and revival
 APIs (which include the PTY tee), the OSC 7501 apprt action, and the macOS responsibility disclaim.
-The embedder subprocess spawn hook is described in section 12.
+The embedder subprocess spawn hook, NFD Hangul font resolution and the vendored libxev with its
+write-backpressure patch are described in sections 12 to 14.
 
 ### 1) macOS display link restart on display changes
 
@@ -187,12 +189,58 @@ tend to conflict together during rebases.
   - Preserve the callback on the IO thread and the non-owned `attached` process semantics.
   - Keep the macOS slave open explicit: libc `openpty` does not supply `O_NOCTTY`.
 
+### 13) NFD Hangul clusters resolve through the composed syllable
+
+- Commits: `740d7f209` (regression test), `8a6b6d15b` (fix). Ported from manaflow-ai/ghostty
+  `0316a8de8` and `3fbdd078d` (cmux `1066f9b914`).
+- Files: `src/font/hangul.zig`, `src/font/main.zig`, `src/font/shaper/run.zig`,
+  `src/font/shaper/coretext.zig` (test).
+- Summary:
+  - `RunIterator.indexForCell` composes a decomposed L+V, L+V+T or LV+T jamo cluster into its
+    precomposed syllable (Unicode 3.12, no tables) and resolves the face through that codepoint
+    first, so NFC and NFD Korean text select the same face and honor the same
+    `font-codepoint-map` entries. Cell contents are unchanged, so copy and paste still return the
+    original codepoints.
+- Conflict notes:
+  - Keep the composed lookup before the primary-codepoint lookup in `indexForCell`. If upstream
+    restructures grapheme font selection, re-run
+    `zig build test -Dtest-filter="canonically equivalent NFC and NFD Hangul"`.
+
+### 14) Vendored libxev: ordered writes survive transient backpressure
+
+- Commits: `21dcac3f7` (pristine import), `ed3d6c1be` (regression tests), `60f5a29b7` (fix).
+  Ported by behavior from manaflow-ai/ghostty `2f6ee7b3d` and `982a723ff` (cmux `8d6221348b`).
+- Files: `build.zig.zon`, `vendor/libxev/` (see `vendor/libxev/VENDORED.md`).
+- Summary:
+  - libxev is vendored from the same `819ffa180` tarball upstream pins and wired in as a path
+    dependency, because the fix lives inside libxev and upstream libxev does not have it.
+  - The kqueue backend now reports EAGAIN from writes as `WouldBlock` instead of `Unexpected`,
+    and the ordered write queue (`queueWrite`) keeps the head request and resubmits the same
+    buffer on `WouldBlock`. Before this, a full pty during a large paste dropped one buffer and
+    let later ones through, so the pasted text lost a chunk from the middle.
+  - Tests run from `vendor/libxev` with `zig build test`; Ghostty's own `zig build test` does not
+    run dependency tests.
+- Conflict notes:
+  - When upstream bumps libxev in `build.zig.zon`, re-import the new tarball into
+    `vendor/libxev`, keep the path dependency, and re-apply the patch. Only a complete write or a
+    terminal error may pop the head request.
+  - `deps/packages.*` and `flatpak/zig-packages.json` are generated from `build.zig.zon` by
+    `nix/build-support/check-zig-cache.sh --update`, which needs Nix. They still list the
+    libxev tarball; regenerate them on a machine with Nix. Programa's GhosttyKit build does not
+    read them.
+
 ## Upstreamed fork changes
 
 ### cursor-click-to-move respects OSC 133 click-to-move
 
 - Was local in the fork as `10a585754`.
 - Landed upstream as `bb646926f`, so the fork does not carry it as a separate patch.
+
+### Screen export temp-directory handle leak
+
+- `TempDir.close(.retain)` closes both directory handles after a screen, scrollback or selection
+  export. The fork carried this as `6772a8884`; upstream landed it as #13644 (`0dcb41168`), so
+  cmux's port of the same fix (`ef4f1570d`) needs no separate patch.
 
 ### zsh prompt redraw follow-ups
 
