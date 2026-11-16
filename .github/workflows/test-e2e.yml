@@ -45,7 +45,7 @@ jobs:
       TEST_REF: ${{ inputs.ref || github.ref }}
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.ref || github.ref }}
           submodules: recursive
@@ -145,7 +145,7 @@ jobs:
       # Restore only: this job builds an arbitrary dispatched ref, so it must not
       # write caches that main and release runs later restore.
       - name: Restore Swift packages cache
-        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: .ci-source-packages
           key: spm-${{ inputs.runner || 'macos-15' }}-${{ hashFiles('GhosttyTabs.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
@@ -305,7 +305,7 @@ jobs:
 
       - name: Upload E2E diagnostics
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: programa-e2e-diagnostics-${{ github.run_id }}
           path: |
@@ -356,7 +356,7 @@ jobs:
 
       - name: Upload recording artifact
         if: ${{ always() && inputs.record_video }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: test-recording
           path: /tmp/test-recording.mp4
