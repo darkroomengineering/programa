@@ -226,7 +226,8 @@ extension ProgramaCLI {
         let session = BrowseeApp.session(explicit: explicitSession, environment: ProcessInfo.processInfo.environment)
         // main() ignores SIGPIPE, and an ignored signal stays ignored across exec.
         signal(SIGPIPE, SIG_DFL)
-        let argv = [helper, "--session", session].map { strdup($0) } + [nil]
+        let arguments: [String] = [helper, "--session", session]
+        let argv: [UnsafeMutablePointer<CChar>?] = arguments.map { strdup($0) } + [nil]
         execv(helper, argv)
         let reason = String(cString: strerror(errno))
         argv.forEach { free($0) }
