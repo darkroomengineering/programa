@@ -20,11 +20,13 @@ involved.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import socket
 import stat
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -38,21 +40,43 @@ STRIPPED_ENV = (
 )
 SURFACE_ID = "0F6C7B52-3D4E-4A1B-9C2D-5E6F7A8B9C0D"
 
-# Stands in for both `claude mcp` and `codex mcp`: a registered server is a file in the client's
-# own state folder, so the two clients never see each other's registrations.
-FAKE_CLIENT = r"""#!/bin/bash
-state="$FAKE_STATE/$(basename "$0")"
-mkdir -p "$state"
-printf '%s\n' "$*" >> "$state/calls.log"
-case "$1 $2" in
-  "mcp get") [[ -f "$state/server-$3" ]] ;;
-  "mcp add")
-    name=""; for arg in "$@"; do [[ "$arg" == "--" ]] && break; name="$arg"; done
-    touch "$state/server-$name" ;;
-  "mcp remove") rm -f "$state/server-${@: -1}" ;;
-  *) exit 2 ;;
-esac
-"""
+# Stands in for both `claude mcp` and `codex mcp`. Claude Code keeps user-scope servers under
+# `mcpServers` in `$CLAUDE_CONFIG_DIR/.claude.json` or `~/.claude.json`; the fake Codex keeps them
+# in its state folder and answers `mcp get --json` with the entry as `transport`. The fake Claude
+# refuses `mcp get`: the real one health-checks the server, which would start browsee.
+FAKE_CLIENT = """#!__PYTHON__
+import json, os, sys
+name = os.path.basename(sys.argv[0])
+state = os.path.join(os.environ["FAKE_STATE"], name)
+os.makedirs(state, exist_ok=True)
+args = sys.argv[1:]
+with open(os.path.join(state, "calls.log"), "a") as log:
+    log.write(" ".join(args) + "\\n")
+if name == "claude":
+    path = os.path.join(os.environ.get("CLAUDE_CONFIG_DIR") or os.environ["HOME"], ".claude.json")
+else:
+    path = os.path.join(state, "config.json")
+config = json.load(open(path)) if os.path.exists(path) else {}
+servers = config.setdefault("mcpServers", {})
+if args[:2] == ["mcp", "add"]:
+    split = args.index("--")
+    server = args[split - 1]
+    if server in servers:
+        sys.exit("MCP server " + server + " already exists")
+    servers[server] = {"type": "stdio", "command": args[split + 1], "args": args[split + 2:], "env": {}}
+elif args[:2] == ["mcp", "remove"]:
+    if servers.pop(args[-1], None) is None:
+        sys.exit("No MCP server named " + args[-1])
+elif args[:2] == ["mcp", "get"] and name == "codex":
+    if args[2] not in servers:
+        sys.exit(1)
+    print(json.dumps({"name": args[2], "enabled": True, "transport": servers[args[2]]}))
+    sys.exit(0)
+else:
+    sys.exit(2)
+with open(path, "w") as out:
+    json.dump(config, out)
+""".replace("__PYTHON__", sys.executable)
 
 FAKE_HELPER = """#!/bin/sh
 printf '%s\\n' "$*" > "$FAKE_STATE/helper.log"
@@ -101,8 +125,20 @@ class Sandbox:
         log = self.state / client / "calls.log"
         return log.read_text(encoding="utf-8").splitlines() if log.exists() else []
 
+    def config_path(self, client: str) -> Path:
+        return self.home / ".claude.json" if client == "claude" else self.state / client / "config.json"
+
+    def servers(self, client: str) -> dict:
+        path = self.config_path(client)
+        return json.loads(path.read_text(encoding="utf-8")).get("mcpServers", {}) if path.exists() else {}
+
+    def write_servers(self, client: str, servers: dict) -> None:
+        path = self.config_path(client)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"mcpServers": servers}), encoding="utf-8")
+
     def registered(self, client: str) -> bool:
-        return (self.state / client / "server-browsee").exists()
+        return "browsee" in self.servers(client)
 
     def log(self, name: str) -> list[str]:
         path = self.state / name
@@ -173,6 +209,47 @@ class BrowseeIntegrationTests(unittest.TestCase):
         self.assertIn("mcp remove browsee", box.calls("codex"))
         self.assertFalse(box.registered("claude") or box.registered("codex"))
         self.assertEqual(box.log("open.log"), [], "registering must never start browsee")
+        self.assertFalse(any(call.startswith("mcp get") for call in box.calls("claude")))
+
+    def test_install_replaces_a_registration_that_runs_something_else(self) -> None:
+        box = self.sandbox()
+        stale_claude = "/Applications/browsee.app/Contents/MacOS/browsee-mcp"
+        box.write_servers("claude", {
+            "browsee": {"type": "stdio", "command": stale_claude, "args": [], "env": {}},
+            "other": {"type": "http", "url": "https://example.test/mcp"},
+        })
+        # Our own command, but with an environment of its own.
+        codex_args = ["browsee", "mcp", "--session", "programa"]
+        box.write_servers("codex", {
+            "browsee": {"type": "stdio", "command": str(box.cli), "args": codex_args, "env": {"X": "1"}},
+        })
+        server = f"{box.cli} browsee mcp"
+
+        status = box.run("status")
+        self.assertOK(status)
+        self.assertIn(f"browsee registered, but runs {stale_claude}; run install-mcp to update it", status.stdout)
+
+        proc = box.run("install-mcp", "--yes")
+        self.assertOK(proc)
+        self.assertIn(f"Claude Code: replace browsee: {stale_claude} -> {server}", proc.stdout)
+        self.assertIn(
+            f"Codex: replace browsee: {server} --session programa (with its own environment) -> {server} --session programa",
+            proc.stdout,
+        )
+        self.assertEqual(
+            box.calls("claude"),
+            ["mcp remove --scope user browsee", f"mcp add --scope user --transport stdio browsee -- {server}"],
+        )
+        self.assertEqual(box.servers("claude")["browsee"]["command"], str(box.cli))
+        self.assertEqual(box.servers("claude")["browsee"]["args"], ["browsee", "mcp"])
+        self.assertIn("other", box.servers("claude"), "other servers stay")
+        self.assertEqual(box.servers("codex")["browsee"]["env"], {})
+        self.assertIn("mcp remove browsee", box.calls("codex"))
+
+        again = box.run("install-mcp")
+        self.assertOK(again)
+        self.assertIn("Nothing to do.", again.stdout, "an up-to-date entry needs no consent and no change")
+        self.assertIn(f"browsee registered\n", box.run("status").stdout)
 
     def test_without_consent_nothing_is_registered(self) -> None:
         box = self.sandbox()

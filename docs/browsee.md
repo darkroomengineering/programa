@@ -16,7 +16,9 @@ programa browsee uninstall-mcp
 
 `File > Install browsee MCP…` runs the same installer in a new workspace. The installer
 lists the `claude mcp add` and `codex mcp add` commands it will run and asks first; `--yes`
-skips the question. Agents pick up the server the next time they start.
+skips the question. A `browsee` entry that runs anything else, such as `browsee-mcp` directly
+or a Programa that has since moved, is replaced: the preview shows the old and the new
+command. Agents pick up the server the next time they start.
 
 Then turn on **Let other apps control my tabs** in browsee > Settings > Agents. browsee
 serves no agent it did not start while that setting is off, and `browsee-mcp` says so.

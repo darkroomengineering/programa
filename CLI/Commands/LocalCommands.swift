@@ -131,7 +131,8 @@ extension ProgramaCLI {
 
                 Let Claude Code and Codex drive browsee tabs. `install-mcp` registers a
                 `browsee` MCP server with each client found on PATH (`claude mcp add
-                --scope user`, `codex mcp add`); `uninstall-mcp` removes it. `status`
+                --scope user`, `codex mcp add`), replacing a `browsee` entry that runs
+                anything else; `uninstall-mcp` removes it. `status`
                 reports where browsee is, whether it is running and what is registered.
                 `--yes`/`-y` skips the confirmation prompt.
 

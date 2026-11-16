@@ -52,29 +52,81 @@ enum BrowseeApp {
     }
 }
 
-/// The `claude mcp` and `codex mcp` commands that register or remove the `browsee` server.
-/// The server runs this CLI's `browsee mcp`, which starts browsee when it is closed and then
-/// becomes `browsee-mcp`. Pure so the exact argv can be tested without spawning a process.
-struct BrowseeMCPPlan {
-    let claudeCommands: [[String]]
-    let codexCommands: [[String]]
+/// A `browsee` server as Claude Code or Codex has it registered.
+struct BrowseeRegistration: Equatable {
+    let command: String
+    let args: [String]
+    /// The entry sets environment variables of its own; ours sets none.
+    let hasEnvironment: Bool
 
-    static func build(programaCLI: String, claudeExecutable: String?, codexExecutable: String?, install: Bool) -> BrowseeMCPPlan {
+    init(command: String, args: [String], hasEnvironment: Bool = false) {
+        self.command = command
+        self.args = args
+        self.hasEnvironment = hasEnvironment
+    }
+
+    /// Claude Code's `mcpServers.browsee` entry or Codex's `transport`. An HTTP server has no command.
+    init(entry: [String: Any]) {
+        command = entry["command"] as? String ?? ""
+        args = entry["args"] as? [String] ?? []
+        hasEnvironment = ["env", "env_vars"].contains { key in
+            switch entry[key] {
+            case let list as [Any]: return !list.isEmpty
+            case let map as [String: Any]: return !map.isEmpty
+            default: return false
+            }
+        }
+    }
+
+    var shown: String {
+        guard !command.isEmpty else { return "a non-stdio server" }
+        return ([command] + args).joined(separator: " ") + (hasEnvironment ? " (with its own environment)" : "")
+    }
+}
+
+enum BrowseeClient: String {
+    case claude = "Claude Code"
+    case codex = "Codex"
+}
+
+/// What `install-mcp` or `uninstall-mcp` does for one client: the commands to run in order, and
+/// the line the preview shows. The server runs this CLI's `browsee mcp`, which starts browsee
+/// when it is closed and then becomes `browsee-mcp`. Pure so the decision table and the exact
+/// argv can be tested without spawning a process.
+struct BrowseeMCPStep: Equatable {
+    let commands: [[String]]
+    let summary: String
+
+    static func desired(_ client: BrowseeClient, programaCLI: String) -> BrowseeRegistration {
+        let args = ["browsee", "mcp"] + (client == .codex ? ["--session", BrowseeApp.sharedSession] : [])
+        return BrowseeRegistration(command: programaCLI, args: args)
+    }
+
+    /// An entry that runs anything else, an older Programa included, is replaced: removed, then
+    /// added again, because `claude mcp add` refuses a name that exists.
+    static func build(
+        _ client: BrowseeClient,
+        executable: String,
+        programaCLI: String,
+        existing: BrowseeRegistration?,
+        install: Bool
+    ) -> BrowseeMCPStep {
         let name = BrowseeApp.serverName
-        let server = [programaCLI, "browsee", "mcp"]
-        var claudeCommands: [[String]] = []
-        var codexCommands: [[String]] = []
-        if let claude = claudeExecutable {
-            claudeCommands.append(install
-                ? [claude, "mcp", "add", "--scope", "user", "--transport", "stdio", name, "--"] + server
-                : [claude, "mcp", "remove", "--scope", "user", name])
+        let remove = client == .claude
+            ? [executable, "mcp", "remove", "--scope", "user", name]
+            : [executable, "mcp", "remove", name]
+        guard install else {
+            guard let existing else { return BrowseeMCPStep(commands: [], summary: "browsee not registered, skipping") }
+            return BrowseeMCPStep(commands: [remove], summary: "remove browsee: \(existing.shown)")
         }
-        if let codex = codexExecutable {
-            codexCommands.append(install
-                ? [codex, "mcp", "add", name, "--"] + server + ["--session", BrowseeApp.sharedSession]
-                : [codex, "mcp", "remove", name])
-        }
-        return BrowseeMCPPlan(claudeCommands: claudeCommands, codexCommands: codexCommands)
+        let wanted = desired(client, programaCLI: programaCLI)
+        let server = [wanted.command] + wanted.args
+        let add = client == .claude
+            ? [executable, "mcp", "add", "--scope", "user", "--transport", "stdio", name, "--"] + server
+            : [executable, "mcp", "add", name, "--"] + server
+        guard let existing else { return BrowseeMCPStep(commands: [add], summary: "add browsee: \(wanted.shown)") }
+        if existing == wanted { return BrowseeMCPStep(commands: [], summary: "browsee already registered, skipping") }
+        return BrowseeMCPStep(commands: [remove, add], summary: "replace browsee: \(existing.shown) -> \(wanted.shown)")
     }
 }
 
@@ -181,19 +233,44 @@ extension ProgramaCLI {
         throw CLIError(message: "Could not run \(helper): \(reason)")
     }
 
-    private func browseeIsRegistered(executable: String) -> Bool {
-        let result = CLIProcessRunner.runProcess(
-            executablePath: executable,
-            arguments: ["mcp", "get", BrowseeApp.serverName],
-            timeout: 30
-        )
-        return result.status == 0
+    /// Read from Claude Code's user config, not `claude mcp get`: that command health-checks the
+    /// server, and starting ours starts browsee.
+    private func claudeBrowseeRegistration() -> BrowseeRegistration? {
+        let configured = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let folder = configured.flatMap { $0.isEmpty ? nil : Self.integrationExpandTilde($0) } ?? browseeHome
+        let path = (folder as NSString).appendingPathComponent(".claude.json")
+        guard let data = FileManager.default.contents(atPath: path),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let entry = (root["mcpServers"] as? [String: Any])?[BrowseeApp.serverName] as? [String: Any] else { return nil }
+        return BrowseeRegistration(entry: entry)
     }
 
-    private func browseePrintClientStatus(_ client: String, executable: String?) {
-        guard let executable else { return print("\(client): not found") }
-        let registered = browseeIsRegistered(executable: executable)
-        print("\(client): \(executable): browsee \(registered ? "registered" : "not registered")")
+    private func codexBrowseeRegistration(executable: String) -> BrowseeRegistration? {
+        let result = CLIProcessRunner.runProcess(
+            executablePath: executable,
+            arguments: ["mcp", "get", BrowseeApp.serverName, "--json"],
+            timeout: 30
+        )
+        guard result.status == 0,
+              let data = result.stdout.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return BrowseeRegistration(entry: root["transport"] as? [String: Any] ?? [:])
+    }
+
+    private func browseeRegistration(_ client: BrowseeClient, executable: String) -> BrowseeRegistration? {
+        client == .claude ? claudeBrowseeRegistration() : codexBrowseeRegistration(executable: executable)
+    }
+
+    private func browseePrintClientStatus(_ client: BrowseeClient, executable: String?, programaCLI: String?) {
+        guard let executable else { return print("\(client.rawValue): not found") }
+        let state: String
+        switch browseeRegistration(client, executable: executable) {
+        case nil: state = "not registered"
+        case let existing? where programaCLI.map({ BrowseeMCPStep.desired(client, programaCLI: $0) }) == existing:
+            state = "registered"
+        case let existing?: state = "registered, but runs \(existing.shown); run install-mcp to update it"
+        }
+        print("\(client.rawValue): \(executable): browsee \(state)")
     }
 
     func runBrowsee(arguments: [String]) throws {
@@ -209,8 +286,9 @@ extension ProgramaCLI {
             let app = browseeAppPath()
             print("browsee: \(app ?? "not found, install browsee.app in /Applications")")
             print("Running: \(browseeIsRunning() ? "yes" : "no")")
-            browseePrintClientStatus("Claude Code", executable: resolveClaudeExecutable(searchPath: searchPath))
-            browseePrintClientStatus("Codex", executable: resolveCodexExecutable(searchPath: searchPath))
+            let programaCLI = resolvedExecutableURL()?.path
+            browseePrintClientStatus(.claude, executable: resolveClaudeExecutable(searchPath: searchPath), programaCLI: programaCLI)
+            browseePrintClientStatus(.codex, executable: resolveCodexExecutable(searchPath: searchPath), programaCLI: programaCLI)
             print("Agents reach browsee only while \"Let other apps control my tabs\" is on in browsee > Settings > Agents.")
 
         case "install-mcp", "uninstall-mcp":
@@ -229,19 +307,29 @@ extension ProgramaCLI {
             guard claudeExecutable != nil || codexExecutable != nil else {
                 throw CLIError(message: "Neither Claude Code nor Codex CLI was found on PATH.")
             }
-            let plan = BrowseeMCPPlan.build(
-                programaCLI: programaCLI,
-                claudeExecutable: claudeExecutable,
-                codexExecutable: codexExecutable,
-                install: install
-            )
-            let pending = plan.claudeCommands.map { (client: "Claude Code", command: $0) }
-                + plan.codexCommands.map { (client: "Codex", command: $0) }
+            let clients: [(BrowseeClient, String?)] = [(.claude, claudeExecutable), (.codex, codexExecutable)]
+            let steps = clients.compactMap { client, executable in
+                executable.map { executable in
+                    (client: client, step: BrowseeMCPStep.build(
+                        client,
+                        executable: executable,
+                        programaCLI: programaCLI,
+                        existing: browseeRegistration(client, executable: executable),
+                        install: install
+                    ))
+                }
+            }
 
             print("")
-            print("The following commands will run:")
-            for entry in pending {
-                print("  \(entry.command.joined(separator: " "))")
+            for entry in steps {
+                print("\(entry.client.rawValue): \(entry.step.summary)")
+                for command in entry.step.commands {
+                    print("  \(command.joined(separator: " "))")
+                }
+            }
+            guard steps.contains(where: { !$0.step.commands.isEmpty }) else {
+                print("Nothing to do.")
+                return
             }
             if !skipConfirm {
                 print("Apply these changes? [Y/n] ", terminator: "")
@@ -258,23 +346,21 @@ extension ProgramaCLI {
             }
 
             var failures: [String] = []
-            for entry in pending {
-                guard let executable = entry.command.first else { continue }
-                let registered = browseeIsRegistered(executable: executable)
-                if install == registered {
-                    print("\(entry.client): browsee \(registered ? "already registered" : "not registered"), skipping")
-                    continue
-                }
-                print("Running: \(entry.command.joined(separator: " "))")
-                let result = CLIProcessRunner.runProcess(
-                    executablePath: executable,
-                    arguments: Array(entry.command.dropFirst()),
-                    timeout: 60
-                )
-                if result.status != 0 {
-                    // Keep going so one client's failure never leaves the other untouched.
-                    let detail = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-                    failures.append("\(entry.client): exit \(result.status)\(detail.isEmpty ? "" : ": \(detail)")")
+            for entry in steps {
+                for command in entry.step.commands {
+                    guard let executable = command.first else { continue }
+                    print("Running: \(command.joined(separator: " "))")
+                    let result = CLIProcessRunner.runProcess(
+                        executablePath: executable,
+                        arguments: Array(command.dropFirst()),
+                        timeout: 60
+                    )
+                    guard result.status == 0 else {
+                        // Skip this client's later commands, but keep going with the other client.
+                        let detail = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                        failures.append("\(entry.client.rawValue): exit \(result.status)\(detail.isEmpty ? "" : ": \(detail)")")
+                        break
+                    }
                 }
             }
             print("")
