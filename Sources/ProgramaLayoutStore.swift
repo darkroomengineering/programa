@@ -21,9 +21,79 @@ struct ProgramaSavedLayout: Codable, Sendable {
 
 /// Lightweight summary used for listing (command palette, `layout.list`) without decoding the
 /// full layout tree.
-struct ProgramaSavedLayoutSummary: Identifiable, Equatable, Sendable {
+struct ProgramaSavedLayoutSummary: Identifiable, Hashable, Sendable {
     var name: String
     var savedAt: Date
+    var id: String { name }
+}
+
+/// A layout file that exists but cannot be used. It is listed with its reason instead of being
+/// hidden, so the user can see which file is broken and why.
+struct ProgramaLayoutFileFailure: Error, Hashable, Sendable {
+    var name: String
+    var reason: String
+
+    var fileName: String { "\(name).json" }
+
+    /// For example "my-layout.json: missing key 'panes'".
+    var displayMessage: String {
+        String(localized: "layout.failed.detail", defaultValue: "\(fileName): \(reason)")
+    }
+}
+
+/// A layout that ships with the app. It uses the same `ProgramaLayoutNode` as saved files but
+/// has no file, so it cannot be renamed or deleted; the palette can save a copy as a file.
+struct ProgramaLayoutPreset: Identifiable, Sendable {
+    let id: String
+    let title: String
+    let layout: ProgramaLayoutNode
+
+    /// The same command "New Claude Code Workspace" types.
+    private static let agentCommand = "claude"
+
+    static var all: [ProgramaLayoutPreset] {
+        [
+            ProgramaLayoutPreset(
+                id: "agent-shell",
+                title: String(localized: "layout.preset.agentShell", defaultValue: "Agent and Shell"),
+                layout: .split(ProgramaSplitDefinition(direction: .horizontal, children: [agentPane(focus: true), shellPane]))
+            ),
+            ProgramaLayoutPreset(
+                id: "three-agents",
+                title: String(localized: "layout.preset.threeAgents", defaultValue: "Three Agents"),
+                layout: .split(ProgramaSplitDefinition(direction: .horizontal, split: 1.0 / 3.0, children: [
+                    agentPane(focus: true),
+                    .split(ProgramaSplitDefinition(direction: .horizontal, children: [agentPane(focus: false), agentPane(focus: false)]))
+                ]))
+            )
+        ]
+    }
+
+    private static func agentPane(focus: Bool) -> ProgramaLayoutNode {
+        .pane(ProgramaPaneDefinition(surfaces: [
+            ProgramaSurfaceDefinition(type: .terminal, name: nil, command: agentCommand, cwd: nil, env: nil, focus: focus ? true : nil)
+        ]))
+    }
+
+    private static var shellPane: ProgramaLayoutNode {
+        .pane(ProgramaPaneDefinition(surfaces: [
+            ProgramaSurfaceDefinition(type: .terminal, name: nil, command: nil, cwd: nil, env: nil, focus: nil)
+        ]))
+    }
+}
+
+/// One file in the layouts directory, whether or not it decodes.
+enum ProgramaLayoutEntry: Identifiable, Hashable, Sendable {
+    case saved(ProgramaSavedLayoutSummary)
+    case failed(ProgramaLayoutFileFailure)
+
+    var name: String {
+        switch self {
+        case .saved(let summary): return summary.name
+        case .failed(let failure): return failure.name
+        }
+    }
+
     var id: String { name }
 }
 
@@ -47,7 +117,7 @@ enum ProgramaLayoutStoreError: Error, CustomStringConvertible {
 final class ProgramaLayoutStore: ObservableObject {
     static let shared = ProgramaLayoutStore()
 
-    @Published private(set) var savedLayouts: [ProgramaSavedLayoutSummary] = []
+    @Published private(set) var entries: [ProgramaLayoutEntry] = []
 
     static let directoryPath: String = {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -71,8 +141,12 @@ final class ProgramaLayoutStore: ObservableObject {
 
     // MARK: - Public API
 
+    /// The layouts that decode. Broken files are only in `entries`.
     func list() -> [ProgramaSavedLayoutSummary] {
-        savedLayouts
+        entries.compactMap { entry in
+            guard case .saved(let summary) = entry else { return nil }
+            return summary
+        }
     }
 
     func exists(name: String) -> Bool {
@@ -81,16 +155,40 @@ final class ProgramaLayoutStore: ObservableObject {
     }
 
     func load(name: String) -> ProgramaSavedLayout? {
-        guard Self.isValidName(name) else { return nil }
-        guard let data = FileManager.default.contents(atPath: filePath(for: name)), !data.isEmpty else {
-            return nil
+        try? decode(name: name).get()
+    }
+
+    /// Like `load`, but says why a file cannot be used.
+    func decode(name: String) -> Result<ProgramaSavedLayout, ProgramaLayoutFileFailure> {
+        func failure(_ reason: String) -> Result<ProgramaSavedLayout, ProgramaLayoutFileFailure> {
+            .failure(ProgramaLayoutFileFailure(name: name, reason: reason))
+        }
+        guard Self.isValidName(name) else {
+            return failure(String(localized: "layout.decodeError.invalidName", defaultValue: "not a valid layout name"))
+        }
+        let data: Data
+        do {
+            data = try Data(contentsOf: URL(fileURLWithPath: filePath(for: name)))
+        } catch CocoaError.fileReadNoSuchFile {
+            return failure(String(localized: "layout.decodeError.fileMissing", defaultValue: "the file no longer exists"))
+        } catch {
+            return failure(error.localizedDescription)
+        }
+        guard !data.isEmpty else {
+            return failure(String(localized: "layout.decodeError.emptyFile", defaultValue: "the file is empty"))
         }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        guard var saved = try? decoder.decode(ProgramaSavedLayout.self, from: data) else { return nil }
-        // The filename remains authoritative when a layout file is copied or renamed.
-        saved.name = name
-        return saved
+        do {
+            var saved = try decoder.decode(ProgramaSavedLayout.self, from: data)
+            // The filename remains authoritative when a layout file is copied or renamed.
+            saved.name = name
+            return .success(saved)
+        } catch let error as DecodingError {
+            return failure(Self.reason(for: error))
+        } catch {
+            return failure(error.localizedDescription)
+        }
     }
 
     @discardableResult
@@ -123,6 +221,38 @@ final class ProgramaLayoutStore: ObservableObject {
         reload()
     }
 
+    /// Moves the file without decoding it, so a broken file can be renamed too.
+    func rename(from oldName: String, to newName: String) throws {
+        guard Self.isValidName(oldName), Self.isValidName(newName) else { throw ProgramaLayoutStoreError.invalidName }
+        let source = filePath(for: oldName)
+        let destination = filePath(for: newName)
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: source) else { throw ProgramaLayoutStoreError.notFound }
+        guard oldName != newName else { return }
+        // A case-only rename on a case-insensitive volume finds the source itself at the
+        // destination; that is not a conflict, and rename(2) changes the case in place.
+        let caseOnly = fileManager.fileExists(atPath: destination) && Self.isSameFile(source, destination)
+        // RENAME_EXCL makes the conflict check and the move one step, so a layout saved under
+        // the new name at the same moment (say, by an agent over the socket) is never overwritten.
+        let result = caseOnly
+            ? Darwin.rename(source, destination)
+            : renamex_np(source, destination, UInt32(RENAME_EXCL))
+        guard result == 0 else {
+            if errno == EEXIST { throw ProgramaLayoutStoreError.alreadyExists }
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+        reload()
+    }
+
+    private static func isSameFile(_ first: String, _ second: String) -> Bool {
+        let fileManager = FileManager.default
+        guard let a = try? fileManager.attributesOfItem(atPath: first)[.systemFileNumber] as? NSNumber,
+              let b = try? fileManager.attributesOfItem(atPath: second)[.systemFileNumber] as? NSNumber else {
+            return false
+        }
+        return a == b
+    }
+
     static func isValidName(_ name: String) -> Bool {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != ".", trimmed != ".." else { return false }
@@ -141,18 +271,62 @@ final class ProgramaLayoutStore: ObservableObject {
 
     private func reload() {
         let fileManager = FileManager.default
-        guard let entries = try? fileManager.contentsOfDirectory(atPath: directoryURL.path) else {
-            savedLayouts = []
+        guard let fileNames = try? fileManager.contentsOfDirectory(atPath: directoryURL.path) else {
+            entries = []
             return
         }
 
-        var summaries: [ProgramaSavedLayoutSummary] = []
-        for entry in entries where entry.hasSuffix(".json") {
-            let name = String(entry.dropLast(".json".count))
-            guard Self.isValidName(name), let saved = load(name: name) else { continue }
-            summaries.append(ProgramaSavedLayoutSummary(name: saved.name, savedAt: saved.savedAt))
+        var loaded: [ProgramaLayoutEntry] = []
+        for fileName in fileNames where fileName.hasSuffix(".json") {
+            let name = String(fileName.dropLast(".json".count))
+            guard Self.isValidName(name) else { continue }
+            switch decode(name: name) {
+            case .success(let saved):
+                loaded.append(.saved(ProgramaSavedLayoutSummary(name: saved.name, savedAt: saved.savedAt)))
+            case .failure(let failure):
+                loaded.append(.failed(failure))
+            }
         }
-        savedLayouts = summaries.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        entries = loaded.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    /// A short, user-facing reason such as "missing key 'panes'".
+    private static func reason(for error: DecodingError) -> String {
+        func path(_ codingPath: [CodingKey]) -> String {
+            codingPath.reduce(into: "") { path, key in
+                if let index = key.intValue {
+                    path += "[\(index)]"
+                } else {
+                    path += path.isEmpty ? key.stringValue : ".\(key.stringValue)"
+                }
+            }
+        }
+        switch error {
+        case .keyNotFound(let key, let context):
+            let location = path(context.codingPath)
+            return location.isEmpty
+                ? String(localized: "layout.decodeError.missingKey", defaultValue: "missing key '\(key.stringValue)'")
+                : String(localized: "layout.decodeError.missingKeyAt", defaultValue: "missing key '\(key.stringValue)' in '\(location)'")
+        case .typeMismatch(_, let context), .valueNotFound(_, let context):
+            let location = path(context.codingPath)
+            return location.isEmpty
+                ? String(localized: "layout.decodeError.wrongValueRoot", defaultValue: "wrong value type")
+                : String(localized: "layout.decodeError.wrongValue", defaultValue: "wrong or missing value at '\(location)'")
+        case .dataCorrupted(let context):
+            if context.codingPath.isEmpty, let underlying = context.underlyingError as NSError? {
+                // JSONSerialization puts the line and column of a syntax error here.
+                if let detail = underlying.userInfo[NSDebugDescriptionErrorKey] as? String, !detail.isEmpty {
+                    return String(localized: "layout.decodeError.invalidJSONDetail", defaultValue: "not valid JSON (\(detail))")
+                }
+                return String(localized: "layout.decodeError.invalidJSON", defaultValue: "not valid JSON")
+            }
+            let location = path(context.codingPath)
+            return location.isEmpty
+                ? context.debugDescription
+                : String(localized: "layout.decodeError.invalidValueAt", defaultValue: "\(context.debugDescription) at '\(location)'")
+        @unknown default:
+            return error.localizedDescription
+        }
     }
 
     private func startWatching() {

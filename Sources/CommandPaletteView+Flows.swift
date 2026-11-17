@@ -1006,7 +1006,7 @@ extension CommandPaletteView {
         startRenameFlow(target)
     }
 
-    private func startRenameFlow(_ target: CommandPaletteRenameTarget) {
+    func startRenameFlow(_ target: CommandPaletteRenameTarget) {
         commandPaletteController.commandPaletteRenameDraft = target.currentName
         commandPaletteController.commandPaletteShouldFocusWorkspaceDescriptionEditor = false
         commandPaletteController.commandPaletteMode = .renameInput(target)
@@ -1057,6 +1057,10 @@ extension CommandPaletteView {
                 return
             }
             workspace.setPanelCustomTitle(panelId: panelId, title: normalizedName)
+        case .layout(let action):
+            // Decides itself whether the prompt stays open.
+            applyLayoutNameFlow(action, proposedName: trimmedName)
+            return
         }
 
         dismissCommandPalette()

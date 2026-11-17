@@ -247,6 +247,7 @@ extension CommandPaletteView {
         var hasher = Hasher()
         hasher.combine(commandsContext.snapshot.fingerprint())
         hasher.combine(programaConfigStore.configRevision)
+        hasher.combine(programaLayoutStore.entries)
         return hasher.finalize()
     }
     func commandPaletteSwitcherEntriesFingerprint(includeSurfaces: Bool) -> Int {

@@ -743,17 +743,7 @@ extension CommandPaletteView {
             )
         }
 
-        let layoutSubtitle = constant(String(localized: "command.applyLayout.subtitle", defaultValue: "Layout"))
-        for savedLayout in programaLayoutStore.savedLayouts {
-            contributions.append(
-                CommandPaletteCommandContribution(
-                    commandId: "palette.applyLayout." + savedLayout.name,
-                    title: constant(String(localized: "command.applyLayout.title", defaultValue: "Apply layout: \(savedLayout.name)")),
-                    subtitle: layoutSubtitle,
-                    keywords: ["layout", "apply", savedLayout.name]
-                )
-            )
-        }
+        contributions.append(contentsOf: layoutCommandContributions())
 
         return contributions
     }
@@ -1104,14 +1094,7 @@ extension CommandPaletteView {
             }
         }
 
-        for savedLayout in programaLayoutStore.savedLayouts {
-            let layoutName = savedLayout.name
-            registry.register(commandId: "palette.applyLayout." + layoutName) {
-                guard let saved = programaLayoutStore.load(name: layoutName) else { return }
-                let workspace = tabManager.addWorkspace()
-                workspace.applyCustomLayout(saved.layout, baseCwd: workspace.currentDirectory)
-            }
-        }
+        registerLayoutHandlers(&registry)
     }
 
     private func selectedWorkspaceIndex() -> Int? {

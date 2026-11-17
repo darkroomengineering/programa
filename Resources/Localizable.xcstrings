@@ -36,6 +36,251 @@
         "ja": { "stringUnit": { "state": "translated", "value": "閉じる" } }
       }
     },
+    "command.applyLayoutPreset.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Built-in layout" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "組み込みレイアウト" } }
+      }
+    },
+    "command.copyLayoutPreset.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Save copy of layout: %@…" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウトのコピーを保存: %@…" } }
+      }
+    },
+    "commandPalette.layout.copyInputHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Enter a name for the copy. Press Enter to save, Escape to cancel." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "コピーの名前を入力してください。Enterで保存、Escapeでキャンセルします。" } }
+      }
+    },
+    "layout.preset.agentShell": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Agent and Shell" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "エージェントとシェル" } }
+      }
+    },
+    "layout.preset.threeAgents": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Three Agents" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "エージェント3つ" } }
+      }
+    },
+    "command.renameLayout.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Rename layout: %@…" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウト名を変更: %@…" } }
+      }
+    },
+    "command.deleteLayout.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Delete layout: %@…" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウトを削除: %@…" } }
+      }
+    },
+    "commandPalette.layout.renameInputHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Enter a new layout name. Press Enter to rename, Escape to cancel." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "新しいレイアウト名を入力してください。Enterで名前を変更、Escapeでキャンセルします。" } }
+      }
+    },
+    "layout.renameFailed.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Layout Not Renamed" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウト名を変更できませんでした" } }
+      }
+    },
+    "layout.renameFailed.exists": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "A saved layout named “%@” already exists." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "「%@」という名前の保存済みレイアウトがすでにあります。" } }
+      }
+    },
+    "layout.renameFailed.missing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The layout “%@” no longer exists." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウト「%@」は見つかりません。" } }
+      }
+    },
+    "layout.delete.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Delete layout “%@”?" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウト「%@」を削除しますか？" } }
+      }
+    },
+    "layout.delete.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "This deletes %@.json from ~/.config/programa/layouts. You can't undo this." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "~/.config/programa/layouts から %@.json を削除します。この操作は取り消せません。" } }
+      }
+    },
+    "layout.delete.confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Delete" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "削除" } }
+      }
+    },
+    "layout.deleteFailed.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Layout Not Deleted" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウトを削除できませんでした" } }
+      }
+    },
+    "command.saveLayout.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Save current layout…" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "現在のレイアウトを保存…" } }
+      }
+    },
+    "commandPalette.rename.layoutPlaceholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Layout name" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウト名" } }
+      }
+    },
+    "commandPalette.layout.saveInputHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Enter a layout name. Press Enter to save, Escape to cancel." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウト名を入力してください。Enterで保存、Escapeでキャンセルします。" } }
+      }
+    },
+    "layout.saveFailed.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Layout Not Saved" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウトを保存できませんでした" } }
+      }
+    },
+    "layout.saveFailed.noPanes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "This workspace has no terminal panes to save." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "このワークスペースには保存できるターミナルペインがありません。" } }
+      }
+    },
+    "layout.replace.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Replace layout “%@”?" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウト「%@」を置き換えますか？" } }
+      }
+    },
+    "layout.replace.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "A saved layout with this name already exists. Replacing it overwrites its file." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "この名前の保存済みレイアウトがすでにあります。置き換えるとファイルが上書きされます。" } }
+      }
+    },
+    "layout.replace.confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Replace" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "置き換える" } }
+      }
+    },
+    "layout.applyFailed.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Layout Can't Be Applied" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウトを適用できません" } }
+      }
+    },
+    "layout.failed.detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%@: %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@: %@" } }
+      }
+    },
+    "layout.decodeError.missingKey": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "missing key '%@'" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "キー '%@' がありません" } }
+      }
+    },
+    "layout.decodeError.missingKeyAt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "missing key '%@' in '%@'" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "'%2$@' にキー '%1$@' がありません" } }
+      }
+    },
+    "layout.decodeError.wrongValue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "wrong or missing value at '%@'" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "'%@' の値が正しくないか、ありません" } }
+      }
+    },
+    "layout.decodeError.wrongValueRoot": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "wrong value type" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "値の型が正しくありません" } }
+      }
+    },
+    "layout.decodeError.invalidJSON": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "not valid JSON" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "有効なJSONではありません" } }
+      }
+    },
+    "layout.decodeError.invalidJSONDetail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "not valid JSON (%@)" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "有効なJSONではありません（%@）" } }
+      }
+    },
+    "layout.decodeError.invalidValueAt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%@ at '%@'" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@（'%@'）" } }
+      }
+    },
+    "layout.decodeError.emptyFile": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "the file is empty" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ファイルが空です" } }
+      }
+    },
+    "layout.decodeError.fileMissing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "the file no longer exists" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ファイルが見つかりません" } }
+      }
+    },
+    "layout.decodeError.invalidName": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "not a valid layout name" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "有効なレイアウト名ではありません" } }
+      }
+    },
     "storage.cache.derivedData": {
       "extractionState": "manual",
       "localizations": {
