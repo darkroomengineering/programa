@@ -5,6 +5,7 @@ import SwiftUI
 enum CommandPaletteLayoutNameAction: Equatable {
     case saveWorkspace(workspaceId: UUID)
     case rename(from: String)
+    case copyPreset(presetId: String)
 
     var inputHint: String {
         switch self {
@@ -12,12 +13,15 @@ enum CommandPaletteLayoutNameAction: Equatable {
             return String(localized: "commandPalette.layout.saveInputHint", defaultValue: "Enter a layout name. Press Enter to save, Escape to cancel.")
         case .rename:
             return String(localized: "commandPalette.layout.renameInputHint", defaultValue: "Enter a new layout name. Press Enter to rename, Escape to cancel.")
+        case .copyPreset:
+            return String(localized: "commandPalette.layout.copyInputHint", defaultValue: "Enter a name for the copy. Press Enter to save, Escape to cancel.")
         }
     }
 }
 
-/// Palette commands for named layouts: save the current workspace's layout, and apply, rename or
-/// delete every layout file in `~/.config/programa/layouts/`, including ones that fail to decode.
+/// Palette commands for named layouts: save the current workspace's layout, apply or copy the
+/// built-in presets, and apply, rename or delete every layout file in
+/// `~/.config/programa/layouts/`, including ones that fail to decode.
 extension CommandPaletteView {
     func layoutCommandContributions() -> [CommandPaletteCommandContribution] {
         let layoutSubtitle = String(localized: "command.applyLayout.subtitle", defaultValue: "Layout")
@@ -31,6 +35,27 @@ extension CommandPaletteView {
                 when: { $0.bool(CommandPaletteContextKeys.hasWorkspace) }
             )
         ]
+        let presetSubtitle = String(localized: "command.applyLayoutPreset.subtitle", defaultValue: "Built-in layout")
+        for preset in ProgramaLayoutPreset.all {
+            let title = preset.title
+            contributions.append(
+                CommandPaletteCommandContribution(
+                    commandId: "palette.applyLayoutPreset." + preset.id,
+                    title: { _ in String(localized: "command.applyLayout.title", defaultValue: "Apply layout: \(title)") },
+                    subtitle: { _ in presetSubtitle },
+                    keywords: ["layout", "apply", "preset", "agent", title]
+                )
+            )
+            contributions.append(
+                CommandPaletteCommandContribution(
+                    commandId: "palette.copyLayoutPreset." + preset.id,
+                    title: { _ in String(localized: "command.copyLayoutPreset.title", defaultValue: "Save copy of layout: \(title)…") },
+                    subtitle: { _ in presetSubtitle },
+                    keywords: ["layout", "save", "copy", "preset", title],
+                    dismissOnRun: false
+                )
+            )
+        }
         for entry in programaLayoutStore.entries {
             switch entry {
             case .saved(let summary):
@@ -67,6 +92,17 @@ extension CommandPaletteView {
                 return
             }
             beginLayoutNameFlow(.saveWorkspace(workspaceId: workspace.id), currentName: "")
+        }
+        for preset in ProgramaLayoutPreset.all {
+            let layout = preset.layout
+            registry.register(commandId: "palette.applyLayoutPreset." + preset.id) {
+                applyLayout(layout)
+            }
+            let presetId = preset.id
+            let title = preset.title
+            registry.register(commandId: "palette.copyLayoutPreset." + presetId) {
+                beginLayoutNameFlow(.copyPreset(presetId: presetId), currentName: title)
+            }
         }
         for entry in programaLayoutStore.entries {
             let layoutName = entry.name
@@ -118,6 +154,10 @@ extension CommandPaletteView {
             } catch {
                 Self.showLayoutAlert(title: Self.renameFailedTitle, message: error.localizedDescription)
             }
+        case .copyPreset(let presetId):
+            dismissCommandPalette()
+            guard let preset = ProgramaLayoutPreset.all.first(where: { $0.id == presetId }) else { return }
+            Self.saveLayout(preset.layout, name: name, store: programaLayoutStore)
         }
     }
 
@@ -139,14 +179,19 @@ extension CommandPaletteView {
     private func applySavedLayout(named name: String) {
         switch programaLayoutStore.decode(name: name) {
         case .success(let saved):
-            let workspace = tabManager.addWorkspace()
-            workspace.applyCustomLayout(saved.layout, baseCwd: workspace.currentDirectory)
+            applyLayout(saved.layout)
         case .failure(let failure):
             Self.showLayoutAlert(
                 title: String(localized: "layout.applyFailed.title", defaultValue: "Layout Can't Be Applied"),
                 message: failure.displayMessage
             )
         }
+    }
+
+    /// Saved files and presets both open this way.
+    private func applyLayout(_ layout: ProgramaLayoutNode) {
+        let workspace = tabManager.addWorkspace()
+        workspace.applyCustomLayout(layout, baseCwd: workspace.currentDirectory)
     }
 
     /// Saves through `ProgramaLayoutStore.save`, asking before it replaces an existing file.

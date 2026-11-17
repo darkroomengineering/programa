@@ -36,6 +36,41 @@
         "ja": { "stringUnit": { "state": "translated", "value": "閉じる" } }
       }
     },
+    "command.applyLayoutPreset.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Built-in layout" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "組み込みレイアウト" } }
+      }
+    },
+    "command.copyLayoutPreset.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Save copy of layout: %@…" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウトのコピーを保存: %@…" } }
+      }
+    },
+    "commandPalette.layout.copyInputHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Enter a name for the copy. Press Enter to save, Escape to cancel." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "コピーの名前を入力してください。Enterで保存、Escapeでキャンセルします。" } }
+      }
+    },
+    "layout.preset.agentShell": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Agent and Shell" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "エージェントとシェル" } }
+      }
+    },
+    "layout.preset.threeAgents": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Three Agents" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "エージェント3つ" } }
+      }
+    },
     "command.renameLayout.title": {
       "extractionState": "manual",
       "localizations": {

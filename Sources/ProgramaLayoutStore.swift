@@ -41,6 +41,47 @@ struct ProgramaLayoutFileFailure: Error, Hashable, Sendable {
     }
 }
 
+/// A layout that ships with the app. It uses the same `ProgramaLayoutNode` as saved files but
+/// has no file, so it cannot be renamed or deleted; the palette can save a copy as a file.
+struct ProgramaLayoutPreset: Identifiable, Sendable {
+    let id: String
+    let title: String
+    let layout: ProgramaLayoutNode
+
+    /// The same command "New Claude Code Workspace" types.
+    private static let agentCommand = "claude"
+
+    static var all: [ProgramaLayoutPreset] {
+        [
+            ProgramaLayoutPreset(
+                id: "agent-shell",
+                title: String(localized: "layout.preset.agentShell", defaultValue: "Agent and Shell"),
+                layout: .split(ProgramaSplitDefinition(direction: .horizontal, children: [agentPane(focus: true), shellPane]))
+            ),
+            ProgramaLayoutPreset(
+                id: "three-agents",
+                title: String(localized: "layout.preset.threeAgents", defaultValue: "Three Agents"),
+                layout: .split(ProgramaSplitDefinition(direction: .horizontal, split: 1.0 / 3.0, children: [
+                    agentPane(focus: true),
+                    .split(ProgramaSplitDefinition(direction: .horizontal, children: [agentPane(focus: false), agentPane(focus: false)]))
+                ]))
+            )
+        ]
+    }
+
+    private static func agentPane(focus: Bool) -> ProgramaLayoutNode {
+        .pane(ProgramaPaneDefinition(surfaces: [
+            ProgramaSurfaceDefinition(type: .terminal, name: nil, command: agentCommand, cwd: nil, env: nil, focus: focus ? true : nil)
+        ]))
+    }
+
+    private static var shellPane: ProgramaLayoutNode {
+        .pane(ProgramaPaneDefinition(surfaces: [
+            ProgramaSurfaceDefinition(type: .terminal, name: nil, command: nil, cwd: nil, env: nil, focus: nil)
+        ]))
+    }
+}
+
 /// One file in the layouts directory, whether or not it decodes.
 enum ProgramaLayoutEntry: Identifiable, Hashable, Sendable {
     case saved(ProgramaSavedLayoutSummary)
