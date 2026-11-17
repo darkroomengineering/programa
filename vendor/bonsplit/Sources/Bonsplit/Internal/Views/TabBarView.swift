@@ -496,12 +496,23 @@ struct TabBarView: View {
 
     // MARK: - Split Buttons Gutter Drag Zone
 
-    /// Fixed-width gutter reserved behind the split-action icon cluster (terminal/
-    /// split buttons), 114pt wide. Kept as a real drag-capturing view so window drag works there.
+    /// Fixed-width gutter reserved behind the split-action icon cluster (review/terminal/
+    /// split buttons), 114pt wide plus one hit target while the review button shows. Kept as a
+    /// real drag-capturing view so window drag works there.
     @ViewBuilder
     private var splitButtonsGutterDragZone: some View {
         TabBarDragZoneView()
-            .frame(width: 114, height: TabBarMetrics.tabHeight)
+            .frame(width: 114 + openReviewButtonExtraWidth, height: TabBarMetrics.tabHeight)
+    }
+
+    /// The review button opens a diff of a terminal's working tree, so it only shows while
+    /// the selected tab is a terminal.
+    private var showsOpenReviewButton: Bool {
+        pane.selectedTab?.kind == "terminal"
+    }
+
+    private var openReviewButtonExtraWidth: CGFloat {
+        showsOpenReviewButton ? TabBarMetrics.minimumHitTarget : 0
     }
 
     // MARK: - Drop Indicator
@@ -520,6 +531,18 @@ struct TabBarView: View {
     private var splitButtons: some View {
         let tooltips = controller.configuration.appearance.splitButtonTooltips
         HStack(spacing: 0) {
+            if showsOpenReviewButton {
+                Button {
+                    controller.requestReview(inPane: pane.id)
+                } label: {
+                    Image(systemName: "plus.forwardslash.minus")
+                        .font(.system(size: TabBarMetrics.controlIconSize))
+                }
+                .buttonStyle(SplitActionButtonStyle(appearance: appearance))
+                .safeHelp(tooltips.openReview)
+                .accessibilityLabel(tooltips.openReview)
+            }
+
             Button {
                 controller.requestNewTab(kind: "terminal", inPane: pane.id)
             } label: {
@@ -557,7 +580,7 @@ struct TabBarView: View {
     private var combinedMask: some View {
         let fadeWidth: CGFloat = 24
         let shouldShowButtons = presentationMode != "minimal" || isHoveringTabBar
-        let buttonClearWidth: CGFloat = shouldShowButtons ? 90 : 0
+        let buttonClearWidth: CGFloat = shouldShowButtons ? 90 + openReviewButtonExtraWidth : 0
 
         HStack(spacing: 0) {
             // Left scroll fade

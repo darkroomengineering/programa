@@ -299,10 +299,19 @@ struct ReviewPanelView: View {
                 ReviewDiffWebView(
                     patch: panel.viewerPatch,
                     files: panel.files,
+                    editablePaths: panel.inlineEditablePaths,
                     revision: panel.filesRevision,
                     style: .split,
                     isVisibleInUI: isVisibleInUI,
-                    bundleDirectory: bundleDirectory
+                    bundleDirectory: bundleDirectory,
+                    onLoadFile: { [weak panel] path, completion in
+                        guard let panel else { return completion(.failure(.notEditable)) }
+                        panel.loadEditableFile(path: path, completion: completion)
+                    },
+                    onSaveFile: { [weak panel] path, contents, token, completion in
+                        guard let panel else { return completion(.failure(.notEditable)) }
+                        panel.saveEditedFile(path: path, contents: contents, token: token, completion: completion)
+                    }
                 ) { selection in
                     composer = InlineComposerState(
                         filePath: selection.filePath,

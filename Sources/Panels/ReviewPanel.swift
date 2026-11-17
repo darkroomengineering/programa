@@ -1,5 +1,6 @@
 import Foundation
 import Bonsplit
+import CryptoKit
 
 /// Why review comments were not delivered. They stay pending in every case.
 enum ReviewCommentDeliveryFailure: Error, Equatable {
@@ -16,7 +17,8 @@ enum ReviewCommentDelivery: Equatable {
 /// A panel that shows the git diff for another terminal surface ("the agent's pane"), with
 /// line comments that can be sent back into that surface's input. Modeled directly on
 /// `MarkdownPanel.swift`: never mutates the index or branches, and touches worktree files only
-/// when the user confirms a checkpoint revert (`revertToLatestCheckpoint`). Refresh-driven
+/// when the user confirms a checkpoint revert (`revertToLatestCheckpoint`) or saves an inline
+/// edit (`saveEditedFile`). Refresh-driven
 /// rather than continuously live. See docs/plans/diff-review-panel.md.
 @MainActor
 final class ReviewPanel: Panel, ObservableObject {
@@ -396,5 +398,234 @@ final class ReviewPanel: Panel, ObservableObject {
             commentDeliveryFailure = failure
             return .failure(failure)
         }
+    }
+}
+
+// MARK: - Inline editing
+
+extension ReviewPanel {
+    /// The repository the diff paths are relative to; `nil` until a snapshot finds one.
+    var repositoryRoot: String? { diffOperation.value?.repositoryRoot }
+
+    /// Only the uncommitted review diffs the worktree; a branch review shows `HEAD`, where a save
+    /// would never appear. Deleted, binary and over-size files have nothing to edit.
+    static func canEditInline(_ file: ReviewFileDiff, mode: ReviewDiffMode) -> Bool {
+        guard mode == .uncommitted, file.status != .deleted, file.newPath != nil else { return false }
+        switch file.notDiffableReason {
+        case nil, .newUntrackedFile: return true
+        case .binary, .tooLarge: return false
+        }
+    }
+
+    /// Entry index in `viewerPatch` -> repo-relative path, for each file the Pierre viewer may
+    /// offer to edit.
+    var inlineEditablePaths: [Int: String] {
+        var paths: [Int: String] = [:]
+        for (index, file) in files.enumerated() where Self.canEditInline(file, mode: mode) {
+            paths[index] = file.newPath
+        }
+        return paths
+    }
+
+    /// The web viewer reports paths back as untrusted message data, so only a path naming one of
+    /// this panel's editable files is accepted.
+    private func inlineEditableFile(path: String) -> (repositoryRoot: String, file: ReviewFileDiff, newPath: String)? {
+        guard !path.isEmpty,
+              let repositoryRoot,
+              let file = files.first(where: { $0.newPath == path }),
+              Self.canEditInline(file, mode: mode),
+              let newPath = file.newPath else { return nil }
+        return (repositoryRoot, file, newPath)
+    }
+
+    /// Reads both sides of `path` off-main for the inline editor.
+    func loadEditableFile(path: String, completion: @escaping (Result<ReviewEditableFile, ReviewFileEditError>) -> Void) {
+        guard let target = inlineEditableFile(path: path) else {
+            completion(.failure(.notEditable))
+            return
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = ReviewFileEditor.read(repositoryRoot: target.repositoryRoot, file: target.file)
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
+    /// Writes `contents` to `path` off-main unless the file changed since `token` was issued, then
+    /// refreshes the diff.
+    func saveEditedFile(
+        path: String,
+        contents: String,
+        token: String,
+        completion: @escaping (Result<Void, ReviewFileEditError>) -> Void
+    ) {
+        guard let target = inlineEditableFile(path: path) else {
+            completion(.failure(.notEditable))
+            return
+        }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = ReviewFileEditor.write(
+                repositoryRoot: target.repositoryRoot,
+                relativePath: target.newPath,
+                contents: contents,
+                token: token
+            )
+            DispatchQueue.main.async {
+                if case .success = result {
+                    self?.refresh()
+                }
+                completion(result)
+            }
+        }
+    }
+}
+
+/// A file opened in the Review diff's inline editor. `token` is the SHA-256 of the bytes on disk
+/// when it was read; a save that presents a different token is refused.
+struct ReviewEditableFile: Sendable {
+    let oldContents: String?
+    let newContents: String
+    let token: String
+}
+
+enum ReviewFileEditError: Error, Equatable, Sendable {
+    case notEditable
+    case notUTF8
+    case tooLarge
+    case changedOnDisk
+    case readFailed(String)
+    case writeFailed(String)
+
+    var message: String {
+        switch self {
+        case .notEditable:
+            return String(localized: "review.file.edit.error.notEditable", defaultValue: "This file can no longer be edited here.")
+        case .notUTF8:
+            return String(localized: "review.file.edit.error.notUTF8", defaultValue: "Only UTF-8 text files can be edited here.")
+        case .tooLarge:
+            return String(localized: "review.file.edit.error.tooLarge", defaultValue: "This file is too large to edit here.")
+        case .changedOnDisk:
+            return String(
+                localized: "review.file.edit.error.changedOnDisk",
+                defaultValue: "The file changed on disk. Cancel and edit again to get the new version."
+            )
+        case .readFailed(let detail):
+            return String(localized: "review.file.edit.error.readFailed", defaultValue: "Could not read the file: \(detail)")
+        case .writeFailed(let detail):
+            return String(localized: "review.file.edit.error.writeFailed", defaultValue: "Could not save the file: \(detail)")
+        }
+    }
+}
+
+/// File I/O for the Review diff's inline editor. Runs off-main.
+enum ReviewFileEditor {
+    /// The web view keeps the whole file in an editor; past this it gets sluggish.
+    static let maxEditableBytes = 2 * 1024 * 1024
+
+    /// The regular file at `relativePath` under `repositoryRoot`, or `nil` for anything a save
+    /// could abuse: a path outside the repository, a symlink anywhere along it (an in-repo link
+    /// can point into `.git/` or out of the repo), a `.git` component, or a non-regular file.
+    static func fileURL(repositoryRoot: String, relativePath: String) -> URL? {
+        guard !relativePath.isEmpty, !relativePath.hasPrefix("/") else { return nil }
+        let root = URL(fileURLWithPath: repositoryRoot, isDirectory: true).standardizedFileURL.resolvingSymlinksInPath()
+        let candidate = root.appendingPathComponent(relativePath).standardizedFileURL
+        guard candidate.path.hasPrefix(root.path + "/") else { return nil }
+        let components = candidate.pathComponents.dropFirst(root.pathComponents.count)
+        guard !components.contains(where: { $0.caseInsensitiveCompare(".git") == .orderedSame }),
+              candidate.resolvingSymlinksInPath().path == candidate.path,
+              let values = try? candidate.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
+              values.isRegularFile == true, values.isSymbolicLink != true else { return nil }
+        return candidate
+    }
+
+    static func fileSize(_ url: URL) -> Int? {
+        try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize
+    }
+
+    /// The working-tree file and its `HEAD` version (none for an added file).
+    static func read(repositoryRoot: String, file: ReviewFileDiff) -> Result<ReviewEditableFile, ReviewFileEditError> {
+        guard let newPath = file.newPath, let url = fileURL(repositoryRoot: repositoryRoot, relativePath: newPath) else {
+            return .failure(.notEditable)
+        }
+        guard let size = fileSize(url) else { return .failure(.notEditable) }
+        guard size <= maxEditableBytes else { return .failure(.tooLarge) }
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            return .failure(.readFailed(error.localizedDescription))
+        }
+        guard data.count <= maxEditableBytes else { return .failure(.tooLarge) }
+        guard let newContents = utf8Text(data) else { return .failure(.notUTF8) }
+
+        let oldContents: String?
+        switch file.status {
+        case .added:
+            oldContents = nil
+        case .deleted:
+            return .failure(.notEditable)
+        case .modified, .renamed:
+            let result = CanonicalSubprocessRunner.runAutomaticGit(
+                arguments: ["cat-file", "blob", "HEAD:\(file.oldPath ?? newPath)"],
+                currentDirectory: repositoryRoot,
+                timeout: 5,
+                stdoutLimit: maxEditableBytes * 2,
+                stderrLimit: 64 * 1024
+            )
+            if result.outcome == .decodingFailure {
+                return .failure(.notUTF8)
+            }
+            if result.outcome == .stdoutLimitExceeded {
+                return .failure(.tooLarge)
+            }
+            guard result.exitStatus == 0, result.outcome == .exited, let stdout = result.stdout else {
+                let detail = (result.stderr ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                return .failure(.readFailed(detail.isEmpty ? "git cat-file \(result.outcome)" : detail))
+            }
+            oldContents = stdout
+        }
+        return .success(ReviewEditableFile(oldContents: oldContents, newContents: newContents, token: digest(data)))
+    }
+
+    /// Writes `contents` over the file when it still holds the bytes `token` was made from,
+    /// keeping its permissions.
+    static func write(
+        repositoryRoot: String,
+        relativePath: String,
+        contents: String,
+        token: String
+    ) -> Result<Void, ReviewFileEditError> {
+        guard let url = fileURL(repositoryRoot: repositoryRoot, relativePath: relativePath) else {
+            return .failure(.notEditable)
+        }
+        guard contents.utf8.count <= maxEditableBytes else { return .failure(.tooLarge) }
+        // A file past the cap was not the one the editor loaded.
+        guard let size = fileSize(url), size <= maxEditableBytes else { return .failure(.changedOnDisk) }
+        // SHORTCUT: check, then write. ceiling: an agent write that lands between the hash check
+        // and the rename is overwritten. upgrade: compare-and-swap through a lock file if agents
+        // and the editor are seen racing on one file.
+        guard let current = try? Data(contentsOf: url), digest(current) == token else {
+            return .failure(.changedOnDisk)
+        }
+        let permissions = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.posixPermissions]
+        do {
+            try Data(contents.utf8).write(to: url, options: .atomic)
+            if let permissions {
+                try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: url.path)
+            }
+        } catch {
+            return .failure(.writeFailed(error.localizedDescription))
+        }
+        return .success(())
+    }
+
+    /// `nil` unless `data` is UTF-8 that decodes and re-encodes to the same bytes, so a save
+    /// cannot silently rewrite bytes the editor never showed.
+    static func utf8Text(_ data: Data) -> String? {
+        guard let text = String(data: data, encoding: .utf8), Data(text.utf8) == data else { return nil }
+        return text
+    }
+
+    static func digest(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 }

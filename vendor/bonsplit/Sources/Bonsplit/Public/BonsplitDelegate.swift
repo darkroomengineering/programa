@@ -52,6 +52,10 @@ public protocol BonsplitDelegate: AnyObject {
     /// The `kind` string identifies the type of tab (e.g. "terminal", "markdown").
     func splitTabBar(_ controller: BonsplitController, didRequestNewTab kind: String, inPane pane: PaneID)
 
+    /// Called when the user clicks the tab bar's "open review" button. Bonsplit shows it only
+    /// while the pane's selected tab has kind `"terminal"`.
+    func splitTabBar(_ controller: BonsplitController, didRequestReviewInPane pane: PaneID)
+
     /// Called when the user triggers an action from a tab's context menu.
     func splitTabBar(_ controller: BonsplitController, didRequestTabContextAction action: TabContextAction, for tab: Tab, inPane pane: PaneID)
 
@@ -78,6 +82,7 @@ public extension BonsplitDelegate {
     func splitTabBar(_ controller: BonsplitController, didClosePane paneId: PaneID) {}
     func splitTabBar(_ controller: BonsplitController, didFocusPane pane: PaneID) {}
     func splitTabBar(_ controller: BonsplitController, didRequestNewTab kind: String, inPane pane: PaneID) {}
+    func splitTabBar(_ controller: BonsplitController, didRequestReviewInPane pane: PaneID) {}
     func splitTabBar(_ controller: BonsplitController, didRequestTabContextAction action: TabContextAction, for tab: Tab, inPane pane: PaneID) {}
     func splitTabBar(_ controller: BonsplitController, didRequestTabColor hex: String, for tab: Tab, inPane pane: PaneID) {}
     func splitTabBar(_ controller: BonsplitController, didChangeGeometry snapshot: LayoutSnapshot) {}

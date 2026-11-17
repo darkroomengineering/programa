@@ -996,6 +996,14 @@ extension Workspace: @preconcurrency BonsplitDelegate {
         }
     }
 
+    /// Pane header "Open Review" button: reviews the working tree of the pane's selected terminal.
+    func splitTabBar(_ controller: BonsplitController, didRequestReviewInPane pane: PaneID) {
+        guard let selectedTabId = controller.selectedTab(inPane: pane)?.id,
+              let panelId = panelIdFromSurfaceId(selectedTabId),
+              terminalPanel(for: panelId) != nil else { return }
+        _ = newReviewSplit(from: panelId, orientation: .horizontal, focus: true)
+    }
+
     func splitTabBar(_ controller: BonsplitController, didRequestTabContextAction action: TabContextAction, for tab: Bonsplit.Tab, inPane pane: PaneID) {
         switch action {
         case .rename:

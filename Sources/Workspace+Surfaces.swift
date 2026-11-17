@@ -505,6 +505,9 @@ extension Workspace {
             reviewPanel.close()
             return nil
         }
+        // Otherwise the panel stays empty until the agent next goes idle. `review.open` applies
+        // its own snapshot right after, which bumps the generation and drops this one.
+        reviewPanel.refresh()
 
         let previousHostedView = focusedTerminalPanel?.hostedView
         if focus {

@@ -82,6 +82,8 @@ public final class BonsplitPaneChromeDescriptor {
     public let isZoomed: Bool
     /// The workspace has more than one pane, so zoom can toggle.
     public let canZoom: Bool
+    /// The selected tab is a terminal, so the pane can open a review of its working tree.
+    public let showsOpenReview: Bool
     public let onSelect: (TabID) -> Void
     public let onClose: (TabID) -> Void
     public let onContextAction: (TabID, TabContextAction) -> Void
@@ -93,6 +95,7 @@ public final class BonsplitPaneChromeDescriptor {
     public let onNewTab: () -> Void
     public let onSplitRight: () -> Void
     public let onSplitDown: () -> Void
+    public let onOpenReview: () -> Void
 
     public init(
         paneID: PaneID,
@@ -104,6 +107,7 @@ public final class BonsplitPaneChromeDescriptor {
         showsSplitButtons: Bool,
         isZoomed: Bool = false,
         canZoom: Bool = false,
+        showsOpenReview: Bool = false,
         onSelect: @escaping (TabID) -> Void,
         onClose: @escaping (TabID) -> Void,
         onContextAction: @escaping (TabID, TabContextAction) -> Void,
@@ -114,7 +118,8 @@ public final class BonsplitPaneChromeDescriptor {
         onDropTab: @escaping (Int) -> Bool,
         onNewTab: @escaping () -> Void,
         onSplitRight: @escaping () -> Void,
-        onSplitDown: @escaping () -> Void
+        onSplitDown: @escaping () -> Void,
+        onOpenReview: @escaping () -> Void = {}
     ) {
         self.paneID = paneID
         self.anchorView = anchorView
@@ -125,6 +130,7 @@ public final class BonsplitPaneChromeDescriptor {
         self.showsSplitButtons = showsSplitButtons
         self.isZoomed = isZoomed
         self.canZoom = canZoom
+        self.showsOpenReview = showsOpenReview
         self.onSelect = onSelect
         self.onClose = onClose
         self.onContextAction = onContextAction
@@ -136,6 +142,7 @@ public final class BonsplitPaneChromeDescriptor {
         self.onNewTab = onNewTab
         self.onSplitRight = onSplitRight
         self.onSplitDown = onSplitDown
+        self.onOpenReview = onOpenReview
     }
 }
 
