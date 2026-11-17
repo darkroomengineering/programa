@@ -231,10 +231,14 @@ final class ProgramaLayoutStore: ObservableObject {
         guard oldName != newName else { return }
         // A case-only rename on a case-insensitive volume finds the source itself at the
         // destination; that is not a conflict, and rename(2) changes the case in place.
-        if fileManager.fileExists(atPath: destination), !Self.isSameFile(source, destination) {
-            throw ProgramaLayoutStoreError.alreadyExists
-        }
-        guard Darwin.rename(source, destination) == 0 else {
+        let caseOnly = fileManager.fileExists(atPath: destination) && Self.isSameFile(source, destination)
+        // RENAME_EXCL makes the conflict check and the move one step, so a layout saved under
+        // the new name at the same moment (say, by an agent over the socket) is never overwritten.
+        let result = caseOnly
+            ? Darwin.rename(source, destination)
+            : renamex_np(source, destination, UInt32(RENAME_EXCL))
+        guard result == 0 else {
+            if errno == EEXIST { throw ProgramaLayoutStoreError.alreadyExists }
             throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
         }
         reload()
