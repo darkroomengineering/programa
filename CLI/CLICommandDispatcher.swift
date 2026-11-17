@@ -158,6 +158,8 @@ struct CLICommandDispatcher {
     case "themes":
         try cli.runThemes(commandArgs: commandArgs, jsonOutput: jsonOutput)
         return
+    case "config":
+        cli.runConfigCheck(commandArgs: commandArgs)
     case "claude-teams":
         try cli.runClaudeTeams(
             commandArgs: commandArgs,

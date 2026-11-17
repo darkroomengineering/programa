@@ -93,6 +93,8 @@ struct programaApp: App {
         // `terminateForMissingLaunchTag()` early-exit precedent below.
         // Never returns if the holder-mode argument is present.
         SessionEscrowHolder.runIfRequested()
+        // `programa config check` runs this binary with --check-settings; never returns then.
+        SettingsFileCheck.runIfRequested()
 
         // First instance wins. Exits here when another instance is live, before any
         // migration, configuration or history rotation below can touch shared state.
