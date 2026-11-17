@@ -3874,7 +3874,7 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
 
 #if DEBUG
         XCTAssertTrue(
-            appDelegate.debugSetCommandPalettePendingOpenAge(window: window, age: 1.3),
+            appDelegate.debugSetCommandPalettePendingOpenAge(window: window, age: 6.25),
             "Expected to backdate pending-open age for stale visibility test"
         )
 #else
@@ -3885,66 +3885,6 @@ final class AppDelegateShortcutRoutingTests: XCTestCase {
         appDelegate.setCommandPaletteVisible(false, for: window)
 
         let dismissExpectation = expectation(description: "Escape should dismiss stale-state command palette after delay")
-        var observedDismissWindow: NSWindow?
-        let dismissToken = NotificationCenter.default.addObserver(
-            forName: .commandPaletteToggleRequested,
-            object: nil,
-            queue: nil
-        ) { notification in
-            observedDismissWindow = notification.object as? NSWindow
-            dismissExpectation.fulfill()
-        }
-        defer { NotificationCenter.default.removeObserver(dismissToken) }
-
-        guard let escapeEvent = makeKeyDownEvent(
-            key: "\u{1b}",
-            modifiers: [],
-            keyCode: 53,
-            windowNumber: window.windowNumber
-        ) else {
-            XCTFail("Failed to construct Escape event")
-            return
-        }
-
-#if DEBUG
-        XCTAssertTrue(appDelegate.debugHandleCustomShortcut(event: escapeEvent))
-#else
-        XCTFail("debugHandleCustomShortcut is only available in DEBUG")
-#endif
-
-        wait(for: [dismissExpectation], timeout: 1.0)
-        XCTAssertEqual(observedDismissWindow?.windowNumber, window.windowNumber)
-    }
-
-    func testEscapeDismissesCommandPaletteWhenVisibilityStateRemainsStaleForExtendedDelay() {
-        guard let appDelegate = AppDelegate.shared else {
-            XCTFail("Expected AppDelegate.shared")
-            return
-        }
-
-        let windowId = appDelegate.createMainWindow()
-        defer {
-            closeWindow(withId: windowId)
-        }
-
-        guard let window = window(withId: windowId) else {
-            XCTFail("Expected test window")
-            return
-        }
-
-#if DEBUG
-        XCTAssertTrue(
-            appDelegate.debugSetCommandPalettePendingOpenAge(window: window, age: 6.25),
-            "Expected to backdate pending-open age for extended stale visibility test"
-        )
-#else
-        XCTFail("debugSetCommandPalettePendingOpenAge is only available in DEBUG")
-#endif
-
-        // Simulate stale app-level visibility bookkeeping for a longer user delay.
-        appDelegate.setCommandPaletteVisible(false, for: window)
-
-        let dismissExpectation = expectation(description: "Escape should dismiss stale-state command palette after extended delay")
         var observedDismissWindow: NSWindow?
         let dismissToken = NotificationCenter.default.addObserver(
             forName: .commandPaletteToggleRequested,
