@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import SwiftUI
 
 /// Whether a persistent agent hook integration (`programa <agent> install-integration`) is
 /// installed, probed off the main thread at launch, on app activation, and on focus changes
@@ -102,5 +103,65 @@ final class AgentIntegrationStatusStore: ObservableObject {
         defer { try? handle.close() }
         guard let data = try? handle.read(upToCount: 8 * 1024 * 1024) else { return false }
         return data.range(of: Data(marker.utf8)) != nil
+    }
+}
+
+/// One quiet footer line shown while no agent hook integration is installed. It owns its own
+/// store observation so the sidebar root and its rows never re-render for it.
+struct SidebarAgentSetupHint: View {
+    @ObservedObject private var store = AgentIntegrationStatusStore.shared
+    @AppStorage(AgentIntegrationStatusStore.hintDismissedKey) private var isDismissed = false
+
+    private let title = String(localized: "sidebar.agentSetupHint.title", defaultValue: "Set up agent status")
+    private let detail = String(
+        localized: "sidebar.agentSetupHint.detail",
+        defaultValue: "Install a hook integration so the sidebar shows when an agent is working, blocked or done."
+    )
+    private let dismissTitle = String(localized: "sidebar.agentSetupHint.dismiss", defaultValue: "Hide This Hint")
+
+    var body: some View {
+        if !isDismissed && store.state.showsSetupHint {
+            HStack(spacing: 4) {
+                Menu {
+                    Button(String(localized: "menu.file.installClaudeIntegration", defaultValue: "Install Claude Code Integration…")) {
+                        AppDelegate.shared?.openClaudeIntegrationInstaller(debugSource: "sidebar.agentSetupHint")
+                    }
+                    Button(String(localized: "menu.file.installCodexIntegration", defaultValue: "Install Codex Integration…")) {
+                        AppDelegate.shared?.openCodexIntegrationInstaller(debugSource: "sidebar.agentSetupHint")
+                    }
+                    Button(String(localized: "menu.file.installOpenCodeIntegration", defaultValue: "Install OpenCode Integration…")) {
+                        AppDelegate.shared?.openOpenCodeIntegrationInstaller(debugSource: "sidebar.agentSetupHint")
+                    }
+                } label: {
+                    Text(title)
+                }
+                .menuStyle(.button)
+                .buttonStyle(.link)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .safeHelp(detail)
+                .accessibilityLabel(title)
+                .accessibilityHint(detail)
+                .accessibilityIdentifier("SidebarAgentSetupHint")
+
+                Spacer(minLength: 0)
+
+                Button {
+                    isDismissed = true
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .safeHelp(dismissTitle)
+                .accessibilityLabel(dismissTitle)
+                .accessibilityIdentifier("SidebarAgentSetupHintDismiss")
+            }
+            .font(.subheadline)
+            .controlSize(.small)
+            // Text starts on the footer glyph column (edge 8 + the buttons' leading inset + hit inset).
+            .padding(.leading, 8 + SidebarFooterControlLayout.leadingInset + SidebarFooterControlLayout.hitInset)
+            .padding(.trailing, 8)
+        }
     }
 }
