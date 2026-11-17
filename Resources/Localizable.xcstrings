@@ -36,6 +36,90 @@
         "ja": { "stringUnit": { "state": "translated", "value": "閉じる" } }
       }
     },
+    "layout.applyFailed.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Layout Can't Be Applied" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウトを適用できません" } }
+      }
+    },
+    "layout.failed.detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%@: %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@: %@" } }
+      }
+    },
+    "layout.decodeError.missingKey": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "missing key '%@'" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "キー '%@' がありません" } }
+      }
+    },
+    "layout.decodeError.missingKeyAt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "missing key '%@' in '%@'" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "'%2$@' にキー '%1$@' がありません" } }
+      }
+    },
+    "layout.decodeError.wrongValue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "wrong or missing value at '%@'" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "'%@' の値が正しくないか、ありません" } }
+      }
+    },
+    "layout.decodeError.wrongValueRoot": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "wrong value type" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "値の型が正しくありません" } }
+      }
+    },
+    "layout.decodeError.invalidJSON": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "not valid JSON" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "有効なJSONではありません" } }
+      }
+    },
+    "layout.decodeError.invalidJSONDetail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "not valid JSON (%@)" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "有効なJSONではありません（%@）" } }
+      }
+    },
+    "layout.decodeError.invalidValueAt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%@ at '%@'" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@（'%@'）" } }
+      }
+    },
+    "layout.decodeError.emptyFile": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "the file is empty" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ファイルが空です" } }
+      }
+    },
+    "layout.decodeError.fileMissing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "the file no longer exists" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ファイルが見つかりません" } }
+      }
+    },
+    "layout.decodeError.invalidName": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "not a valid layout name" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "有効なレイアウト名ではありません" } }
+      }
+    },
     "storage.cache.derivedData": {
       "extractionState": "manual",
       "localizations": {
