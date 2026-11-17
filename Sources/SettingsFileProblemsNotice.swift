@@ -39,8 +39,10 @@ final class SettingsFileProblemsNotice {
         _ = KeyboardShortcutSettings.settingsFileStore
         let center = NotificationCenter.default
         observers = [
-            center.addObserver(forName: ProgramaSettingsFileStore.didReloadNotification, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.evaluate() }
+            // queue: nil, then hop async: the store posts from inside managedSettingsQueue.sync, and a
+            // .main observer makes the poster wait on the main queue, which deadlocks a main-thread reload().
+            center.addObserver(forName: ProgramaSettingsFileStore.didReloadNotification, object: nil, queue: nil) { [weak self] _ in
+                DispatchQueue.main.async { MainActor.assumeIsolated { self?.evaluate() } }
             },
             center.addObserver(forName: NSWindow.didBecomeMainNotification, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.presentIfPending() }
