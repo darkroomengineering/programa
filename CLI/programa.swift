@@ -369,7 +369,7 @@ struct ProgramaCLI {
         descriptors += paneListDescriptors()
         descriptors += self.treeDescriptors()
         descriptors += self.portsDescriptors() + self.resumeDescriptors() + self.usageDescriptors() + self.storageDescriptors()
-        descriptors += self.handoffDescriptors()
+        descriptors += self.handoffDescriptors() + self.configDescriptors()
         descriptors += paneSurfaceDescriptors()
         descriptors += surfaceDiagnosticsDescriptors()
         descriptors += panelDescriptors()

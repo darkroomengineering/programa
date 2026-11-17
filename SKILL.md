@@ -280,6 +280,7 @@ Do not reach for a Chrome extension. Programa has no built-in browser; browser w
 - `--workspace`/`--surface`/`--pane`/`--window` accept either a short ref (`workspace:2`, `surface:4`) or a raw UUID; omitted, they default to `$PROGRAMA_WORKSPACE_ID`/`$PROGRAMA_SURFACE_ID`.
 - `--json` and `--id-format <refs|uuids|both>` are global flags and go before the subcommand: `programa --json tree`, `programa --id-format both list-panes`.
 - Full command list: `programa help`; one command's flags: `programa <command> --help`.
+- `programa config check [--file <path>]` checks `~/.config/programa/settings.json` without the app running and prints one `settings.json:LINE: key.path: message` line per problem. It exits 0 when the file is valid, 1 when it has problems and 2 when it cannot run the check. Run it after editing the file.
 - Anything not wrapped by a dedicated subcommand is reachable directly: `programa rpc <method> [json-params]` calls any socket API method.
 - `watch-events` streams a live feed of agent-state/output/workspace events over one long-lived connection — it's for dashboards and orchestrators watching many surfaces at once, not for a normal agent loop; use `wait-surface`/`prompt-agent` for "wait for one thing" instead.
 - Longer walkthrough and the full socket API reference: `docs/agent-skill.md` and `docs/socket-api.md` in the programa repo.

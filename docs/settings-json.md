@@ -9,6 +9,27 @@ Programa reads `~/.config/programa/settings.json` on launch and reloads it whene
 
 Keys you do not set fall back to the defaults listed below. Keyboard shortcuts live under `shortcuts.bindings` and are documented in [keyboard-shortcuts.md](keyboard-shortcuts.md); terminal theme and font keys are explained in [terminal-themes.md](terminal-themes.md).
 
+## Checking the file
+
+When a reload finds problems, a notice in the bottom-right corner of the main window says how many there are, with a button that opens the file. It shows once for each new set of problems, so an unchanged file does not bring it back on the next launch. A value with a problem is skipped and the rest of the file still applies. A file that does not parse at all keeps the last settings that did.
+
+To list the problems, run:
+
+```bash
+programa config check
+```
+
+It uses the same parser as the app and works while Programa is closed. It prints one line per problem, with the line of the key in the file when it can find one, and exits 1:
+
+```
+settings.json:4: app.appearance: expected one of "system", "light", "dark"
+settings.json:9: shortcuts.bindings.newTabb: unknown shortcut action
+```
+
+With no problems it prints `settings.json is valid` and exits 0. It also exits 0 when there is no settings file, since the defaults are in use. `--file <path>` checks another file, such as a copy you are editing. Exit code 2 means the check could not run: a usage error, a `--file` path that does not exist, or a CLI that is not the one inside `Programa.app`.
+
+The check covers the sections the settings loader applies: `app`, `notifications`, `sidebarAppearance`, `automation`, `customCommands`, `browser` and `shortcuts`. It does not check `storage` and `worktrees`, which the worktree manager reads separately. It reports unknown shortcut actions but no other unknown keys, and some values of the wrong type, such as a number where a boolean or a string belongs, are skipped without a report.
+
 ## `app`
 
 General app preferences from Settings > App.

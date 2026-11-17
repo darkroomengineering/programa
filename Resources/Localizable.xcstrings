@@ -1,6 +1,41 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "settingsFile.problems.notice.one": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "settings.json has 1 problem" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "settings.json に問題が 1 件あります" } }
+      }
+    },
+    "settingsFile.problems.notice.other": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "settings.json has %lld problems" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "settings.json に問題が %lld 件あります" } }
+      }
+    },
+    "settingsFile.problems.notice.detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Run programa config check in a terminal to list them." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "一覧を表示するには、ターミナルで programa config check を実行してください。" } }
+      }
+    },
+    "settingsFile.problems.notice.open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Open settings.json" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "settings.json を開く" } }
+      }
+    },
+    "settingsFile.problems.notice.dismiss": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Dismiss" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "閉じる" } }
+      }
+    },
     "storage.cache.derivedData": {
       "extractionState": "manual",
       "localizations": {

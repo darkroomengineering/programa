@@ -356,6 +356,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         )
         if !isRunningUnderXCTest(ProcessInfo.processInfo.environment) {
             installSocketListenerFailureNotice()
+            SettingsFileProblemsNotice.shared.install()
         }
     }
 

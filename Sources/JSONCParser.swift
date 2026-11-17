@@ -136,6 +136,10 @@ enum JSONCParser {
                             didClose = true
                             break
                         }
+                        // Keep line breaks so parse-error offsets map to the original line.
+                        if scalars[index] == "\n" || scalars[index] == "\r" {
+                            result.append(scalars[index])
+                        }
                         index += 1
                     }
                     guard didClose else {
