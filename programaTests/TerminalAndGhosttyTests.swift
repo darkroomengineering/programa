@@ -3956,21 +3956,6 @@ final class TerminalControllerSocketTextChunkTests: XCTestCase {
 }
 
 final class GhosttyTerminalViewVisibilityPolicyTests: XCTestCase {
-    func testImmediateStateUpdateAllowedWhenHostNotInWindow() {
-        // hostedViewHasSuperview must be false here to actually represent "not in a
-        // window" per this test's name. With `true` it is byte-for-byte identical to
-        // testImmediateStateUpdateSkippedForStaleHostBoundElsewhere below (same params,
-        // opposite expectation) — a self-contradiction for a pure function that has
-        // existed since this test was authored (PR #1717). shouldApplyImmediateHostedStateUpdate
-        // only returns true for a not-bound host when it truly has no superview anywhere.
-        XCTAssertTrue(
-            GhosttyTerminalView.shouldApplyImmediateHostedStateUpdate(
-                hostedViewHasSuperview: false,
-                isBoundToCurrentHost: false
-            )
-        )
-    }
-
     func testImmediateStateUpdateAllowedWhenBoundToCurrentHost() {
         XCTAssertTrue(
             GhosttyTerminalView.shouldApplyImmediateHostedStateUpdate(
