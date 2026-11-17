@@ -465,6 +465,11 @@ final class ProgramaSettingsFileStore {
         if let shortcutsSection = root["shortcuts"] {
             parseShortcutsSection(shortcutsSection, snapshot: &snapshot)
         }
+        parseStorageSections(
+            worktrees: root["worktrees"] as? [String: Any],
+            storage: root["storage"] as? [String: Any],
+            snapshot: &snapshot
+        )
 
         return snapshot
     }
@@ -498,6 +503,9 @@ final class ProgramaSettingsFileStore {
         }
         if let value = jsonBool(section["confirmCloseLastPane"]) {
             snapshot.managedUserDefaults[LastPaneCloseWarningSettings.confirmCloseLastPaneKey] = .bool(value)
+        }
+        if let value = jsonBool(section["saveScrollbackOnQuit"]) {
+            snapshot.managedUserDefaults[ScrollbackPersistenceSettings.persistScrollbackKey] = .bool(value)
         }
         if let value = jsonBool(section["autoResumeAgents"]) {
             snapshot.managedUserDefaults[AgentAutoResumeSettings.autoResumeAgentsKey] = .bool(value)
@@ -553,6 +561,32 @@ final class ProgramaSettingsFileStore {
             } else {
                 snapshot.addProblem("app.terminalFont", "expected an object with a non-empty family and a size above 0, or null")
             }
+        }
+    }
+
+    /// Mirrors `worktrees` and `storage` into the UserDefaults keys their Settings rows use, so
+    /// those rows show as managed. `StorageSettings` reads the file itself and reports nothing, so
+    /// a value it would ignore is skipped here too, without a problem.
+    private static func parseStorageSections(
+        worktrees: [String: Any]?,
+        storage: [String: Any]?,
+        snapshot: inout ResolvedSettingsSnapshot
+    ) {
+        if let raw = worktrees?["directory"] as? String,
+           StorageSettings.validDirectory(raw) != nil {
+            snapshot.managedUserDefaults[StorageSettings.directoryKey] = .string(raw)
+        }
+        if let value = StorageSettings.validBool(worktrees?["autoRemoveMerged"]) {
+            snapshot.managedUserDefaults[StorageSettings.autoRemoveMergedKey] = .bool(value)
+        }
+        if let value = StorageSettings.validAutoRemoveAfterHours(worktrees?["autoRemoveAfterHours"]) {
+            snapshot.managedUserDefaults[StorageSettings.autoRemoveAfterHoursKey] = .double(value)
+        }
+        if let value = StorageSettings.validBool(storage?["autoCleanCaches"]) {
+            snapshot.managedUserDefaults[StorageSettings.autoCleanCachesKey] = .bool(value)
+        }
+        if let value = StorageSettings.validLowDiskWarningGB(storage?["lowDiskWarningGB"]) {
+            snapshot.managedUserDefaults[StorageSettings.lowDiskWarningGBKey] = .double(value)
         }
     }
 
@@ -636,6 +670,9 @@ final class ProgramaSettingsFileStore {
         }
         if let value = jsonBool(section["claudeTeamsByDefault"]) {
             snapshot.managedUserDefaults[ClaudeCodeIntegrationSettings.teamsByDefaultKey] = .bool(value)
+        }
+        if let value = jsonBool(section["agentScreenDetection"]) {
+            snapshot.managedUserDefaults[AgentScreenDetectionSettings.enabledKey] = .bool(value)
         }
         if let value = jsonBool(section["holdAgentTextWhileTyping"]) {
             snapshot.managedUserDefaults[DraftGuardSettings.enabledKey] = .bool(value)
@@ -1015,6 +1052,9 @@ final class ProgramaSettingsFileStore {
         case .bool:
             guard defaults.object(forKey: defaultsKey) != nil else { return .absent }
             return .bool(defaults.bool(forKey: defaultsKey))
+        case .double:
+            guard defaults.object(forKey: defaultsKey) != nil else { return .absent }
+            return .double(defaults.double(forKey: defaultsKey))
         case .string:
             guard let value = defaults.string(forKey: defaultsKey) else { return .absent }
             return .string(value)
@@ -1085,6 +1125,11 @@ final class ProgramaSettingsFileStore {
         switch value {
         case .bool(let next):
             let current = defaults.object(forKey: defaultsKey) as? Bool
+            if current != next {
+                defaults.set(next, forKey: defaultsKey)
+            }
+        case .double(let next):
+            let current = defaults.object(forKey: defaultsKey) as? Double
             if current != next {
                 defaults.set(next, forKey: defaultsKey)
             }
@@ -1244,6 +1289,7 @@ final class ProgramaSettingsFileStore {
                     "minimalMode": WorkspacePresentationModeSettings.defaultMode == .minimal,
                     "warnBeforeQuit": QuitWarningSettings.defaultWarnBeforeQuit,
                     "confirmCloseLastPane": LastPaneCloseWarningSettings.defaultConfirmCloseLastPane,
+                    "saveScrollbackOnQuit": ScrollbackPersistenceSettings.defaultPersistScrollback,
                     "autoResumeAgents": AgentAutoResumeSettings.defaultAutoResumeAgents,
                     "reapLeftoverAgentProcesses": LeftoverProcessReaperSettings.defaultReapLeftoverAgentProcesses,
                     "commandPaletteSearchesAllSurfaces": CommandPaletteSwitcherSearchSettings.defaultSearchAllSurfaces,
@@ -1269,6 +1315,7 @@ final class ProgramaSettingsFileStore {
                     "claudeTeamsByDefault": ClaudeCodeIntegrationSettings.defaultTeamsByDefault,
                     "holdAgentTextWhileTyping": DraftGuardSettings.defaultEnabled,
                     "protectApprovalPrompts": ApprovalGuardSettings.defaultEnabled,
+                    "agentScreenDetection": AgentScreenDetectionSettings.defaultEnabled,
                 ],
             ],
             [
@@ -1279,6 +1326,19 @@ final class ProgramaSettingsFileStore {
             [
                 "browser": [
                     "externalAppOpenAllowlist": [String](),
+                ],
+            ],
+            [
+                "storage": [
+                    "autoCleanCaches": StorageSettings.defaultAutoCleanCaches,
+                    "lowDiskWarningGB": StorageSettings.defaultLowDiskWarningGB,
+                ],
+            ],
+            [
+                "worktrees": [
+                    "directory": "~/.programa/worktrees",
+                    "autoRemoveMerged": StorageSettings.defaultAutoRemoveMerged,
+                    "autoRemoveAfterHours": StorageSettings.defaultAutoRemoveAfterHours,
                 ],
             ],
             [
@@ -1396,6 +1456,7 @@ private struct ManagedCustomSettings: Equatable {
 
 private enum ManagedSettingsValue: Equatable {
     case bool(Bool)
+    case double(Double)
     case string(String)
     case stringArray([String])
 }

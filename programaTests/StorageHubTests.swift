@@ -43,12 +43,15 @@ final class StorageHubTests: XCTestCase {
     }
 
     func testLowDiskSettingDefaultsForMissingMalformedAndInvalidValues() throws {
+        let suiteName = "StorageHubTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let settingsURL = directory.appendingPathComponent("settings.json")
 
-        XCTAssertEqual(StorageSettings.read(settingsURL: settingsURL).lowDiskWarningGB, 20)
+        XCTAssertEqual(StorageSettings.read(settingsURL: settingsURL, defaults: defaults).lowDiskWarningGB, 20)
         for contents in [
             "", "not JSON", "[]", "{}", "{\"storage\":{}}",
             "{\"storage\":{\"lowDiskWarningGB\":true}}",
@@ -57,22 +60,25 @@ final class StorageHubTests: XCTestCase {
             "{\"storage\":{\"lowDiskWarningGB\":1e999}}"
         ] {
             try contents.write(to: settingsURL, atomically: true, encoding: .utf8)
-            XCTAssertEqual(StorageSettings.read(settingsURL: settingsURL).lowDiskWarningGB, 20, contents)
+            XCTAssertEqual(StorageSettings.read(settingsURL: settingsURL, defaults: defaults).lowDiskWarningGB, 20, contents)
         }
     }
 
     func testLowDiskSettingHonorsDisableAndFractionalThresholdInJSONC() throws {
+        let suiteName = "StorageHubTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let settingsURL = directory.appendingPathComponent("settings.json")
 
         try "{\"storage\":{\"lowDiskWarningGB\":0}}".write(to: settingsURL, atomically: true, encoding: .utf8)
-        XCTAssertEqual(StorageSettings.read(settingsURL: settingsURL).lowDiskWarningGB, 0)
+        XCTAssertEqual(StorageSettings.read(settingsURL: settingsURL, defaults: defaults).lowDiskWarningGB, 0)
         try "{ /* custom threshold */ \"storage\": {\"lowDiskWarningGB\": 12.5,},}".write(
             to: settingsURL, atomically: true, encoding: .utf8
         )
-        XCTAssertEqual(StorageSettings.read(settingsURL: settingsURL).lowDiskWarningGB, 12.5)
+        XCTAssertEqual(StorageSettings.read(settingsURL: settingsURL, defaults: defaults).lowDiskWarningGB, 12.5)
     }
 
     func testConfirmationListsOnlyDryRunRemovalCandidatesAndTheirCombinedSize() {

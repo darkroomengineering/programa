@@ -184,6 +184,28 @@ enum ReviewDiffRendererSettings {
         case pierre
         /// The SwiftUI row list in `ReviewPanelView`.
         case native
+
+        var displayName: String {
+            switch self {
+            case .pierre: String(localized: "settings.app.reviewDiffRenderer.pierre", defaultValue: "Split View")
+            case .native: String(localized: "settings.app.reviewDiffRenderer.native", defaultValue: "Plain List")
+            }
+        }
+
+        var subtitle: String {
+            switch self {
+            case .pierre:
+                String(
+                    localized: "settings.app.reviewDiffRenderer.pierre.subtitle",
+                    defaultValue: "The Review panel shows diffs side by side with syntax colors and word-level changes."
+                )
+            case .native:
+                String(
+                    localized: "settings.app.reviewDiffRenderer.native.subtitle",
+                    defaultValue: "The Review panel shows diffs as a plain list, which uses less memory on very large diffs."
+                )
+            }
+        }
     }
 
     static let rendererKey = "reviewDiffRenderer"

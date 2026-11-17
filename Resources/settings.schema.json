@@ -104,6 +104,11 @@
           "default": true,
           "description": "Ask before closing a workspace's last tab closes the workspace, or the window when it is the last workspace. Running processes always ask."
         },
+        "saveScrollbackOnQuit": {
+          "type": "boolean",
+          "default": true,
+          "description": "Save terminal scrollback when Programa quits and restore it on the next launch. When false, terminal scrollback is not written to disk."
+        },
         "autoResumeAgents": {
           "type": "boolean",
           "default": true,
@@ -207,6 +212,11 @@
           "type": "boolean",
           "default": true,
           "description": "Refuse agent and script writes to a terminal while the agent there waits on a permission or sign-in prompt, so only you can answer it. The refusal lifts when you press a key at the prompt or the agent moves on."
+        },
+        "agentScreenDetection": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show working, blocked and idle status for agent CLIs without an installed integration, such as Gemini CLI and GitHub Copilot CLI, by reading the terminal screen. Sessions with hooks (Claude Code, Codex, OpenCode) are not affected."
         }
       }
     },

@@ -5,7 +5,7 @@ editable shortcuts under `windows.shortcuts` in
 `%USERPROFILE%\\.config\\programa\\settings.json`; see the
 [Windows configuration guide](../windows/README.md#windows-behavior).
 
-Programa reads `~/.config/programa/settings.json` on launch and reloads it whenever the file changes, so edits apply without a restart. Many keys also have a control in the Settings window; where one does, a key set in the file wins over it until you remove the key from the file. The file may contain `//` comments. The full contract is `Resources/settings.schema.json` in the repository. This page is maintained by hand, and `scripts/check-settings-docs.py` fails when a schema key is missing from it (or the reverse).
+Programa reads `~/.config/programa/settings.json` on launch and reloads it whenever the file changes, so edits apply without a restart. Almost every key also has a row in the Settings window, and a key set in the file wins over its row until you remove the key from the file. While the file sets a key, its row is disabled and says "Managed in settings.json". The keys without a row are `sidebarAppearance.matchTerminalBackground` and the Windows-only `windows.shortcuts`. The file may contain `//` comments. The full contract is `Resources/settings.schema.json` in the repository. This page is maintained by hand. `scripts/check-settings-docs.py` fails when a schema key is missing from it (or the reverse), and when a schema key has no Settings row or a Settings row has no key, apart from the exceptions it lists.
 
 Keys you do not set fall back to the defaults listed below. Keyboard shortcuts live under `shortcuts.bindings` and are documented in [keyboard-shortcuts.md](keyboard-shortcuts.md); terminal theme and font keys are explained in [terminal-themes.md](terminal-themes.md).
 
@@ -32,7 +32,7 @@ The check covers the sections the settings loader applies: `app`, `notifications
 
 ## `app`
 
-General app preferences from Settings > App.
+General app preferences. Most are in Settings > General > App; `appearance` and `minimalMode` are in Settings > Appearance > Appearance, and `terminalTheme` and `terminalFont` in Settings > Appearance > Terminal.
 
 | Key | Type | Default | What it does |
 |---|---|---|---|
@@ -43,6 +43,7 @@ General app preferences from Settings > App.
 | `minimalMode` | boolean | `false` | Hide the workspace title bar so each pane's tab bar sits at the top of the window, next to the toolbar. |
 | `warnBeforeQuit` | boolean | `true` | Show a confirmation before quitting Programa. |
 | `confirmCloseLastPane` | boolean | `true` | Ask before closing a workspace's last tab closes the workspace, or the window when it is the last workspace. When off, an idle last tab closes without asking; a running process still asks. Shell `exit` never asks. |
+| `saveScrollbackOnQuit` | boolean | `true` | Save terminal scrollback when Programa quits and restore it on the next launch. When `false`, terminal scrollback is not written to disk. |
 | `autoResumeAgents` | boolean | `true` | Resume Claude Code, Codex and OpenCode sessions that were running at quit when their pane is restored. |
 | `reapLeftoverAgentProcesses` | boolean | `true` | When a Claude Code session exits, stop the processes it started and left running (MCP servers, dev servers, debug binaries). Processes started with `nohup` are kept. See [Processes an agent leaves behind](workspace-interface.md#processes-an-agent-leaves-behind). |
 | `commandPaletteSearchesAllSurfaces` | boolean | `false` | Search every surface in the command palette switcher instead of only the active workspace. |
@@ -50,7 +51,7 @@ General app preferences from Settings > App.
 
 ## `notifications`
 
-Notification behavior from Settings > Notifications.
+Notification behavior. `sound` is in Settings > General > Notifications; `showInMenuBar` is the Show in Menu Bar row in Settings > General > App.
 
 | Key | Type | Default | What it does |
 |---|---|---|---|
@@ -59,7 +60,7 @@ Notification behavior from Settings > Notifications.
 
 ## `sidebarAppearance`
 
-Sidebar settings from Settings > Sidebar.
+Sidebar settings from Settings > Appearance > Sidebar. `matchTerminalBackground` has no row there; set it in this file.
 
 | Key | Type | Default | What it does |
 |---|---|---|---|
@@ -68,7 +69,7 @@ Sidebar settings from Settings > Sidebar.
 
 ## `automation`
 
-Socket control and automation settings from Settings > Automation.
+Socket control and agent settings. `socketControlMode` and `socketPassword` are in Settings > Automation > Socket Control; the others are in Settings > Automation > Agents.
 
 | Key | Type | Default | What it does |
 |---|---|---|---|
@@ -78,10 +79,11 @@ Socket control and automation settings from Settings > Automation.
 | `claudeTeamsByDefault` | boolean | `true` | Start plain `claude` in a Programa terminal with Claude Code agent teams on, the same as `programa claude-teams`: teammates open as Programa panes. An explicit `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` in the environment, including `0`, always wins. Applies to new terminals. |
 | `holdAgentTextWhileTyping` | boolean | `true` | Refuse agent and script text sent to a terminal while you have typed input there that you have not submitted. Socket writes return `draft_in_progress` instead (see [socket-api.md](socket-api.md#text-delivery-draft_in_progress)). A draft stops holding text 60 seconds after your last keystroke. |
 | `protectApprovalPrompts` | boolean | `true` | Refuse agent and script writes to a terminal while the agent there waits on a permission or sign-in prompt, so only you can answer it. Socket writes return `agent_awaiting_approval` instead (see [socket-api.md](socket-api.md#approval-prompts-agent_awaiting_approval)). The refusal lifts when you press a key at the prompt or the agent moves on. Questions are not protected. |
+| `agentScreenDetection` | boolean | `true` | Show working, blocked and idle status for agent CLIs that have no installed integration, such as Gemini CLI and GitHub Copilot CLI, by reading the terminal screen. Sessions with hooks (Claude Code, Codex, OpenCode) are not affected. |
 
 ## `customCommands`
 
-Custom command trust settings from Settings > Custom Commands.
+Custom command trust settings from Settings > Automation > Custom Commands.
 
 | Key | Type | Default | What it does |
 |---|---|---|---|
@@ -89,7 +91,7 @@ Custom command trust settings from Settings > Custom Commands.
 
 ## `browser`
 
-Settings for links that open in other apps.
+Settings for links that open in other apps, from Settings > General > Links. The Apps Allowed to Open Links list there shows each entry, and Remove takes it out so that app asks again.
 
 | Key | Type | Default | What it does |
 |---|---|---|---|
@@ -97,7 +99,7 @@ Settings for links that open in other apps.
 
 ## `storage`
 
-Developer cache cleanup and low disk space warning settings.
+Developer cache cleanup and low disk space warning settings, from Settings > General > Storage.
 
 | Key | Type | Default | What it does |
 |---|---|---|---|
@@ -106,7 +108,7 @@ Developer cache cleanup and low disk space warning settings.
 
 ## `worktrees`
 
-Native git worktree workflow settings.
+Native git worktree workflow settings, from Settings > General > Storage.
 
 | Key | Type | Default | What it does |
 |---|---|---|---|
@@ -116,7 +118,7 @@ Native git worktree workflow settings.
 
 ## `shortcuts`
 
-Keyboard shortcut settings from Settings > Keyboard Shortcuts.
+Keyboard shortcut settings from Settings > Shortcuts.
 
 | Key | Type | Default | What it does |
 |---|---|---|---|

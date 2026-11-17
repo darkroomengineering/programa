@@ -180,7 +180,7 @@ These run in CI; run the relevant one before pushing:
 
 - `python3 scripts/check-structural-budgets.py`: line budgets for lifecycle owner files such as `CLI/programa.swift` and `Sources/TerminalController.swift`. Run it before adding lines to a file it lists; it prints each file's current count and cap. When a file is near its cap, free lines or move code into a new file first.
 - `scripts/check-v2-contract.sh`: v2 socket methods are contract-first. Edit `contracts/v2/methods.json`, then `python3 scripts/gen-v2-contract.py`; never hand-edit the generated Swift.
-- `python3 scripts/check-settings-docs.py`: every settings key and shortcut action is documented.
+- `python3 scripts/check-settings-docs.py`: every settings key and shortcut action is documented, and every settings.json key has a matching `SettingsRow` case in `Sources/SettingsRowRegistry.swift` (or an allowlist entry with a reason). Add the case when you add a key or a Settings row.
 - New Swift files need four `project.pbxproj` entries (PBXBuildFile, PBXFileReference, group child, Sources build phase) or the build fails with "cannot find type in scope".
 - Every new chrome or overlay `NSHostingView` sets `safeAreaRegions = []`.
 - Files that call `dlog` import `Bonsplit` and wrap the call in `#if DEBUG`.

@@ -411,7 +411,20 @@ struct StorageSettings: Sendable {
     let autoCleanCaches: Bool
     let lowDiskWarningGB: Double
 
-    private static let defaultDirectory: String = {
+    /// UserDefaults keys written by the Settings window. A key set in settings.json wins: the
+    /// file is read first, and the settings file store mirrors its values into these keys.
+    static let directoryKey = "worktreesDirectory"
+    static let autoRemoveMergedKey = "worktreesAutoRemoveMerged"
+    static let autoRemoveAfterHoursKey = "worktreesAutoRemoveAfterHours"
+    static let autoCleanCachesKey = "storageAutoCleanCaches"
+    static let lowDiskWarningGBKey = "storageLowDiskWarningGB"
+
+    static let defaultAutoRemoveMerged = true
+    static let defaultAutoRemoveAfterHours: Double = 24
+    static let defaultAutoCleanCaches = true
+    static let defaultLowDiskWarningGB: Double = 20
+
+    static let defaultDirectory: String = {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return (home as NSString).appendingPathComponent(".programa/worktrees")
     }()
@@ -419,34 +432,60 @@ struct StorageSettings: Sendable {
     private static let settingsFileURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".config/programa/settings.json")
 
-    static func read(settingsURL: URL = settingsFileURL) -> Self {
+    static func read(settingsURL: URL = settingsFileURL, defaults: UserDefaults = .standard) -> Self {
         guard let data = FileManager.default.contents(atPath: settingsURL.path), !data.isEmpty,
               let sanitized = try? JSONCParser.preprocess(data: data),
               let root = try? JSONSerialization.jsonObject(with: sanitized, options: []) as? [String: Any] else {
-            return Self(root: [:])
+            return Self(root: [:], defaults: defaults)
         }
-        return Self(root: root)
+        return Self(root: root, defaults: defaults)
     }
 
-    private init(root: [String: Any]) {
+    private init(root: [String: Any], defaults: UserDefaults) {
         let worktrees = root["worktrees"] as? [String: Any]
         let storage = root["storage"] as? [String: Any]
-        directory = Self.resolvedDirectory(worktrees?["directory"] as? String)
-        autoRemoveMerged = worktrees?["autoRemoveMerged"] as? Bool ?? true
-        autoCleanCaches = storage?["autoCleanCaches"] as? Bool ?? true
-        if let number = worktrees?["autoRemoveAfterHours"] as? NSNumber,
-           CFGetTypeID(number) != CFBooleanGetTypeID(), number.doubleValue.isFinite {
-            autoRemoveAfterHours = max(1, number.doubleValue)
-        } else {
-            autoRemoveAfterHours = 24
-        }
-        if let number = storage?["lowDiskWarningGB"] as? NSNumber,
-           CFGetTypeID(number) != CFBooleanGetTypeID(),
-           number.doubleValue.isFinite, number.doubleValue >= 0 {
-            lowDiskWarningGB = number.doubleValue
-        } else {
-            lowDiskWarningGB = 20
-        }
+        directory = Self.validDirectory(worktrees?["directory"])
+            ?? Self.validDirectory(defaults.object(forKey: Self.directoryKey))
+            ?? Self.defaultDirectory
+        autoRemoveMerged = Self.validBool(worktrees?["autoRemoveMerged"])
+            ?? Self.validBool(defaults.object(forKey: Self.autoRemoveMergedKey))
+            ?? Self.defaultAutoRemoveMerged
+        autoCleanCaches = Self.validBool(storage?["autoCleanCaches"])
+            ?? Self.validBool(defaults.object(forKey: Self.autoCleanCachesKey))
+            ?? Self.defaultAutoCleanCaches
+        autoRemoveAfterHours = Self.validAutoRemoveAfterHours(worktrees?["autoRemoveAfterHours"])
+            ?? Self.validAutoRemoveAfterHours(defaults.object(forKey: Self.autoRemoveAfterHoursKey))
+            ?? Self.defaultAutoRemoveAfterHours
+        lowDiskWarningGB = Self.validLowDiskWarningGB(storage?["lowDiskWarningGB"])
+            ?? Self.validLowDiskWarningGB(defaults.object(forKey: Self.lowDiskWarningGBKey))
+            ?? Self.defaultLowDiskWarningGB
+    }
+
+    /// The value settings.json `worktrees.directory` resolves to, or nil when it is not a
+    /// non-empty string and the next source applies.
+    static func validDirectory(_ raw: Any?) -> String? {
+        guard let string = raw as? String,
+              !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return resolvedDirectory(string)
+    }
+
+    /// Also accepts `0` and `1`: a file that turned cleanup off with `0` must keep it off.
+    static func validBool(_ raw: Any?) -> Bool? {
+        raw as? Bool
+    }
+
+    /// Values below 1 hour are treated as 1.
+    static func validAutoRemoveAfterHours(_ raw: Any?) -> Double? {
+        guard let number = raw as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+              number.doubleValue.isFinite else { return nil }
+        return max(1, number.doubleValue)
+    }
+
+    /// `0` turns the warning off; negative values are invalid.
+    static func validLowDiskWarningGB(_ raw: Any?) -> Double? {
+        guard let number = raw as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+              number.doubleValue.isFinite, number.doubleValue >= 0 else { return nil }
+        return number.doubleValue
     }
 
     private static func resolvedDirectory(_ raw: String?) -> String {

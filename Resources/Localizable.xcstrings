@@ -85,6 +85,209 @@
         "ja": { "stringUnit": { "state": "translated", "value": "この保存済みセッションには復元するウインドウがありません。" } }
       }
     },
+    "settings.section.links": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Links" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "リンク" } }
+      }
+    },
+    "settings.links.allowedApps": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Apps Allowed to Open Links" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "リンクを開くことを許可したアプリ" } }
+      }
+    },
+    "settings.links.allowedApps.subtitleEmpty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "None yet. Choose Always Allow when Programa asks before a link opens another app." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "まだありません。リンクを別のアプリで開く前に Programa が確認したときに「常に許可」を選ぶと追加されます。" } }
+      }
+    },
+    "settings.links.allowedApps.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Links of these kinds open in these apps without asking. Remove one to be asked again." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "これらの種類のリンクは確認なしでこれらのアプリで開きます。削除すると再び確認されます。" } }
+      }
+    },
+    "settings.links.allowedApps.entry": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%1$@: links · %2$@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%1$@: リンク · %2$@" } }
+      }
+    },
+    "settings.links.allowedApps.remove": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Remove" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "削除" } }
+      }
+    },
+    "settings.links.allowedApps.removeLabel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Remove %1$@ for %2$@: links" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%2$@: リンク用の %1$@ を削除" } }
+      }
+    },
+    "settings.section.storage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Storage" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ストレージ" } }
+      }
+    },
+    "settings.storage.worktreeDirectory": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Worktree Folder" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ワークツリーのフォルダ" } }
+      }
+    },
+    "settings.storage.worktreeDirectory.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "programa worktree create puts new worktrees here, one folder per repository." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "programa worktree create は新しいワークツリーをここに作成します。リポジトリごとに1つのフォルダです。" } }
+      }
+    },
+    "settings.storage.worktreeDirectory.choose": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Choose…" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "選択…" } }
+      }
+    },
+    "settings.storage.worktreeDirectory.choosePrompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Use Folder" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "このフォルダを使用" } }
+      }
+    },
+    "settings.storage.autoRemoveMerged": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Remove Merged Worktrees" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "マージ済みワークツリーを削除" } }
+      }
+    },
+    "settings.storage.autoRemoveMerged.subtitleOn": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Every 6 hours, merged worktrees in the worktree folder with no changes are removed. Branches are kept." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "6時間ごとに、ワークツリーのフォルダ内で変更のないマージ済みワークツリーを削除します。ブランチは残ります。" } }
+      }
+    },
+    "settings.storage.autoRemoveMerged.subtitleOff": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Merged worktrees stay until you remove them, for example with programa storage clean." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "マージ済みワークツリーは、programa storage clean などで削除するまで残ります。" } }
+      }
+    },
+    "settings.storage.autoRemoveAfterHours": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Remove After" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "削除までの時間" } }
+      }
+    },
+    "settings.storage.autoRemoveAfterHours.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "How long a merged worktree must go unused before it is removed." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "マージ済みワークツリーが削除されるまでに使われていない必要がある時間です。" } }
+      }
+    },
+    "settings.storage.autoCleanCaches": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Clean Developer Caches" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "開発者キャッシュを削除" } }
+      }
+    },
+    "settings.storage.autoCleanCaches.subtitleOn": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Every 6 hours, eligible Xcode, Android and package manager caches are cleaned while their tools are idle." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "6時間ごとに、ツールが使われていない間に対象の Xcode、Android、パッケージマネージャーのキャッシュを削除します。" } }
+      }
+    },
+    "settings.storage.autoCleanCaches.subtitleOff": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Caches are cleaned only when you run programa storage clean." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "キャッシュは programa storage clean を実行したときだけ削除されます。" } }
+      }
+    },
+    "settings.storage.lowDiskWarning": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Low Disk Space Warning" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ディスク容量不足の警告" } }
+      }
+    },
+    "settings.storage.lowDiskWarning.subtitleOn": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Warn when free space on the home volume falls below this amount." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ホームボリュームの空き容量がこの値を下回ったら警告します。" } }
+      }
+    },
+    "settings.storage.lowDiskWarning.subtitleOff": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "No warning when the disk runs low." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ディスク容量が少なくなっても警告しません。" } }
+      }
+    },
+    "settings.storage.lowDiskWarning.off": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Off" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "オフ" } }
+      }
+    },
+    "settings.app.reviewDiffRenderer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Review Diffs" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レビューの差分表示" } }
+      }
+    },
+    "settings.app.reviewDiffRenderer.pierre": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Split View" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "分割表示" } }
+      }
+    },
+    "settings.app.reviewDiffRenderer.native": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Plain List" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "シンプルなリスト" } }
+      }
+    },
+    "settings.app.reviewDiffRenderer.pierre.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The Review panel shows diffs side by side with syntax colors and word-level changes." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レビューパネルは差分を左右に並べ、構文の色分けと単語単位の変更で表示します。" } }
+      }
+    },
+    "settings.app.reviewDiffRenderer.native.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The Review panel shows diffs as a plain list, which uses less memory on very large diffs." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レビューパネルは差分をシンプルなリストで表示します。非常に大きな差分でメモリの使用が少なくなります。" } }
+      }
+    },
     "settingsFile.problems.notice.one": {
       "extractionState": "manual",
       "localizations": {
