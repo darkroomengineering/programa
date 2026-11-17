@@ -7676,6 +7676,142 @@
         }
       }
     },
+    "dialog.closeTab.agentWorkingNamed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An agent in \"%@\" is still working. Closing it stops the agent."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%@」のエージェントはまだ作業中です。閉じるとエージェントは停止します。"
+          }
+        }
+      }
+    },
+    "dialog.closeTab.agentWorking": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An agent in this tab is still working. Closing it stops the agent."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このタブのエージェントはまだ作業中です。閉じるとエージェントは停止します。"
+          }
+        }
+      }
+    },
+    "dialog.closeTab.agentBlockedNamed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An agent in \"%@\" is waiting for input. Closing it stops the agent."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%@」のエージェントが入力を待っています。閉じるとエージェントは停止します。"
+          }
+        }
+      }
+    },
+    "dialog.closeTab.agentBlocked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An agent in this tab is waiting for input. Closing it stops the agent."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このタブのエージェントが入力を待っています。閉じるとエージェントは停止します。"
+          }
+        }
+      }
+    },
+    "dialog.close.agentsWorking.one": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 agent is still working."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1個のエージェントがまだ作業中です。"
+          }
+        }
+      }
+    },
+    "dialog.close.agentsWorking.other": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld agents are still working."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld個のエージェントがまだ作業中です。"
+          }
+        }
+      }
+    },
+    "dialog.close.agentsBlocked.one": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 agent is waiting for input."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1個のエージェントが入力を待っています。"
+          }
+        }
+      }
+    },
+    "dialog.close.agentsBlocked.other": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld agents are waiting for input."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld個のエージェントが入力を待っています。"
+          }
+        }
+      }
+    },
     "dialog.closeTab.title": {
       "extractionState": "manual",
       "localizations": {
