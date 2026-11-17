@@ -6,7 +6,10 @@ Fails when:
     or a documented key is missing from the schema;
   * a shortcut action in Sources/KeyboardShortcutSettings.swift is missing from the
     action id table in docs/keyboard-shortcuts.md (or the reverse);
-  * a shortcut action is missing from the shortcuts.bindings enum in the schema (or the reverse).
+  * a shortcut action is missing from the shortcuts.bindings enum in the schema (or the reverse);
+  * a schema key has no Settings window row in the SettingsRow enum in
+    Sources/SettingsRowRegistry.swift, or a row there has no schema key, unless the key or row is
+    listed below in FILE_ONLY_KEYS or SETTINGS_ONLY_ROWS with a reason.
 
 Standard library only. Run from anywhere: python3 scripts/check-settings-docs.py
 """
@@ -21,6 +24,20 @@ SCHEMA = ROOT / "Resources" / "settings.schema.json"
 SETTINGS_DOC = ROOT / "docs" / "settings-json.md"
 SHORTCUTS_DOC = ROOT / "docs" / "keyboard-shortcuts.md"
 SWIFT = ROOT / "Sources" / "KeyboardShortcutSettings.swift"
+ROW_REGISTRY = ROOT / "Sources" / "SettingsRowRegistry.swift"
+
+# settings.json keys with no Settings window row, on purpose.
+FILE_ONLY_KEYS = {
+    "sidebarAppearance.matchTerminalBackground": (
+        "Only affects macOS 14 and 15, where the sidebar has no system glass; set it in the file."
+    ),
+    "windows.shortcuts": "Read by the Windows app only.",
+}
+
+# Settings window rows with no settings.json key, on purpose (SettingsRow cases with no raw value).
+SETTINGS_ONLY_ROWS = {
+    "desktopNotifications": "Shows the macOS notification permission, which only macOS can change.",
+}
 
 # Top-level schema keys that are file metadata rather than settings.
 METADATA_KEYS = {"$schema", "schemaVersion"}
@@ -63,6 +80,16 @@ def swift_actions(text):
     start = text.index("enum Action")
     end = text.index("var id: String", start)
     return set(re.findall(r"^\s+case (\w+)\s*$", text[start:end], re.M))
+
+
+def settings_rows(text):
+    """SettingsRow cases as {case name: settings.json key or None}."""
+    start = text.index("enum SettingsRow")
+    end = text.index("var settingsFileKey", start)
+    rows = {}
+    for match in re.finditer(r'^\s+case (\w+)(?:\s*=\s*"([^"]+)")?\s*$', text[start:end], re.M):
+        rows[match.group(1)] = match.group(2)
+    return rows
 
 
 def shortcut_doc_ids(text):
@@ -118,9 +145,41 @@ def main():
         "Resources/settings.schema.json",
     )
 
+    rows = settings_rows(ROW_REGISTRY.read_text())
+    if not rows:
+        print("FAIL could not find any cases in the SettingsRow enum")
+        return 1
+    row_keys = {key for key in rows.values() if key}
+    for key in sorted(from_schema - row_keys - FILE_ONLY_KEYS.keys()):
+        print(
+            f"FAIL settings rows: {key} has no Settings window row. Add the row and its SettingsRow "
+            "case, or list the key in FILE_ONLY_KEYS with a reason"
+        )
+        ok = False
+    for key in sorted(row_keys - from_schema):
+        print(f"FAIL settings rows: SettingsRow key {key} is not in Resources/settings.schema.json")
+        ok = False
+    for name in sorted(n for n, key in rows.items() if key is None and n not in SETTINGS_ONLY_ROWS):
+        print(
+            f"FAIL settings rows: Settings row {name} has no settings.json key. Add the key, "
+            "or list the row in SETTINGS_ONLY_ROWS with a reason"
+        )
+        ok = False
+    for key in sorted(FILE_ONLY_KEYS.keys() & row_keys):
+        print(f"FAIL settings rows: {key} is in FILE_ONLY_KEYS but has a Settings row; remove it from the list")
+        ok = False
+    for key in sorted(FILE_ONLY_KEYS.keys() - from_schema):
+        print(f"FAIL settings rows: FILE_ONLY_KEYS lists {key}, which is not in the schema")
+        ok = False
+    for name in sorted(n for n in SETTINGS_ONLY_ROWS if rows.get(n, "missing") is not None):
+        print(f"FAIL settings rows: SETTINGS_ONLY_ROWS lists {name}, which is not a SettingsRow case without a key")
+        ok = False
+
     if ok:
         print(
-            f"ok: {len(from_schema)} settings keys and {len(actions)} shortcut actions match the docs"
+            f"ok: {len(from_schema)} settings keys and {len(actions)} shortcut actions match the docs; "
+            f"{len(rows)} Settings rows match the schema ({len(FILE_ONLY_KEYS)} file-only keys, "
+            f"{len(SETTINGS_ONLY_ROWS)} Settings-only rows)"
         )
         return 0
     return 1
