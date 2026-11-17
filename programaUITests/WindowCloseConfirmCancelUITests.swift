@@ -35,6 +35,8 @@ final class WindowCloseConfirmCancelUITests: XCTestCase {
     private func launchWithRunningProcess() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["PROGRAMA_TAG"] = "ui-tests-close-cancel-\(UUID().uuidString.prefix(8).lowercased())"
+        // Keeps the first-launch setup assistant from taking key focus on a fresh profile.
+        app.launchArguments += ["-programaWelcomeShown", "YES"]
         app.launch()
         if !app.wait(for: .runningForeground, timeout: 12) { app.activate() }
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 6))

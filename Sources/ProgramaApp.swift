@@ -281,35 +281,37 @@ struct programaApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .commands {
-            CommandGroup(replacing: .appSettings) {
-                splitCommandButton(title: String(localized: "menu.app.settings", defaultValue: "Settings…"), shortcut: menuShortcut(for: .openSettings)) {
-                    appDelegate.openPreferencesWindow(debugSource: "menu.cmdComma")
-                }
-                Button(String(localized: "menu.app.openProgramaSettingsFile", defaultValue: "Open settings.json")) {
-                    openProgramaSettingsFileInEditor()
-                }
-                Button(String(localized: "menu.app.ghosttySettings", defaultValue: "Ghostty Settings…")) {
-                    GhosttyApp.shared.openConfigurationInTextEdit()
-                }
-                splitCommandButton(title: String(localized: "menu.app.reloadConfiguration", defaultValue: "Reload Configuration"), shortcut: menuShortcut(for: .reloadConfiguration)) {
-                    GhosttyApp.shared.reloadConfiguration(source: "menu.reload_configuration")
-                }
-            }
-
-            CommandGroup(replacing: .appInfo) {
-                Button(String(localized: "menu.app.about", defaultValue: "About Programa")) {
-                    showAboutPanel()
+            Group {
+                CommandGroup(replacing: .appSettings) {
+                    splitCommandButton(title: String(localized: "menu.app.settings", defaultValue: "Settings…"), shortcut: menuShortcut(for: .openSettings)) {
+                        appDelegate.openPreferencesWindow(debugSource: "menu.cmdComma")
+                    }
+                    Button(String(localized: "menu.app.openProgramaSettingsFile", defaultValue: "Open settings.json")) {
+                        openProgramaSettingsFileInEditor()
+                    }
+                    Button(String(localized: "menu.app.ghosttySettings", defaultValue: "Ghostty Settings…")) {
+                        GhosttyApp.shared.openConfigurationInTextEdit()
+                    }
+                    splitCommandButton(title: String(localized: "menu.app.reloadConfiguration", defaultValue: "Reload Configuration"), shortcut: menuShortcut(for: .reloadConfiguration)) {
+                        GhosttyApp.shared.reloadConfiguration(source: "menu.reload_configuration")
+                    }
                 }
 
-                Button(String(localized: "menu.app.checkForUpdates", defaultValue: "Check for Updates…")) {
-                    appDelegate.checkForUpdates(nil)
-                }
-                InstallUpdateMenuItem(model: appDelegate.updateViewModel)
-            }
+                CommandGroup(replacing: .appInfo) {
+                    Button(String(localized: "menu.app.about", defaultValue: "About Programa")) {
+                        showAboutPanel()
+                    }
 
-            CommandGroup(replacing: .appTermination) {
-                splitCommandButton(title: String(localized: "menu.quitPrograma", defaultValue: "Quit Programa"), shortcut: menuShortcut(for: .quit)) {
-                    NSApp.terminate(nil)
+                    Button(String(localized: "menu.app.checkForUpdates", defaultValue: "Check for Updates…")) {
+                        appDelegate.checkForUpdates(nil)
+                    }
+                    InstallUpdateMenuItem(model: appDelegate.updateViewModel)
+                }
+
+                CommandGroup(replacing: .appTermination) {
+                    splitCommandButton(title: String(localized: "menu.quitPrograma", defaultValue: "Quit Programa"), shortcut: menuShortcut(for: .quit)) {
+                        NSApp.terminate(nil)
+                    }
                 }
             }
 
@@ -667,6 +669,12 @@ struct programaApp: App {
 
                 splitCommandButton(title: String(localized: "menu.view.showNotifications", defaultValue: "Show Notifications"), shortcut: menuShortcut(for: .showNotifications)) {
                     showNotificationsPopover()
+                }
+            }
+
+            CommandGroup(after: .help) {
+                Button(String(localized: "menu.help.setupAssistant", defaultValue: "Set Up Programa…")) {
+                    SetupAssistantController.shared.presentFromUserRequest()
                 }
             }
         }

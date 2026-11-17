@@ -339,6 +339,14 @@ extension CommandPaletteView {
         )
         contributions.append(
             CommandPaletteCommandContribution(
+                commandId: "palette.showSetupAssistant",
+                title: constant(String(localized: "command.showSetupAssistant.title", defaultValue: "Set Up Programa…")),
+                subtitle: constant(String(localized: "command.showWelcome.subtitle", defaultValue: "Help")),
+                keywords: ["setup", "set", "up", "onboarding", "first", "run", "wizard", "theme", "font", "agents", "notifications", "cli", "help"]
+            )
+        )
+        contributions.append(
+            CommandPaletteCommandContribution(
                 commandId: "palette.openStorageHub",
                 title: constant(String(localized: "command.openStorageHub.title", defaultValue: "Open Storage Hub")),
                 subtitle: constant(String(localized: "command.openStorageHub.subtitle", defaultValue: "Storage")),
@@ -895,6 +903,9 @@ extension CommandPaletteView {
         }
         registry.register(commandId: "palette.showWelcome") {
             AppDelegate.shared?.openWelcomeWorkspace()
+        }
+        registry.register(commandId: "palette.showSetupAssistant") {
+            SetupAssistantController.shared.presentFromUserRequest()
         }
         registry.register(commandId: "palette.openStorageHub") {
             guard let window = observedWindow ?? NSApp.keyWindow ?? NSApp.mainWindow else {

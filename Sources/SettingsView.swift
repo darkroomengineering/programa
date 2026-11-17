@@ -123,20 +123,6 @@ struct SettingsView: View {
         )
     }
 
-    private var terminalLightThemeSelection: Binding<String> {
-        Binding(
-            get: { terminalThemeSettings.lightTheme },
-            set: { terminalThemeSettings.selectLightTheme($0) }
-        )
-    }
-
-    private var terminalDarkThemeSelection: Binding<String> {
-        Binding(
-            get: { terminalThemeSettings.darkTheme },
-            set: { terminalThemeSettings.selectDarkTheme($0) }
-        )
-    }
-
     private var selectedSocketControlMode: SocketControlMode {
         SocketControlSettings.migrateMode(socketControlMode)
     }
@@ -204,38 +190,15 @@ struct SettingsView: View {
     }
 
     private var notificationPermissionStatusColor: Color {
-        switch notificationStore.authorizationState {
-        case .authorized, .provisional, .ephemeral:
-            return .green
-        case .denied:
-            return .red
-        case .unknown, .notDetermined:
-            return .secondary
-        }
+        notificationStore.authorizationState.statusColor
     }
 
     private var notificationPermissionSubtitle: String {
-        switch notificationStore.authorizationState {
-        case .unknown, .notDetermined:
-            return String(localized: "settings.notifications.permission.subtitle.notDetermined", defaultValue: "Desktop notifications are not enabled yet.")
-        case .authorized:
-            return String(localized: "settings.notifications.permission.subtitle.authorized", defaultValue: "Desktop notifications are enabled.")
-        case .denied:
-            return String(localized: "settings.notifications.permission.subtitle.denied", defaultValue: "Desktop notifications are disabled in System Settings.")
-        case .provisional:
-            return String(localized: "settings.notifications.permission.subtitle.provisional", defaultValue: "Desktop notifications are enabled with quiet delivery.")
-        case .ephemeral:
-            return String(localized: "settings.notifications.permission.subtitle.ephemeral", defaultValue: "Desktop notifications are temporarily enabled.")
-        }
+        notificationStore.authorizationState.permissionSubtitle
     }
 
     private var notificationPermissionActionTitle: String {
-        switch notificationStore.authorizationState {
-        case .unknown, .notDetermined:
-            return String(localized: "settings.notifications.permission.action.enable", defaultValue: "Enable")
-        case .authorized, .denied, .provisional, .ephemeral:
-            return String(localized: "settings.notifications.permission.action.openSettings", defaultValue: "Open Settings")
-        }
+        notificationStore.authorizationState.permissionActionTitle
     }
 
     private func previewNotificationSound() {
@@ -247,12 +210,7 @@ struct SettingsView: View {
 #if DEBUG
         dlog("notification.ui enableTapped state=\(state)")
 #endif
-        switch notificationStore.authorizationState {
-        case .unknown, .notDetermined:
-            notificationStore.requestAuthorizationFromSettings()
-        case .authorized, .denied, .provisional, .ephemeral:
-            notificationStore.openNotificationSettings()
-        }
+        notificationStore.performPermissionAction()
     }
 
     private func saveSocketPassword() {
@@ -616,94 +574,7 @@ struct SettingsView: View {
             title: String(localized: "settings.section.terminal", defaultValue: "Terminal")
         )
         SettingsCard {
-            SettingsPickerRow(
-                String(localized: "settings.terminalTheme.light", defaultValue: "Light Theme"),
-                subtitle: terminalThemeSettings.isManagedBySettingsFile
-                    ? String(localized: "settings.terminalTheme.managedByFile", defaultValue: "Managed in settings.json")
-                    : String(localized: "settings.terminalTheme.light.subtitle", defaultValue: "Used when Programa has a light appearance."),
-                controlWidth: pickerColumnWidth,
-                selection: terminalLightThemeSelection,
-                accessibilityId: "TerminalLightThemePicker"
-            ) {
-                Text(
-                    String(
-                        localized: "settings.terminalTheme.useGhosttyConfiguration",
-                        defaultValue: "Use Ghostty Configuration"
-                    )
-                ).tag("")
-                ForEach(terminalThemeSettings.themeNames, id: \.self) { themeName in
-                    Text(themeName).tag(themeName)
-                }
-            }
-            .disabled(terminalThemeSettings.isManagedBySettingsFile)
-
-            SettingsCardDivider()
-
-            SettingsPickerRow(
-                String(localized: "settings.terminalTheme.dark", defaultValue: "Dark Theme"),
-                subtitle: terminalThemeSettings.isManagedBySettingsFile
-                    ? String(localized: "settings.terminalTheme.managedByFile", defaultValue: "Managed in settings.json")
-                    : String(localized: "settings.terminalTheme.dark.subtitle", defaultValue: "Used when Programa has a dark appearance."),
-                controlWidth: pickerColumnWidth,
-                selection: terminalDarkThemeSelection,
-                accessibilityId: "TerminalDarkThemePicker"
-            ) {
-                Text(
-                    String(
-                        localized: "settings.terminalTheme.useGhosttyConfiguration",
-                        defaultValue: "Use Ghostty Configuration"
-                    )
-                ).tag("")
-                ForEach(terminalThemeSettings.themeNames, id: \.self) { themeName in
-                    Text(themeName).tag(themeName)
-                }
-            }
-            .disabled(terminalThemeSettings.isManagedBySettingsFile)
-
-            SettingsCardDivider()
-
-            SettingsCardRow(
-                String(localized: "settings.terminalFont.title", defaultValue: "Font"),
-                subtitle: terminalThemeSettings.isFontManagedBySettingsFile
-                    ? String(localized: "settings.terminalTheme.managedByFile", defaultValue: "Managed in settings.json")
-                    : String(
-                        localized: "settings.terminalFont.subtitle",
-                        defaultValue: "Font family and size used in the terminal."
-                    )
-            ) {
-                HStack(spacing: 6) {
-                    TextField(
-                        String(localized: "settings.terminalFont.familyPlaceholder", defaultValue: "System Default"),
-                        text: Binding(
-                            get: { terminalThemeSettings.fontFamily },
-                            set: { terminalThemeSettings.setFontFamily($0) }
-                        )
-                    )
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 140)
-                    TextField(
-                        "",
-                        value: Binding<Double?>(
-                            get: { terminalThemeSettings.fontSize > 0 ? terminalThemeSettings.fontSize : nil },
-                            set: { terminalThemeSettings.setFontSize($0 ?? 0) }
-                        ),
-                        format: .number,
-                        prompt: Text(TerminalThemeSettingsModel.ghosttyDefaultFontSize.formatted())
-                    )
-                        .textFieldStyle(.roundedBorder)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 44)
-                        .accessibilityLabel(
-                            String(localized: "settings.terminalFont.size", defaultValue: "Font Size")
-                        )
-                }
-            }
-            .disabled(terminalThemeSettings.isFontManagedBySettingsFile)
-
-            if let errorMessage = terminalThemeSettings.errorMessage {
-                SettingsCardDivider()
-                SettingsCardNote(errorMessage)
-            }
+            TerminalThemeAndFontRows(model: terminalThemeSettings, pickerColumnWidth: pickerColumnWidth)
         }
 
     }
@@ -1050,10 +921,61 @@ struct SettingsView: View {
 
 }
 
+/// The desktop notification permission row, shared by Settings and the setup assistant.
+extension NotificationAuthorizationState {
+    var statusColor: Color {
+        switch self {
+        case .authorized, .provisional, .ephemeral:
+            return .green
+        case .denied:
+            return .red
+        case .unknown, .notDetermined:
+            return .secondary
+        }
+    }
+
+    var permissionSubtitle: String {
+        switch self {
+        case .unknown, .notDetermined:
+            return String(localized: "settings.notifications.permission.subtitle.notDetermined", defaultValue: "Desktop notifications are not enabled yet.")
+        case .authorized:
+            return String(localized: "settings.notifications.permission.subtitle.authorized", defaultValue: "Desktop notifications are enabled.")
+        case .denied:
+            return String(localized: "settings.notifications.permission.subtitle.denied", defaultValue: "Desktop notifications are disabled in System Settings.")
+        case .provisional:
+            return String(localized: "settings.notifications.permission.subtitle.provisional", defaultValue: "Desktop notifications are enabled with quiet delivery.")
+        case .ephemeral:
+            return String(localized: "settings.notifications.permission.subtitle.ephemeral", defaultValue: "Desktop notifications are temporarily enabled.")
+        }
+    }
+
+    var permissionActionTitle: String {
+        switch self {
+        case .unknown, .notDetermined:
+            return String(localized: "settings.notifications.permission.action.enable", defaultValue: "Enable")
+        case .authorized, .denied, .provisional, .ephemeral:
+            return String(localized: "settings.notifications.permission.action.openSettings", defaultValue: "Open Settings")
+        }
+    }
+}
+
+extension TerminalNotificationStore {
+    /// Asks for permission while it is undecided; otherwise opens System Settings, the only
+    /// place a decided permission can change.
+    func performPermissionAction() {
+        switch authorizationState {
+        case .unknown, .notDetermined:
+            requestAuthorizationFromSettings()
+        case .authorized, .denied, .provisional, .ephemeral:
+            openNotificationSettings()
+        }
+    }
+}
+
 /// Which Settings rows settings.json currently controls, and the file's parse error if its last
 /// reload failed. Refreshes on every settings-file reload.
 @MainActor
-private final class SettingsFileStatusModel: ObservableObject {
+final class SettingsFileStatusModel: ObservableObject {
     @Published private(set) var parseError: String?
     @Published private(set) var managedDefaultsKeysRevision: UInt64 = 0
     @Published private(set) var trustedDirectoriesManaged = false
@@ -1123,8 +1045,105 @@ extension View {
     }
 }
 
+/// The terminal light/dark theme pickers and font row, shared by Settings and the setup assistant.
+struct TerminalThemeAndFontRows: View {
+    @ObservedObject var model: TerminalThemeSettingsModel
+    let pickerColumnWidth: CGFloat
+
+    var body: some View {
+        SettingsPickerRow(
+            String(localized: "settings.terminalTheme.light", defaultValue: "Light Theme"),
+            subtitle: model.isManagedBySettingsFile
+                ? String(localized: "settings.terminalTheme.managedByFile", defaultValue: "Managed in settings.json")
+                : String(localized: "settings.terminalTheme.light.subtitle", defaultValue: "Used when Programa has a light appearance."),
+            controlWidth: pickerColumnWidth,
+            selection: Binding(get: { model.lightTheme }, set: { model.selectLightTheme($0) }),
+            accessibilityId: "TerminalLightThemePicker"
+        ) {
+            Text(
+                String(
+                    localized: "settings.terminalTheme.useGhosttyConfiguration",
+                    defaultValue: "Use Ghostty Configuration"
+                )
+            ).tag("")
+            ForEach(model.themeNames, id: \.self) { themeName in
+                Text(themeName).tag(themeName)
+            }
+        }
+        .disabled(model.isManagedBySettingsFile)
+
+        SettingsCardDivider()
+
+        SettingsPickerRow(
+            String(localized: "settings.terminalTheme.dark", defaultValue: "Dark Theme"),
+            subtitle: model.isManagedBySettingsFile
+                ? String(localized: "settings.terminalTheme.managedByFile", defaultValue: "Managed in settings.json")
+                : String(localized: "settings.terminalTheme.dark.subtitle", defaultValue: "Used when Programa has a dark appearance."),
+            controlWidth: pickerColumnWidth,
+            selection: Binding(get: { model.darkTheme }, set: { model.selectDarkTheme($0) }),
+            accessibilityId: "TerminalDarkThemePicker"
+        ) {
+            Text(
+                String(
+                    localized: "settings.terminalTheme.useGhosttyConfiguration",
+                    defaultValue: "Use Ghostty Configuration"
+                )
+            ).tag("")
+            ForEach(model.themeNames, id: \.self) { themeName in
+                Text(themeName).tag(themeName)
+            }
+        }
+        .disabled(model.isManagedBySettingsFile)
+
+        SettingsCardDivider()
+
+        SettingsCardRow(
+            String(localized: "settings.terminalFont.title", defaultValue: "Font"),
+            subtitle: model.isFontManagedBySettingsFile
+                ? String(localized: "settings.terminalTheme.managedByFile", defaultValue: "Managed in settings.json")
+                : String(
+                    localized: "settings.terminalFont.subtitle",
+                    defaultValue: "Font family and size used in the terminal."
+                )
+        ) {
+            HStack(spacing: 6) {
+                TextField(
+                    String(localized: "settings.terminalFont.familyPlaceholder", defaultValue: "System Default"),
+                    text: Binding(
+                        get: { model.fontFamily },
+                        set: { model.setFontFamily($0) }
+                    )
+                )
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 140)
+                TextField(
+                    "",
+                    value: Binding<Double?>(
+                        get: { model.fontSize > 0 ? model.fontSize : nil },
+                        set: { model.setFontSize($0 ?? 0) }
+                    ),
+                    format: .number,
+                    prompt: Text(TerminalThemeSettingsModel.ghosttyDefaultFontSize.formatted())
+                )
+                    .textFieldStyle(.roundedBorder)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 44)
+                    .accessibilityLabel(
+                        String(localized: "settings.terminalFont.size", defaultValue: "Font Size")
+                    )
+            }
+        }
+        .disabled(model.isFontManagedBySettingsFile)
+
+        if let errorMessage = model.errorMessage {
+            SettingsCardDivider()
+            SettingsCardNote(errorMessage)
+        }
+    }
+}
+
 @MainActor
-private final class TerminalThemeSettingsModel: ObservableObject {
+final class TerminalThemeSettingsModel: ObservableObject {
     @Published private(set) var themeNames: [String] = []
     @Published private(set) var lightTheme = ""
     @Published private(set) var darkTheme = ""
@@ -1615,7 +1634,7 @@ private struct ThemeWindowThumbnail: View {
     }
 }
 
-private struct ThemePickerRow: View {
+struct ThemePickerRow: View {
     let selectedMode: String
     let onSelect: (AppearanceMode) -> Void
 

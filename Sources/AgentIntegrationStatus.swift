@@ -77,9 +77,21 @@ final class AgentIntegrationStatusStore: ObservableObject {
         if next != state { state = next }
     }
 
+    enum Agent: CaseIterable, Sendable {
+        case claude
+        case codex
+        case openCode
+    }
+
     nonisolated static func probeInstalled(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Bool {
+        !probeInstalledAgents(environment: environment).isEmpty
+    }
+
+    nonisolated static func probeInstalledAgents(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Set<Agent> {
         let home = environment["HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? NSHomeDirectory()
         func configDir(_ key: String, fallback: String) -> String {
             let raw = environment[key]?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -93,9 +105,11 @@ final class AgentIntegrationStatusStore: ObservableObject {
             .appendingPathComponent("hooks.json")
         let openCodePlugin = (configDir("OPENCODE_CONFIG_DIR", fallback: "~/.config/opencode") as NSString)
             .appendingPathComponent("plugins/programa.js")
-        return FileManager.default.fileExists(atPath: openCodePlugin)
-            || fileContains(claudeSettings, marker: "programa claude-hook")
-            || fileContains(codexHooks, marker: "programa codex-hook")
+        var installed: Set<Agent> = []
+        if fileContains(claudeSettings, marker: "programa claude-hook") { installed.insert(.claude) }
+        if fileContains(codexHooks, marker: "programa codex-hook") { installed.insert(.codex) }
+        if FileManager.default.fileExists(atPath: openCodePlugin) { installed.insert(.openCode) }
+        return installed
     }
 
     private nonisolated static func fileContains(_ path: String, marker: String) -> Bool {
