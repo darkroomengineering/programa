@@ -16,6 +16,8 @@ final class SetupAssistantController: NSObject, NSWindowDelegate {
     private var firstLaunchObservers: [NSObjectProtocol] = []
     private weak var firstLaunchTabManager: TabManager?
     private var parentCloseObserver: NSObjectProtocol?
+    /// The terminal window the panel belongs to, kept while the panel is detached for an installer.
+    private weak var owner: NSWindow?
 
     /// Called for the first selected workspace while `WelcomeSettings.shownKey` is unset. That
     /// happens inside `TabManager.init`, before its window is registered, so presentation waits
@@ -55,6 +57,7 @@ final class SetupAssistantController: NSObject, NSWindowDelegate {
     /// Help menu and command palette entry point.
     func presentFromUserRequest() {
         if let panel {
+            reattach(panel)
             panel.makeKeyAndOrderFront(nil)
             return
         }
@@ -69,8 +72,13 @@ final class SetupAssistantController: NSObject, NSWindowDelegate {
 
     func installIntegration(for agent: AgentIntegrationStatusStore.Agent) {
         // The installer workspace opens in the key terminal window and asks for confirmation
-        // there, so hand key focus to the window the assistant is attached to.
-        panel?.parent?.makeKeyAndOrderFront(nil)
+        // there. A child panel always stays above its parent and is larger than a default
+        // terminal window, so detach it and bring the terminal in front of it. Clicking the
+        // panel or rerunning setup reattaches it.
+        if let panel, let parent = panel.parent {
+            parent.removeChildWindow(panel)
+            parent.makeKeyAndOrderFront(nil)
+        }
         let source = "setupAssistant"
         switch agent {
         case .claude: AppDelegate.shared?.openClaudeIntegrationInstaller(debugSource: source)
@@ -88,6 +96,7 @@ final class SetupAssistantController: NSObject, NSWindowDelegate {
         UserDefaults.standard.set(true, forKey: WelcomeSettings.shownKey)
         panel.parent?.removeChildWindow(panel)
         panel.delegate = nil
+        owner = nil
         self.panel = nil
         if let parentCloseObserver {
             NotificationCenter.default.removeObserver(parentCloseObserver)
@@ -115,6 +124,7 @@ final class SetupAssistantController: NSObject, NSWindowDelegate {
         panel.setFrameOrigin(Self.bottomTrailingOrigin(for: panel.frame.size, over: parent))
 
         self.panel = panel
+        owner = parent
         parentCloseObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
             object: parent,
@@ -126,6 +136,16 @@ final class SetupAssistantController: NSObject, NSWindowDelegate {
         if NSApp.isActive {
             panel.makeKeyAndOrderFront(nil)
         }
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        guard let panel, notification.object as? NSPanel === panel else { return }
+        reattach(panel)
+    }
+
+    private func reattach(_ panel: NSPanel) {
+        guard panel.parent == nil, let owner else { return }
+        owner.addChildWindow(panel, ordered: .above)
     }
 
     /// Installers prompt (y/N) at the top-left of a fresh terminal in the parent window, so the
