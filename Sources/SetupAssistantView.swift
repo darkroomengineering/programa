@@ -85,7 +85,7 @@ struct SetupAssistantView: View {
             Divider()
             footer
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(width: SetupAssistantController.panelSize.width, height: SetupAssistantController.panelSize.height)
         .animation(.smooth, value: step)
     }
 
@@ -99,12 +99,13 @@ struct SetupAssistantView: View {
         }
     }
 
-    /// Reduce Motion swaps the slide for a crossfade.
+    /// The incoming step slides in from the side it comes from; the outgoing one only fades,
+    /// because it keeps the transition it last rendered with. Reduce Motion crossfades.
     private var stepTransition: AnyTransition {
         if reduceMotion { return .opacity }
         return .asymmetric(
             insertion: .move(edge: isMovingForward ? .trailing : .leading).combined(with: .opacity),
-            removal: .move(edge: isMovingForward ? .leading : .trailing).combined(with: .opacity)
+            removal: .opacity
         )
     }
 

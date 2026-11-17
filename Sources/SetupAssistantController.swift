@@ -10,32 +10,46 @@ final class SetupAssistantController: NSObject, NSWindowDelegate {
     static let shared = SetupAssistantController()
     static let windowIdentifier = NSUserInterfaceItemIdentifier("programa.setupAssistant")
 
-    private static let panelSize = NSSize(width: 580, height: 500)
+    static let panelSize = NSSize(width: 580, height: 500)
 
     private var panel: NSPanel?
-    private var firstLaunchObserver: NSObjectProtocol?
+    private var firstLaunchObservers: [NSObjectProtocol] = []
+    private weak var firstLaunchTabManager: TabManager?
     private var parentCloseObserver: NSObjectProtocol?
 
     /// Called for the first selected workspace while `WelcomeSettings.shownKey` is unset. That
-    /// happens inside `TabManager.init`, before the window exists, so presentation waits for the
-    /// first main terminal window to become main. It never activates the app.
+    /// happens inside `TabManager.init`, before its window is registered, so presentation waits
+    /// until the window holds a ready terminal (the old `programa welcome` timing) or becomes
+    /// main. It never activates the app.
     func presentOnFirstLaunch(in tabManager: TabManager) {
-        guard panel == nil, firstLaunchObserver == nil,
+        guard panel == nil, firstLaunchObservers.isEmpty,
               !AppDelegate.detectRunningUnderXCTest(ProcessInfo.processInfo.environment) else { return }
-        if let window = tabManager.window, window.isMainWindow {
-            present(attachedTo: window)
+        firstLaunchTabManager = tabManager
+        let center = NotificationCenter.default
+        for name in [Notification.Name.terminalSurfaceDidBecomeReady, NSWindow.didBecomeMainNotification] {
+            firstLaunchObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { SetupAssistantController.shared.presentForFirstLaunchIfReady() }
+            })
+        }
+    }
+
+    private func presentForFirstLaunchIfReady() {
+        guard let tabManager = firstLaunchTabManager else {
+            stopWaitingForFirstLaunch()
             return
         }
-        firstLaunchObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.didBecomeMainNotification,
-            object: nil,
-            queue: .main
-        ) { note in
-            MainActor.assumeIsolated {
-                guard let window = note.object as? NSWindow else { return }
-                SetupAssistantController.shared.firstLaunchWindowDidBecomeMain(window)
-            }
+        guard let window = tabManager.window, window.isVisible else { return }
+        stopWaitingForFirstLaunch()
+        guard panel == nil, !UserDefaults.standard.bool(forKey: WelcomeSettings.shownKey) else { return }
+        present(attachedTo: window)
+    }
+
+    private func stopWaitingForFirstLaunch() {
+        for observer in firstLaunchObservers {
+            NotificationCenter.default.removeObserver(observer)
         }
+        firstLaunchObservers = []
+        firstLaunchTabManager = nil
     }
 
     /// Help menu and command palette entry point.
@@ -81,16 +95,6 @@ final class SetupAssistantController: NSObject, NSWindowDelegate {
         parentCloseObserver = nil
     }
 
-    private func firstLaunchWindowDidBecomeMain(_ window: NSWindow) {
-        guard AppDelegate.shared?.isMainTerminalWindow(window) == true else { return }
-        if let firstLaunchObserver {
-            NotificationCenter.default.removeObserver(firstLaunchObserver)
-        }
-        firstLaunchObserver = nil
-        guard panel == nil, !UserDefaults.standard.bool(forKey: WelcomeSettings.shownKey) else { return }
-        present(attachedTo: window)
-    }
-
     private func present(attachedTo parent: NSWindow) {
         let panel = NSPanel(
             contentRect: NSRect(origin: .zero, size: Self.panelSize),
@@ -108,7 +112,7 @@ final class SetupAssistantController: NSObject, NSWindowDelegate {
         let hostingView = NSHostingView(rootView: SetupAssistantView())
         hostingView.safeAreaRegions = []
         panel.contentView = hostingView
-        panel.setFrameOrigin(Self.centeredOrigin(for: Self.panelSize, over: parent))
+        panel.setFrameOrigin(Self.centeredOrigin(for: panel.frame.size, over: parent))
 
         self.panel = panel
         parentCloseObserver = NotificationCenter.default.addObserver(
