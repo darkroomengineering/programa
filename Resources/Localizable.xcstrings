@@ -36,6 +36,76 @@
         "ja": { "stringUnit": { "state": "translated", "value": "閉じる" } }
       }
     },
+    "command.renameLayout.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Rename layout: %@…" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウト名を変更: %@…" } }
+      }
+    },
+    "command.deleteLayout.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Delete layout: %@…" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウトを削除: %@…" } }
+      }
+    },
+    "commandPalette.layout.renameInputHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Enter a new layout name. Press Enter to rename, Escape to cancel." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "新しいレイアウト名を入力してください。Enterで名前を変更、Escapeでキャンセルします。" } }
+      }
+    },
+    "layout.renameFailed.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Layout Not Renamed" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウト名を変更できませんでした" } }
+      }
+    },
+    "layout.renameFailed.exists": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "A saved layout named “%@” already exists." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "「%@」という名前の保存済みレイアウトがすでにあります。" } }
+      }
+    },
+    "layout.renameFailed.missing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The layout “%@” no longer exists." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウト「%@」は見つかりません。" } }
+      }
+    },
+    "layout.delete.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Delete layout “%@”?" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウト「%@」を削除しますか？" } }
+      }
+    },
+    "layout.delete.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "This deletes %@.json from ~/.config/programa/layouts. You can't undo this." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "~/.config/programa/layouts から %@.json を削除します。この操作は取り消せません。" } }
+      }
+    },
+    "layout.delete.confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Delete" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "削除" } }
+      }
+    },
+    "layout.deleteFailed.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Layout Not Deleted" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウトを削除できませんでした" } }
+      }
+    },
     "command.saveLayout.title": {
       "extractionState": "manual",
       "localizations": {

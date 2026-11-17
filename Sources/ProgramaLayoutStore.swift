@@ -180,6 +180,34 @@ final class ProgramaLayoutStore: ObservableObject {
         reload()
     }
 
+    /// Moves the file without decoding it, so a broken file can be renamed too.
+    func rename(from oldName: String, to newName: String) throws {
+        guard Self.isValidName(oldName), Self.isValidName(newName) else { throw ProgramaLayoutStoreError.invalidName }
+        let source = filePath(for: oldName)
+        let destination = filePath(for: newName)
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: source) else { throw ProgramaLayoutStoreError.notFound }
+        guard oldName != newName else { return }
+        // A case-only rename on a case-insensitive volume finds the source itself at the
+        // destination; that is not a conflict, and rename(2) changes the case in place.
+        if fileManager.fileExists(atPath: destination), !Self.isSameFile(source, destination) {
+            throw ProgramaLayoutStoreError.alreadyExists
+        }
+        guard Darwin.rename(source, destination) == 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+        reload()
+    }
+
+    private static func isSameFile(_ first: String, _ second: String) -> Bool {
+        let fileManager = FileManager.default
+        guard let a = try? fileManager.attributesOfItem(atPath: first)[.systemFileNumber] as? NSNumber,
+              let b = try? fileManager.attributesOfItem(atPath: second)[.systemFileNumber] as? NSNumber else {
+            return false
+        }
+        return a == b
+    }
+
     static func isValidName(_ name: String) -> Bool {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != ".", trimmed != ".." else { return false }

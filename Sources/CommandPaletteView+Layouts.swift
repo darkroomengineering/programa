@@ -4,17 +4,20 @@ import SwiftUI
 /// What the palette's name prompt does with the name typed for a layout.
 enum CommandPaletteLayoutNameAction: Equatable {
     case saveWorkspace(workspaceId: UUID)
+    case rename(from: String)
 
     var inputHint: String {
         switch self {
         case .saveWorkspace:
             return String(localized: "commandPalette.layout.saveInputHint", defaultValue: "Enter a layout name. Press Enter to save, Escape to cancel.")
+        case .rename:
+            return String(localized: "commandPalette.layout.renameInputHint", defaultValue: "Enter a new layout name. Press Enter to rename, Escape to cancel.")
         }
     }
 }
 
-/// Palette commands for named layouts: save the current workspace's layout, and apply every
-/// layout file in `~/.config/programa/layouts/`, including ones that fail to decode.
+/// Palette commands for named layouts: save the current workspace's layout, and apply, rename or
+/// delete every layout file in `~/.config/programa/layouts/`, including ones that fail to decode.
 extension CommandPaletteView {
     func layoutCommandContributions() -> [CommandPaletteCommandContribution] {
         let layoutSubtitle = String(localized: "command.applyLayout.subtitle", defaultValue: "Layout")
@@ -35,6 +38,24 @@ extension CommandPaletteView {
             case .failed(let failure):
                 contributions.append(applyLayoutContribution(name: failure.name, subtitle: failure.displayMessage))
             }
+            let name = entry.name
+            contributions.append(
+                CommandPaletteCommandContribution(
+                    commandId: "palette.renameLayout." + name,
+                    title: { _ in String(localized: "command.renameLayout.title", defaultValue: "Rename layout: \(name)…") },
+                    subtitle: { _ in layoutSubtitle },
+                    keywords: ["layout", "rename", name],
+                    dismissOnRun: false
+                )
+            )
+            contributions.append(
+                CommandPaletteCommandContribution(
+                    commandId: "palette.deleteLayout." + name,
+                    title: { _ in String(localized: "command.deleteLayout.title", defaultValue: "Delete layout: \(name)…") },
+                    subtitle: { _ in layoutSubtitle },
+                    keywords: ["layout", "delete", "remove", name]
+                )
+            )
         }
         return contributions
     }
@@ -51,6 +72,13 @@ extension CommandPaletteView {
             let layoutName = entry.name
             registry.register(commandId: "palette.applyLayout." + layoutName) {
                 applySavedLayout(named: layoutName)
+            }
+            registry.register(commandId: "palette.renameLayout." + layoutName) {
+                beginLayoutNameFlow(.rename(from: layoutName), currentName: layoutName)
+            }
+            let store = programaLayoutStore
+            registry.register(commandId: "palette.deleteLayout." + layoutName) {
+                Self.confirmDeleteLayout(named: layoutName, store: store)
             }
         }
     }
@@ -73,6 +101,23 @@ extension CommandPaletteView {
                 return
             }
             Self.saveLayout(layout, name: name, store: programaLayoutStore)
+        case .rename(let oldName):
+            dismissCommandPalette()
+            do {
+                try programaLayoutStore.rename(from: oldName, to: name)
+            } catch ProgramaLayoutStoreError.alreadyExists {
+                Self.showLayoutAlert(
+                    title: Self.renameFailedTitle,
+                    message: String(localized: "layout.renameFailed.exists", defaultValue: "A saved layout named “\(name)” already exists.")
+                )
+            } catch ProgramaLayoutStoreError.notFound {
+                Self.showLayoutAlert(
+                    title: Self.renameFailedTitle,
+                    message: String(localized: "layout.renameFailed.missing", defaultValue: "The layout “\(oldName)” no longer exists.")
+                )
+            } catch {
+                Self.showLayoutAlert(title: Self.renameFailedTitle, message: error.localizedDescription)
+            }
         }
     }
 
@@ -126,6 +171,35 @@ extension CommandPaletteView {
         } catch {
             showLayoutAlert(title: saveFailedTitle, message: error.localizedDescription)
         }
+    }
+
+    /// Deferred so the palette dismisses before the modal appears. Deletion goes through
+    /// `ProgramaLayoutStore.remove`, which works on broken files too.
+    private static func confirmDeleteLayout(named name: String, store: ProgramaLayoutStore) {
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = String(localized: "layout.delete.title", defaultValue: "Delete layout “\(name)”?")
+            alert.informativeText = String(localized: "layout.delete.message", defaultValue: "This deletes \(name).json from ~/.config/programa/layouts. You can't undo this.")
+            alert.addButton(withTitle: String(localized: "layout.delete.confirm", defaultValue: "Delete"))
+            alert.addButton(withTitle: String(localized: "common.cancel", defaultValue: "Cancel"))
+            alert.buttons.first?.hasDestructiveAction = true
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+            do {
+                try store.remove(name: name)
+            } catch ProgramaLayoutStoreError.notFound {
+                // Already gone; the file watcher drops the entry.
+            } catch {
+                showLayoutAlert(
+                    title: String(localized: "layout.deleteFailed.title", defaultValue: "Layout Not Deleted"),
+                    message: error.localizedDescription
+                )
+            }
+        }
+    }
+
+    private static var renameFailedTitle: String {
+        String(localized: "layout.renameFailed.title", defaultValue: "Layout Not Renamed")
     }
 
     private static var saveFailedTitle: String {
