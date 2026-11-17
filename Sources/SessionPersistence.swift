@@ -797,6 +797,26 @@ enum SessionPersistenceStore {
         Array(snapshot.windows.prefix(max(0, limit)))
     }
 
+    enum HistorySnapshotRestoreFailure: Error, Equatable {
+        case unreadable
+        case versionMismatch(Int)
+        case noWindows
+    }
+
+    /// The checks an archive must pass before `snapshot.restore` or the palette's session
+    /// picker restores it.
+    static func restorableHistorySnapshot(at url: URL) -> Result<AppSessionSnapshot, HistorySnapshotRestoreFailure> {
+        guard let data = boundedSnapshotData(at: url),
+              let snapshot = decodeSnapshot(from: data) else {
+            return .failure(.unreadable)
+        }
+        guard snapshot.version == SessionSnapshotSchema.currentVersion else {
+            return .failure(.versionMismatch(snapshot.version))
+        }
+        guard !snapshot.windows.isEmpty else { return .failure(.noWindows) }
+        return .success(snapshot)
+    }
+
     /// Archives the current snapshot file into `session-history/` before anything else can
     /// overwrite it, so a launch that clobbers `session-<bundleId>.json` (a cold boot with no
     /// clean shutdown, or an explicit-open-intent launch that skips restore entirely) never
