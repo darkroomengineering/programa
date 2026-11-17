@@ -106,11 +106,16 @@ final class AgentIntegrationStatusStore: ObservableObject {
     }
 }
 
-/// One quiet footer line shown while no agent hook integration is installed. It owns its own
-/// store observation so the sidebar root and its rows never re-render for it.
+/// One quiet footer line shown while no agent reports status: the bundled Claude wrapper's hooks
+/// are off and no hook integration is installed. It owns its own store and settings observation
+/// so the sidebar root and its rows never re-render for it.
 struct SidebarAgentSetupHint: View {
     @ObservedObject private var store = AgentIntegrationStatusStore.shared
     @AppStorage(AgentIntegrationStatusStore.hintDismissedKey) private var isDismissed = false
+    /// While this is on, the bundled `claude` wrapper injects Programa's hooks, so Claude Code
+    /// already reports status without an install.
+    @AppStorage(ClaudeCodeIntegrationSettings.hooksEnabledKey)
+    private var claudeWrapperHooksEnabled = ClaudeCodeIntegrationSettings.defaultHooksEnabled
 
     private let title = String(localized: "sidebar.agentSetupHint.title", defaultValue: "Set up agent status")
     private let detail = String(
@@ -120,7 +125,7 @@ struct SidebarAgentSetupHint: View {
     private let dismissTitle = String(localized: "sidebar.agentSetupHint.dismiss", defaultValue: "Hide this hint")
 
     var body: some View {
-        if !isDismissed && store.state.showsSetupHint {
+        if !isDismissed && !claudeWrapperHooksEnabled && store.state.showsSetupHint {
             HStack(spacing: 4) {
                 Menu {
                     Button(String(localized: "menu.file.installClaudeIntegration", defaultValue: "Install Claude Code Integration…")) {
