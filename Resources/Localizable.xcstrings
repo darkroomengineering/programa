@@ -18233,6 +18233,23 @@
         }
       }
     },
+    "agentHelpers.report.defaultFileName": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper report"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ヘルパーレポート"
+          }
+        }
+      }
+    },
     "agentHelpers.report.none": {
       "extractionState": "manual",
       "localizations": {
