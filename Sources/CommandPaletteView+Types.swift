@@ -26,6 +26,7 @@ extension CommandPaletteView {
         enum Kind: Equatable {
             case workspace(workspaceId: UUID)
             case tab(workspaceId: UUID, panelId: UUID)
+            case layout(CommandPaletteLayoutNameAction)
         }
 
         let kind: Kind
@@ -37,6 +38,8 @@ extension CommandPaletteView {
                 return String(localized: "commandPalette.rename.workspacePlaceholder", defaultValue: "Workspace name")
             case .tab:
                 return String(localized: "commandPalette.rename.tabPlaceholder", defaultValue: "Tab name")
+            case .layout:
+                return String(localized: "commandPalette.rename.layoutPlaceholder", defaultValue: "Layout name")
             }
         }
     }

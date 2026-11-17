@@ -36,6 +36,62 @@
         "ja": { "stringUnit": { "state": "translated", "value": "閉じる" } }
       }
     },
+    "command.saveLayout.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Save current layout…" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "現在のレイアウトを保存…" } }
+      }
+    },
+    "commandPalette.rename.layoutPlaceholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Layout name" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウト名" } }
+      }
+    },
+    "commandPalette.layout.saveInputHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Enter a layout name. Press Enter to save, Escape to cancel." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウト名を入力してください。Enterで保存、Escapeでキャンセルします。" } }
+      }
+    },
+    "layout.saveFailed.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Layout Not Saved" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウトを保存できませんでした" } }
+      }
+    },
+    "layout.saveFailed.noPanes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "This workspace has no terminal panes to save." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "このワークスペースには保存できるターミナルペインがありません。" } }
+      }
+    },
+    "layout.replace.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Replace layout “%@”?" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "レイアウト「%@」を置き換えますか？" } }
+      }
+    },
+    "layout.replace.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "A saved layout with this name already exists. Replacing it overwrites its file." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "この名前の保存済みレイアウトがすでにあります。置き換えるとファイルが上書きされます。" } }
+      }
+    },
+    "layout.replace.confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Replace" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "置き換える" } }
+      }
+    },
     "layout.applyFailed.title": {
       "extractionState": "manual",
       "localizations": {
