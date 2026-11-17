@@ -424,11 +424,15 @@ mod tests {
     #[test]
     fn quiet_dirty_wal_becomes_due_without_another_append() {
         let dir = tempfile::tempdir().unwrap();
-        let mut wal =
-            WalStore::open_with(dir.path().join("wal"), 4096, Duration::from_millis(10)).unwrap();
+        let interval = Duration::from_secs(60);
+        let mut wal = WalStore::open_with(dir.path().join("wal"), 4096, interval).unwrap();
         wal.append(b"seed").unwrap();
         wal.append(b"quiet tail").unwrap();
-        std::thread::sleep(Duration::from_millis(20));
+        assert!(!wal.flush_if_due().unwrap());
+        assert!(wal.flush_due_in().is_some());
+        // Backdate the last fsync instead of sleeping: a real sleep races the
+        // second append, which flushes on its own once the interval has passed.
+        wal.last_fsync -= interval;
         assert!(wal.flush_if_due().unwrap());
         assert_eq!(wal.flush_due_in(), None);
     }
