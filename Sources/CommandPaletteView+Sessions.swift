@@ -43,7 +43,7 @@ final class SessionHistoryStore: ObservableObject {
     ) async -> (summaries: [SessionHistorySummary], cache: [URL: CachedArchive]) {
         var nextCache: [URL: CachedArchive] = [:]
         var summaries: [SessionHistorySummary] = []
-        for url in SessionPersistenceStore.historyFileURLs() {
+        for url in SessionPersistenceStore.ownedHistoryFileURLs() {
             if Task.isCancelled { break }
             let modifiedAt = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
             let archive: CachedArchive
