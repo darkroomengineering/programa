@@ -58,6 +58,7 @@ enum V2CommandCatalog {
         "review.send_comments",
         "routes.list",
         "settings.open",
+        "shortcuts.list",
         "snapshot.list",
         "snapshot.restore",
         "storage.clean",

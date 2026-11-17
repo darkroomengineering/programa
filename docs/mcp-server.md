@@ -189,7 +189,7 @@ Deliberate omissions, not oversights:
 
 - **Debug methods** (`debug.*`). DEBUG builds only, and mostly UI-test hooks that can
   synthesize keystrokes and activate the app.
-- **App chrome** (`auth.login`, `settings.open`, `feedback.*`, `markdown.open`) and
+- **App chrome** (`auth.login`, `settings.open`, `shortcuts.list`, `feedback.*`, `markdown.open`) and
   app-wide test hooks (`app.*`).
 
 The authoritative method list is `contracts/v2/methods.json`, from which

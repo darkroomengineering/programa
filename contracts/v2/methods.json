@@ -2729,6 +2729,24 @@
       },
       "threading": "off_main"
     },
+    "shortcuts.list": {
+      "auth_required": true,
+      "debug_only": false,
+      "description": "Keyboard shortcut bindings as the app resolves them (settings.json, then Settings, then defaults). (list).",
+      "errors": [],
+      "focus_intent": false,
+      "handler": "v2ShortcutsList",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "result": {
+        "type": "object"
+      },
+      "threading": "off_main"
+    },
     "snapshot.list": {
       "auth_required": true,
       "debug_only": false,

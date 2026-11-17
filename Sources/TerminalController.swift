@@ -1886,6 +1886,8 @@ class TerminalController {
         // Settings
         case "settings.open":
             return v2Result(id: id, self.v2SettingsOpen(params: params))
+        case "shortcuts.list":
+            return v2Result(id: id, self.v2ShortcutsList(params: params))
 
         // Feedback
         case "feedback.open":

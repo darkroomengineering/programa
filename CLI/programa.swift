@@ -2533,7 +2533,7 @@ struct ProgramaCLI {
         return "\(baseSummary) [\(commit)]"
     }
 
-    func printWelcome() {
+    func printWelcome(socketPath: String, explicitPassword: String?) {
         let reset = "\u{001B}[0m"
         let bold = "\u{001B}[1m"
         func trueColor(_ red: Int, _ green: Int, _ blue: Int) -> String {
@@ -2583,18 +2583,9 @@ struct ProgramaCLI {
         \(r4)\u{2593}\u{2593} \u{2588}\u{2588} \u{2588}\u{2588} \(cursor)\u{2588}\u{2588}\(reset)        \(tagline)built for coding agents\(reset)
         """
 
-        let shortcuts = """
-          \(bold)Shortcuts\(reset)
-
-          \(bold)\u{2318}N\(reset)\(subdued)                  New workspace\(reset)
-          \(bold)\u{2318}T\(reset)\(subdued)                  New tab\(reset)
-          \(bold)\u{2318}P\(reset)\(subdued)                  Go to workspace\(reset)
-          \(bold)\u{2318}D\(reset)\(subdued)                  Split right\(reset)
-          \(bold)\u{2318}\u{21E7}D\(reset)\(subdued)                 Split down\(reset)
-          \(bold)\u{2318}\u{21E7}P\(reset)\(subdued)                 Command palette\(reset)
-          \(bold)\u{2318}\u{21E7}R\(reset)\(subdued)                 Rename workspace\(reset)
-          \(bold)\u{2318}\u{21E7}U\(reset)\(subdued)                 Jump to latest unread\(reset)
-        """
+        let bindings = welcomeShortcutBindings(socketPath: socketPath, explicitPassword: explicitPassword)
+        let shortcuts = (["  \(bold)Shortcuts\(reset)", ""]
+            + welcomeShortcutLines(bindings: bindings, bold: bold, subdued: subdued, reset: reset)).joined(separator: "\n")
 
         print()
         print(logo)
