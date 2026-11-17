@@ -124,7 +124,8 @@ enum AgentHelpersFormatting {
         let cleaned = title.unicodeScalars
             .map { CharacterSet.alphanumerics.contains($0) || $0 == " " || $0 == "-" ? Character($0) : " " }
         let words = String(cleaned).split(separator: " ").prefix(8).joined(separator: " ")
-        return (words.isEmpty ? "Helper report" : words) + ".md"
+        let fallback = String(localized: "agentHelpers.report.defaultFileName", defaultValue: "Helper report")
+        return (words.isEmpty ? fallback : words) + ".md"
     }
 }
 

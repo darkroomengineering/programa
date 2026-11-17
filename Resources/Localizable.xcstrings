@@ -18369,6 +18369,23 @@
         }
       }
     },
+    "agentHelpers.report.defaultFileName": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper report"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ヘルパーレポート"
+          }
+        }
+      }
+    },
     "agentHelpers.report.none": {
       "extractionState": "manual",
       "localizations": {
@@ -18613,13 +18630,30 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Claude stopped unexpectedly."
+            "value": "The agent stopped unexpectedly."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Claude が予期せず停止しました。"
+            "value": "エージェントが予期せず停止しました。"
+          }
+        }
+      }
+    },
+    "agentInterrupted.shellAlive.message.named": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ stopped unexpectedly."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ が予期せず停止しました。"
           }
         }
       }
@@ -18658,19 +18692,36 @@
         }
       }
     },
+    "agentInterrupted.resume.accessibility.named": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resume the %@ session"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ セッションを再開"
+          }
+        }
+      }
+    },
     "agentInterrupted.resume.accessibility": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Resume the Claude session"
+            "value": "Resume the agent session"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Claude セッションを再開"
+            "value": "エージェントのセッションを再開"
           }
         }
       }

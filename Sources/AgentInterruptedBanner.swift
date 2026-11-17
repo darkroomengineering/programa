@@ -137,12 +137,30 @@ extension Workspace {
 /// `GhosttySurfaceScrollView` (the portal layer), never from a SwiftUI panel container.
 struct AgentInterruptedBanner: View {
     let state: InterruptedAgentState
+    /// Brand name of the agent that ran in the pane, or nil when it is not known.
+    var agentName: String? = nil
     let onAction: (AgentInterruptedBannerAction) -> Void
+
+    /// Brand name for a resume provider id (`AgentResumeTarget.provider`).
+    static func agentName(provider: String) -> String? {
+        switch provider {
+        case "claude-code", "claude": "Claude"
+        case "codex": "Codex"
+        case "opencode": "OpenCode"
+        default: nil
+        }
+    }
 
     private var message: String {
         switch state {
         case .shellAlive:
-            return String(localized: "agentInterrupted.shellAlive.message", defaultValue: "Claude stopped unexpectedly.")
+            if let agentName {
+                return String(
+                    localized: "agentInterrupted.shellAlive.message.named",
+                    defaultValue: "\(agentName) stopped unexpectedly."
+                )
+            }
+            return String(localized: "agentInterrupted.shellAlive.message", defaultValue: "The agent stopped unexpectedly.")
         case .paneDead:
             return String(localized: "agentInterrupted.paneDead.message", defaultValue: "This pane's processes were killed.")
         }
@@ -166,6 +184,15 @@ struct AgentInterruptedBanner: View {
         }
     }
 
+    private var resumeAccessibilityLabel: String {
+        if let agentName {
+            return String(
+                localized: "agentInterrupted.resume.accessibility.named", defaultValue: "Resume the \(agentName) session"
+            )
+        }
+        return String(localized: "agentInterrupted.resume.accessibility", defaultValue: "Resume the agent session")
+    }
+
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -180,9 +207,7 @@ struct AgentInterruptedBanner: View {
             Button(String(localized: "agentInterrupted.resume", defaultValue: "Resume")) {
                 onAction(.resume)
             }
-            .accessibilityLabel(String(
-                localized: "agentInterrupted.resume.accessibility", defaultValue: "Resume the Claude session"
-            ))
+            .accessibilityLabel(resumeAccessibilityLabel)
             Button(dismissTitle) {
                 onAction(.dismiss)
             }

@@ -1460,7 +1460,11 @@ final class GhosttySurfaceScrollView: NSView {
     }
 
     private func makeAgentInterruptedBanner(state: InterruptedAgentState) -> AgentInterruptedBanner {
-        AgentInterruptedBanner(state: state) { [weak self] action in
+        let provider = surfaceView.terminalSurface.flatMap { AgentResumeStore.shared.target(panelId: $0.id)?.provider }
+        return AgentInterruptedBanner(
+            state: state,
+            agentName: provider.flatMap(AgentInterruptedBanner.agentName(provider:))
+        ) { [weak self] action in
             self?.agentInterruptedBannerAction?(action)
         }
     }
