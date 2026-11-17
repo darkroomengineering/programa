@@ -52,7 +52,12 @@ extension Workspace: @preconcurrency BonsplitDelegate {
             return nil
         }()
 
-        if let panelName {
+        if let agentMessage = CloseAgentSummary.panelMessage(
+            panelIdFromSurfaceId(tabId).flatMap { routeAgentState(panelId: $0) },
+            panelName: panelName
+        ) {
+            alert.informativeText = agentMessage
+        } else if let panelName {
             alert.informativeText = String(localized: "dialog.closeTab.messageNamed", defaultValue: "This will close \"\(panelName)\".")
         } else {
             alert.informativeText = String(localized: "dialog.closeTab.message", defaultValue: "This will close the current tab.")

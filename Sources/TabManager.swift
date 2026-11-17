@@ -1920,9 +1920,9 @@ class TabManager: ObservableObject {
         let format = count == 1
             ? String(localized: "shell.closeOtherTabs.message.one", defaultValue: "This is about to close 1 tab in this pane:\n%@")
             : String(localized: "shell.closeOtherTabs.message.other", defaultValue: "This is about to close %1$lld tabs in this pane:\n%2$@")
-        let message = count == 1
+        let message = plan.workspace.closeAgentSummary(panelIds: plan.panelIds).prefixing(count == 1
             ? String(format: format, titleLines)
-            : String(format: format, locale: .current, Int64(count), titleLines)
+            : String(format: format, locale: .current, Int64(count), titleLines))
         guard confirmClose(
             title: String(localized: "dialog.closeOtherTabs.title", defaultValue: "Close other tabs?"),
             message: message,
@@ -1957,10 +1957,10 @@ class TabManager: ObservableObject {
         if workspace.isPinned {
             guard confirmClose(
                 title: String(localized: "dialog.closePinnedWorkspace.title", defaultValue: "Close pinned workspace?"),
-                message: String(
+                message: workspace.closeAgentSummary.prefixing(String(
                     localized: "dialog.closePinnedWorkspace.message",
                     defaultValue: "This workspace is pinned. Closing it will close the workspace and all of its panels."
-                ),
+                )),
                 acceptCmdD: tabs.count <= 1
             ) else {
                 return false
@@ -1986,7 +1986,7 @@ class TabManager: ObservableObject {
         let title = willCloseWindow
             ? String(localized: "dialog.closeLastPane.window.title", defaultValue: "Close window?")
             : String(localized: "dialog.closeLastPane.workspace.title", defaultValue: "Close workspace?")
-        let message = willCloseWindow
+        let message = workspace.closeAgentSummary.prefixing(willCloseWindow
             ? String(
                 localized: "dialog.closeLastPane.window.message",
                 defaultValue: "This is the last tab in this window. Closing it will close the window."
@@ -1994,7 +1994,7 @@ class TabManager: ObservableObject {
             : String(
                 localized: "dialog.closeLastPane.workspace.message",
                 defaultValue: "This is the last tab in this workspace. Closing it will close the workspace."
-            )
+            ))
         guard confirmClose(title: title, message: message, acceptCmdD: willCloseWindow) else { return }
         closeWorkspaceIfRunningProcess(workspace, requiresConfirmation: false)
     }
@@ -2037,7 +2037,7 @@ class TabManager: ObservableObject {
         guard tabs.contains(where: { workspaceNeedsConfirmClose($0) }) else { return true }
         let plan = closeWorkspacesPlan(for: tabs)
         let message = tabs.count == 1
-            ? String(localized: "shell.closeWindow.singleWorkspace.message", defaultValue: "This will close the current window and all of its panels.")
+            ? plan.agentSummary.prefixing(String(localized: "shell.closeWindow.singleWorkspace.message", defaultValue: "This will close the current window and all of its panels."))
             : plan.message
         return confirmClose(title: plan.title, message: message, acceptCmdD: plan.acceptCmdD)
     }
@@ -2092,6 +2092,7 @@ class TabManager: ObservableObject {
         let title: String
         let message: String
         let acceptCmdD: Bool
+        let agentSummary: CloseAgentSummary
     }
 
     private func closeOtherTabsInFocusedPanePlan() -> CloseOtherTabsInFocusedPanePlan? {
@@ -2168,12 +2169,14 @@ class TabManager: ObservableObject {
                 localized: "dialog.closeWorkspaces.message",
                 defaultValue: "This will close %1$lld workspaces and all of their panels:\n%2$@"
             )
+        let agentSummary = workspaces.reduce(CloseAgentSummary()) { $0 + $1.closeAgentSummary }
         let message = String(format: format, locale: .current, Int64(workspaces.count), titleLines)
         return CloseWorkspacesPlan(
             workspaces: workspaces,
             title: title,
-            message: message,
-            acceptCmdD: willCloseWindow
+            message: agentSummary.prefixing(message),
+            acceptCmdD: willCloseWindow,
+            agentSummary: agentSummary
         )
     }
 
@@ -2194,7 +2197,9 @@ class TabManager: ObservableObject {
            workspaceNeedsConfirmClose(workspace),
            !confirmClose(
                title: String(localized: "dialog.closeWorkspace.title", defaultValue: "Close workspace?"),
-               message: String(localized: "dialog.closeWorkspace.message", defaultValue: "This will close the workspace and all of its panels."),
+               message: workspace.closeAgentSummary.prefixing(
+                   String(localized: "dialog.closeWorkspace.message", defaultValue: "This will close the workspace and all of its panels.")
+               ),
                acceptCmdD: willCloseWindow
            ) {
             return
@@ -2305,7 +2310,8 @@ class TabManager: ObservableObject {
            tab.panelNeedsConfirmClose(panelId: surfaceId, fallbackNeedsConfirmClose: terminalPanel.needsConfirmClose()) {
             guard confirmClose(
                 title: String(localized: "dialog.closeTab.title", defaultValue: "Close tab?"),
-                message: String(localized: "dialog.closeTab.message", defaultValue: "This will close the current tab."),
+                message: CloseAgentSummary.panelMessage(tab.routeAgentState(panelId: surfaceId), panelName: nil)
+                    ?? String(localized: "dialog.closeTab.message", defaultValue: "This will close the current tab."),
                 acceptCmdD: false
             ) else { return }
         }
