@@ -3630,12 +3630,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         sendWelcomeCommandWhenReady(to: workspace)
     }
 
-    func sendWelcomeCommandWhenReady(to workspace: Workspace, markShownOnSend: Bool = false) {
-        sendTextWhenReady("programa welcome\n", to: workspace) {
-            if markShownOnSend {
-                UserDefaults.standard.set(true, forKey: WelcomeSettings.shownKey)
-            }
-        }
+    func sendWelcomeCommandWhenReady(to workspace: Workspace) {
+        sendTextWhenReady("programa welcome\n", to: workspace)
     }
 
     @objc func applyUpdateIfAvailable(_ sender: Any?) {
