@@ -27,17 +27,20 @@ extension BonsplitConfiguration {
         public var newTerminal: String
         public var splitRight: String
         public var splitDown: String
+        public var openReview: String
 
         public static let `default` = SplitButtonTooltips()
 
         public init(
             newTerminal: String = "New Terminal",
             splitRight: String = "Split Right",
-            splitDown: String = "Split Down"
+            splitDown: String = "Split Down",
+            openReview: String = "Open Review"
         ) {
             self.newTerminal = newTerminal
             self.splitRight = splitRight
             self.splitDown = splitDown
+            self.openReview = openReview
         }
     }
 

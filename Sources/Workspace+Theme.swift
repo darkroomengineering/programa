@@ -17,8 +17,16 @@ extension Workspace {
             ),
             splitDown: KeyboardShortcutSettings.Action.splitDown.tooltip(
                 String(localized: "tabBar.splitDown", defaultValue: "Split Down")
-            )
+            ),
+            openReview: openReviewTooltip()
         )
+    }
+
+    /// `.openReview` ships unbound, and `tooltip(_:)` would then read "Open Review ()".
+    private static func openReviewTooltip() -> String {
+        let label = String(localized: "tabBar.openReview", defaultValue: "Open Review")
+        guard !KeyboardShortcutSettings.shortcut(for: .openReview).key.isEmpty else { return label }
+        return KeyboardShortcutSettings.Action.openReview.tooltip(label)
     }
 
     static func bonsplitAppearance(from config: GhosttyConfig) -> BonsplitConfiguration.Appearance {

@@ -323,6 +323,7 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
             showsSplitButtons: true,
             isZoomed: isZoomed,
             canZoom: canZoom,
+            showsOpenReview: tabs.first(where: { $0.id == selectedTabID })?.kind == "terminal",
             onSelect: { [weak pane, weak bonsplitController] tabID in
                 guard let pane, let bonsplitController,
                       pane.tabs.contains(where: { $0.id == tabID.id }) else { return }
@@ -392,6 +393,10 @@ private struct BonsplitPaneChromeAnchor: NSViewRepresentable {
                 guard let pane, let splitController, let bonsplitController else { return }
                 splitController.splitPane(pane.id, orientation: .vertical)
                 Self.populateFreshSplit(after: pane.id, splitController: splitController, bonsplitController: bonsplitController)
+            },
+            onOpenReview: { [weak pane, weak bonsplitController] in
+                guard let pane, let bonsplitController else { return }
+                bonsplitController.requestReview(inPane: pane.id)
             }
         )
         bridge.updatePaneChrome(descriptor)
@@ -573,13 +578,28 @@ struct PaneContainerView<Content: View, EmptyContent: View>: View {
                     .frame(height: usesNativePaneChrome ? TabBarGlassStyling.barHeight : TabBarMetrics.barHeight)
                     .accessibilityHidden(true)
                     .overlay(alignment: .trailing) {
-                        FloatingNewTabButton(
-                            title: BonsplitStrings.newTab
-                        ) { [weak pane, weak bonsplitController] in
-                            guard let pane, let bonsplitController else { return }
-                            bonsplitController.requestNewTab(kind: "terminal", inPane: pane.id)
+                        HStack(spacing: 6) {
+                            if pane.selectedTab?.kind == "terminal" {
+                                FloatingPaneButton(
+                                    symbol: "plus.forwardslash.minus",
+                                    title: bonsplitController.configuration.appearance.splitButtonTooltips.openReview,
+                                    identifier: "paneFloatingOpenReviewButton"
+                                ) { [weak pane, weak bonsplitController] in
+                                    guard let pane, let bonsplitController else { return }
+                                    bonsplitController.requestReview(inPane: pane.id)
+                                }
+                                .frame(width: 24, height: 22)
+                            }
+                            FloatingPaneButton(
+                                symbol: "plus",
+                                title: BonsplitStrings.newTab,
+                                identifier: "paneFloatingNewTabButton"
+                            ) { [weak pane, weak bonsplitController] in
+                                guard let pane, let bonsplitController else { return }
+                                bonsplitController.requestNewTab(kind: "terminal", inPane: pane.id)
+                            }
+                            .frame(width: 24, height: 22)
                         }
-                        .frame(width: 24, height: 22)
                         .padding(.trailing, 8)
                     }
             }
@@ -967,23 +987,25 @@ struct UnifiedPaneDropDelegate: DropDelegate {
     }
 }
 
-/// The "+" that opens a new tab from the empty strip a single tab leaves behind.
+/// A control ("+" new tab, "±" open review) on the empty strip a single tab leaves behind.
 /// It is an AppKit button on purpose: the window's titlebar-drag routing in
 /// `programa_sendEvent` turns a click on plain SwiftUI content there into a window drag.
-private struct FloatingNewTabButton: NSViewRepresentable {
+private struct FloatingPaneButton: NSViewRepresentable {
+    let symbol: String
     let title: String
+    let identifier: String
     let action: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(action: action) }
 
     func makeNSView(context: Context) -> NSView {
         let button = NSButton(frame: .zero)
-        button.image = NSImage(systemSymbolName: "plus", accessibilityDescription: title)
+        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
         button.isBordered = false
         button.contentTintColor = .secondaryLabelColor
         button.toolTip = title
         button.setAccessibilityLabel(title)
-        button.setAccessibilityIdentifier("paneFloatingNewTabButton")
+        button.setAccessibilityIdentifier(identifier)
         button.target = context.coordinator
         button.action = #selector(Coordinator.pressed)
         #if compiler(>=6.2)

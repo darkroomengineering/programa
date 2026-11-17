@@ -917,6 +917,10 @@ private final class PaneHeaderControlsView: NSView {
     static let buttonSize: CGFloat = ChromeScale.minimumHitTarget
     private static let spacing: CGFloat = 2
 
+    private let openReviewButton = PaneHeaderControlButton(
+        symbol: "plus.forwardslash.minus",
+        label: String(localized: "tabBar.openReview", defaultValue: "Open Review")
+    )
     private let newTabButton = PaneHeaderControlButton(
         symbol: "plus",
         label: String(localized: "tabBar.newTab", defaultValue: "New Tab")
@@ -938,7 +942,7 @@ private final class PaneHeaderControlsView: NSView {
         label: String(localized: "tabBar.closeTab", defaultValue: "Close Tab")
     )
     private var buttons: [PaneHeaderControlButton] {
-        [newTabButton, splitRightButton, splitDownButton, zoomButton, closeButton]
+        [openReviewButton, newTabButton, splitRightButton, splitDownButton, zoomButton, closeButton]
     }
     private var canSplit = true
 
@@ -963,7 +967,7 @@ private final class PaneHeaderControlsView: NSView {
 
     private func fittedButtons() -> [PaneHeaderControlButton] {
         var fitted = buttons.filter(\.isWanted)
-        for dropped in [splitDownButton, splitRightButton, newTabButton, zoomButton]
+        for dropped in [splitDownButton, splitRightButton, newTabButton, openReviewButton, zoomButton]
         where Self.width(of: fitted.count) > availableWidth {
             fitted.removeAll { $0 === dropped }
         }
@@ -973,6 +977,8 @@ private final class PaneHeaderControlsView: NSView {
     func update(_ descriptor: BonsplitPaneChromeDescriptor, showsNewTab: Bool) {
         let selectedTab = descriptor.tabs.first(where: \.isSelected) ?? descriptor.tabs.first
         newTabButton.isWanted = showsNewTab
+        openReviewButton.isWanted = descriptor.showsOpenReview
+        openReviewButton.handler = { [weak descriptor] in descriptor?.onOpenReview() }
         newTabButton.handler = { [weak descriptor] in descriptor?.onNewTab() }
 
         splitRightButton.isWanted = descriptor.showsSplitButtons

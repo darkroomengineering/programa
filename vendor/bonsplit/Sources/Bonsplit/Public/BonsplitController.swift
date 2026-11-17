@@ -151,6 +151,11 @@ public final class BonsplitController {
         delegate?.splitTabBar(self, didRequestNewTab: kind, inPane: pane)
     }
 
+    /// Request the delegate to open a review of the pane's selected tab.
+    public func requestReview(inPane pane: PaneID) {
+        delegate?.splitTabBar(self, didRequestReviewInPane: pane)
+    }
+
     /// Request the delegate to handle a tab context-menu action.
     public func requestTabContextAction(_ action: TabContextAction, for tabId: TabID, inPane pane: PaneID) {
         guard let tab = tab(tabId) else { return }
