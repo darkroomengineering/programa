@@ -13116,6 +13116,57 @@
         }
       }
     },
+    "sidebar.agentSetupHint.detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Install a hook integration so the sidebar shows when an agent is working, blocked or done."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フック連携をインストールすると、エージェントが作業中、ブロック中、完了のいずれかをサイドバーに表示します。"
+          }
+        }
+      }
+    },
+    "sidebar.agentSetupHint.dismiss": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide this hint"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このヒントを非表示"
+          }
+        }
+      }
+    },
+    "sidebar.agentSetupHint.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set up agent status"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "エージェントのステータスを設定"
+          }
+        }
+      }
+    },
     "sidebar.closeWorkspace.tooltip": {
       "extractionState": "manual",
       "localizations": {

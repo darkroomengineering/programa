@@ -16,14 +16,17 @@ struct SidebarFooter: View {
     let onSendFeedback: () -> Void
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            SidebarAgentSetupHint()
 #if DEBUG
-        SidebarDevFooter(updateViewModel: updateViewModel, onSendFeedback: onSendFeedback)
+            SidebarDevFooter(updateViewModel: updateViewModel, onSendFeedback: onSendFeedback)
 #else
-        // Sidebar spacing grid: 4pt base, edges on 8.
-        SidebarFooterButtons(updateViewModel: updateViewModel, onSendFeedback: onSendFeedback)
-            .padding(.horizontal, 8)
-            .padding(.bottom, 8)
+            // Sidebar spacing grid: 4pt base, edges on 8.
+            SidebarFooterButtons(updateViewModel: updateViewModel, onSendFeedback: onSendFeedback)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 8)
 #endif
+        }
     }
 }
 

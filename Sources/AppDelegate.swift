@@ -3178,20 +3178,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
     }
 
     /// The integration installers target the user's global agent settings, not a project,
-    /// so they open without a working-directory override. Menu-only entry points (#138).
+    /// so they open without a working-directory override. Reached from the File menu (#138)
+    /// and the sidebar's agent setup hint (`SidebarAgentSetupHint`).
     @discardableResult
     func openClaudeIntegrationInstaller(event: NSEvent? = nil, debugSource: String = "unspecified") -> UUID? {
-        openWorkspaceRunning("programa claude install-integration\n", event: event, debugSource: debugSource)
+        AgentIntegrationStatusStore.shared.noteInstallerOpened()
+        return openWorkspaceRunning("programa claude install-integration\n", event: event, debugSource: debugSource)
     }
 
     @discardableResult
     func openCodexIntegrationInstaller(event: NSEvent? = nil, debugSource: String = "unspecified") -> UUID? {
-        openWorkspaceRunning("programa codex install-integration\n", event: event, debugSource: debugSource)
+        AgentIntegrationStatusStore.shared.noteInstallerOpened()
+        return openWorkspaceRunning("programa codex install-integration\n", event: event, debugSource: debugSource)
     }
 
     @discardableResult
     func openOpenCodeIntegrationInstaller(event: NSEvent? = nil, debugSource: String = "unspecified") -> UUID? {
-        openWorkspaceRunning("programa opencode install-integration\n", event: event, debugSource: debugSource)
+        AgentIntegrationStatusStore.shared.noteInstallerOpened()
+        return openWorkspaceRunning("programa opencode install-integration\n", event: event, debugSource: debugSource)
     }
 
     @discardableResult
