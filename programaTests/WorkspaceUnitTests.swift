@@ -1023,6 +1023,85 @@ final class KeyboardShortcutSettingsFileStoreTests: XCTestCase {
         XCTAssertNil(defaults.data(forKey: settingsFileBackupsDefaultsKey))
     }
 
+    func testSettingsWindowOnlyKeysRoundTripThroughTheSettingsFile() throws {
+        let defaults = UserDefaults.standard
+        let managedKeys = [
+            ScrollbackPersistenceSettings.persistScrollbackKey,
+            AgentScreenDetectionSettings.enabledKey,
+            StorageSettings.directoryKey,
+            StorageSettings.autoRemoveMergedKey,
+            StorageSettings.autoRemoveAfterHoursKey,
+            StorageSettings.autoCleanCachesKey,
+            StorageSettings.lowDiskWarningGBKey,
+        ]
+        // A scrollback transition that fails in the test host sets the failure key; restore it too.
+        let restoredKeys = managedKeys + [ScrollbackPersistenceSettings.failureKey]
+        let previousValues = restoredKeys.map { defaults.object(forKey: $0) }
+        let previousBackups = defaults.data(forKey: settingsFileBackupsDefaultsKey)
+        defer {
+            for (key, value) in zip(restoredKeys, previousValues) {
+                if let value {
+                    defaults.set(value, forKey: key)
+                } else {
+                    defaults.removeObject(forKey: key)
+                }
+            }
+            if let previousBackups {
+                defaults.set(previousBackups, forKey: settingsFileBackupsDefaultsKey)
+            } else {
+                defaults.removeObject(forKey: settingsFileBackupsDefaultsKey)
+            }
+        }
+        for key in managedKeys {
+            defaults.removeObject(forKey: key)
+        }
+        defaults.removeObject(forKey: settingsFileBackupsDefaultsKey)
+
+        let directoryURL = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+        let settingsFileURL = directoryURL.appendingPathComponent("settings.json", isDirectory: false)
+        try writeSettingsFile(
+            """
+            {
+              "app": { "saveScrollbackOnQuit": false },
+              "automation": { "agentScreenDetection": false },
+              "worktrees": { "directory": "~/wt", "autoRemoveMerged": false, "autoRemoveAfterHours": 0.5 },
+              "storage": { "autoCleanCaches": false, "lowDiskWarningGB": 7.5 }
+            }
+            """,
+            to: settingsFileURL
+        )
+        let store = KeyboardShortcutSettingsFileStore(
+            primaryPath: settingsFileURL.path,
+            fallbackPath: nil,
+            startWatching: false
+        )
+
+        for key in managedKeys {
+            XCTAssertTrue(store.isManagedByFile(defaultsKey: key), key)
+        }
+        XCTAssertEqual(defaults.object(forKey: ScrollbackPersistenceSettings.persistScrollbackKey) as? Bool, false)
+        XCTAssertFalse(AgentScreenDetectionSettings.enabled(defaults: defaults))
+        XCTAssertEqual(defaults.string(forKey: StorageSettings.directoryKey), "~/wt")
+        XCTAssertEqual(defaults.object(forKey: StorageSettings.autoRemoveMergedKey) as? Bool, false)
+        XCTAssertEqual(defaults.object(forKey: StorageSettings.autoRemoveAfterHoursKey) as? Double, 1)
+        XCTAssertEqual(defaults.object(forKey: StorageSettings.autoCleanCachesKey) as? Bool, false)
+        XCTAssertEqual(defaults.object(forKey: StorageSettings.lowDiskWarningGBKey) as? Double, 7.5)
+
+        try writeSettingsFile("{}", to: settingsFileURL)
+        store.reload()
+
+        for key in managedKeys {
+            XCTAssertFalse(store.isManagedByFile(defaultsKey: key), key)
+        }
+        // The running app's scrollback observer may write the default back as soon as the key is
+        // cleared, so check the effective value rather than absence.
+        XCTAssertTrue(defaults.object(forKey: ScrollbackPersistenceSettings.persistScrollbackKey) as? Bool ?? true)
+        for key in managedKeys where key != ScrollbackPersistenceSettings.persistScrollbackKey {
+            XCTAssertNil(defaults.object(forKey: key), "Removing \(key) from the file restores the Settings value")
+        }
+    }
+
     func testReloadConfigurationReloadsManagedAppSettingsFromSettingsFile() throws {
         let defaults = UserDefaults.standard
         let managedKey = WorkspacePlacementSettings.placementKey
