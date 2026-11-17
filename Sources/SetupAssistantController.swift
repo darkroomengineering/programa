@@ -112,7 +112,7 @@ final class SetupAssistantController: NSObject, NSWindowDelegate {
         let hostingView = NSHostingView(rootView: SetupAssistantView())
         hostingView.safeAreaRegions = []
         panel.contentView = hostingView
-        panel.setFrameOrigin(Self.centeredOrigin(for: panel.frame.size, over: parent))
+        panel.setFrameOrigin(Self.bottomTrailingOrigin(for: panel.frame.size, over: parent))
 
         self.panel = panel
         parentCloseObserver = NotificationCenter.default.addObserver(
@@ -128,9 +128,12 @@ final class SetupAssistantController: NSObject, NSWindowDelegate {
         }
     }
 
-    private static func centeredOrigin(for size: NSSize, over parent: NSWindow) -> NSPoint {
+    /// Installers prompt (y/N) at the top-left of a fresh terminal in the parent window, so the
+    /// panel sits in the opposite corner to keep that prompt visible.
+    private static func bottomTrailingOrigin(for size: NSSize, over parent: NSWindow) -> NSPoint {
         let frame = parent.frame
-        var origin = NSPoint(x: frame.midX - size.width / 2, y: frame.midY - size.height / 2)
+        let inset: CGFloat = 24
+        var origin = NSPoint(x: frame.maxX - size.width - inset, y: frame.minY + inset)
         if let visible = parent.screen?.visibleFrame {
             origin.x = min(max(origin.x, visible.minX), visible.maxX - size.width)
             origin.y = min(max(origin.y, visible.minY), visible.maxY - size.height)
