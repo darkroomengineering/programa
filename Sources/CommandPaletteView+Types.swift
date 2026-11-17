@@ -274,3 +274,23 @@ extension CommandPaletteView {
 
     static let commandPaletteUsageDefaultsKey = "commandPalette.commandUsage.v1"
 }
+
+/// A list the switcher shows in place of workspaces and surfaces until the palette dismisses.
+@MainActor
+enum CommandPaletteSwitcherPicker {
+    case paneHandoff(CommandPalettePaneHandoffTarget)
+    case sessionRestore
+}
+
+@MainActor
+enum CommandPaletteSwitcherPickerStore {
+    /// Keyed by palette controller (one per window). Cleared on every palette dismissal.
+    static var pickers: [ObjectIdentifier: CommandPaletteSwitcherPicker] = [:]
+}
+
+extension CommandPaletteView {
+    var switcherPicker: CommandPaletteSwitcherPicker? {
+        get { CommandPaletteSwitcherPickerStore.pickers[ObjectIdentifier(commandPaletteController)] }
+        nonmutating set { CommandPaletteSwitcherPickerStore.pickers[ObjectIdentifier(commandPaletteController)] = newValue }
+    }
+}

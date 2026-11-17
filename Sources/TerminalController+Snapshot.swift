@@ -39,18 +39,19 @@ extension TerminalController {
         guard let targetURL else {
             return .err(code: "not_found", message: "No archived snapshot found", data: nil)
         }
-        guard let data = try? Data(contentsOf: targetURL),
-              let snapshot = SessionPersistenceStore.decodeSnapshot(from: data) else {
+        let snapshot: AppSessionSnapshot
+        switch SessionPersistenceStore.restorableHistorySnapshot(at: targetURL) {
+        case .success(let restorable):
+            snapshot = restorable
+        case .failure(.unreadable):
             return .err(code: "not_found", message: "Archived snapshot is unreadable or corrupt", data: nil)
-        }
-        guard snapshot.version == SessionSnapshotSchema.currentVersion else {
+        case .failure(.versionMismatch(let version)):
             return .err(
                 code: "version_mismatch",
-                message: "Archived snapshot version \(snapshot.version) does not match the current schema version \(SessionSnapshotSchema.currentVersion)",
+                message: "Archived snapshot version \(version) does not match the current schema version \(SessionSnapshotSchema.currentVersion)",
                 data: nil
             )
-        }
-        guard !snapshot.windows.isEmpty else {
+        case .failure(.noWindows):
             return .err(code: "not_found", message: "Archived snapshot has no windows to restore", data: nil)
         }
 

@@ -22,6 +22,7 @@ struct CommandPaletteView: View {
     @EnvironmentObject var sidebarState: SidebarState
     @EnvironmentObject var programaConfigStore: ProgramaConfigStore
     @ObservedObject var programaLayoutStore = ProgramaLayoutStore.shared
+    @ObservedObject var sessionHistoryStore = SessionHistoryStore.shared
     @AppStorage(WorkspacePresentationModeSettings.modeKey)
     var workspacePresentationMode = WorkspacePresentationModeSettings.defaultMode.rawValue
     @FocusState var isCommandPaletteSearchFocused: Bool

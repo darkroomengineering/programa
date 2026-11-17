@@ -1066,6 +1066,35 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertEqual(restored?.windows.count, 1)
     }
 
+    func testRestorableHistorySnapshotAcceptsCurrentArchivesAndNamesWhyOthersFail() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("programa-session-tests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let currentURL = tempDir.appendingPathComponent("current.json", isDirectory: false)
+        XCTAssertTrue(SessionPersistenceStore.save(makeSnapshot(version: SessionSnapshotSchema.currentVersion), fileURL: currentURL))
+        let current = try SessionPersistenceStore.restorableHistorySnapshot(at: currentURL).get()
+        XCTAssertEqual(current.windows.count, 1)
+
+        let futureURL = tempDir.appendingPathComponent("future.json", isDirectory: false)
+        let futureVersion = SessionSnapshotSchema.currentVersion + 1
+        XCTAssertTrue(SessionPersistenceStore.save(makeSnapshot(version: futureVersion), fileURL: futureURL))
+        XCTAssertEqual(restoreFailure(at: futureURL), .versionMismatch(futureVersion))
+
+        let corruptURL = tempDir.appendingPathComponent("corrupt.json", isDirectory: false)
+        try Data("{\"version\":".utf8).write(to: corruptURL)
+        XCTAssertEqual(restoreFailure(at: corruptURL), .unreadable)
+
+        let missingURL = tempDir.appendingPathComponent("missing.json", isDirectory: false)
+        XCTAssertEqual(restoreFailure(at: missingURL), .unreadable)
+    }
+
+    private func restoreFailure(at url: URL) -> SessionPersistenceStore.HistorySnapshotRestoreFailure? {
+        guard case .failure(let failure) = SessionPersistenceStore.restorableHistorySnapshot(at: url) else { return nil }
+        return failure
+    }
+
     func testAutomaticHistoryFallbackFiltersBundleBeforeApplyingLookupLimit() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
