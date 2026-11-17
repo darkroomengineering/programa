@@ -137,7 +137,7 @@ struct CLICommandDispatcher {
         print(cli.usage())
         return
     case "welcome":
-        cli.printWelcome()
+        cli.printWelcome(socketPath: resolveSocketPath(), explicitPassword: socketPasswordArg)
         return
     case "shortcuts":
         try cli.runShortcuts(

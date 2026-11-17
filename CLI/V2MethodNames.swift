@@ -95,6 +95,7 @@ enum V2MethodNames {
     static let reviewSendComments = "review.send_comments"
     static let routesList = "routes.list"
     static let settingsOpen = "settings.open"
+    static let shortcutsList = "shortcuts.list"
     static let snapshotList = "snapshot.list"
     static let snapshotRestore = "snapshot.restore"
     static let storageClean = "storage.clean"

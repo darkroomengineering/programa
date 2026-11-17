@@ -506,6 +506,14 @@ extension TerminalController {
         ])
     }
 
+    /// Read-only and off-main: `KeyboardShortcutSettings.shortcut(for:)` resolves under its own lock.
+    nonisolated func v2ShortcutsList(params: [String: Any]) -> V2CallResult {
+        let shortcuts: [[String: Any]] = KeyboardShortcutSettings.Action.allCases.map { action in
+            ["id": action.rawValue, "display_string": KeyboardShortcutSettings.shortcut(for: action).displayString]
+        }
+        return .ok(["shortcuts": shortcuts])
+    }
+
     nonisolated func v2FeedbackSubmit(params: [String: Any]) -> V2CallResult {
         return .err(
             code: "feedback_disabled",
