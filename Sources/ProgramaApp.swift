@@ -669,6 +669,12 @@ struct programaApp: App {
                     showNotificationsPopover()
                 }
             }
+
+            CommandGroup(after: .help) {
+                Button(String(localized: "menu.help.setupAssistant", defaultValue: "Set Up Programa…")) {
+                    SetupAssistantController.shared.presentFromUserRequest()
+                }
+            }
         }
     }
 
