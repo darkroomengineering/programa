@@ -101,6 +101,16 @@ enum ExternalOpenPolicy {
         defaults.set(entries.joined(separator: "\n"), forKey: allowlistKey)
     }
 
+    /// Revokes one remembered `bundleId|scheme` approval, so that app prompts again for that scheme.
+    static func removeFromAllowlist(_ entry: String, defaults: UserDefaults = .standard) {
+        let entries = allowlist(defaults: defaults).filter { $0 != entry }
+        if entries.isEmpty {
+            defaults.removeObject(forKey: allowlistKey)
+        } else {
+            defaults.set(entries.joined(separator: "\n"), forKey: allowlistKey)
+        }
+    }
+
     static func applicationDisplayName(at appURL: URL) -> String {
         let name = FileManager.default.displayName(atPath: appURL.path)
         return name.hasSuffix(".app") ? String(name.dropLast(4)) : name

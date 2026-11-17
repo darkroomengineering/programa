@@ -111,6 +111,31 @@ final class ExternalOpenPolicySHELTests: XCTestCase {
         defaults.set("com.apple.Terminal\ncom.apple.Terminal|ssh", forKey: ExternalOpenPolicy.allowlistKey)
         XCTAssertEqual(ExternalOpenPolicy.allowlist(defaults: defaults), ["com.apple.Terminal|ssh"])
     }
+
+    func testRevokedApprovalPromptsAgainAndKeepsTheOthers() throws {
+        let suite = "ExternalOpenPolicySHELTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        ExternalOpenPolicy.addToAllowlist("com.apple.Terminal", scheme: "ssh", defaults: defaults)
+        ExternalOpenPolicy.addToAllowlist("com.tinyspeck.slackmacgap", scheme: "slack", defaults: defaults)
+
+        ExternalOpenPolicy.removeFromAllowlist("com.apple.Terminal|ssh", defaults: defaults)
+
+        let allowlist = ExternalOpenPolicy.allowlist(defaults: defaults)
+        XCTAssertEqual(allowlist, ["com.tinyspeck.slackmacgap|slack"])
+        XCTAssertEqual(
+            ExternalOpenPolicy.requirement(
+                for: try XCTUnwrap(URL(string: "ssh://x")),
+                handlerBundleIdentifier: "com.apple.Terminal",
+                allowlist: allowlist,
+                targetIsExecutable: false
+            ),
+            .prompt(offerAlwaysAllow: true)
+        )
+
+        ExternalOpenPolicy.removeFromAllowlist("com.tinyspeck.slackmacgap|slack", defaults: defaults)
+        XCTAssertEqual(ExternalOpenPolicy.allowlist(defaults: defaults), [])
+    }
 }
 
 // MARK: - SHEL-15: hierarchy order keeps children under their parent
