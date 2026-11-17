@@ -257,4 +257,83 @@ extension Workspace {
     var hasBlockedAgentSurface: Bool {
         panelAgentStates.values.contains(.blocked)
     }
+
+    /// Counts the working and blocked agents among `panelIds`, read the way routes see them.
+    func closeAgentSummary(panelIds: some Sequence<UUID>) -> CloseAgentSummary {
+        panelIds.reduce(into: CloseAgentSummary()) { summary, panelId in
+            switch routeAgentState(panelId: panelId) {
+            case .working?: summary.working += 1
+            case .blocked?: summary.blocked += 1
+            case .idle?, nil: break
+            }
+        }
+    }
+
+    var closeAgentSummary: CloseAgentSummary { closeAgentSummary(panelIds: panels.keys) }
+}
+
+/// What a close would stop: the working and blocked agents among the panels being closed.
+/// Every close-confirmation dialog words its agent text through this type. It only words the
+/// dialog; whether a dialog shows at all stays with `Workspace.panelNeedsConfirmClose`.
+struct CloseAgentSummary {
+    var working = 0
+    var blocked = 0
+
+    static func + (lhs: Self, rhs: Self) -> Self {
+        Self(working: lhs.working + rhs.working, blocked: lhs.blocked + rhs.blocked)
+    }
+
+    /// The tab dialog's message for one panel, or nil when its agent is idle or absent.
+    static func panelMessage(_ state: AgentActivityState?, panelName: String?) -> String? {
+        switch (state, panelName) {
+        case (.working?, let name?):
+            return String(
+                localized: "dialog.closeTab.agentWorkingNamed",
+                defaultValue: "An agent in \"\(name)\" is still working. Closing it stops the agent."
+            )
+        case (.working?, nil):
+            return String(
+                localized: "dialog.closeTab.agentWorking",
+                defaultValue: "An agent in this tab is still working. Closing it stops the agent."
+            )
+        case (.blocked?, let name?):
+            return String(
+                localized: "dialog.closeTab.agentBlockedNamed",
+                defaultValue: "An agent in \"\(name)\" is waiting for input. Closing it stops the agent."
+            )
+        case (.blocked?, nil):
+            return String(
+                localized: "dialog.closeTab.agentBlocked",
+                defaultValue: "An agent in this tab is waiting for input. Closing it stops the agent."
+            )
+        case (.idle?, _), (nil, _):
+            return nil
+        }
+    }
+
+    /// Puts the agent count sentence ahead of a multi-panel dialog's message; returns the message
+    /// unchanged when no agent is working or blocked.
+    func prefixing(_ message: String) -> String {
+        var sentences: [String] = []
+        if working > 0 {
+            sentences.append(working == 1
+                ? String(localized: "dialog.close.agentsWorking.one", defaultValue: "1 agent is still working.")
+                : String(
+                    format: String(localized: "dialog.close.agentsWorking.other", defaultValue: "%lld agents are still working."),
+                    locale: .current,
+                    Int64(working)
+                ))
+        }
+        if blocked > 0 {
+            sentences.append(blocked == 1
+                ? String(localized: "dialog.close.agentsBlocked.one", defaultValue: "1 agent is waiting for input.")
+                : String(
+                    format: String(localized: "dialog.close.agentsBlocked.other", defaultValue: "%lld agents are waiting for input."),
+                    locale: .current,
+                    Int64(blocked)
+                ))
+        }
+        guard !sentences.isEmpty else { return message }
+        return sentences.joined(separator: " ") + "\n\n" + message
+    }
 }
