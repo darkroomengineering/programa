@@ -179,7 +179,7 @@ enum CommandPaletteSwitcherSearchSettings {
 
 /// `app.reviewDiffRenderer`: which view draws the Review panel's diff body.
 enum ReviewDiffRendererSettings {
-    enum Renderer: String {
+    enum Renderer: String, CaseIterable {
         /// `@pierre/diffs` in a web view (`ReviewDiffWebView`).
         case pierre
         /// The SwiftUI row list in `ReviewPanelView`.

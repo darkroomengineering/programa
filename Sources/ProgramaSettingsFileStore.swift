@@ -81,6 +81,7 @@ final class ProgramaSettingsFileStore {
     private var activeManagedCustomSettings = ManagedCustomSettings()
     private var isApplyingManagedSettings = false
     private var lastParseError: String?
+    private var lastProblems: [ProgramaSettingsFileProblem] = []
     private(set) var activeSourcePath: String?
 
     init(
@@ -168,17 +169,22 @@ final class ProgramaSettingsFileStore {
         switch resolveSettings() {
         case .resolved(let snapshot):
             resolved = snapshot
-        case .invalid(let path, let message):
+        case .invalid(let path, let message, let problem):
             // A file that fails to parse is usually a save in the middle of an edit. Keep every
             // value applied from the last good parse instead of restoring the pre-file backups
             // (which would flip socket mode, clear the password and drop trusted directories
             // until the next good save), and tell the user what is wrong.
             dilog("settings.file", "parse error at \(path), keeping previous settings: \(message)")
+            NSLog("[ProgramaSettingsFileStore] parse error at %@: %@", path, problem.message)
             synchronized {
                 lastParseError = message
+                lastProblems = [problem]
                 if activeSourcePath == nil { activeSourcePath = path }
             }
             return
+        }
+        for problem in resolved.problems {
+            NSLog("[ProgramaSettingsFileStore] ignoring %@", problem.formattedLine(fileName: resolved.path ?? "settings.json"))
         }
         applyManagedSettings(snapshot: resolved)
         synchronized {
@@ -187,6 +193,7 @@ final class ProgramaSettingsFileStore {
             activeManagedCustomSettings = resolved.managedCustomSettings
             activeSourcePath = resolved.path
             lastParseError = nil
+            lastProblems = resolved.problems
         }
 
         if previousShortcuts != resolved.shortcuts || previousActiveSourcePath != resolved.path {
@@ -198,6 +205,26 @@ final class ProgramaSettingsFileStore {
     /// good settings stay applied meanwhile), or nil when it parsed.
     func currentParseError() -> String? {
         synchronized { lastParseError }
+    }
+
+    /// Every problem the last reload found in the active file, sorted by line: one whole-file
+    /// problem when it failed to parse, otherwise each value it skipped. Empty when clean.
+    func currentProblems() -> [ProgramaSettingsFileProblem] {
+        synchronized { lastProblems }
+    }
+
+    /// Checks the settings file at `path` without applying anything. Returns nil when the
+    /// file does not exist. `SettingsFileCheck` uses this, so it must never touch the store.
+    static func problems(inFileAt path: String, fileManager: FileManager = .default) -> [ProgramaSettingsFileProblem]? {
+        guard fileManager.fileExists(atPath: path) else { return nil }
+        switch parseSettingsData(fileManager.contents(atPath: path), sourcePath: path) {
+        case .missing:
+            return nil
+        case .invalid(_, let problem):
+            return [problem]
+        case .parsed(let snapshot):
+            return snapshot.problems
+        }
     }
 
     /// Whether settings.json currently sets the UserDefaults key `defaultsKey`. A control bound
@@ -313,15 +340,15 @@ final class ProgramaSettingsFileStore {
         case resolved(ResolvedSettingsSnapshot)
         /// The active file exists but could not be parsed. An invalid primary never falls
         /// through to the fallback file.
-        case invalid(path: String, message: String)
+        case invalid(path: String, message: String, problem: ProgramaSettingsFileProblem)
     }
 
     private func resolveSettings() -> ResolveResult {
         switch loadSettings(at: primaryPath) {
         case .parsed(let snapshot):
             return .resolved(snapshot)
-        case .invalid(let message):
-            return .invalid(path: primaryPath, message: message)
+        case .invalid(let message, let problem):
+            return .invalid(path: primaryPath, message: message, problem: problem)
         case .missing:
             break
         }
@@ -333,8 +360,8 @@ final class ProgramaSettingsFileStore {
         switch loadSettings(at: fallbackPath) {
         case .parsed(let snapshot):
             return .resolved(snapshot)
-        case .invalid(let message):
-            return .invalid(path: fallbackPath, message: message)
+        case .invalid(let message, let problem):
+            return .invalid(path: fallbackPath, message: message, problem: problem)
         case .missing:
             return .resolved(ResolvedSettingsSnapshot(path: nil))
         }
@@ -342,7 +369,9 @@ final class ProgramaSettingsFileStore {
 
     private enum LoadResult {
         case missing
-        case invalid(String)
+        /// `message` is the short reason the Settings banner shows; `problem` adds the line
+        /// and the parser's detail for `config check` and the in-window notice.
+        case invalid(message: String, problem: ProgramaSettingsFileProblem)
         case parsed(ResolvedSettingsSnapshot)
     }
 
@@ -350,24 +379,51 @@ final class ProgramaSettingsFileStore {
         guard fileManager.fileExists(atPath: path) else {
             return .missing
         }
-        guard let data = fileManager.contents(atPath: path), !data.isEmpty else {
-            return .invalid("the file is empty")
+        return Self.parseSettingsData(fileManager.contents(atPath: path), sourcePath: path)
+    }
+
+    private static func parseSettingsData(_ data: Data?, sourcePath: String) -> LoadResult {
+        func invalid(_ message: String, detail: String? = nil, line: Int? = nil) -> LoadResult {
+            .invalid(
+                message: message,
+                problem: ProgramaSettingsFileProblem(keyPath: nil, message: detail ?? message, line: line)
+            )
+        }
+        guard let data, !data.isEmpty else {
+            return invalid("the file is empty")
         }
 
+        let sanitized: Data
         do {
-            let sanitized = try JSONCParser.preprocess(data: data)
+            sanitized = try JSONCParser.preprocess(data: data)
+        } catch {
+            return invalid(error.localizedDescription)
+        }
+        do {
             let object = try JSONSerialization.jsonObject(with: sanitized, options: [])
             guard let root = object as? [String: Any] else {
-                return .invalid("the top level is not a JSON object")
+                return invalid("the top level is not a JSON object", line: 1)
             }
-            return .parsed(parseSettingsFile(root: root, sourcePath: path))
+            var snapshot = parseSettingsFile(root: root, sourcePath: sourcePath)
+            if !snapshot.problems.isEmpty {
+                let locator = SettingsFileKeyLocator(data: data)
+                snapshot.problems = snapshot.problems
+                    .map { $0.withLine(locator.line(forKeyPath: $0.keyPath)) }
+                    .sorted(by: ProgramaSettingsFileProblem.sortsBefore)
+            }
+            return .parsed(snapshot)
         } catch {
-            NSLog("[ProgramaSettingsFileStore] parse error at %@: %@", path, String(describing: error))
-            return .invalid((error as NSError).localizedDescription)
+            let nsError = error as NSError
+            let offset = nsError.userInfo["NSJSONSerializationErrorIndex"] as? Int
+            return invalid(
+                nsError.localizedDescription,
+                detail: nsError.userInfo[NSDebugDescriptionErrorKey] as? String,
+                line: offset.map { SettingsFileKeyLocator.line(atByteOffset: $0, in: sanitized) }
+            )
         }
     }
 
-    private func parseSettingsFile(root: [String: Any], sourcePath: String) -> ResolvedSettingsSnapshot {
+    private static func parseSettingsFile(root: [String: Any], sourcePath: String) -> ResolvedSettingsSnapshot {
         let schemaVersion = jsonInt(root["schemaVersion"]) ?? 1
         if schemaVersion > Self.currentSchemaVersion {
             NSLog(
@@ -380,19 +436,19 @@ final class ProgramaSettingsFileStore {
         var snapshot = ResolvedSettingsSnapshot(path: sourcePath)
 
         if let appSection = root["app"] as? [String: Any] {
-            parseAppSection(appSection, sourcePath: sourcePath, snapshot: &snapshot)
+            parseAppSection(appSection, snapshot: &snapshot)
         }
         if let notificationsSection = root["notifications"] as? [String: Any] {
-            parseNotificationsSection(notificationsSection, sourcePath: sourcePath, snapshot: &snapshot)
+            parseNotificationsSection(notificationsSection, snapshot: &snapshot)
         }
         if let sidebarAppearanceSection = root["sidebarAppearance"] as? [String: Any] {
-            parseSidebarAppearanceSection(sidebarAppearanceSection, sourcePath: sourcePath, snapshot: &snapshot)
+            parseSidebarAppearanceSection(sidebarAppearanceSection, snapshot: &snapshot)
         }
         if let automationSection = root["automation"] as? [String: Any] {
-            parseAutomationSection(automationSection, sourcePath: sourcePath, snapshot: &snapshot)
+            parseAutomationSection(automationSection, snapshot: &snapshot)
         }
         if let customCommandsSection = root["customCommands"] as? [String: Any] {
-            parseCustomCommandsSection(customCommandsSection, sourcePath: sourcePath, snapshot: &snapshot)
+            parseCustomCommandsSection(customCommandsSection, snapshot: &snapshot)
         }
         if let browserSection = root["browser"] as? [String: Any] {
             if let values = jsonStringArray(browserSection["externalAppOpenAllowlist"]) {
@@ -403,19 +459,18 @@ final class ProgramaSettingsFileStore {
                     normalized.joined(separator: "\n")
                 )
             } else if browserSection.keys.contains("externalAppOpenAllowlist") {
-                logInvalid("browser.externalAppOpenAllowlist", sourcePath: sourcePath)
+                snapshot.addProblem("browser.externalAppOpenAllowlist", "expected an array of strings")
             }
         }
         if let shortcutsSection = root["shortcuts"] {
-            parseShortcutsSection(shortcutsSection, sourcePath: sourcePath, snapshot: &snapshot)
+            parseShortcutsSection(shortcutsSection, snapshot: &snapshot)
         }
 
         return snapshot
     }
 
-    private func parseAppSection(
+    private static func parseAppSection(
         _ section: [String: Any],
-        sourcePath: String,
         snapshot: inout ResolvedSettingsSnapshot
     ) {
         if let raw = jsonString(section["appearance"]) {
@@ -424,14 +479,14 @@ final class ProgramaSettingsFileStore {
             if accepted.contains(raw) {
                 snapshot.managedUserDefaults[AppearanceSettings.appearanceModeKey] = .string(normalized)
             } else {
-                logInvalid("app.appearance", sourcePath: sourcePath)
+                snapshot.addProblem("app.appearance", expectedOneOf(AppearanceMode.allCases.map(\.rawValue)))
             }
         }
         if let raw = jsonString(section["newWorkspacePlacement"]) {
             if let placement = NewWorkspacePlacement(rawValue: raw) {
                 snapshot.managedUserDefaults[WorkspacePlacementSettings.placementKey] = .string(placement.rawValue)
             } else {
-                logInvalid("app.newWorkspacePlacement", sourcePath: sourcePath)
+                snapshot.addProblem("app.newWorkspacePlacement", expectedOneOf(NewWorkspacePlacement.allCases.map(\.rawValue)))
             }
         }
         if let value = jsonBool(section["minimalMode"]) {
@@ -457,7 +512,7 @@ final class ProgramaSettingsFileStore {
             if let renderer = ReviewDiffRendererSettings.Renderer(rawValue: raw) {
                 snapshot.managedUserDefaults[ReviewDiffRendererSettings.rendererKey] = .string(renderer.rawValue)
             } else {
-                logInvalid("app.reviewDiffRenderer", sourcePath: sourcePath)
+                snapshot.addProblem("app.reviewDiffRenderer", expectedOneOf(ReviewDiffRendererSettings.Renderer.allCases.map(\.rawValue)))
             }
         }
         if let rawTerminalTheme = section["terminalTheme"] {
@@ -467,12 +522,12 @@ final class ProgramaSettingsFileStore {
                 let light = parseTerminalThemeName(
                     terminalTheme["light"],
                     path: "app.terminalTheme.light",
-                    sourcePath: sourcePath
+                    snapshot: &snapshot
                 )
                 let dark = parseTerminalThemeName(
                     terminalTheme["dark"],
                     path: "app.terminalTheme.dark",
-                    sourcePath: sourcePath
+                    snapshot: &snapshot
                 )
                 if light.isValid && dark.isValid {
                     snapshot.managedCustomSettings.terminalTheme = ManagedTerminalTheme(
@@ -481,7 +536,7 @@ final class ProgramaSettingsFileStore {
                     )
                 }
             } else {
-                logInvalid("app.terminalTheme", sourcePath: sourcePath)
+                snapshot.addProblem("app.terminalTheme", "expected an object with light and dark theme names, or null")
             }
         }
         if let rawTerminalFont = section["terminalFont"] {
@@ -493,36 +548,35 @@ final class ProgramaSettingsFileStore {
                 if let family, !family.isEmpty, let size, size > 0 {
                     snapshot.managedCustomSettings.terminalFont = ManagedTerminalFont(family: family, size: size)
                 } else {
-                    logInvalid("app.terminalFont", sourcePath: sourcePath)
+                    snapshot.addProblem("app.terminalFont", "expected an object with a non-empty family and a size above 0, or null")
                 }
             } else {
-                logInvalid("app.terminalFont", sourcePath: sourcePath)
+                snapshot.addProblem("app.terminalFont", "expected an object with a non-empty family and a size above 0, or null")
             }
         }
     }
 
-    private func parseTerminalThemeName(
+    private static func parseTerminalThemeName(
         _ rawValue: Any?,
         path: String,
-        sourcePath: String
+        snapshot: inout ResolvedSettingsSnapshot
     ) -> (isValid: Bool, value: String?) {
         guard let rawValue else { return (true, nil) }
         if rawValue is NSNull { return (true, nil) }
         guard let string = rawValue as? String else {
-            logInvalid(path, sourcePath: sourcePath)
+            snapshot.addProblem(path, "expected a non-empty theme name or null")
             return (false, nil)
         }
         let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            logInvalid(path, sourcePath: sourcePath)
+            snapshot.addProblem(path, "expected a non-empty theme name or null")
             return (false, nil)
         }
         return (true, trimmed)
     }
 
-    private func parseNotificationsSection(
+    private static func parseNotificationsSection(
         _ section: [String: Any],
-        sourcePath: String,
         snapshot: inout ResolvedSettingsSnapshot
     ) {
         if let value = jsonBool(section["showInMenuBar"]) {
@@ -533,14 +587,13 @@ final class ProgramaSettingsFileStore {
             if allowed.contains(raw) {
                 snapshot.managedUserDefaults[NotificationSoundSettings.key] = .string(raw)
             } else {
-                logInvalid("notifications.sound", sourcePath: sourcePath)
+                snapshot.addProblem("notifications.sound", expectedOneOf(NotificationSoundSettings.systemSounds.map(\.value)))
             }
         }
     }
 
-    private func parseSidebarAppearanceSection(
+    private static func parseSidebarAppearanceSection(
         _ section: [String: Any],
-        sourcePath: String,
         snapshot: inout ResolvedSettingsSnapshot
     ) {
         if let value = jsonBool(section["matchTerminalBackground"]) {
@@ -551,9 +604,8 @@ final class ProgramaSettingsFileStore {
         }
     }
 
-    private func parseAutomationSection(
+    private static func parseAutomationSection(
         _ section: [String: Any],
-        sourcePath: String,
         snapshot: inout ResolvedSettingsSnapshot
     ) {
         if let raw = jsonString(section["socketControlMode"]) {
@@ -567,7 +619,7 @@ final class ProgramaSettingsFileStore {
                     SocketControlSettings.migrateMode(raw).rawValue
                 )
             } else {
-                logInvalid("automation.socketControlMode", sourcePath: sourcePath)
+                snapshot.addProblem("automation.socketControlMode", expectedOneOf(SocketControlMode.allCases.map(\.rawValue)))
             }
         }
         if section.keys.contains("socketPassword") {
@@ -576,7 +628,7 @@ final class ProgramaSettingsFileStore {
             } else if let raw = jsonString(section["socketPassword"]) {
                 snapshot.managedCustomSettings.socketPassword = raw.isEmpty ? .clear : .set(raw)
             } else {
-                logInvalid("automation.socketPassword", sourcePath: sourcePath)
+                snapshot.addProblem("automation.socketPassword", "expected a string or null")
             }
         }
         if let value = jsonBool(section["claudeCodeIntegration"]) {
@@ -593,9 +645,8 @@ final class ProgramaSettingsFileStore {
         }
     }
 
-    private func parseCustomCommandsSection(
+    private static func parseCustomCommandsSection(
         _ section: [String: Any],
-        sourcePath: String,
         snapshot: inout ResolvedSettingsSnapshot
     ) {
         if let values = jsonStringArray(section["trustedDirectories"]) {
@@ -604,35 +655,43 @@ final class ProgramaSettingsFileStore {
                 .filter { !$0.isEmpty }
             snapshot.managedCustomSettings.trustedDirectories = normalized
         } else if section.keys.contains("trustedDirectories") {
-            logInvalid("customCommands.trustedDirectories", sourcePath: sourcePath)
+            snapshot.addProblem("customCommands.trustedDirectories", "expected an array of strings")
         }
     }
 
-    private func parseShortcutsSection(
+    private static func parseShortcutsSection(
         _ value: Any,
-        sourcePath: String,
         snapshot: inout ResolvedSettingsSnapshot
     ) {
         guard let section = value as? [String: Any] else {
-            logInvalid("shortcuts", sourcePath: sourcePath)
+            snapshot.addProblem("shortcuts", "expected an object")
             return
         }
 
-        var bindings = section["bindings"] as? [String: Any] ?? [:]
+        // Keys beside `bindings` are the legacy flat form and win over the same key inside it.
+        var bindings: [String: (keyPath: String, value: Any)] = [:]
+        if let nested = section["bindings"] as? [String: Any] {
+            for (key, rawValue) in nested {
+                bindings[key] = ("shortcuts.bindings.\(key)", rawValue)
+            }
+        } else if section.keys.contains("bindings") {
+            snapshot.addProblem("shortcuts.bindings", "expected an object")
+        }
         for (key, rawValue) in section where key != "bindings" {
-            bindings[key] = rawValue
+            bindings[key] = ("shortcuts.\(key)", rawValue)
         }
 
-        for (rawAction, rawBinding) in bindings {
+        for (rawAction, binding) in bindings {
             guard let action = KeyboardShortcutSettings.Action(rawValue: rawAction) else {
-                NSLog("[ProgramaSettingsFileStore] ignoring unknown shortcut action '%@' in %@", rawAction, sourcePath)
+                snapshot.addProblem(binding.keyPath, "unknown shortcut action")
                 continue
             }
-            guard let shortcut = parseShortcutBindingValue(rawBinding, action: action) else {
-                NSLog(
-                    "[ProgramaSettingsFileStore] ignoring invalid shortcut binding for '%@' in %@",
-                    rawAction,
-                    sourcePath
+            guard let shortcut = parseShortcutBindingValue(binding.value, action: action) else {
+                snapshot.addProblem(
+                    binding.keyPath,
+                    action.usesNumberedDigitMatching
+                        ? "expected a shortcut ending in a digit from 1 to 9, like \"cmd+1\""
+                        : "expected a shortcut like \"cmd+shift+t\", or an array of two strokes for a chord"
                 )
                 continue
             }
@@ -640,7 +699,7 @@ final class ProgramaSettingsFileStore {
         }
     }
 
-    private func parseShortcutBindingValue(
+    private static func parseShortcutBindingValue(
         _ rawValue: Any,
         action: KeyboardShortcutSettings.Action
     ) -> StoredShortcut? {
@@ -660,7 +719,7 @@ final class ProgramaSettingsFileStore {
         return action.usesNumberedDigitMatching ? nil : shortcut
     }
 
-    private func parseStoredShortcut(strokes: [String]) -> StoredShortcut? {
+    private static func parseStoredShortcut(strokes: [String]) -> StoredShortcut? {
         guard !strokes.isEmpty, strokes.count <= 2 else { return nil }
         let parsedStrokes = strokes.compactMap(parseStroke(_:))
         guard parsedStrokes.count == strokes.count, let firstStroke = parsedStrokes.first else {
@@ -671,7 +730,7 @@ final class ProgramaSettingsFileStore {
         return StoredShortcut(first: firstStroke, second: secondStroke)
     }
 
-    private func parseStroke(_ rawValue: String) -> ShortcutStroke? {
+    private static func parseStroke(_ rawValue: String) -> ShortcutStroke? {
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
@@ -711,7 +770,7 @@ final class ProgramaSettingsFileStore {
         )
     }
 
-    private func parseKeyToken(_ rawValue: String) -> String? {
+    private static func parseKeyToken(_ rawValue: String) -> String? {
         let lowered = rawValue.lowercased()
         switch lowered {
         case "left", "arrowleft", "leftarrow", "←":
@@ -1081,21 +1140,21 @@ final class ProgramaSettingsFileStore {
         defaults.set(data, forKey: Self.backupsDefaultsKey)
     }
 
-    private func logInvalid(_ path: String, sourcePath: String) {
-        NSLog("[ProgramaSettingsFileStore] ignoring invalid setting '%@' in %@", path, sourcePath)
+    private static func expectedOneOf(_ values: [String]) -> String {
+        "expected one of " + values.map { "\"\($0)\"" }.joined(separator: ", ")
     }
 
-    private func jsonString(_ rawValue: Any?) -> String? {
+    private static func jsonString(_ rawValue: Any?) -> String? {
         rawValue as? String
     }
 
-    private func jsonBool(_ rawValue: Any?) -> Bool? {
+    private static func jsonBool(_ rawValue: Any?) -> Bool? {
         guard let number = rawValue as? NSNumber else { return nil }
         guard CFGetTypeID(number) == CFBooleanGetTypeID() else { return nil }
         return number.boolValue
     }
 
-    private func jsonInt(_ rawValue: Any?) -> Int? {
+    private static func jsonInt(_ rawValue: Any?) -> Int? {
         guard let number = rawValue as? NSNumber else { return nil }
         guard CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
         let doubleValue = number.doubleValue
@@ -1103,13 +1162,13 @@ final class ProgramaSettingsFileStore {
         return number.intValue
     }
 
-    private func jsonDouble(_ rawValue: Any?) -> Double? {
+    private static func jsonDouble(_ rawValue: Any?) -> Double? {
         guard let number = rawValue as? NSNumber else { return nil }
         guard CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
         return number.doubleValue
     }
 
-    private func jsonStringArray(_ rawValue: Any?) -> [String]? {
+    private static func jsonStringArray(_ rawValue: Any?) -> [String]? {
         guard let values = rawValue as? [Any] else { return nil }
         var strings: [String] = []
         strings.reserveCapacity(values.count)
@@ -1284,6 +1343,12 @@ private struct ResolvedSettingsSnapshot {
     var shortcuts: [KeyboardShortcutSettings.Action: StoredShortcut] = [:]
     var managedUserDefaults: [String: ManagedSettingsValue] = [:]
     var managedCustomSettings = ManagedCustomSettings()
+    /// Values the parse skipped. Lines are filled in once parsing ends.
+    var problems: [ProgramaSettingsFileProblem] = []
+
+    mutating func addProblem(_ keyPath: String, _ message: String) {
+        problems.append(ProgramaSettingsFileProblem(keyPath: keyPath, message: message, line: nil))
+    }
 }
 
 private enum ManagedStringOverride: Equatable {
