@@ -614,9 +614,13 @@ final class WorktreeStorageTests: XCTestCase {
 /// period slipping through, would remove worktrees merged minutes ago.
 final class WorktreeAutoRemoveSettingsTests: XCTestCase {
     private var settingsURL: URL!
+    private var defaultsSuiteName: String!
+    private var defaults: UserDefaults!
 
     override func setUpWithError() throws {
         try super.setUpWithError()
+        defaultsSuiteName = "WorktreeAutoRemoveSettingsTests-\(UUID().uuidString)"
+        defaults = try XCTUnwrap(UserDefaults(suiteName: defaultsSuiteName))
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("worktree-settings-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -626,7 +630,13 @@ final class WorktreeAutoRemoveSettingsTests: XCTestCase {
     override func tearDownWithError() throws {
         try? FileManager.default.removeItem(at: settingsURL.deletingLastPathComponent())
         settingsURL = nil
+        defaults.removePersistentDomain(forName: defaultsSuiteName)
+        defaults = nil
         try super.tearDownWithError()
+    }
+
+    private func read() -> StorageSettings {
+        StorageSettings.read(settingsURL: settingsURL, defaults: defaults)
     }
 
     private func writeSettings(_ contents: String) throws {
@@ -634,9 +644,9 @@ final class WorktreeAutoRemoveSettingsTests: XCTestCase {
     }
 
     func testMissingOrUnusableSettingsFallBackToDefaults() throws {
-        XCTAssertTrue(StorageSettings.read(settingsURL: settingsURL).autoRemoveMerged)
-        XCTAssertEqual(StorageSettings.read(settingsURL: settingsURL).autoRemoveAfterHours, 24)
-        XCTAssertTrue(StorageSettings.read(settingsURL: settingsURL).autoCleanCaches)
+        XCTAssertTrue(read().autoRemoveMerged)
+        XCTAssertEqual(read().autoRemoveAfterHours, 24)
+        XCTAssertTrue(read().autoCleanCaches)
 
         for contents in [
             "", "not JSON", "[]", "{}", "{\"worktrees\":{},\"storage\":{}}",
@@ -645,9 +655,9 @@ final class WorktreeAutoRemoveSettingsTests: XCTestCase {
             "{\"worktrees\":{\"autoRemoveMerged\":null,\"autoRemoveAfterHours\":null},\"storage\":{\"autoCleanCaches\":null}}",
         ] {
             try writeSettings(contents)
-            XCTAssertTrue(StorageSettings.read(settingsURL: settingsURL).autoRemoveMerged, contents)
-            XCTAssertEqual(StorageSettings.read(settingsURL: settingsURL).autoRemoveAfterHours, 24, contents)
-            XCTAssertTrue(StorageSettings.read(settingsURL: settingsURL).autoCleanCaches, contents)
+            XCTAssertTrue(read().autoRemoveMerged, contents)
+            XCTAssertEqual(read().autoRemoveAfterHours, 24, contents)
+            XCTAssertTrue(read().autoCleanCaches, contents)
         }
     }
 
@@ -659,8 +669,8 @@ final class WorktreeAutoRemoveSettingsTests: XCTestCase {
           "storage": { "autoCleanCaches": false },
         }
         """)
-        XCTAssertFalse(StorageSettings.read(settingsURL: settingsURL).autoRemoveMerged)
-        XCTAssertFalse(StorageSettings.read(settingsURL: settingsURL).autoCleanCaches)
+        XCTAssertFalse(read().autoRemoveMerged)
+        XCTAssertFalse(read().autoCleanCaches)
     }
 
     func testGracePeriodIsClampedToAtLeastOneHour() throws {
@@ -670,7 +680,58 @@ final class WorktreeAutoRemoveSettingsTests: XCTestCase {
         ]
         for (json, hours) in cases {
             try writeSettings("{\"worktrees\":{\"autoRemoveAfterHours\":\(json)}}")
-            XCTAssertEqual(StorageSettings.read(settingsURL: settingsURL).autoRemoveAfterHours, hours, json)
+            XCTAssertEqual(read().autoRemoveAfterHours, hours, json)
         }
+    }
+
+    func testSettingsWindowValuesApplyWhenTheFileDoesNotSetTheKey() throws {
+        try writeSettings("{}")
+        defaults.set("~/custom-worktrees", forKey: StorageSettings.directoryKey)
+        defaults.set(false, forKey: StorageSettings.autoRemoveMergedKey)
+        defaults.set(72.0, forKey: StorageSettings.autoRemoveAfterHoursKey)
+        defaults.set(false, forKey: StorageSettings.autoCleanCachesKey)
+        defaults.set(5.0, forKey: StorageSettings.lowDiskWarningGBKey)
+
+        let settings = read()
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        XCTAssertEqual(settings.directory, (home as NSString).appendingPathComponent("custom-worktrees"))
+        XCTAssertFalse(settings.autoRemoveMerged)
+        XCTAssertEqual(settings.autoRemoveAfterHours, 72)
+        XCTAssertFalse(settings.autoCleanCaches)
+        XCTAssertEqual(settings.lowDiskWarningGB, 5)
+    }
+
+    func testSettingsFileWinsOverSettingsWindowValues() throws {
+        try writeSettings("""
+        {
+          "worktrees": { "directory": "/tmp/from-file", "autoRemoveMerged": true, "autoRemoveAfterHours": 12 },
+          "storage": { "autoCleanCaches": true, "lowDiskWarningGB": 30 }
+        }
+        """)
+        defaults.set("/tmp/from-settings", forKey: StorageSettings.directoryKey)
+        defaults.set(false, forKey: StorageSettings.autoRemoveMergedKey)
+        defaults.set(72.0, forKey: StorageSettings.autoRemoveAfterHoursKey)
+        defaults.set(false, forKey: StorageSettings.autoCleanCachesKey)
+        defaults.set(5.0, forKey: StorageSettings.lowDiskWarningGBKey)
+
+        let settings = read()
+        XCTAssertEqual(settings.directory, "/tmp/from-file")
+        XCTAssertTrue(settings.autoRemoveMerged)
+        XCTAssertEqual(settings.autoRemoveAfterHours, 12)
+        XCTAssertTrue(settings.autoCleanCaches)
+        XCTAssertEqual(settings.lowDiskWarningGB, 30)
+    }
+
+    func testUnusableSettingsWindowValuesFallBackToDefaults() throws {
+        defaults.set("   ", forKey: StorageSettings.directoryKey)
+        defaults.set("no", forKey: StorageSettings.autoRemoveMergedKey)
+        defaults.set(0.25, forKey: StorageSettings.autoRemoveAfterHoursKey)
+        defaults.set(-3.0, forKey: StorageSettings.lowDiskWarningGBKey)
+
+        let settings = read()
+        XCTAssertEqual(settings.directory, StorageSettings.defaultDirectory)
+        XCTAssertTrue(settings.autoRemoveMerged)
+        XCTAssertEqual(settings.autoRemoveAfterHours, 1, "Below one hour is clamped, the same as in the file")
+        XCTAssertEqual(settings.lowDiskWarningGB, 20)
     }
 }
