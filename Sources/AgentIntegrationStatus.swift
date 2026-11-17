@@ -117,7 +117,7 @@ struct SidebarAgentSetupHint: View {
         localized: "sidebar.agentSetupHint.detail",
         defaultValue: "Install a hook integration so the sidebar shows when an agent is working, blocked or done."
     )
-    private let dismissTitle = String(localized: "sidebar.agentSetupHint.dismiss", defaultValue: "Hide This Hint")
+    private let dismissTitle = String(localized: "sidebar.agentSetupHint.dismiss", defaultValue: "Hide this hint")
 
     var body: some View {
         if !isDismissed && store.state.showsSetupHint {
@@ -150,6 +150,8 @@ struct SidebarAgentSetupHint: View {
                     isDismissed = true
                 } label: {
                     Image(systemName: "xmark")
+                        .frame(width: SidebarFooterControlLayout.buttonSize, height: SidebarFooterControlLayout.buttonSize)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
@@ -161,7 +163,7 @@ struct SidebarAgentSetupHint: View {
             .controlSize(.small)
             // Text starts on the footer glyph column (edge 8 + the buttons' leading inset + hit inset).
             .padding(.leading, 8 + SidebarFooterControlLayout.leadingInset + SidebarFooterControlLayout.hitInset)
-            .padding(.trailing, 8)
+            .padding(.trailing, 8 - SidebarFooterControlLayout.hitInset)
         }
     }
 }
