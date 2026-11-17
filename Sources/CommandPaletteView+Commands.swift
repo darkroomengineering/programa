@@ -289,6 +289,70 @@ extension CommandPaletteView {
                 keywords: ["restart", "socket", "listener", "cli", "programa", "control"]
             )
         )
+        contributions.append(
+            CommandPaletteCommandContribution(
+                commandId: "palette.installClaudeIntegration",
+                title: constant(String(localized: "command.installClaudeIntegration.title", defaultValue: "Install Claude Code Integration…")),
+                subtitle: constant(String(localized: "command.installClaudeIntegration.subtitle", defaultValue: "Integrations")),
+                keywords: ["install", "claude", "integration", "hooks", "agent", "ai", "setup"]
+            )
+        )
+        contributions.append(
+            CommandPaletteCommandContribution(
+                commandId: "palette.installCodexIntegration",
+                title: constant(String(localized: "command.installCodexIntegration.title", defaultValue: "Install Codex Integration…")),
+                subtitle: constant(String(localized: "command.installCodexIntegration.subtitle", defaultValue: "Integrations")),
+                keywords: ["install", "codex", "openai", "integration", "hooks", "agent", "ai", "setup"]
+            )
+        )
+        contributions.append(
+            CommandPaletteCommandContribution(
+                commandId: "palette.installOpenCodeIntegration",
+                title: constant(String(localized: "command.installOpenCodeIntegration.title", defaultValue: "Install OpenCode Integration…")),
+                subtitle: constant(String(localized: "command.installOpenCodeIntegration.subtitle", defaultValue: "Integrations")),
+                keywords: ["install", "opencode", "integration", "plugin", "agent", "ai", "setup"]
+            )
+        )
+        contributions.append(
+            CommandPaletteCommandContribution(
+                commandId: "palette.openSettingsFile",
+                title: constant(String(localized: "command.openSettingsFile.title", defaultValue: "Open settings.json")),
+                subtitle: constant(String(localized: "command.openSettingsFile.subtitle", defaultValue: "Global")),
+                keywords: ["settings", "preferences", "config", "configuration", "json", "file", "edit", "shortcuts"]
+            )
+        )
+        contributions.append(
+            CommandPaletteCommandContribution(
+                commandId: "palette.openGhosttyConfig",
+                title: constant(String(localized: "command.openGhosttyConfig.title", defaultValue: "Open Ghostty Config")),
+                subtitle: constant(String(localized: "command.openGhosttyConfig.subtitle", defaultValue: "Global")),
+                keywords: ["ghostty", "config", "configuration", "settings", "preferences", "terminal", "theme", "font", "edit"]
+            )
+        )
+        contributions.append(
+            CommandPaletteCommandContribution(
+                commandId: "palette.showWelcome",
+                title: constant(String(localized: "command.showWelcome.title", defaultValue: "Show Welcome Screen")),
+                subtitle: constant(String(localized: "command.showWelcome.subtitle", defaultValue: "Help")),
+                keywords: ["welcome", "onboarding", "intro", "tour", "tutorial", "getting", "started", "help"]
+            )
+        )
+        contributions.append(
+            CommandPaletteCommandContribution(
+                commandId: "palette.openStorageHub",
+                title: constant(String(localized: "command.openStorageHub.title", defaultValue: "Open Storage Hub")),
+                subtitle: constant(String(localized: "command.openStorageHub.subtitle", defaultValue: "Storage")),
+                keywords: ["storage", "disk", "space", "cache", "caches", "clean", "cleanup", "reclaim", "free"]
+            )
+        )
+        contributions.append(
+            CommandPaletteCommandContribution(
+                commandId: "palette.copyDebugInfo",
+                title: constant(String(localized: "command.copyDebugInfo.title", defaultValue: "Copy Debug Info")),
+                subtitle: constant(String(localized: "command.copyDebugInfo.subtitle", defaultValue: "Version and system details for a bug report")),
+                keywords: ["copy", "debug", "info", "version", "build", "bug", "report", "diagnostics", "system", "macos", "ghostty", "support", "about"]
+            )
+        )
 
         contributions.append(
             CommandPaletteCommandContribution(
@@ -814,6 +878,38 @@ extension CommandPaletteView {
         }
         registry.register(commandId: "palette.restartSocketListener") {
             AppDelegate.shared?.restartSocketListener(nil)
+        }
+        registry.register(commandId: "palette.installClaudeIntegration") {
+            AppDelegate.shared?.openClaudeIntegrationInstaller(debugSource: "palette.installClaudeIntegration")
+        }
+        registry.register(commandId: "palette.installCodexIntegration") {
+            AppDelegate.shared?.openCodexIntegrationInstaller(debugSource: "palette.installCodexIntegration")
+        }
+        registry.register(commandId: "palette.installOpenCodeIntegration") {
+            AppDelegate.shared?.openOpenCodeIntegrationInstaller(debugSource: "palette.installOpenCodeIntegration")
+        }
+        registry.register(commandId: "palette.openSettingsFile") {
+            openProgramaSettingsFileInEditor()
+        }
+        registry.register(commandId: "palette.openGhosttyConfig") {
+            GhosttyApp.shared.openConfigurationInTextEdit()
+        }
+        registry.register(commandId: "palette.showWelcome") {
+            AppDelegate.shared?.openWelcomeWorkspace()
+        }
+        registry.register(commandId: "palette.openStorageHub") {
+            guard let window = observedWindow ?? NSApp.keyWindow ?? NSApp.mainWindow else {
+                NSSound.beep()
+                return
+            }
+            sidebarState.isVisible = true
+            // Defer so the command palette dismisses before the popover anchors to the sidebar.
+            DispatchQueue.main.async {
+                StorageHubModel.shared.requestOpen(window: window)
+            }
+        }
+        registry.register(commandId: "palette.copyDebugInfo") {
+            DebugInfoReport.copyToPasteboard()
         }
 
         registry.register(commandId: "palette.renameWorkspace") {

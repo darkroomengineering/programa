@@ -1946,7 +1946,7 @@ enum ProgramaRuntimeDebugCapture {
     }
 }
 
-private func openProgramaSettingsFileInEditor() {
+func openProgramaSettingsFileInEditor() {
     let url = KeyboardShortcutSettings.settingsFileStore.settingsFileURLForEditing()
     PreferredEditorSettings.open(url)
 }
