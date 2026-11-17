@@ -50,7 +50,7 @@ final class SessionHistoryStore: ObservableObject {
             if let cached = cache[url], cached.modifiedAt == modifiedAt {
                 archive = cached
             } else {
-                archive = CachedArchive(modifiedAt: modifiedAt, summary: summary(of: url))
+                archive = autoreleasepool { CachedArchive(modifiedAt: modifiedAt, summary: summary(of: url)) }
             }
             nextCache[url] = archive
             if let summary = archive.summary { summaries.append(summary) }
