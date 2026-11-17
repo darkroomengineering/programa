@@ -163,7 +163,7 @@ private struct SetupLookStep: View {
             VStack(alignment: .leading, spacing: 12) {
                 SettingsCard {
                     ThemePickerRow(selectedMode: appearanceMode, onSelect: { mode in appearanceMode = mode.rawValue })
-                        .managedBySettingsFile(settingsFileStatus.isManaged(AppearanceSettings.appearanceModeKey))
+                        .managedBySettingsFile(settingsFileStatus.isManaged(.appearance))
                 }
                 SettingsCard {
                     TerminalThemeAndFontRows(
