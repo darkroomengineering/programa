@@ -288,6 +288,223 @@
         "ja": { "stringUnit": { "state": "translated", "value": "レビューパネルは差分をシンプルなリストで表示します。非常に大きな差分でメモリの使用が少なくなります。" } }
       }
     },
+    "command.showSetupAssistant.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Set Up Programa…" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "Programa をセットアップ…" } }
+      }
+    },
+    "menu.help.setupAssistant": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Set Up Programa…" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "Programa をセットアップ…" } }
+      }
+    },
+    "setupAssistant.windowTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Set Up Programa" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "Programa をセットアップ" } }
+      }
+    },
+    "setupAssistant.stepCounter": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Step %lld of %lld" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ステップ %lld / %lld" } }
+      }
+    },
+    "setupAssistant.look.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Choose a Look" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "外観を選ぶ" } }
+      }
+    },
+    "setupAssistant.look.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Pick a theme and font. You can change these later in Settings." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "テーマとフォントを選んでください。あとで設定から変更できます。" } }
+      }
+    },
+    "setupAssistant.agents.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Connect Your Agents" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "エージェントを接続" } }
+      }
+    },
+    "setupAssistant.agents.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Install an integration so the sidebar shows when an agent is working, blocked or done." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "連携をインストールすると、エージェントが作業中・ブロック中・完了したことがサイドバーに表示されます。" } }
+      }
+    },
+    "setupAssistant.permissions.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Notifications and CLI" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "通知と CLI" } }
+      }
+    },
+    "setupAssistant.permissions.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Get notified when an agent needs you, and use the programa command in any terminal." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "エージェントが対応を必要とするときに通知を受け取り、どのターミナルでも programa コマンドを使えるようにします。" } }
+      }
+    },
+    "setupAssistant.finish.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "You’re All Set" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "準備が整いました" } }
+      }
+    },
+    "setupAssistant.finish.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "A few shortcuts to get you started. You can change them in Settings." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "まず覚えておきたいショートカットです。設定から変更できます。" } }
+      }
+    },
+    "setupAssistant.skipSetup": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Skip Setup" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "セットアップをスキップ" } }
+      }
+    },
+    "setupAssistant.skipStep": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Skip" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "スキップ" } }
+      }
+    },
+    "setupAssistant.back": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Back" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "戻る" } }
+      }
+    },
+    "setupAssistant.continue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Continue" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "続ける" } }
+      }
+    },
+    "setupAssistant.done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Done" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "完了" } }
+      }
+    },
+    "setupAssistant.agents.claude": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Claude Code" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "Claude Code" } }
+      }
+    },
+    "setupAssistant.agents.codex": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Codex" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "Codex" } }
+      }
+    },
+    "setupAssistant.agents.openCode": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "OpenCode" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "OpenCode" } }
+      }
+    },
+    "setupAssistant.agents.checking": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Checking…" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "確認中…" } }
+      }
+    },
+    "setupAssistant.agents.installed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Installed" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "インストール済み" } }
+      }
+    },
+    "setupAssistant.agents.install": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Install…" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "インストール…" } }
+      }
+    },
+    "setupAssistant.agents.installAccessibility": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Install %@ integration" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@ の連携をインストール" } }
+      }
+    },
+    "setupAssistant.agents.subtitle.installed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Reports its status to the sidebar." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "サイドバーに状態を表示します。" } }
+      }
+    },
+    "setupAssistant.agents.subtitle.found": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Found on this Mac. The installer opens in a new workspace." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "この Mac で見つかりました。インストーラは新しいワークスペースで開きます。" } }
+      }
+    },
+    "setupAssistant.agents.subtitle.notFound": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Not found on this Mac. You can still install the integration." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "この Mac では見つかりませんでした。連携はインストールできます。" } }
+      }
+    },
+    "setupAssistant.cli.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Command-Line Tool" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "コマンドラインツール" } }
+      }
+    },
+    "setupAssistant.cli.subtitle.installed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "The programa command works in any terminal." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "programa コマンドはどのターミナルでも使えます。" } }
+      }
+    },
+    "setupAssistant.cli.subtitle.notInstalled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Add the programa command to /usr/local/bin so it works outside Programa." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "programa コマンドを /usr/local/bin に追加して、Programa の外でも使えるようにします。" } }
+      }
+    },
+    "setupAssistant.cli.install": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Install" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "インストール" } }
+      }
+    },
     "settingsFile.problems.notice.one": {
       "extractionState": "manual",
       "localizations": {
