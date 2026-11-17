@@ -66,6 +66,8 @@ struct SettingsView: View {
     private var commandPaletteSearchAllSurfaces = CommandPaletteSwitcherSearchSettings.defaultSearchAllSurfaces
     @AppStorage(ShortcutHintDebugSettings.alwaysShowHintsKey)
     private var alwaysShowShortcutHints = ShortcutHintDebugSettings.defaultAlwaysShowHints
+    @AppStorage(ReviewDiffRendererSettings.rendererKey)
+    private var reviewDiffRenderer = ReviewDiffRendererSettings.defaultRenderer.rawValue
     @AppStorage(WorkspacePlacementSettings.placementKey) private var newWorkspacePlacement = WorkspacePlacementSettings.defaultPlacement.rawValue
     @AppStorage(SidebarActiveTabIndicatorSettings.styleKey)
     private var sidebarActiveTabIndicatorStyle = SidebarActiveTabIndicatorSettings.defaultStyle.rawValue
@@ -98,6 +100,10 @@ struct SettingsView: View {
 
     private var selectedWorkspacePlacement: NewWorkspacePlacement {
         NewWorkspacePlacement(rawValue: newWorkspacePlacement) ?? WorkspacePlacementSettings.defaultPlacement
+    }
+
+    private var selectedReviewDiffRenderer: ReviewDiffRendererSettings.Renderer {
+        ReviewDiffRendererSettings.Renderer(rawValue: reviewDiffRenderer) ?? ReviewDiffRendererSettings.defaultRenderer
     }
 
     private var minimalModeEnabled: Bool {
@@ -302,6 +308,10 @@ struct SettingsView: View {
                         settingsFileSection
                         appSection
                         notificationsSection
+                        ExternalAppAllowlistSettingsSection(
+                            isManagedBySettingsFile: settingsFileStatus.isManaged(.externalAppOpenAllowlist)
+                        )
+                        StorageSettingsSection(isManaged: settingsFileStatus.isManaged)
                         resetSection
                     case .appearance:
                         appearanceSection
@@ -401,7 +411,7 @@ struct SettingsView: View {
                     Text(placement.displayName).tag(placement.rawValue)
                 }
             }
-            .managedBySettingsFile(settingsFileStatus.isManaged(WorkspacePlacementSettings.placementKey))
+            .managedBySettingsFile(settingsFileStatus.isManaged(.newWorkspacePlacement))
 
             SettingsCardDivider()
 
@@ -416,7 +426,7 @@ struct SettingsView: View {
                         String(localized: "settings.app.showInMenuBar", defaultValue: "Show in Menu Bar")
                     )
             }
-            .managedBySettingsFile(settingsFileStatus.isManaged(MenuBarExtraSettings.showInMenuBarKey))
+            .managedBySettingsFile(settingsFileStatus.isManaged(.showInMenuBar))
 
             SettingsCardDivider()
 
@@ -430,7 +440,7 @@ struct SettingsView: View {
                     .labelsHidden()
                     .controlSize(.small)
             }
-            .managedBySettingsFile(settingsFileStatus.isManaged(QuitWarningSettings.warnBeforeQuitKey))
+            .managedBySettingsFile(settingsFileStatus.isManaged(.warnBeforeQuit))
 
             SettingsCardDivider()
 
@@ -450,7 +460,7 @@ struct SettingsView: View {
                     .labelsHidden()
                     .controlSize(.small)
             }
-            .managedBySettingsFile(settingsFileStatus.isManaged(LastPaneCloseWarningSettings.confirmCloseLastPaneKey))
+            .managedBySettingsFile(settingsFileStatus.isManaged(.confirmCloseLastPane))
 
             SettingsCardDivider()
 
@@ -469,6 +479,7 @@ struct SettingsView: View {
                     .labelsHidden()
                     .controlSize(.small)
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(.saveScrollbackOnQuit))
 
             if scrollbackPersistenceFailure != nil {
                 SettingsCardRow(
@@ -492,7 +503,7 @@ struct SettingsView: View {
                     .labelsHidden()
                     .controlSize(.small)
             }
-            .managedBySettingsFile(settingsFileStatus.isManaged(AgentAutoResumeSettings.autoResumeAgentsKey))
+            .managedBySettingsFile(settingsFileStatus.isManaged(.autoResumeAgents))
 
             SettingsCardDivider()
 
@@ -509,7 +520,7 @@ struct SettingsView: View {
                         String(localized: "settings.app.reapLeftoverAgentProcesses", defaultValue: "Stop Leftover Agent Processes")
                     )
             }
-            .managedBySettingsFile(settingsFileStatus.isManaged(LeftoverProcessReaperSettings.reapLeftoverAgentProcessesKey))
+            .managedBySettingsFile(settingsFileStatus.isManaged(.reapLeftoverAgentProcesses))
 
             SettingsCardDivider()
 
@@ -527,8 +538,21 @@ struct SettingsView: View {
                         String(localized: "settings.app.commandPaletteSearchAllSurfaces", defaultValue: "Command Palette Searches All Surfaces")
                     )
             }
-            .managedBySettingsFile(settingsFileStatus.isManaged(CommandPaletteSwitcherSearchSettings.searchAllSurfacesKey))
+            .managedBySettingsFile(settingsFileStatus.isManaged(.commandPaletteSearchesAllSurfaces))
 
+            SettingsCardDivider()
+
+            SettingsPickerRow(
+                String(localized: "settings.app.reviewDiffRenderer", defaultValue: "Review Diffs"),
+                subtitle: selectedReviewDiffRenderer.subtitle,
+                controlWidth: pickerColumnWidth,
+                selection: $reviewDiffRenderer
+            ) {
+                ForEach(ReviewDiffRendererSettings.Renderer.allCases, id: \.rawValue) { renderer in
+                    Text(renderer.displayName).tag(renderer.rawValue)
+                }
+            }
+            .managedBySettingsFile(settingsFileStatus.isManaged(.reviewDiffRenderer))
         }
 
     }
@@ -582,7 +606,7 @@ struct SettingsView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            .managedBySettingsFile(settingsFileStatus.isManaged(NotificationSoundSettings.key))
+            .managedBySettingsFile(settingsFileStatus.isManaged(.notificationSound))
         }
     }
 
@@ -689,7 +713,7 @@ struct SettingsView: View {
         SettingsSectionHeader(title: String(localized: "settings.section.appearance", defaultValue: "Appearance"))
         SettingsCard {
             ThemePickerRow(selectedMode: appearanceMode, onSelect: { mode in appearanceMode = mode.rawValue })
-                .managedBySettingsFile(settingsFileStatus.isManaged(AppearanceSettings.appearanceModeKey))
+                .managedBySettingsFile(settingsFileStatus.isManaged(.appearance))
 
             SettingsCardDivider()
 
@@ -705,7 +729,7 @@ struct SettingsView: View {
                         String(localized: "settings.app.minimalMode", defaultValue: "Minimal Mode")
                     )
             }
-            .managedBySettingsFile(settingsFileStatus.isManaged(WorkspacePresentationModeSettings.modeKey))
+            .managedBySettingsFile(settingsFileStatus.isManaged(.minimalMode))
         }
 
     }
@@ -730,7 +754,7 @@ struct SettingsView: View {
                         String(localized: "settings.sidebarAppearance.showClaudeQuota", defaultValue: "Show Provider Usage")
                     )
             }
-            .managedBySettingsFile(settingsFileStatus.isManaged("sidebarShowClaudeQuota"))
+            .managedBySettingsFile(settingsFileStatus.isManaged(.showClaudeQuota))
             // The sidebar tint keys, the selection and badge hex keys and the active-tab
             // indicator style are tuned in the Debug window (DebugWindows.swift). The
             // bindings stay on this view so "Reset all settings" restores them.
@@ -752,7 +776,7 @@ struct SettingsView: View {
                     Text(mode.displayName).tag(mode.rawValue)
                 }
             }
-            .managedBySettingsFile(settingsFileStatus.isManaged(SocketControlSettings.appStorageKey))
+            .managedBySettingsFile(settingsFileStatus.isManaged(.socketControlMode))
 
             if selectedSocketControlMode == .password {
                 SettingsCardDivider()
@@ -777,7 +801,7 @@ struct SettingsView: View {
                         }
                     }
                 }
-                .managedBySettingsFile(settingsFileStatus.socketPasswordManaged)
+                .managedBySettingsFile(settingsFileStatus.isManaged(.socketPassword))
                 if let message = socketPasswordStatusMessage {
                     Text(message)
                         .font(.subheadline)
@@ -816,7 +840,7 @@ struct SettingsView: View {
                     .controlSize(.small)
                     .accessibilityIdentifier("SettingsClaudeCodeHooksToggle")
             }
-            .managedBySettingsFile(settingsFileStatus.isManaged(ClaudeCodeIntegrationSettings.hooksEnabledKey))
+            .managedBySettingsFile(settingsFileStatus.isManaged(.claudeCodeIntegration))
 
             SettingsCardDivider()
 
@@ -831,7 +855,7 @@ struct SettingsView: View {
                     .controlSize(.small)
                     .accessibilityIdentifier("SettingsClaudeTeamsByDefaultToggle")
             }
-            .managedBySettingsFile(settingsFileStatus.isManaged(ClaudeCodeIntegrationSettings.teamsByDefaultKey))
+            .managedBySettingsFile(settingsFileStatus.isManaged(.claudeTeamsByDefault))
 
             SettingsCardDivider()
 
@@ -846,7 +870,7 @@ struct SettingsView: View {
                     .controlSize(.small)
                     .accessibilityIdentifier("SettingsHoldAgentTextToggle")
             }
-            .managedBySettingsFile(settingsFileStatus.isManaged(DraftGuardSettings.enabledKey))
+            .managedBySettingsFile(settingsFileStatus.isManaged(.holdAgentTextWhileTyping))
 
             SettingsCardDivider()
 
@@ -861,7 +885,7 @@ struct SettingsView: View {
                     .controlSize(.small)
                     .accessibilityIdentifier("SettingsProtectApprovalPromptsToggle")
             }
-            .managedBySettingsFile(settingsFileStatus.isManaged(ApprovalGuardSettings.enabledKey))
+            .managedBySettingsFile(settingsFileStatus.isManaged(.protectApprovalPrompts))
 
             SettingsCardDivider()
 
@@ -876,6 +900,7 @@ struct SettingsView: View {
                     .controlSize(.small)
                     .accessibilityIdentifier("SettingsAgentScreenDetectionToggle")
             }
+            .managedBySettingsFile(settingsFileStatus.isManaged(.agentScreenDetection))
         }
         SettingsSectionFooter(
             String(localized: "settings.automation.claudeCode.note", defaultValue: "When enabled, Programa wraps the claude command to inject session tracking and notification hooks. Disable if you prefer to manage Claude Code hooks yourself."),
@@ -928,7 +953,7 @@ struct SettingsView: View {
                         reseedTrustedDirectoriesDraft()
                     }
             }
-            .managedBySettingsFile(settingsFileStatus.trustedDirectoriesManaged)
+            .managedBySettingsFile(settingsFileStatus.isManaged(.trustedDirectories))
         }
         SettingsSectionFooter(
             String(localized: "settings.customCommands.trustedDirectories.note", defaultValue: "Place a programa.json in your project root to define custom commands. Trust a directory from the confirmation dialog, or add paths here. For git repos, trusting the root covers all subdirectories.")
@@ -996,6 +1021,8 @@ struct SettingsView: View {
         sessionAutoResumeAgents = AgentAutoResumeSettings.defaultAutoResumeAgents
         reapLeftoverAgentProcesses = LeftoverProcessReaperSettings.defaultReapLeftoverAgentProcesses
         commandPaletteSearchAllSurfaces = CommandPaletteSwitcherSearchSettings.defaultSearchAllSurfaces
+        reviewDiffRenderer = ReviewDiffRendererSettings.defaultRenderer.rawValue
+        StorageSettingsSection.resetToDefaults()
         ShortcutHintDebugSettings.resetVisibilityDefaults()
         alwaysShowShortcutHints = ShortcutHintDebugSettings.defaultAlwaysShowHints
         newWorkspacePlacement = WorkspacePlacementSettings.defaultPlacement.rawValue
@@ -1055,9 +1082,20 @@ private final class SettingsFileStatusModel: ObservableObject {
         }
     }
 
-    func isManaged(_ defaultsKey: String) -> Bool {
+    func isManaged(_ row: SettingsRow) -> Bool {
         _ = managedDefaultsKeysRevision
-        return KeyboardShortcutSettings.settingsFileStore.isManagedByFile(defaultsKey: defaultsKey)
+        let store = KeyboardShortcutSettings.settingsFileStore
+        switch row {
+        case .trustedDirectories: return trustedDirectoriesManaged
+        case .socketPassword: return socketPasswordManaged
+        case .terminalTheme: return store.isTerminalThemeManagedByFile()
+        case .terminalFont: return store.isTerminalFontManagedByFile()
+        // Each shortcut row checks its own action.
+        case .shortcutBindings, .desktopNotifications: return false
+        default:
+            guard let defaultsKey = row.defaultsKey else { return false }
+            return store.isManagedByFile(defaultsKey: defaultsKey)
+        }
     }
 
     private func refresh() {
@@ -1069,7 +1107,7 @@ private final class SettingsFileStatusModel: ObservableObject {
     }
 }
 
-private extension View {
+extension View {
     /// Disables a Settings row whose value settings.json controls (the store would revert any
     /// edit on its next reapply) and says so under the row.
     @ViewBuilder
