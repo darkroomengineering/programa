@@ -5602,6 +5602,40 @@
         }
       }
     },
+    "command.copyDebugInfo.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Debug Info"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デバッグ情報をコピー"
+          }
+        }
+      }
+    },
+    "command.copyDebugInfo.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version and system details for a bug report"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バグ報告用のバージョンとシステム情報"
+          }
+        }
+      }
+    },
     "command.resumeAgentSession.title": {
       "extractionState": "manual",
       "localizations": {

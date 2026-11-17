@@ -345,6 +345,14 @@ extension CommandPaletteView {
                 keywords: ["storage", "disk", "space", "cache", "caches", "clean", "cleanup", "reclaim", "free"]
             )
         )
+        contributions.append(
+            CommandPaletteCommandContribution(
+                commandId: "palette.copyDebugInfo",
+                title: constant(String(localized: "command.copyDebugInfo.title", defaultValue: "Copy Debug Info")),
+                subtitle: constant(String(localized: "command.copyDebugInfo.subtitle", defaultValue: "Version and system details for a bug report")),
+                keywords: ["copy", "debug", "info", "version", "build", "bug", "report", "diagnostics", "system", "macos", "ghostty", "support", "about"]
+            )
+        )
 
         contributions.append(
             CommandPaletteCommandContribution(
@@ -899,6 +907,9 @@ extension CommandPaletteView {
             DispatchQueue.main.async {
                 StorageHubModel.shared.requestOpen(window: window)
             }
+        }
+        registry.register(commandId: "palette.copyDebugInfo") {
+            DebugInfoReport.copyToPasteboard()
         }
 
         registry.register(commandId: "palette.renameWorkspace") {
