@@ -8,6 +8,8 @@ Programa is a fork of [cmux](https://github.com/manaflow-ai/cmux); for history p
 
 ### Added
 - `programa browsee install-mcp` registers browsee with Claude Code and Codex, so an agent in a Programa pane can open, read and click browsee tabs. Each pane's agent gets its own browsee session and sees only the tabs it opened, and when browsee is closed it starts in the background. It needs "Let other apps control my tabs" on in browsee. `File > Install browsee MCP…` runs it too. See `docs/browsee.md`.
+- A terminal pane's header has an Open Review button that opens the Review panel for that terminal's changes, the same as the Open Review shortcut.
+- Each file in the Review panel's uncommitted diff has an Edit button that lets you edit the file right in the diff. Save (or ⌘S) writes it to disk and Cancel discards the changes. If the file changed on disk while you were editing, Save refuses and asks you to edit again. Deleted, binary and very large files have no Edit button.
 
 ### Removed
 - `programa aside` and `File > Install Aside Browser MCP…` are gone; `programa browsee install-mcp` takes their place. Servers it registered stay in your agent config until you remove them: `claude mcp remove --scope user aside`, `claude mcp remove --scope user aside-devtools`, `codex mcp remove aside`, `codex mcp remove aside-devtools`, and the `programa` entry under `mcp.servers` in `~/.aside/u/<account>/settings.json`.
