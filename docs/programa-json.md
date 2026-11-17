@@ -469,3 +469,36 @@ where possible) and custom tab titles. It does not record running commands,
 environment variables or focus, and markdown panels are skipped. You can add `command`, `env` and
 `focus` by hand. The `layout.save`, `layout.apply` and `layout.list` socket methods work on the
 same files; see [socket-api.md](socket-api.md).
+
+### Layouts in the command palette
+
+The command palette works on the same files:
+
+| Command | What it does |
+|---|---|
+| **Save current layout…** | Asks for a name and saves the selected workspace's layout, like `programa layout save`. If the name is taken, it asks before replacing the file. |
+| **Apply layout: \<name\>** | Opens the layout in a new workspace. |
+| **Rename layout: \<name\>…** | Asks for a new name and renames the file. It refuses a name another layout already uses. |
+| **Delete layout: \<name\>…** | Asks for confirmation, then deletes the file. This can't be undone. |
+
+### Built-in presets
+
+Two layouts ship with Programa and appear in the palette under the subtitle "Built-in layout",
+with nothing saved:
+
+| Preset | Panes |
+|---|---|
+| Agent and Shell | Two side-by-side terminals. The left one runs `claude` and has focus; the right one is a plain shell. |
+| Three Agents | Three side-by-side terminals of equal width, each running `claude`. |
+
+Presets are not files, so you can't rename or delete them. **Save copy of layout: \<preset\>…**
+saves one as a file under a name you choose, which you can then edit, rename or delete like any
+saved layout. Presets are palette-only: `programa layout apply` and `layout list` see only files.
+
+### Broken layout files
+
+A file in the layouts directory that fails to load still appears in the palette. Its
+**Apply layout** entry shows the file name and the reason as its subtitle, for example
+`my-layout.json: missing key 'surfaces' in 'layout.pane'`. Applying it shows that message in an
+alert and opens nothing. Fix the file, or rename or delete it from the palette. `programa layout
+list` and `layout.list` skip broken files, and `programa layout apply` reports them as not found.
