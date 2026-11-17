@@ -130,6 +130,7 @@
 		SCCH000007 /* StoragePackageCaches.swift in Sources */ = {isa = PBXBuildFile; fileRef = SCCH000008 /* StoragePackageCaches.swift */; };
 		WTMG000005 /* ProgramaLayoutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = WTMG000006 /* ProgramaLayoutStore.swift */; };
 		LYPL000001 /* CommandPaletteView+Layouts.swift in Sources */ = {isa = PBXBuildFile; fileRef = LYPL000002 /* CommandPaletteView+Layouts.swift */; };
+		SSRP000001 /* CommandPaletteView+Sessions.swift in Sources */ = {isa = PBXBuildFile; fileRef = SSRP000002 /* CommandPaletteView+Sessions.swift */; };
 		NRTM00000002 /* TabManager+UITestHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRTM00000001 /* TabManager+UITestHarness.swift */; };
 			A5001004 /* GhosttyConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001014 /* GhosttyConfig.swift */; };
 			A5FF0051 /* GhosttyTerminalView+Keyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5FF0041 /* GhosttyTerminalView+Keyboard.swift */; };
@@ -585,6 +586,7 @@
 			A1D00000000000000000000A /* PaneHandoffFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneHandoffFormatterTests.swift; sourceTree = "<group>"; };
 			A1D000000000000000000008 /* CommandPaletteView+PaneHandoff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandPaletteView+PaneHandoff.swift"; sourceTree = "<group>"; };
 			LYPL000002 /* CommandPaletteView+Layouts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandPaletteView+Layouts.swift"; sourceTree = "<group>"; };
+			SSRP000002 /* CommandPaletteView+Sessions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CommandPaletteView+Sessions.swift"; sourceTree = "<group>"; };
 			A1D000000000000000000006 /* CLI+Handoff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLI+Handoff.swift"; sourceTree = "<group>"; };
 			A1D000000000000000000003 /* PaneHandoffFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneHandoffFormatter.swift; sourceTree = "<group>"; };
 			TPEV00000000000000000001 /* TerminalPathEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalPathEnvironment.swift; sourceTree = "<group>"; };
@@ -1123,6 +1125,7 @@
 					A2CV0000000000000000000D /* CommandPaletteView+Commands.swift */,
 					A1D000000000000000000008 /* CommandPaletteView+PaneHandoff.swift */,
 					LYPL000002 /* CommandPaletteView+Layouts.swift */,
+					SSRP000002 /* CommandPaletteView+Sessions.swift */,
 					A2CV0000000000000000000B /* CommandPaletteView.swift */,
 					A2CV00000000000000000009 /* CommandPaletteView+Flows.swift */,
 					A2CV00000000000000000007 /* CommandPaletteView+Types.swift */,
@@ -1753,6 +1756,7 @@
 					A2CV0000000000000000000C /* CommandPaletteView+Commands.swift in Sources */,
 					A1D000000000000000000009 /* CommandPaletteView+PaneHandoff.swift in Sources */,
 					LYPL000001 /* CommandPaletteView+Layouts.swift in Sources */,
+					SSRP000001 /* CommandPaletteView+Sessions.swift in Sources */,
 					A2CV0000000000000000000A /* CommandPaletteView.swift in Sources */,
 					A2CV00000000000000000008 /* CommandPaletteView+Flows.swift in Sources */,
 					A2CV00000000000000000006 /* CommandPaletteView+Types.swift in Sources */,

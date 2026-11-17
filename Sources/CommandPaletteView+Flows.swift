@@ -135,8 +135,13 @@ extension CommandPaletteView {
         case .commands:
             return String(localized: "commandPalette.search.commandsPlaceholder", defaultValue: "Type a command")
         case .switcher:
-            if paneHandoffTarget != nil {
+            switch switcherPicker {
+            case .paneHandoff:
                 return String(localized: "commandPalette.search.paneHandoffPlaceholder", defaultValue: "Pick a pane to paste its output")
+            case .sessionRestore:
+                return String(localized: "commandPalette.search.sessionRestorePlaceholder", defaultValue: "Pick a saved session to restore")
+            case nil:
+                break
             }
             return commandPaletteController.commandPaletteSearchAllSurfaces
                 ? String(localized: "commandPalette.search.switcherPlaceholderAllSurfaces", defaultValue: "Search workspaces and surfaces")
@@ -149,8 +154,13 @@ extension CommandPaletteView {
         case .commands:
             return String(localized: "commandPalette.search.commandsEmpty", defaultValue: "No commands match your search.")
         case .switcher:
-            if paneHandoffTarget != nil {
+            switch switcherPicker {
+            case .paneHandoff:
                 return String(localized: "commandPalette.search.paneHandoffEmpty", defaultValue: "No other terminal panes match your search.")
+            case .sessionRestore:
+                return sessionRestoreEmptyStateText
+            case nil:
+                break
             }
             return commandPaletteController.commandPaletteSearchAllSurfaces
                 ? String(localized: "commandPalette.search.switcherEmptyAllSurfaces", defaultValue: "No workspaces or surfaces match your search.")
@@ -312,7 +322,13 @@ extension CommandPaletteView {
         let fingerprint = commandPaletteController.cachedCommandPaletteFingerprint
         let searchCorpus = commandPaletteController.commandPaletteSearchCorpus
         let commandsByID = commandPaletteController.commandPaletteSearchCommandsByID
-        let usageHistory = commandPaletteController.commandPaletteUsageHistoryByCommandId
+        let usageHistory: [String: CommandPaletteUsageEntry]
+        if scope == .switcher, case .sessionRestore = switcherPicker {
+            // Saved sessions stay newest first; a past restore must not lift an older one.
+            usageHistory = [:]
+        } else {
+            usageHistory = commandPaletteController.commandPaletteUsageHistoryByCommandId
+        }
         let queryIsEmpty = CommandPaletteFuzzyMatcher.preparedQuery(matchingQuery).isEmpty
         let historyTimestamp = Date().timeIntervalSince1970
         commandPaletteController.commandPalettePendingActivation = nil
@@ -698,7 +714,7 @@ extension CommandPaletteView {
             )
         }
 #endif
-        paneHandoffTarget = nil
+        switcherPicker = nil
         let storedFocusTarget = commandPaletteController.prepareDismissal(
             minimumEditorHeight: CommandPaletteMultilineTextEditorRepresentable.defaultMinimumHeight
         )

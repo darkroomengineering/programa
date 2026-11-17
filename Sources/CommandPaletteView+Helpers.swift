@@ -251,7 +251,11 @@ extension CommandPaletteView {
         return hasher.finalize()
     }
     func commandPaletteSwitcherEntriesFingerprint(includeSurfaces: Bool) -> Int {
-        if let target = paneHandoffTarget { return paneHandoffSourceEntriesFingerprint(target: target) }
+        switch switcherPicker {
+        case .paneHandoff(let target): return paneHandoffSourceEntriesFingerprint(target: target)
+        case .sessionRestore: return sessionRestoreEntriesFingerprint()
+        case nil: break
+        }
         let windowContexts = commandPaletteSwitcherWindowContexts()
         let fingerprintContexts = windowContexts.map { context in
             CommandPaletteSwitcherFingerprintContext(
@@ -288,7 +292,11 @@ extension CommandPaletteView {
         return Self.commandPaletteSwitcherFingerprint(windowContexts: fingerprintContexts)
     }
     func commandPaletteSwitcherEntries(includeSurfaces: Bool) -> [CommandPaletteCommand] {
-        if let target = paneHandoffTarget { return paneHandoffSourceEntries(target: target) }
+        switch switcherPicker {
+        case .paneHandoff(let target): return paneHandoffSourceEntries(target: target)
+        case .sessionRestore: return sessionRestoreEntries()
+        case nil: break
+        }
         let windowContexts = commandPaletteSwitcherWindowContexts()
         guard !windowContexts.isEmpty else { return [] }
 

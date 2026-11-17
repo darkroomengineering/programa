@@ -16,29 +16,17 @@ final class CommandPalettePaneHandoffTarget {
     }
 }
 
-@MainActor
-private enum CommandPalettePaneHandoffStore {
-    /// Keyed by palette controller (one per window). Cleared on every palette dismissal.
-    static var targets: [ObjectIdentifier: CommandPalettePaneHandoffTarget] = [:]
-}
-
 extension CommandPaletteView {
-    /// Set while the switcher is picking the pane to paste from.
-    var paneHandoffTarget: CommandPalettePaneHandoffTarget? {
-        get { CommandPalettePaneHandoffStore.targets[ObjectIdentifier(commandPaletteController)] }
-        nonmutating set { CommandPalettePaneHandoffStore.targets[ObjectIdentifier(commandPaletteController)] = newValue }
-    }
-
     func beginPaneHandoffPickFlow() {
         guard let context = focusedPanelContext, let terminal = context.panel as? TerminalPanel else {
             NSSound.beep()
             return
         }
-        paneHandoffTarget = CommandPalettePaneHandoffTarget(
+        switcherPicker = .paneHandoff(CommandPalettePaneHandoffTarget(
             workspaceId: context.workspace.id,
             panelId: context.panelId,
             panel: terminal
-        )
+        ))
         resetCommandPaletteListState(initialQuery: "")
     }
 

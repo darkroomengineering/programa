@@ -1,6 +1,90 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "command.restoreSession.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Restore Previous Session…" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "以前のセッションを復元…" } }
+      }
+    },
+    "command.restoreSession.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Session" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "セッション" } }
+      }
+    },
+    "commandPalette.search.sessionRestorePlaceholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Pick a saved session to restore" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "復元する保存済みセッションを選択" } }
+      }
+    },
+    "commandPalette.search.sessionRestoreLoading": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Loading saved sessions…" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "保存済みセッションを読み込み中…" } }
+      }
+    },
+    "commandPalette.search.sessionRestoreNone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "No saved sessions yet." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "保存済みセッションはまだありません。" } }
+      }
+    },
+    "commandPalette.search.sessionRestoreEmpty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "No saved sessions match your search." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "検索に一致する保存済みセッションはありません。" } }
+      }
+    },
+    "commandPalette.sessionRestore.workspaces.one": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "1 workspace" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "1 件のワークスペース" } }
+      }
+    },
+    "commandPalette.sessionRestore.workspaces.other": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "%lld workspaces" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%lld 件のワークスペース" } }
+      }
+    },
+    "sessionRestore.failed.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Session Can't Be Restored" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "セッションを復元できません" } }
+      }
+    },
+    "sessionRestore.failed.unreadable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "This saved session can't be read. It may have been deleted or damaged." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "この保存済みセッションを読み込めません。削除されたか、破損している可能性があります。" } }
+      }
+    },
+    "sessionRestore.failed.versionMismatch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "This saved session was written by a different version of Programa." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "この保存済みセッションは別のバージョンの Programa で作成されました。" } }
+      }
+    },
+    "sessionRestore.failed.noWindows": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "This saved session has no windows to restore." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "この保存済みセッションには復元するウインドウがありません。" } }
+      }
+    },
     "settingsFile.problems.notice.one": {
       "extractionState": "manual",
       "localizations": {

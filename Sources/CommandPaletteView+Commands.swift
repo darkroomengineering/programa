@@ -744,6 +744,15 @@ extension CommandPaletteView {
         }
 
         contributions.append(contentsOf: layoutCommandContributions())
+        contributions.append(
+            CommandPaletteCommandContribution(
+                commandId: "palette.restoreSession",
+                title: constant(String(localized: "command.restoreSession.title", defaultValue: "Restore Previous Session…")),
+                subtitle: constant(String(localized: "command.restoreSession.subtitle", defaultValue: "Session")),
+                keywords: ["restore", "session", "previous", "snapshot", "history", "reopen", "recover"],
+                dismissOnRun: false
+            )
+        )
 
         return contributions
     }
@@ -1095,6 +1104,9 @@ extension CommandPaletteView {
         }
 
         registerLayoutHandlers(&registry)
+        registry.register(commandId: "palette.restoreSession") {
+            beginSessionRestorePickFlow()
+        }
     }
 
     private func selectedWorkspaceIndex() -> Int? {
