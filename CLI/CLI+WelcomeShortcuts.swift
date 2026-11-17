@@ -20,7 +20,8 @@ extension ProgramaCLI {
         defer { client.close() }
         guard (try? client.connect()) != nil,
               (try? authenticateClientIfNeeded(client, explicitPassword: explicitPassword, socketPath: socketPath)) != nil,
-              let result = try? client.sendV2(method: V2MethodNames.shortcutsList),
+              // Welcome runs automatically in new terminals, so a busy app must not stall it.
+              let result = try? client.sendV2(method: V2MethodNames.shortcutsList, receiveTimeout: 1.0),
               let rows = result["shortcuts"] as? [[String: Any]] else { return [:] }
         var bindings: [String: String] = [:]
         for row in rows {

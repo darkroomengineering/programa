@@ -124,7 +124,9 @@ final class SocketClient {
     ///   larger than it, for commands that legitimately hold the connection open longer than
     ///   `PROGRAMA_CLI_RESPONSE_TIMEOUT_SEC`'s default (e.g. `surface.wait` with a caller-chosen
     ///   `--timeout`). Ignored (falls back to the default) when `nil` or smaller.
-    func send(command: String, minimumReceiveTimeout: TimeInterval? = nil) throws -> String {
+    /// `receiveTimeout` replaces the response timeout outright (for optional lookups that must
+    /// not stall); `minimumReceiveTimeout` only raises it.
+    func send(command: String, minimumReceiveTimeout: TimeInterval? = nil, receiveTimeout: TimeInterval? = nil) throws -> String {
         guard socketFD >= 0 else { throw CLIError(message: "Not connected") }
 
         try writeAll(
@@ -135,6 +137,7 @@ final class SocketClient {
 
         var data = Data()
         let initialReceiveTimeout: TimeInterval = {
+            if let receiveTimeout { return receiveTimeout }
             guard let minimumReceiveTimeout, minimumReceiveTimeout > Self.responseTimeoutSeconds else {
                 return Self.responseTimeoutSeconds
             }
@@ -429,12 +432,12 @@ final class SocketClient {
         return requestLine
     }
 
-    func sendV2(method: String, params: [String: Any] = [:], minimumReceiveTimeout: TimeInterval? = nil) throws -> [String: Any] {
+    func sendV2(method: String, params: [String: Any] = [:], minimumReceiveTimeout: TimeInterval? = nil, receiveTimeout: TimeInterval? = nil) throws -> [String: Any] {
         let requestLine = try Self.encodeV2RequestLine(
             method: method,
             params: Self.routedParams(params, method: method, windowId: routingWindowId)
         )
-        let raw = try send(command: requestLine, minimumReceiveTimeout: minimumReceiveTimeout)
+        let raw = try send(command: requestLine, minimumReceiveTimeout: minimumReceiveTimeout, receiveTimeout: receiveTimeout)
 
         // The server may return plain-text errors (e.g., "ERROR: Access denied ...")
         // before the JSON protocol starts. Surface these directly instead of letting
