@@ -182,6 +182,7 @@ def _close_bottom_right_via_ctrl_d(c: ProgramaClient, *, bottom_right_panel_id: 
     c.send_key_surface(bottom_right_panel_id, "ctrl-d")
     next_retry_at = time.time() + CTRL_D_RETRY_INTERVAL_S
     extra = 0
+    surface_gone = False
     deadline = time.time() + PANE_TIMEOUT_S
     last = None
 
@@ -190,15 +191,22 @@ def _close_bottom_right_via_ctrl_d(c: ProgramaClient, *, bottom_right_panel_id: 
         if _pane_count(last) == 2:
             return last
 
-        if extra < CTRL_D_MAX_EXTRA and time.time() >= next_retry_at:
-            c.send_key_surface(bottom_right_panel_id, "ctrl-d")
-            extra += 1
+        if not surface_gone and extra < CTRL_D_MAX_EXTRA and time.time() >= next_retry_at:
+            try:
+                c.send_key_surface(bottom_right_panel_id, "ctrl-d")
+                extra += 1
+            except ProgramaClientError as exc:
+                # An earlier ctrl-d already closed the surface and the layout has not caught up;
+                # there is nothing left to send to, so only the wait for two panes remains.
+                if "not_found" not in str(exc):
+                    raise
+                surface_gone = True
             next_retry_at = time.time() + CTRL_D_RETRY_INTERVAL_S
         time.sleep(POLL_S)
 
     raise ProgramaClientError(
         f"{context}: timed out collapsing back to 2 panes after ctrl-d "
-        f"(extra_ctrl_d={extra}, panel={bottom_right_panel_id}); last_layout={last}"
+        f"(extra_ctrl_d={extra}, surface_gone={surface_gone}, panel={bottom_right_panel_id}); last_layout={last}"
     )
 
 

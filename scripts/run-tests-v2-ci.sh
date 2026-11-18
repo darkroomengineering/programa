@@ -5,11 +5,12 @@ set -euo pipefail
 #
 # Optional environment, used by .github/workflows/nightly-extended-tests.yml:
 #   PROGRAMA_TESTS_V2_SUBSET_FILE   list of test basenames to run (default tests_v2/ci_subset.txt)
-#   PROGRAMA_TESTS_V2_ATTEMPTS      attempts per test before it counts as failed (default 3)
 #   PROGRAMA_TESTS_V2_KEEP_GOING=1  run every listed test and report each result instead of
 #                                   stopping at the first failure
-#   PROGRAMA_TESTS_V2_TEST_TIMEOUT  seconds one attempt may run before it is killed (default: none)
-#   PROGRAMA_TESTS_V2_RESULTS_FILE  receives one "PASS|FLAKY|FAIL|TIMEOUT <test> (attempts)" line per test
+#   PROGRAMA_TESTS_V2_TEST_TIMEOUT  seconds one test may run before it is killed (default: none)
+#   PROGRAMA_TESTS_V2_RESULTS_FILE  receives one "PASS|FAIL|TIMEOUT <test>" line per test
+#
+# Each test runs once: a test that fails fails the run.
 #
 # Unlike scripts/run-tests-v2.sh (which is guarded to only run on a disposable VM
 # and runs the entire tests_v2 suite), this script is intended to run as a
@@ -22,7 +23,6 @@ cd "$(dirname "$0")/.."
 
 RUN_TAG="ci-v2"
 SUBSET_FILE="${PROGRAMA_TESTS_V2_SUBSET_FILE:-tests_v2/ci_subset.txt}"
-ATTEMPTS="${PROGRAMA_TESTS_V2_ATTEMPTS:-3}"
 KEEP_GOING="${PROGRAMA_TESTS_V2_KEEP_GOING:-0}"
 TEST_TIMEOUT="${PROGRAMA_TESTS_V2_TEST_TIMEOUT:-}"
 RESULTS_FILE="${PROGRAMA_TESTS_V2_RESULTS_FILE:-}"
@@ -264,35 +264,20 @@ except subprocess.TimeoutExpired:
 }
 
 record_result() {
-  [ -n "$RESULTS_FILE" ] && echo "$1 $2 (attempts: $3)" >> "$RESULTS_FILE"
+  [ -n "$RESULTS_FILE" ] && echo "$1 $2" >> "$RESULTS_FILE"
   return 0
 }
 
-run_test_with_retry() {
+run_test() {
   local f="$1"
-  local attempts="$ATTEMPTS"
-  local n=1
-
-  while [ "$n" -le "$attempts" ]; do
-    echo "RUN  $f (attempt $n/$attempts)"
-    local status=0
-    run_test_once "$f" || status=$?
-    if [ "$status" -eq 0 ]; then
-      if [ "$n" -gt 1 ]; then record_result FLAKY "$(basename "$f")" "$n"; else record_result PASS "$(basename "$f")" "$n"; fi
-      return 0
-    fi
-
-    if [ "$n" -ge "$attempts" ]; then
-      if [ "$status" -eq 124 ]; then record_result TIMEOUT "$(basename "$f")" "$n"; else record_result FAIL "$(basename "$f")" "$n"; fi
-      return 1
-    fi
-
-    echo "WARN: attempt $n failed for $f; relaunching and retrying" >&2
-    echo "== relaunch (retry) =="
-    launch_and_wait
-    n=$((n + 1))
-  done
-
+  echo "RUN  $f"
+  local status=0
+  run_test_once "$f" || status=$?
+  if [ "$status" -eq 0 ]; then
+    record_result PASS "$(basename "$f")"
+    return 0
+  fi
+  if [ "$status" -eq 124 ]; then record_result TIMEOUT "$(basename "$f")"; else record_result FAIL "$(basename "$f")"; fi
   return 1
 }
 
@@ -307,7 +292,7 @@ while IFS= read -r base; do
   f="tests_v2/$base"
   if [ ! -f "$f" ]; then
     echo "ERROR: Listed test file not found: $f" >&2
-    record_result FAIL "$base" 0
+    record_result FAIL "$base"
     fail=1
     [ "$KEEP_GOING" = "1" ] || break
     continue
@@ -315,7 +300,7 @@ while IFS= read -r base; do
 
   echo "== launch ($base) =="
   launch_and_wait
-  if ! run_test_with_retry "$f"; then
+  if ! run_test "$f"; then
     echo "FAIL $f" >&2
     fail=1
     [ "$KEEP_GOING" = "1" ] || break

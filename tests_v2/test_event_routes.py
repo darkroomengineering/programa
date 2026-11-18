@@ -70,6 +70,18 @@ def _screen(client: ProgramaClient, workspace_id: str, surface_id: str) -> str:
     return str(payload.get("text") or "")
 
 
+def _screen_once_started(client: ProgramaClient, workspace_id: str, surface_id: str) -> str:
+    """The screen text, or "" while the terminal has not started yet. A new workspace's terminal
+    can start after `workspace.create` returns, and until it does `surface.read_text` fails with
+    "Terminal surface not found"; every other error still raises."""
+    try:
+        return _screen(client, workspace_id, surface_id)
+    except ProgramaClientError as exc:
+        if "Terminal surface not found" in str(exc):
+            return ""
+        raise
+
+
 class _Session:
     """Workspaces opened by the test, each with its shell ready, closed again in `close`."""
 
@@ -85,7 +97,7 @@ class _Session:
         surface_id = surfaces[0][1]
         # The prompt is drawn after shell integration reports its directory, so a directory the
         # test reports later is not overwritten by the shell's first report.
-        _wait("the shell prompt", lambda: bool(_screen(self.client, workspace_id, surface_id).strip()))
+        _wait("the shell prompt", lambda: bool(_screen_once_started(self.client, workspace_id, surface_id).strip()))
         return workspace_id, surface_id
 
     def close(self) -> None:

@@ -45,10 +45,6 @@ on:
         description: Run the idle CPU measurement job
         type: boolean
         default: true
-      v2_attempts:
-        description: Attempts per tests_v2 file; a pass on a later attempt is reported as FLAKY
-        type: string
-        default: "2"
 
 permissions:
   contents: read
@@ -201,7 +197,6 @@ jobs:
     env:
       PROGRAMA_DERIVED_DATA_DIR: ${{ github.workspace }}/.ci-derived-data-socket-integration
       V2_FILES: ${{ github.event_name == 'workflow_dispatch' && inputs.v2_files || '' }}
-      V2_ATTEMPTS: ${{ github.event_name == 'workflow_dispatch' && inputs.v2_attempts || '2' }}
       SHARD: ${{ matrix.shard }}
       SHARD_COUNT: 3
     steps:
@@ -259,7 +254,6 @@ jobs:
         if: steps.select.outputs.run == 'true'
         env:
           PROGRAMA_TESTS_V2_SUBSET_FILE: ${{ runner.temp }}/v2-subset.txt
-          PROGRAMA_TESTS_V2_ATTEMPTS: ${{ env.V2_ATTEMPTS }}
           PROGRAMA_TESTS_V2_KEEP_GOING: "1"
           PROGRAMA_TESTS_V2_TEST_TIMEOUT: "300"
           PROGRAMA_TESTS_V2_RESULTS_FILE: ${{ runner.temp }}/v2-results.txt
@@ -293,8 +287,7 @@ jobs:
           fi
           rm -f /tmp/create-virtual-display
 
-  # Its own job, not a nightly_subset.txt line: a measurement must run once, alone on
-  # the runner, with no retry that would hide a slow first attempt.
+  # Its own job, not a nightly_subset.txt line: a measurement must run alone on the runner.
   # Informational while the budget is calibrated against runner numbers (Debug build,
   # shared runner); drop continue-on-error once a few nights show a stable range.
   idle-cpu:
@@ -341,7 +334,6 @@ jobs:
         id: measure
         env:
           PROGRAMA_TESTS_V2_SUBSET_FILE: ${{ runner.temp }}/idle-cpu-subset.txt
-          PROGRAMA_TESTS_V2_ATTEMPTS: "1"
           PROGRAMA_TESTS_V2_TEST_TIMEOUT: "180"
           PROGRAMA_IDLE_CPU_RESULT_FILE: ${{ runner.temp }}/idle-cpu-result.txt
         run: |
