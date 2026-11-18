@@ -343,16 +343,28 @@ def main() -> int:
                 timeout_s=10.0,
             )
 
-            # 10. RIS clears everything.
-            _emit_held(client, surface_id, "state=working:app=ris")
-            _wait(client, workspace_id, surface_id, program_state="working")
+            # 10. RIS clears everything. A prompt would also drop `working`, so the reset runs inside
+            #     the held command: releasing the first read prints the RIS, and the second read keeps
+            #     the shell from reaching a prompt until well after the poll below gives up.
+            _run(
+                client, surface_id,
+                f"{_osc('state=working:app=ris')}; read -r -t {HOLD_S} _; {RIS}; read -r -t {HOLD_S * 3} _",
+            )
+            _wait_program_state(client, workspace_id, surface_id, "working", "case 10 working before RIS")
+            row = _surface(client, workspace_id, surface_id)
+            _must(
+                (row.get("program_status") or {}).get("state") == "working"
+                and row.get("agent_state_source") == "program",
+                f"case 10 working must be set right before RIS: {row}",
+            )
             _release_hold(client, surface_id)
-            _emit_marked(client, workspace_id, surface_id, [RIS])
             row = _poll_surface(
                 client, workspace_id, surface_id,
                 lambda s: s.get("program_status") is None, "case 10 program_status null after RIS",
             )
             _must(row.get("agent_state_source") != "program", f"case 10 source after RIS: {row}")
+            _release_hold(client, surface_id)
+            _emit_marked(client, workspace_id, surface_id, [])
 
             client.close_workspace(workspace_id)
             workspace_id = ""
