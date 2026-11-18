@@ -186,14 +186,21 @@ final class BonsplitTabDragUITests: XCTestCase {
 
         let toolbar = window.toolbars.firstMatch
         XCTAssertTrue(toolbar.waitForExistence(timeout: 5.0), "Expected the main window toolbar to exist")
-        let toolbarHeight = toolbar.frame.maxY - window.frame.minY
+        // Setup resizes the window just before it reports ready, and the sidebar measures its
+        // top inset on a later main-queue turn, so the row moves once after ready.
+        var toolbarHeight: CGFloat = 0
+        var topInset: CGFloat = 0
+        _ = waitForCondition(timeout: 5.0) {
+            toolbarHeight = toolbar.frame.maxY - window.frame.minY
+            topInset = distanceToTopEdge(of: workspaceRow, in: window)
+            return toolbarHeight > 0 && abs(topInset - (toolbarHeight + 8)) <= 4
+        }
         XCTAssertGreaterThan(toolbarHeight, 0, "Expected the toolbar to have a measurable height")
-        let topInset = distanceToTopEdge(of: workspaceRow, in: window)
         XCTAssertEqual(
             topInset,
             toolbarHeight + 8,
             accuracy: 4,
-            "Expected minimal mode to keep the sidebar workspace row below the toolbar that holds the traffic lights. window=\(window.frame) workspaceRow=\(workspaceRow.frame) topInset=\(topInset)"
+            "Expected minimal mode to keep the sidebar workspace row below the toolbar that holds the traffic lights. window=\(window.frame) workspaceRow=\(workspaceRow.frame) topInset=\(topInset) toolbarHeight=\(toolbarHeight)"
         )
     }
 
@@ -540,10 +547,22 @@ final class BonsplitTabDragUITests: XCTestCase {
         }
     }
 
+    /// Reading `isHittable` or `frame` of a missing element fails the test with a snapshot error
+    /// that hides the real assertion, so a missing control is reported with the toolbar tree.
     private func describe(_ controls: [XCUIElement]) -> String {
-        controls
-            .map { "\($0.identifier) exists=\($0.exists) hittable=\($0.isHittable) frame=\($0.frame)" }
+        var missing = false
+        let summary = controls
+            .map { control -> String in
+                guard control.exists else {
+                    missing = true
+                    return "\(control.description) exists=false"
+                }
+                return "\(control.identifier) hittable=\(control.isHittable) frame=\(control.frame)"
+            }
             .joined(separator: "; ")
+        let toolbar = XCUIApplication().windows.firstMatch.toolbars.firstMatch
+        guard missing, toolbar.exists else { return summary }
+        return summary + "\ntoolbar=\(toolbar.debugDescription)"
     }
 
     private func ensureForegroundAfterLaunch(_ app: XCUIApplication, timeout: TimeInterval) -> Bool {
