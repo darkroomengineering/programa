@@ -42,21 +42,15 @@ Windows smoke test in [windows-testing.md](windows-testing.md).
 ## ship (shipit)
 
 `ship.json` at the repository root describes Programa for
-[shipit](https://github.com/darkroomengineering/shipit), the release tool every Incubator
-app is moving to. The release still publishes through the scripts above. shipit runs beside
-them until a release made by `ship` has updated real installs:
+[shipit](https://github.com/darkroomengineering/shipit), Darkroom's release tool.
 
-- **`ship-ci` job in `release.yml`.** On the same green-main trigger and the same commit,
-  it runs `ship ci mac`: the gates and the mac lane as a dry run (preflight, then the
-  archive, sign, verify, notarize, DMG, appcast and upload plan, printed and not run).
-  shipit's `ship ci` does not publish yet, so it changes nothing users see. Nothing waits
-  on it, and a failure does not fail the release.
+- **Programa macOS dry run in shipit.** Run the workflow from shipit's Actions tab. It
+  checks out Programa's current `main` and runs `ship ci mac` without publishing.
 - **`.github/workflows/ship-windows.yml`.** Builds the Windows app as a Velopack installer
-  (`Programa-x64-setup.exe`) with an update feed (`releases.win.json`) through shipit's
-  `windows-lane.yml`. It runs only by hand from the Actions tab (tick `dry-run` to build and
-  pack without uploading) or when `ship beta windows` dispatches it. It is unsigned until
-  `windows.signing` is added to `ship.json` after Azure Artifact Signing is set up
-  ([windows-signing.md](windows-signing.md)); the lane warns about that on every run.
+  (`Programa-x64-setup.exe`) with an update feed (`releases.win.json`) from Programa's
+  checkout. It runs by hand from the Actions tab (tick `dry-run` to build and pack without
+  uploading) or when `ship beta windows` dispatches it. The Velopack lane builds unsigned
+  and requires signing support in the lane before enabling `windows.signing`.
 
 `ship.json` carries the same feed URL and Sparkle public key as the app; never change
 either. Until shipit covers the rest, these checks stay only in `release.yml` and the
