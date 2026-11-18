@@ -103,8 +103,11 @@ final class MainWindowToolbar: NSObject, NSToolbarDelegate {
 
     /// Toolbar items have no accessibility identifier of their own and AppKit leaves their
     /// buttons' empty, so UI tests could not find them; tag each button with its item's id.
+    /// A changed item set gets its buttons in the toolbar's next layout pass, which need not
+    /// have run by this turn; lay the titlebar out first so the walk sees those buttons.
     private static func identifyButtons(in window: NSWindow) {
         guard let titlebarView = window.standardWindowButton(.closeButton)?.superview else { return }
+        (titlebarView.superview ?? titlebarView).layoutSubtreeIfNeeded()
         let identifiers: [Selector: NSToolbarItem.Identifier] = [
             #selector(showNotifications(_:)): notificationsID,
             #selector(newTab(_:)): newTabID,
