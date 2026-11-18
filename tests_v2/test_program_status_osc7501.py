@@ -10,9 +10,10 @@ Wire shape asserted (plan D8): `program_status` is null or
 For a program-owned surface, done and error read as legacy `idle`.
 
 Shell prompts and `working`/`blocked`: a prompt (OSC 133;A) drops working and blocked records, so
-every case that needs `working`/`blocked` to stay visible keeps the command running with `sleep`
-until the assertions finish. Case 4 does not depend on the test shell's own integration: it prints
-the 133;A sequence itself, so it passes whether or not the shell emits one.
+every case that needs `working`/`blocked` to stay visible keeps the command running with a `read`
+until the assertions finish, then ends it with a newline. Case 4 does not depend on the test
+shell's own integration: it prints the 133;A sequence itself, so it passes whether or not the
+shell emits one.
 
 Must run against a tagged build's socket (root CLAUDE.md "Testing policy"). CI-only.
 """
@@ -40,7 +41,7 @@ from pane_resize_test_support import (  # noqa: E402
 SOCKET_PATH = os.environ.get("PROGRAMA_SOCKET", "/tmp/programa-debug.sock")
 
 WAIT_TIMEOUT_MS = 10_000
-# Long enough that a held `sleep` outlives one case's assertions; _reset sends ctrl+c before
+# Long enough that a held command outlives one case's assertions; _release_hold ends it before
 # the next case so the shell is free again.
 HOLD_S = 12
 
@@ -73,7 +74,15 @@ def _emit_held(
     client: ProgramaClient, surface_id: str, body: str, hold_s: int = HOLD_S, signed: bool = False
 ) -> None:
     """Emit one OSC 7501 and keep the command running so no prompt (133;A) drops the record."""
-    _run(client, surface_id, f"{_osc_signed(body) if signed else _osc(body)}; sleep {hold_s}")
+    _run(client, surface_id, f"{_osc_signed(body) if signed else _osc(body)}; read -r -t {hold_s} _")
+
+
+def _release_hold(client: ProgramaClient, surface_id: str) -> None:
+    """End a command `_emit_held` started. Use a newline, not ctrl+c: the held `read` takes the
+    newline whenever it starts reading. A ctrl+c can leave the shell busy for the whole hold,
+    probably when the SIGINT lands before `sleep` owns the terminal. Case 2 leaves a permission
+    prompt showing, which refuses socket writes (INC-695), so the newline passes answer_prompt."""
+    client._call("surface.send_text", {"surface_id": surface_id, "text": "\n", "answer_prompt": True})
 
 
 def _wait_program_state(client: ProgramaClient, workspace_id: str, surface_id: str, state: str, what: str) -> None:
@@ -125,10 +134,8 @@ def _poll_surface(client, workspace_id, surface_id, pred, what: str, timeout_s: 
 
 
 def _reset(client: ProgramaClient, workspace_id: str, surface_id: str) -> None:
-    """Interrupt any held command, then RIS clears every record (case 10 asserts RIS itself).
-    Case 2 leaves a permission prompt showing, which refuses socket writes (INC-695), so the
-    interrupt passes answer_prompt."""
-    client._call("surface.send_key", {"surface_id": surface_id, "key": "ctrl+c", "answer_prompt": True})
+    """End any held command, then RIS clears every record (case 10 asserts RIS itself)."""
+    _release_hold(client, surface_id)
     _emit_marked(client, workspace_id, surface_id, [RIS])
     _poll_surface(
         client, workspace_id, surface_id,
@@ -280,10 +287,9 @@ def main() -> int:
             _reset(client, workspace_id, surface_id)
             _emit_held(client, surface_id, "state=working:app=root")
             _wait(client, workspace_id, surface_id, program_state="working")
-            # Held command owns the shell; children go through a second surface-less path: wait
-            # for the hold to finish by interrupting it, then re-assert the root via a done record
-            # that survives prompts.
-            client._call("surface.send_key", {"surface_id": surface_id, "key": "ctrl+c"})
+            # Held command owns the shell; children go through a second surface-less path: end
+            # the hold, then re-assert the root via a done record that survives prompts.
+            _release_hold(client, surface_id)
             _emit_marked(client, workspace_id, surface_id, [
                 _osc("state=done:app=root"),
                 _osc("state=working:id=a"),
@@ -340,7 +346,7 @@ def main() -> int:
             # 10. RIS clears everything.
             _emit_held(client, surface_id, "state=working:app=ris")
             _wait(client, workspace_id, surface_id, program_state="working")
-            client._call("surface.send_key", {"surface_id": surface_id, "key": "ctrl+c"})
+            _release_hold(client, surface_id)
             _emit_marked(client, workspace_id, surface_id, [RIS])
             row = _poll_surface(
                 client, workspace_id, surface_id,
