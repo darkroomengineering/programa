@@ -76,6 +76,15 @@ def _emit_held(
     _run(client, surface_id, f"{_osc_signed(body) if signed else _osc(body)}; sleep {hold_s}")
 
 
+def _wait_program_state(client: ProgramaClient, workspace_id: str, surface_id: str, state: str, what: str) -> None:
+    """Wait until the root record reaches `state`. A report reaches the app in later main-queue
+    hops than its bytes reach the screen, so a marker line after it does not mean it applied."""
+    try:
+        _wait(client, workspace_id, surface_id, program_state=state)
+    except ProgramaClientError as exc:
+        raise ProgramaClientError(f"{what}: {exc}; surface: {_surface(client, workspace_id, surface_id)}") from exc
+
+
 def _emit_marked(client: ProgramaClient, workspace_id: str, surface_id: str, commands: list[str]) -> None:
     """Run commands then echo a unique marker and wait for the marker line. Proves the shell
     executed every printf before the caller asserts a negative (no change)."""
@@ -197,9 +206,11 @@ def main() -> int:
                 lambda s: s.get("program_status") is None, "case 4 working dropped by prompt",
             )
             _emit_marked(client, workspace_id, surface_id, [_osc("state=done"), PROMPT_MARK])
+            _wait_program_state(client, workspace_id, surface_id, "done", "case 4 done must survive a prompt")
             row = _surface(client, workspace_id, surface_id)
             _must((row.get("program_status") or {}).get("state") == "done", f"case 4 done must survive a prompt: {row}")
             _emit_marked(client, workspace_id, surface_id, [_osc("state=error"), PROMPT_MARK])
+            _wait_program_state(client, workspace_id, surface_id, "error", "case 4 error must survive a prompt")
             row = _surface(client, workspace_id, surface_id)
             _must((row.get("program_status") or {}).get("state") == "error", f"case 4 error must survive a prompt: {row}")
             _must(row.get("agent_state") == "idle", f"case 4 error must read as idle: {row}")
@@ -279,17 +290,22 @@ def main() -> int:
                 _osc("state=working:id=a/b"),
                 _osc("state=clear:id=a"),
             ])
+            _wait_program_state(client, workspace_id, surface_id, "done", "case 7 root must be unaffected by child ops")
             ps = _surface(client, workspace_id, surface_id).get("program_status") or {}
             _must(ps.get("state") == "done" and ps.get("app") == "root", f"case 7 root must be unaffected by child ops: {ps}")
             flood = f"for i in $(seq 1 257); do printf '{OSC}state=working:id=c%s{ST}' \"$i\"; done"
             _emit_marked(client, workspace_id, surface_id, [flood])
             _emit_marked(client, workspace_id, surface_id, [_osc("state=error:app=root")])
+            _wait_program_state(
+                client, workspace_id, surface_id, "error", "case 7 root update must still apply after 257 child records"
+            )
             ps = _surface(client, workspace_id, surface_id).get("program_status") or {}
             _must(ps.get("state") == "error", f"case 7 root update must still apply after 257 child records: {ps}")
 
             # 8. Malformed input changes nothing: control char in decoded msg, unknown state.
             _reset(client, workspace_id, surface_id)
             _emit_marked(client, workspace_id, surface_id, [_osc("state=done:app=keep")])
+            _wait_program_state(client, workspace_id, surface_id, "done", "case 8 precondition")
             before = _surface(client, workspace_id, surface_id).get("program_status") or {}
             _must(before.get("state") == "done", f"case 8 precondition: {before}")
             bad_b64 = base64.b64encode(b"bad\x07body").decode()  # decodes to a BEL control char
