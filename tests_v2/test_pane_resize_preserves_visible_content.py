@@ -103,7 +103,14 @@ def _run_once(socket_path: str) -> int:
 
             post_token = f"PROGRAMA_LOCAL_RESIZE_POST_{stamp}"
             client.send_surface(surface_id, f"echo {post_token}\n")
-            _wait_for(lambda: _scrollback_has_exact_line(client, workspace_id, surface_id, post_token), timeout_s=8.0)
+            try:
+                _wait_for(lambda: _scrollback_has_exact_line(client, workspace_id, surface_id, post_token), timeout_s=8.0)
+            except ProgramaClientError as exc:
+                try:
+                    tail: object = _surface_scrollback_lines(client, workspace_id, surface_id)[-12:]
+                except ProgramaClientError as read_exc:
+                    tail = f"<unreadable: {read_exc}>"
+                raise ProgramaClientError(f"post-resize echo never showed {post_token}; last lines: {tail}") from exc
 
             scrollback_lines = _surface_scrollback_lines(client, workspace_id, surface_id)
             _must(
@@ -112,7 +119,8 @@ def _run_once(socket_path: str) -> int:
             )
             _must(
                 post_token in scrollback_lines,
-                "terminal scrollback missing post-resize token after pane resize",
+                "terminal scrollback missing post-resize token after pane resize; "
+                f"last lines: {scrollback_lines[-12:]}",
             )
 
             client.close_workspace(workspace_id)
