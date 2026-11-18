@@ -1,16 +1,7 @@
 name: ship-windows
 
-# The Velopack installer and update feed for Windows, built by shipit's windows lane
-# (ship.json `windows`). Manual only for now: release.yml still ships programa-windows.exe
-# through the rolling reconciler. `ship beta windows` on a Mac dispatches this workflow with
-# version, build, commit and dispatch_id; run by hand with no inputs it is a whole
-# `ship beta windows` on the runner, and with dry-run it is `ship ci windows`, which builds
-# and packs unsigned and uploads nothing. dry-run defaults to false because the dispatch
-# from ship does not pass it, so tick it when trying the lane from the Actions tab.
-#
-# Signing: ship.json has no `windows.signing` block yet, so the lane ships unsigned and
-# warns on every run. Once Azure Artifact Signing exists (docs/windows-signing.md), add the
-# block; the AZURE_* repository variables below are already passed for the OIDC login.
+# Builds the Windows Velopack installer and update feed. A dispatch from ship supplies the
+# build identity and owns the tag and publish. A manual publish from main owns both.
 run-name: ship windows ${{ inputs.dispatch_id || github.sha }}
 
 on:
@@ -24,17 +15,54 @@ on:
 
 permissions:
   contents: write
-  id-token: write
 
 jobs:
   windows:
-    uses: darkroomengineering/shipit/.github/workflows/windows-lane.yml@ab6747cf4bb751c4210d77062abbcbda5bdb41b2
-    with:
-      version: ${{ inputs.version }}
-      build: ${{ inputs.build }}
-      commit: ${{ inputs.commit }}
-      dry-run: ${{ inputs.dry-run }}
-      shipit-ref: ab6747cf4bb751c4210d77062abbcbda5bdb41b2
-      azure-client-id: ${{ vars.AZURE_CLIENT_ID }}
-      azure-tenant-id: ${{ vars.AZURE_TENANT_ID }}
-      azure-subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      SHIP_DRY_RUN: ${{ inputs.dry-run }}
+      SHIP_RUN_VERSION: ${{ inputs.version }}
+      SHIP_RUN_BUILD: ${{ inputs.build }}
+      SHIP_RUN_COMMIT: ${{ inputs.commit }}
+    steps:
+      - name: Check out workflow scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: workflow
+          persist-credentials: false
+
+      - name: Check out application main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          path: app
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build and pack Windows
+        working-directory: app
+        run: bun ../workflow/scripts/ship-windows.ts build
+
+      - name: Upload release assets
+        if: ${{ !inputs.dry-run && github.ref == 'refs/heads/main' }}
+        working-directory: app
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun ../workflow/scripts/ship-windows.ts publish
+
+      - name: Keep the packages
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-lane-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/shipit-windows-*
+          if-no-files-found: ignore
