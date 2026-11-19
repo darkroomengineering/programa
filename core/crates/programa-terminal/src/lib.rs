@@ -2418,8 +2418,13 @@ mod tests {
             }
             std::thread::sleep(Duration::from_millis(50));
         }
+        // TEMP can be a short 8.3 path (CI runners: RUNNER~1) while PowerShell reports the long one.
+        let real = |path: &str| {
+            std::fs::canonicalize(path).map(|path| path.to_string_lossy().to_lowercase())
+        };
         assert!(
-            cwd.eq_ignore_ascii_case(&directory),
+            cwd.eq_ignore_ascii_case(&directory)
+                || (real(&cwd).is_ok() && real(&cwd).ok() == real(&directory).ok()),
             "reported {cwd:?}, expected {directory:?}"
         );
         assert!(unsafe { programa_terminal_cwd_generation(session.0) } >= 1);

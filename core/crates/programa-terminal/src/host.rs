@@ -15,6 +15,9 @@
 //! Output and input use separate connections: Windows serializes reads and writes on one
 //! synchronous handle, so a blocked read would hold up a write.
 
+// The server is Windows-only; elsewhere only the client half and the replay buffer are used.
+#![cfg_attr(not(windows), allow(dead_code))]
+
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write};

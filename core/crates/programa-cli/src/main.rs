@@ -2669,6 +2669,8 @@ mod tests {
 
     #[test]
     fn storage_clean_takes_repeated_items_and_paths() {
+        // An absolute path on the platform running the tests, so it is passed through as given.
+        let path = if cfg!(windows) { r"C:\w\one" } else { "/w/one" };
         let clean = request(&[
             "storage",
             "clean",
@@ -2678,7 +2680,7 @@ mod tests {
             "packages.npm",
             "--item=packages.pnpm",
             "--path",
-            r"C:\w\one",
+            path,
             "--now",
         ]);
         assert_eq!(clean.command.method(), "storage.clean");
@@ -2693,7 +2695,7 @@ mod tests {
             clean.params["items"],
             json!(["packages.npm", "packages.pnpm"])
         );
-        assert_eq!(clean.params["paths"], json!([r"C:\w\one"]));
+        assert_eq!(clean.params["paths"], json!([path]));
         // Without a cache flag, no cache is cleaned.
         assert_eq!(
             request(&["storage", "clean"]).params["categories"],
