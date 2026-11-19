@@ -37,6 +37,13 @@ public sealed partial class MainWindow
     {
         var shells = _terminals.Values.Where(terminal => terminal.ShellPid != 0).GroupBy(terminal => terminal.ShellPid).ToDictionary(group => group.Key, group => group.First());
         var shellPids = shells.Keys.ToHashSet();
+        // An agent registered with workspace.set_agent_pid counts as its workspace's focused tab, as
+        // macOS scans its ports even when it runs outside the terminal's own processes.
+        var agents = SidebarMetadata.AgentProcesses()
+            .Select(item => (Pid: (uint)item.Pid, Workspace: _snapshot.Workspaces.FirstOrDefault(workspace => workspace.Id == item.WorkspaceId)))
+            .Where(item => item.Workspace?.SelectedPane is not null && !shellPids.Contains(item.Pid))
+            .GroupBy(item => item.Pid).ToDictionary(group => group.Key, group => group.First().Workspace!);
+        shellPids.UnionWith(agents.Keys);
         var processes = ProcessTree.Snapshot();
         var ports = new List<PortEntry>();
         var orphans = new Dictionary<uint, List<int>>();
@@ -46,9 +53,11 @@ public sealed partial class MainWindow
             var command = processes.TryGetValue(pid, out var process) ? Path.GetFileNameWithoutExtension(process.Name) : string.Empty;
             if (ProcessTree.OwningShell(pid, processes, shellPids) is var shell and not 0)
             {
-                var terminal = shells[shell];
-                ports.Add(new PortEntry(port, pid, command, terminal.WorkspaceId, terminal.SurfaceId));
-                var workspace = _snapshot.Workspaces.FirstOrDefault(item => item.Id == terminal.WorkspaceId);
+                var (workspaceId, surfaceId) = shells.TryGetValue(shell, out var terminal)
+                    ? (terminal.WorkspaceId, terminal.SurfaceId)
+                    : (agents[shell].Id, agents[shell].SelectedPane!.SelectedSurfaceId);
+                ports.Add(new PortEntry(port, pid, command, workspaceId, surfaceId));
+                var workspace = _snapshot.Workspaces.FirstOrDefault(item => item.Id == workspaceId);
                 _portOwners[pid] = (command, workspace is null ? string.Empty : WorkspaceTitle(workspace), null);
             }
             // Only the same program under the same pid counts; a reused pid is someone else's.

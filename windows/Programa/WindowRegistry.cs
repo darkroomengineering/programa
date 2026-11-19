@@ -491,6 +491,14 @@ internal static class WindowRegistry
             case "agent.task.start" or "agent.task.update" or "agent.task.finish" or "agent.task.finish_session" or "agent.task.list":
                 return Task.FromResult<object?>(Helpers.FromControl(method, p, id => OwnerOfWorkspace(id) is not null,
                     (workspace, surface) => OwnerOfWorkspace(workspace)?.WorkspaceHasSurface(workspace, surface) == true, DateTimeOffset.UtcNow));
+            case "surface.resolve_tty":
+            {
+                // Only the tab's ids, never the terminal list (macOS v2SurfaceResolveTTY).
+                var tty = TelemetryControl.NormalizedTty(Text(p, "tty")) ?? throw new ControlException("invalid_params", "Missing or invalid tty");
+                var found = Open.Select(window => window.SurfaceWithTty(tty)).FirstOrDefault(item => item is not null)
+                    ?? throw new ControlException("not_found", "No terminal surface has that tty", new { tty });
+                return Task.FromResult<object?>(new { workspace_id = found.WorkspaceId, surface_id = found.SurfaceId });
+            }
             case "system.tree":
                 return Task.FromResult<object?>(Tree(p));
             case "app.reload_config":

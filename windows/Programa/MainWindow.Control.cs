@@ -27,7 +27,7 @@ public sealed partial class MainWindow
         .. SidebarMetadata.Methods, "workspace.sidebar_state", "workspace.reset_sidebar",
         .. PaneControl.Methods, .. SurfaceActionControl.Methods,
         "snapshot.list", "snapshot.restore", "agent.spawn", "agent.detection.list", "agent.detection.classify",
-        .. SystemControl.Methods,
+        .. SystemControl.Methods, .. TelemetryControl.Methods,
     ];
 
     /// <summary>Runs one request routed to this window (<see cref="WindowRegistry"/> owns the pipe) on
@@ -112,6 +112,7 @@ public sealed partial class MainWindow
         _ when PaneControl.Methods.Contains(method) => PaneFromControl(method, p),
         _ when SurfaceActionControl.Methods.Contains(method) => SurfaceActionFromControl(method, p),
         _ when SystemControl.Methods.Contains(method) => SystemFromControl(method, p),
+        _ when TelemetryControl.Methods.Contains(method) => TelemetryFromControl(method, p),
         _ => throw new ControlException("method_not_found", $"{method} is not available on Windows yet."),
     };
 

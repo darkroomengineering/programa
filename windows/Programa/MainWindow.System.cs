@@ -113,9 +113,8 @@ public sealed partial class MainWindow
     {
         var helpers = Helpers.Of(workspace.Id).Concat(Helpers.InWorkspace(workspace.Id)).DistinctBy(helper => helper.Id).ToList();
         var focusedSurface = workspace.SelectedPane?.SelectedSurfaceId;
-        var pullRequest = PullRequestKey(workspace) is { } key && _pullRequests.GetValueOrDefault(key) is { } found
-            ? new { number = found.Number, label = "PR", url = found.Url, status = found.State, branch = key.Branch, checks = (string?)null }
-            : null;
+        static object? Pr(ReportedPullRequest? pr) => pr is null ? null : new { number = pr.Number, label = pr.Label, url = pr.Url, status = pr.State, branch = pr.Branch, checks = pr.Checks };
+        var pullRequest = Pr(PullRequestFor(workspace));
         var states = TerminalsOf(workspace).Select(terminal => terminal.AgentState).Where(state => state.State is not null).ToList();
         var worst = states.OrderBy(state => state.State switch { "blocked" => 0, "working" => 1, _ => 2 }).FirstOrDefault();
         var order = 0;
@@ -134,12 +133,12 @@ public sealed partial class MainWindow
                     {
                         id = surface.Id, index = order++, type = SurfaceType(surface.Id), title = titles.GetValueOrDefault(surface.Id) ?? string.Empty,
                         focused = surface.Id == focusedSurface, selected = surface.Id == pane.SelectedSurfaceId, selected_in_pane = surface.Id == pane.SelectedSurfaceId,
-                        pane_id = pane.Id, index_in_pane = inPane, tty = (string?)null,
+                        pane_id = pane.Id, index_in_pane = inPane, tty = _ttyNames.GetValueOrDefault(surface.Id),
                         current_directory = terminal?.WorkingDirectory ?? _restore.GetValueOrDefault(surface.Id)?.Cwd ?? _restorePanels.GetValueOrDefault(surface.Id),
-                        branch = _branches.GetValueOrDefault(surface.Id), agent_state = state, agent_state_source = source, shell_state = (string?)null,
+                        branch = _branches.GetValueOrDefault(surface.Id), agent_state = state, agent_state_source = source, shell_state = _shellStates.GetValueOrDefault(surface.Id),
                         program_status = terminal?.ProgramStatusJson,
                         helpers = helpers.Where(helper => helper.SurfaceId == surface.Id).Select(helper => helper.Json()).ToList(),
-                        pull_request = pullRequest,
+                        pull_request = _reportedPullRequests.TryGetValue(surface.Id, out var reported) ? Pr(reported) : pullRequest,
                     };
                 }).ToList(),
             };

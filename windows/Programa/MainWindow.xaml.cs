@@ -983,6 +983,11 @@ public sealed partial class MainWindow : Window
             _tabItems.Remove(id);
             _lastStatusState.Remove(id);
             _branches.Remove(id);
+            _shellStates.Remove(id);
+            _ttyNames.Remove(id);
+            _reportedDirty.Remove(id);
+            _reportedPullRequests.Remove(id);
+            _reportedPorts.Remove(id);
         }
         foreach (var id in _panels.Keys.Where(id => !alive.Contains(id)).ToArray())
         {

@@ -64,7 +64,7 @@ public sealed partial class MainWindow
         var focusedId = workspace.SelectedPane?.SelectedSurfaceId;
         var focusedCwd = focusedId is null ? null : _terminals.GetValueOrDefault(focusedId)?.WorkingDirectory;
         var branch = focusedId is null ? null : _branches.GetValueOrDefault(focusedId);
-        var pullRequest = PullRequestKey(workspace) is { } key ? _pullRequests.GetValueOrDefault(key) : null;
+        var pullRequest = PullRequestFor(workspace);
         return new
         {
             workspace_id = workspace.Id,
@@ -73,9 +73,9 @@ public sealed partial class MainWindow
                 ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             focused_cwd = focusedCwd,
             focused_surface_id = focusedId,
-            git_branch = branch is null ? null : new { branch, dirty = (bool?)null },
-            pull_request = pullRequest is null ? null : new { number = pullRequest.Number, label = "PR", url = pullRequest.Url, state = pullRequest.State, branch, checks = (string?)null },
-            ports = _ports.Where(entry => entry.WorkspaceId == workspace.Id).Select(entry => entry.Port).Distinct().Order().ToList(),
+            git_branch = branch is null ? null : new { branch, dirty = focusedId is null ? null : (bool?)(_reportedDirty.TryGetValue(focusedId, out var dirty) ? dirty : null) },
+            pull_request = pullRequest is null ? null : new { number = pullRequest.Number, label = pullRequest.Label, url = pullRequest.Url, state = pullRequest.State, branch = pullRequest.Branch ?? branch, checks = pullRequest.Checks },
+            ports = WorkspacePorts(workspace),
             progress = metadata?.Progress is { } progress ? new { value = progress.Value, label = progress.Label } : null,
             status_entries = metadata?.StatusInOrder().Select(SidebarMetadata.StatusJson).ToList() ?? [],
             metadata_blocks = metadata?.BlocksInOrder().Select(SidebarMetadata.BlockJson).ToList() ?? [],

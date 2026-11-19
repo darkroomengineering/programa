@@ -54,14 +54,14 @@ public sealed partial class MainWindow
 
     private void UpdatePullRequestLine(WorkspaceSnapshot workspace, HyperlinkButton link)
     {
-        var pullRequest = PullRequestKey(workspace) is { } key ? _pullRequests.GetValueOrDefault(key) : null;
+        var pullRequest = PullRequestFor(workspace);
         if (pullRequest is null)
         {
             link.Visibility = Visibility.Collapsed;
             return;
         }
         var state = Localizer.Get(pullRequest.State switch { "open" => "PullRequestOpen", "merged" => "PullRequestMerged", _ => "PullRequestClosed" });
-        ((TextBlock)link.Content).Text = $"PR #{pullRequest.Number} {state}";
+        ((TextBlock)link.Content).Text = $"{pullRequest.Label} #{pullRequest.Number} {state}";
         link.NavigateUri = new Uri(pullRequest.Url);
         ToolTipService.SetToolTip(link, pullRequest.Url);
         link.Visibility = Visibility.Visible;

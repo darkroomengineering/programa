@@ -294,6 +294,14 @@ public sealed partial class TerminalView : UserControl, IDisposable
         return true;
     }
 
+    /// <summary>A directory a shell reported over the socket (surface.report_pwd), as its OSC 7 would.</summary>
+    internal void ReportCwd(string path)
+    {
+        if (Cwd == path) return;
+        Cwd = path;
+        CwdChanged?.Invoke(SurfaceId);
+    }
+
     /// <summary>Redraws the terminal (surface.refresh).</summary>
     internal void Refresh() => _canvas.Invalidate();
 

@@ -14,6 +14,8 @@ internal sealed class WorkspaceMetadata
     internal readonly Dictionary<string, StatusEntry> Status = new(StringComparer.Ordinal);
     internal readonly List<LogEntry> Log = [];
     internal readonly Dictionary<string, MetadataBlock> Blocks = new(StringComparer.Ordinal);
+    /// <summary>Agent processes by status key (workspace.set_agent_pid, set_status pid): the port scan looks under them too.</summary>
+    internal readonly Dictionary<string, int> AgentPids = new(StringComparer.Ordinal);
     internal SidebarProgress? Progress;
     /// <summary>Bumps on every change, so a sidebar row rebuilds its lines only then.</summary>
     internal int Version;
@@ -43,6 +45,7 @@ internal static class SidebarMetadata
         "workspace.log", "workspace.clear_log", "workspace.list_log",
         "workspace.set_progress", "workspace.clear_progress",
         "workspace.report_meta_block", "workspace.clear_meta_block", "workspace.list_meta_blocks",
+        "workspace.set_agent_pid", "workspace.clear_agent_pid",
     ];
 
     internal static readonly string[] Levels = ["info", "progress", "success", "warning", "error"];
@@ -89,9 +92,7 @@ internal static class SidebarMetadata
                         throw Invalid("Invalid url — expected http(s) URL");
                     url = Limit(parsed.AbsoluteUri, 4 * 1024, "url");
                 }
-                // ponytail: the pid is checked as on macOS, but Windows finds agent ports from the shell's process tree.
-                if (Present(p, "pid") && !(p.GetProperty("pid").TryGetInt32(out var pid) && pid >= 1))
-                    throw Invalid("pid must be an integer from 1 through 2147483647");
+                var pid = Pid(p, required: false);
                 var entry = new StatusEntry(key, value, icon, color, url, priority, format, now);
                 // The same entry again keeps its place (macOS shouldReplaceStatusEntry).
                 if (metadata.Status.GetValueOrDefault(key) is not { } current || current with { At = now } != entry)
@@ -101,12 +102,27 @@ internal static class SidebarMetadata
                     metadata.Status[key] = entry;
                     Touch(workspaceId, metadata);
                 }
+                if (pid is { } agent) SetAgentPid(metadata, key, agent);
                 return new { workspace_id = workspaceId, key, value };
             }
             case "workspace.clear_status":
             {
                 var key = Trimmed(p, "key") ?? throw Invalid("Missing key");
                 if (metadata.Status.Remove(key)) Touch(workspaceId, metadata);
+                metadata.AgentPids.Remove(key);
+                return new { workspace_id = workspaceId, key };
+            }
+            case "workspace.set_agent_pid":
+            {
+                var key = Key(p);
+                var pid = Pid(p, required: true)!.Value;
+                SetAgentPid(metadata, key, pid);
+                return new { workspace_id = workspaceId, key, pid };
+            }
+            case "workspace.clear_agent_pid":
+            {
+                var key = Key(p);
+                metadata.AgentPids.Remove(key);
                 return new { workspace_id = workspaceId, key };
             }
             case "workspace.list_status":
@@ -194,6 +210,23 @@ internal static class SidebarMetadata
         }
         throw new ControlException("method_not_found", $"{method} is not a sidebar method.");
     }
+
+    internal const int MaxAgentPids = 128;
+
+    private static void SetAgentPid(WorkspaceMetadata metadata, string key, int pid)
+    {
+        if (metadata.AgentPids.ContainsKey(key) || metadata.AgentPids.Count < MaxAgentPids) metadata.AgentPids[key] = pid;
+    }
+
+    private static int? Pid(JsonElement p, bool required)
+    {
+        if (!Present(p, "pid")) return required ? throw Invalid("pid must be an integer from 1 through 2147483647") : null;
+        return p.GetProperty("pid").TryGetInt32(out var pid) && pid >= 1 ? pid : throw Invalid("pid must be an integer from 1 through 2147483647");
+    }
+
+    /// <summary>Every agent process a workspace registered, for the port scan.</summary>
+    internal static IEnumerable<(string WorkspaceId, int Pid)> AgentProcesses() =>
+        Workspaces.SelectMany(item => item.Value.AgentPids.Values.Select(pid => (item.Key, pid)));
 
     internal static object StatusJson(StatusEntry entry) =>
         new { key = entry.Key, value = entry.Value, icon = entry.Icon, color = entry.Color, url = entry.Url, priority = entry.Priority, format = entry.Format };

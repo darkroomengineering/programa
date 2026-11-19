@@ -112,6 +112,31 @@ public sealed class SidebarMetadataTests
     }
 
     [TestMethod]
+    public void AgentPidsComeWithStatusEntriesOrOnTheirOwnAndFeedThePortScan()
+    {
+        Call("workspace.set_status", new { key = "claude_code", value = "Running", pid = 4242 });
+        Call("workspace.set_agent_pid", new { key = "codex", pid = 777 }, workspace: "ws-2");
+        CollectionAssert.AreEquivalent(new[] { ("ws-1", 4242), ("ws-2", 777) }, SidebarMetadata.AgentProcesses().ToArray());
+        Assert.AreEqual("pid must be an integer from 1 through 2147483647", Error("workspace.set_agent_pid", new { key = "x", pid = 0 }));
+        Assert.AreEqual("pid must be an integer from 1 through 2147483647", Error("workspace.set_agent_pid", new { key = "x" }));
+        // Clearing the status entry forgets its process too.
+        Call("workspace.clear_status", new { key = "claude_code" });
+        Call("workspace.clear_agent_pid", new { key = "codex" }, workspace: "ws-2");
+        Assert.AreEqual(0, SidebarMetadata.AgentProcesses().Count());
+    }
+
+    [TestMethod]
+    public void TtysAndShellStatesReadAsOnMacOS()
+    {
+        Assert.AreEqual("ttys004", TelemetryControl.NormalizedTty(" /dev/ttys004 "));
+        Assert.AreEqual("conpty-1", TelemetryControl.NormalizedTty("conpty-1"));
+        Assert.IsNull(TelemetryControl.NormalizedTty("not a tty"));
+        Assert.IsNull(TelemetryControl.NormalizedTty("  "));
+        Assert.AreEqual(("prompt", "running", "unknown"), (TelemetryControl.ShellState("Idle"), TelemetryControl.ShellState(" busy "), TelemetryControl.ShellState("clear")));
+        Assert.IsNull(TelemetryControl.ShellState("sleeping"));
+    }
+
+    [TestMethod]
     public void ASessionKeepsTheLogAndProgressButNotStatusEntries()
     {
         Call("workspace.set_status", new { key = "claude_code", value = "Running" });
