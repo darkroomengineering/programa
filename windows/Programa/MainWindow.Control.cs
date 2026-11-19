@@ -21,7 +21,7 @@ public sealed partial class MainWindow
         "worktree.create", "worktree.open", "worktree.remove", "worktree.list",
         "layout.save", "layout.apply", "layout.list",
         "agent.task.start", "agent.task.update", "agent.task.finish", "agent.task.finish_session", "agent.task.list",
-        "surface.resume_agent", "workspace.action", "agent.event", "agent.needs_input", "surface.wait", "agent.prompt", "subscribe", "unsubscribe", "routes.list",
+        "surface.resume_agent", "workspace.action", "agent.event", "agent.needs_input", "surface.wait", "agent.prompt", "subscribe", "unsubscribe", "notification.claim_banners", "auth.login", "app.browsers", "routes.list",
         "markdown.open", "review.open", "review.refresh", "review.comment.add", "review.comment.remove", "review.comment.list", "review.send_comments",
         "window.list", "window.current", "window.create", "window.focus", "window.close", "workspace.move_to_window", "surface.move",
         .. SidebarMetadata.Methods, "workspace.sidebar_state", "workspace.reset_sidebar",

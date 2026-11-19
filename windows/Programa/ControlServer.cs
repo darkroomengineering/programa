@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
@@ -96,6 +97,8 @@ internal sealed class ControlServer : IDisposable
             finally
             {
                 if (connection.Subscription is { } subscription) EventHub.Remove(subscription);
+                // However the client goes, its banner claim goes with it.
+                BannerClaims.TryRemove(connection, out _);
             }
         }
     }
@@ -127,6 +130,10 @@ internal sealed class ControlServer : IDisposable
             {
                 "subscribe" => Subscribe(parameters, connection),
                 "unsubscribe" => Unsubscribe(connection),
+                "notification.claim_banners" => ClaimBanners(parameters, connection),
+                // No password mode on Windows: the pipe only lets this user in.
+                "auth.login" => new { authenticated = true, required = false },
+                "app.browsers" => Browsers.Report(),
                 _ => await _handler(method, parameters),
             };
             return JsonSerializer.Serialize(new { id, ok = true, result = result ?? new { } }, Json);
@@ -170,6 +177,31 @@ internal sealed class ControlServer : IDisposable
         connection.Subscription = subscription;
         EventHub.Add(subscription);
         return new { subscription_id = subscription.Id, classes = subscription.Classes, surface_ids = subscription.SurfaceIds, max_queued_events = EventHub.MaxQueuedEvents };
+    }
+
+    /// <summary>The banner kinds each open connection shows itself (`notification.claim_banners`).</summary>
+    private static readonly ConcurrentDictionary<Connection, string[]> BannerClaims = new();
+
+    /// <summary>Whether an open connection shows <paramref name="kind"/>'s banner itself.</summary>
+    internal static bool BannerClaimed(string kind) => BannerClaims.Values.Any(kinds => kinds.Contains(kind));
+
+    /// <summary>`notification.claim_banners`: replaces this connection's claim; `[]` releases it.</summary>
+    private static object ClaimBanners(JsonElement p, Connection? connection)
+    {
+        const string valid = "needs_input";
+        if (!p.TryGetProperty("kinds", out var given) || given.ValueKind != JsonValueKind.Array)
+            throw new ControlException("invalid_params", $"kinds must be an array of: {valid}");
+        var kinds = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var item in given.EnumerateArray())
+        {
+            var name = item.ValueKind == JsonValueKind.String ? item.GetString()! : item.GetRawText();
+            if (name != valid) throw new ControlException("invalid_params", $"Unknown notification kind '{name}' -- use: {valid}");
+            kinds.Add(name);
+        }
+        if (connection is null) throw new ControlException("unavailable", "notification.claim_banners needs a connection that stays open.");
+        if (kinds.Count == 0) BannerClaims.TryRemove(connection, out _);
+        else BannerClaims[connection] = [.. kinds];
+        return new { claimed = kinds };
     }
 
     private static object Unsubscribe(Connection? connection)

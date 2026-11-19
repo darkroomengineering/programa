@@ -203,7 +203,7 @@ public sealed partial class MainWindow
         // Routes first: a notify route can stand in for the built-in banner (the entry is still listed).
         var routeBanner = RouteNeedsInput(terminal, p, kind, provider, title, subtitle, body);
         var looking = IsLookingAt(surfaceId);
-        _notifications.Post(workspace.Id, surfaceId, title, string.Join(" — ", new[] { subtitle, body }.Where(part => !string.IsNullOrEmpty(part))), toast: !looking && !routeBanner);
+        _notifications.Post(workspace.Id, surfaceId, title, string.Join(" — ", new[] { subtitle, body }.Where(part => !string.IsNullOrEmpty(part))), toast: !looking && !routeBanner && !ControlServer.BannerClaimed("needs_input"));
         if (looking) _notifications.MarkRead(new HashSet<string>(StringComparer.Ordinal) { surfaceId });
         var frame = new Dictionary<string, object?> { ["event"] = "needs_input", ["workspace_id"] = workspace.Id, ["surface_id"] = surfaceId };
         foreach (var (key, value) in new[] { ("kind", Text(p, "kind")), ("provider", provider), ("title", title), ("subtitle", subtitle), ("body", body) })

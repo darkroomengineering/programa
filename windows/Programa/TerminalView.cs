@@ -633,6 +633,12 @@ public sealed partial class TerminalView : UserControl, IDisposable
             if (McpConfig.FilePath is { } mcp) environment["PROGRAMA_MCP_CONFIG"] = mcp;
             if (McpConfig.HooksPath is { } hooks) environment["PROGRAMA_CLAUDE_SETTINGS"] = hooks;
         }
+        // The default browser, resolved each time a terminal starts, as on macOS; unset when unknown.
+        if (Browsers.Default() is { } browser)
+        {
+            environment["PROGRAMA_DEFAULT_BROWSER"] = browser.Key;
+            environment["PROGRAMA_DEFAULT_BROWSER_BUNDLE_ID"] = browser.ProgId;
+        }
         // A layout's per-terminal variables (docs/programa-json.md, surfaces[].env).
         if (_extraEnvironment is not null) foreach (var (key, value) in _extraEnvironment) environment[key] = value;
         var directory = Cwd ?? _initialDirectory;

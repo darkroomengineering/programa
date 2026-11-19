@@ -200,8 +200,12 @@ internal static class RouteEngine
         var body = string.Join(" — ", new[] { notify.Subtitle, notify.Body }.OfType<string>().Select(text => Routes.Render(text, routeEvent.Fields)).Where(text => text.Length > 0));
         var window = (routeEvent.SurfaceId is { } surface ? WindowRegistry.OwnerOfSurface(surface) : null)
             ?? (routeEvent.WorkspaceId is { } workspace ? WindowRegistry.OwnerOfWorkspace(workspace) : null);
-        if (window is null || !window.PostRouteNotification(routeEvent.WorkspaceId!, routeEvent.SurfaceId, title, body))
-            WindowRegistry.Notifications.ShowAppToast(title, body);
+        // A needs_input call's notification honours notification.claim_banners, as the built-in one does.
+        var banner = !(routeEvent.Topic.Contains("/needs_input/", StringComparison.Ordinal) && ControlServer.BannerClaimed("needs_input"));
+        if (window is null || !window.PostRouteNotification(routeEvent.WorkspaceId!, routeEvent.SurfaceId, title, body, banner))
+        {
+            if (banner) WindowRegistry.Notifications.ShowAppToast(title, body);
+        }
     }
 
     // ---- review

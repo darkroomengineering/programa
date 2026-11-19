@@ -76,13 +76,13 @@ public sealed partial class MainWindow
     }
 
     /// <summary>A notify route's notification for a workspace of this window; false when it is gone.</summary>
-    internal bool PostRouteNotification(string workspaceId, string? surfaceId, string title, string body)
+    internal bool PostRouteNotification(string workspaceId, string? surfaceId, string title, string body, bool banner = true)
     {
         if (_snapshot.Workspaces.FirstOrDefault(workspace => workspace.Id == workspaceId) is not { } workspace) return false;
         var surface = surfaceId is not null && OwnsSurface(surfaceId) ? surfaceId : workspace.SelectedPane?.SelectedSurfaceId;
         if (surface is null) return false;
         var looking = IsLookingAt(surface);
-        _notifications.Post(workspaceId, surface, title, body, toast: !looking);
+        _notifications.Post(workspaceId, surface, title, body, toast: banner && !looking);
         if (looking) _notifications.MarkRead(new HashSet<string>(StringComparer.Ordinal) { surface });
         return true;
     }
