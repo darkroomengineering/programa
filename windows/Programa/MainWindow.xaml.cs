@@ -626,6 +626,7 @@ public sealed partial class MainWindow : Window
         paneGrid.Children.Add(ring);
         Grid.SetRow(host, 1);
         Grid.SetRow(ring, 1);
+        AddDropTarget(paneGrid, host, workspaceId, pane.Id);
         // Focus in the terminal or on a tab makes this the workspace's selected pane.
         paneGrid.GotFocus += (_, args) => OnPaneGotFocus(tabs, args);
         _paneElements[pane.Id] = paneGrid;

@@ -81,6 +81,30 @@ internal static class PaneGeometry
         return new Resized(candidate.Split.Id!, old, Math.Clamp(old + (paneFirst ? 1 : -1) * amount / axis, 0.1, 0.9));
     }
 
+    /// <summary>Where a tab dropped on a pane goes, as bonsplit's zoneForLocation: the outer quarter
+    /// (at least 80 DIPs) of each side splits that way, left and right first at the corners; the
+    /// middle moves the tab into the pane.</summary>
+    internal static string DropZone(double x, double y, double width, double height)
+    {
+        var across = Math.Max(80, width * 0.25);
+        var down = Math.Max(80, height * 0.25);
+        return x < across ? "left" : x > width - across ? "right" : y < down ? "up" : y > height - down ? "down" : "center";
+    }
+
+    /// <summary>The placeholder a drop zone shows: the half the tab would take, or the whole pane, 4 DIPs in.</summary>
+    internal static Frame DropPlaceholder(string zone, double width, double height)
+    {
+        const double inset = 4;
+        return zone switch
+        {
+            "left" => new(inset, inset, width / 2 - inset, height - 2 * inset),
+            "right" => new(width / 2, inset, width / 2 - inset, height - 2 * inset),
+            "up" => new(inset, inset, width - 2 * inset, height / 2 - inset),
+            "down" => new(inset, height / 2, width - 2 * inset, height / 2 - inset),
+            _ => new(inset, inset, width - 2 * inset, height - 2 * inset),
+        };
+    }
+
     /// <summary>Each split's ratio for equal panes: a split with N1 panes before and N2 after sits at
     /// N1/(N1+N2). With <paramref name="orientation"/> (macOS name), only splits of it.</summary>
     internal static List<(string SplitId, double Ratio)> Equalized(LayoutSnapshot node, string? orientation)

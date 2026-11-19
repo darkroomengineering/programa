@@ -80,6 +80,8 @@ Commands:
                                         rename, clear_name, pin, unpin, mark_read, mark_unread,
                                         new_terminal_right, close_left, close_right, close_others
   rename-tab [--tab ID] [--] <TITLE>
+  drag-surface-to-split --surface ID <left|right|up|down>
+                                        Move a tab into a new split beside its pane
   set-agent-state <working|blocked|idle|clear> [--surface ID] [--source NAME]
   list-ports                            List ports that terminals listen on
   stop-port <PORT> | --pid PID          Stop the process listening on a port
@@ -235,10 +237,11 @@ enum Command {
     ReorderSurface,
     TabAction,
     RenameTab,
+    DragSurfaceToSplit,
 }
 
 impl Command {
-    const ALL: [Command; 81] = [
+    const ALL: [Command; 82] = [
         Command::Ping,
         Command::Identify,
         Command::Tree,
@@ -320,6 +323,7 @@ impl Command {
         Command::ReorderSurface,
         Command::TabAction,
         Command::RenameTab,
+        Command::DragSurfaceToSplit,
     ];
 
     fn from_name(name: &str) -> Option<Command> {
@@ -409,6 +413,7 @@ impl Command {
             Command::ReorderSurface => "reorder-surface",
             Command::TabAction => "tab-action",
             Command::RenameTab => "rename-tab",
+            Command::DragSurfaceToSplit => "drag-surface-to-split",
         }
     }
 
@@ -494,6 +499,7 @@ impl Command {
             Command::ReorderSurface => "surface.reorder",
             Command::TabAction => "tab.action",
             Command::RenameTab => "tab.action",
+            Command::DragSurfaceToSplit => "surface.drag_to_split",
         }
     }
 }
@@ -1429,7 +1435,8 @@ fn build_params(
         | Command::SurfaceHealth
         | Command::ReorderSurface
         | Command::TabAction
-        | Command::RenameTab => return tabs::params(command, args, env),
+        | Command::RenameTab
+        | Command::DragSurfaceToSplit => return tabs::params(command, args, env),
         Command::Ping
         | Command::Tree
         | Command::ListWorkspaces
@@ -2346,7 +2353,8 @@ fn render(command: Command, result: &Value) -> String {
         | Command::SurfaceHealth
         | Command::ReorderSurface
         | Command::TabAction
-        | Command::RenameTab => tabs::render(command, result),
+        | Command::RenameTab
+        | Command::DragSurfaceToSplit => tabs::render(command, result),
         Command::WaitSurface | Command::PromptAgent | Command::WatchEvents => {
             format_wait(command, result)
         }

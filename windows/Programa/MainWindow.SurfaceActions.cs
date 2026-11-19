@@ -9,7 +9,7 @@ internal static class SurfaceActionControl
     internal static readonly string[] Methods =
     [
         "surface.send_key", "surface.send_paste", "surface.send_if_unchanged", "surface.clear_history",
-        "surface.trigger_flash", "surface.refresh", "surface.health", "surface.reorder", "surface.action", "tab.action",
+        "surface.trigger_flash", "surface.refresh", "surface.health", "surface.reorder", "surface.action", "tab.action", "surface.drag_to_split",
     ];
 
     internal static readonly string[] TabActions =
@@ -33,6 +33,7 @@ public sealed partial class MainWindow
         "surface.health" => HealthFromControl(p),
         "surface.reorder" => ReorderSurfaceFromControl(p),
         "surface.action" or "tab.action" => TabActionFromControl(p),
+        "surface.drag_to_split" => DragToSplitFromControl(p),
         _ => throw new ControlException("method_not_found", $"{method} is not available on Windows yet."),
     };
 

@@ -1,6 +1,7 @@
 //! Terminal input and tab commands, as on macOS (CLI/Commands/TerminalIOCommands.swift,
 //! PaneCommands.swift and runTabAction in CLI/programa.swift): send-key, clear-history,
-//! trigger-flash, refresh-surfaces, surface-health, reorder-surface, tab-action and rename-tab.
+//! trigger-flash, refresh-surfaces, surface-health, reorder-surface, tab-action, rename-tab and
+//! drag-surface-to-split.
 
 use serde_json::{Map, Value};
 
@@ -154,6 +155,30 @@ pub(crate) fn params(
             put(&mut params, "surface_id", tab);
             put(&mut params, "title", title.map(|t| t.trim().to_owned()));
         }
+        Command::DragSurfaceToSplit => {
+            let opts = parse_opts(command, args, &["--surface", "--panel"], &[])?;
+            let surface = match (opts.value("--surface"), opts.value("--panel")) {
+                (Some(_), Some(_)) => {
+                    return Err(UsageError(format!(
+                        "{name} requires exactly one of --surface or --panel"
+                    )))
+                }
+                (Some(id), None) | (None, Some(id)) => id,
+                (None, None) => return Err(UsageError(format!("{name} requires --surface <id>"))),
+            };
+            let direction = match opts.positionals.as_slice() {
+                [direction] => direction.to_lowercase(),
+                [] => return Err(UsageError(format!("{name} requires a direction"))),
+                [_, extra, ..] => {
+                    return Err(UsageError(format!("{name}: unexpected argument '{extra}'")))
+                }
+            };
+            if !["left", "right", "up", "down"].contains(&direction.as_str()) {
+                return Err(UsageError(format!("{name}: invalid direction")));
+            }
+            put(&mut params, "surface_id", Some(surface));
+            put(&mut params, "direction", Some(direction));
+        }
         _ => unreachable!("not a tab command"),
     }
     Ok(params)
@@ -210,6 +235,7 @@ pub(crate) fn render(command: Command, result: &Value) -> String {
             }
             line + "\n"
         }
+        Command::DragSurfaceToSplit => format!("OK {}\n", field(result, "pane_id")),
         _ => "OK\n".to_owned(),
     }
 }
@@ -283,6 +309,11 @@ mod tests {
                 "tab.action",
                 json!({"action": "rename", "title": "agent run", "workspace_id": "ws-env", "surface_id": "s-env"}),
             ),
+            (
+                &["drag-surface-to-split", "--surface", "s1", "LEFT"],
+                "surface.drag_to_split",
+                json!({"surface_id": "s1", "direction": "left"}),
+            ),
         ] {
             assert_eq!(
                 call(args, &env).unwrap(),
@@ -310,6 +341,29 @@ mod tests {
                 "tab-action rename requires --title <text> (or a trailing title)",
             ),
             (&["rename-tab"], "rename-tab requires a title"),
+            (
+                &["drag-surface-to-split", "right"],
+                "drag-surface-to-split requires --surface <id>",
+            ),
+            (
+                &["drag-surface-to-split", "--surface", "s"],
+                "drag-surface-to-split requires a direction",
+            ),
+            (
+                &["drag-surface-to-split", "--surface", "s", "sideways"],
+                "drag-surface-to-split: invalid direction",
+            ),
+            (
+                &[
+                    "drag-surface-to-split",
+                    "--surface",
+                    "s",
+                    "--panel",
+                    "p",
+                    "up",
+                ],
+                "drag-surface-to-split requires exactly one of --surface or --panel",
+            ),
         ] {
             assert_eq!(call(args, &[]).unwrap_err(), message);
         }
@@ -354,5 +408,9 @@ mod tests {
             "OK action=new_terminal_right tab=t workspace=w created=n\n"
         );
         assert_eq!(render(Command::ClearHistory, &json!({})), "OK\n");
+        assert_eq!(
+            render(Command::DragSurfaceToSplit, &json!({"pane_id": "p9"})),
+            "OK p9\n"
+        );
     }
 }

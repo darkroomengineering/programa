@@ -46,6 +46,22 @@ public sealed class PaneGeometryTests
     }
 
     [TestMethod]
+    public void ADropNearAnEdgeSplitsThatWayAndTheMiddleJoinsThePane()
+    {
+        // 800 x 600: the edges are 200 and 150 wide; left and right win at the corners.
+        Assert.AreEqual("left", PaneGeometry.DropZone(10, 10, 800, 600));
+        Assert.AreEqual("right", PaneGeometry.DropZone(790, 590, 800, 600));
+        Assert.AreEqual("up", PaneGeometry.DropZone(400, 100, 800, 600));
+        Assert.AreEqual("down", PaneGeometry.DropZone(400, 500, 800, 600));
+        Assert.AreEqual("center", PaneGeometry.DropZone(400, 300, 800, 600));
+        // A small pane still has 80 DIP edges.
+        Assert.AreEqual("left", PaneGeometry.DropZone(70, 100, 200, 200));
+        Assert.AreEqual(new PaneGeometry.Frame(400, 4, 396, 592), PaneGeometry.DropPlaceholder("right", 800, 600));
+        Assert.AreEqual(new PaneGeometry.Frame(4, 300, 792, 296), PaneGeometry.DropPlaceholder("down", 800, 600));
+        Assert.AreEqual(new PaneGeometry.Frame(4, 4, 792, 592), PaneGeometry.DropPlaceholder("center", 800, 600));
+    }
+
+    [TestMethod]
     public void EqualizingGivesEveryPaneTheSameShareAndCanKeepToOneOrientation()
     {
         var all = PaneGeometry.Equalized(Layout, null);
