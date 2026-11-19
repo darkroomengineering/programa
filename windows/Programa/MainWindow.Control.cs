@@ -25,6 +25,7 @@ public sealed partial class MainWindow
         "markdown.open", "review.open", "review.refresh", "review.comment.add", "review.comment.remove", "review.comment.list", "review.send_comments",
         "window.list", "window.current", "window.create", "window.focus", "window.close", "workspace.move_to_window", "surface.move",
         .. SidebarMetadata.Methods, "workspace.sidebar_state", "workspace.reset_sidebar",
+        .. PaneControl.Methods,
     ];
 
     /// <summary>Runs one request routed to this window (<see cref="WindowRegistry"/> owns the pipe) on
@@ -102,6 +103,7 @@ public sealed partial class MainWindow
         "workspace.action" => WorkspaceActionFromControl(p),
         "workspace.sidebar_state" or "workspace.reset_sidebar" => SidebarFromControl(method, p),
         _ when SidebarMetadata.Methods.Contains(method) => SidebarFromControl(method, p),
+        _ when PaneControl.Methods.Contains(method) => PaneFromControl(method, p),
         _ => throw new ControlException("method_not_found", $"{method} is not available on Windows yet."),
     };
 
@@ -213,18 +215,26 @@ public sealed partial class MainWindow
     private object SplitFromControl(JsonElement p)
     {
         var (workspace, pane, surface) = SurfaceTarget(p);
-        var direction = (Text(p, "direction") ?? "right") switch
+        return Split(workspace, pane, surface, Text(p, "direction") ?? "right", Text(p, "cwd"), Text(p, "initial_command"));
+    }
+
+    /// <summary>A new terminal beside <paramref name="surface"/>'s pane; left and up put it first. The selection stays.</summary>
+    private object Split(WorkspaceSnapshot workspace, PaneSnapshot pane, string surface, string requested, string? cwd, string? initialCommand)
+    {
+        var (direction, insertFirst) = requested.ToLowerInvariant() switch
         {
-            "right" or "left" or "vertical" => "vertical",
-            "down" or "up" or "horizontal" => "horizontal",
-            var other => throw new ControlException("invalid_params", $"direction '{other}' is not right or down."),
+            "right" or "vertical" => ("vertical", false),
+            "left" => ("vertical", true),
+            "down" or "horizontal" => ("horizontal", false),
+            "up" => ("horizontal", true),
+            var other => throw new ControlException("invalid_params", $"direction '{other}' is not left, right, up or down."),
         };
         var newPaneId = Id("pane");
         var surfaceId = Id("surface");
-        var directory = Text(p, "cwd") ?? _terminals.GetValueOrDefault(surface)?.WorkingDirectory;
-        CreateKeepingSelection(new { command = "split_pane", workspace_id = workspace.Id, pane_id = pane.Id, split_id = Id("split"), new_pane_id = newPaneId, new_surface_id = surfaceId, session_id = Id("session"), direction, ratio = 0.5 },
-            workspace.Id, surfaceId, directory, Text(p, "initial_command"));
-        return new { surface_id = surfaceId, pane_id = newPaneId, workspace_id = workspace.Id };
+        var directory = cwd ?? _terminals.GetValueOrDefault(surface)?.WorkingDirectory;
+        CreateKeepingSelection(new { command = "split_pane", workspace_id = workspace.Id, pane_id = pane.Id, split_id = Id("split"), new_pane_id = newPaneId, new_surface_id = surfaceId, session_id = Id("session"), direction, ratio = 0.5, insert_first = insertFirst },
+            workspace.Id, surfaceId, directory, initialCommand);
+        return new { surface_id = surfaceId, pane_id = newPaneId, workspace_id = workspace.Id, window_id = WindowId, type = "terminal" };
     }
 
     private void FocusSurfaceFromControl(JsonElement p)

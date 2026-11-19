@@ -24,6 +24,8 @@ public sealed partial class MainWindow : Window
     private string? _startupSettingsError;
     private bool _dialogOpen;
     private bool _projecting;
+    /// <summary>From a rebuild until its refocus: focus moving around the new tree is not a pane pick.</summary>
+    private bool _settlingFocus;
     private bool _activationLogged;
     private readonly bool _smoke;
     private bool _sidebarVisible = true;
@@ -153,6 +155,8 @@ public sealed partial class MainWindow : Window
             content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
             content.Children.Add(BuildToolbar());
             var workspace = SelectedWorkspace();
+            NoteSelectedWorkspace();
+            _layoutElement = null;
             if (workspace is not null)
             {
                 // A zoomed pane fills the workspace on its own (macOS Toggle Pane Zoom).
@@ -160,6 +164,7 @@ public sealed partial class MainWindow : Window
                 var layout = zoomed is not null ? BuildPane(workspace.Id, zoomed) : BuildLayout(workspace, workspace.Layout);
                 content.Children.Add(layout);
                 Grid.SetRow(layout, 1);
+                _layoutElement = layout;
             }
             Root.Children.Add(content);
             Grid.SetColumn(content, 1);
@@ -172,8 +177,10 @@ public sealed partial class MainWindow : Window
         RefreshUnreadIndicators();
         // Rebuilding the tree drops keyboard focus. Refocus once the new tree has been laid out,
         // unless a dialog is open and should keep it.
+        _settlingFocus = true;
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
+            _settlingFocus = false;
             if (!_dialogOpen && !_footerFlyoutOpen) ActiveTerminal()?.FocusTerminal();
         });
     }
@@ -865,12 +872,14 @@ public sealed partial class MainWindow : Window
     private void OnTabSelectionChanged(object sender, SelectionChangedEventArgs args)
     {
         if (_projecting || sender is not TabView tabs || tabs.SelectedItem is not TabViewItem { Tag: SurfaceTag tag }) return;
+        // A rebuilt TabView reports the selection it was built with as it loads; only a new tab is a pick.
+        if (_snapshot.Workspaces.FirstOrDefault(item => item.Id == tag.WorkspaceId)?.Panes.FirstOrDefault(pane => pane.Id == tag.PaneId)?.SelectedSurfaceId == tag.SurfaceId) return;
         SelectSurfaceWithoutProjection(tag, focusTerminal: true);
     }
 
     private void OnPaneGotFocus(object sender, RoutedEventArgs args)
     {
-        if (_projecting || sender is not TabView tabs || tabs.SelectedItem is not TabViewItem { Tag: SurfaceTag tag }) return;
+        if (_projecting || _settlingFocus || sender is not TabView tabs || tabs.SelectedItem is not TabViewItem { Tag: SurfaceTag tag }) return;
         if (SelectedWorkspace() is not { } workspace) return;
         if (workspace.SelectedPaneId != tag.PaneId || workspace.SelectedPane?.SelectedSurfaceId != tag.SurfaceId)
             SelectSurfaceWithoutProjection(tag, focusTerminal: false);

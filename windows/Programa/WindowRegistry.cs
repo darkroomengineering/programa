@@ -456,6 +456,15 @@ internal static class WindowRegistry
                 return Task.FromResult<object?>(new { workspace_id = workspaceId, window_id = moved.WindowId });
             case "surface.move":
                 return Task.FromResult<object?>(MoveSurfaceFromControl(p));
+            case "pane.join":
+                // surface.move of the surface (else the pane's selected tab) into target_pane_id, as on macOS.
+                var joinTarget = Text(p, "target_pane_id") ?? throw new ControlException("invalid_params", "target_pane_id is required.");
+                var joined = Text(p, "surface_id")
+                    ?? (Text(p, "pane_id") is { } fromPane
+                        ? Open.Select(window => window.SelectedSurfaceOfPane(fromPane)).FirstOrDefault(id => id is not null)
+                            ?? throw new ControlException("not_found", "Unable to resolve selected surface in source pane", new { pane_id = fromPane })
+                        : throw new ControlException("invalid_params", "Missing surface_id (or pane_id with selected surface)"));
+                return Task.FromResult<object?>(MoveSurfaceFromControl(JsonSerializer.SerializeToElement(new { surface_id = joined, pane_id = joinTarget })));
             case "debug.tab.tear_off" when BuildIdentity.Value.Contains("0.0.0-dev", StringComparison.Ordinal):
                 // As a tab drag released outside every window: a new window under the screen point.
                 var tornId = Text(p, "surface_id") ?? throw new ControlException("invalid_params", "surface_id is required.");
@@ -487,6 +496,7 @@ internal static class WindowRegistry
         var routed = (Text(p, "window_id") is { } windowId ? WindowById(windowId) : null)
             ?? (Text(p, "surface_id") is { } surfaceId ? OwnerOfSurface(surfaceId) : null)
             ?? (Text(p, "workspace_id") is { } id ? OwnerOfWorkspace(id) : null)
+            ?? (Text(p, "pane_id") is { } routedPane ? Open.FirstOrDefault(window => window.PaneWorkspace(routedPane) is not null) : null)
             ?? Current ?? Open[0];
         return routed.HandleControlAsync(method, p);
     }

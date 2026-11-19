@@ -718,6 +718,17 @@ public sealed partial class TerminalView : UserControl, IDisposable
         }
     }
 
+    /// <summary>The grid, the cell size in DIPs and the display scale, as pane.list reports them; null before the first frame.</summary>
+    internal (int Columns, int Rows, double CellWidth, double CellHeight, double Scale)? GridMetrics
+    {
+        get
+        {
+            TerminalSnapshot? snapshot;
+            lock (_snapshotGate) snapshot = _snapshot;
+            return snapshot is null ? null : (snapshot.Columns, snapshot.Rows, _cellWidth, _cellHeight, _canvas.Dpi / 96.0);
+        }
+    }
+
     private void ResizeBackend()
     {
         if (_session is null || _canvas.ActualWidth <= 0 || _canvas.ActualHeight <= 0) return;

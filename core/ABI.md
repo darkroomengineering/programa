@@ -116,7 +116,11 @@ Commands use a command tag and reject unknown fields.
     {"command":"move_surface","workspace_id":"w","source_pane_id":"p1","target_pane_id":"p2","surface_id":"s","before_surface_id":"target"}
     {"command":"move_surface","workspace_id":"w","source_pane_id":"p1","target_pane_id":"p2","surface_id":"s","before_surface_id":null}
     {"command":"split_pane","workspace_id":"w","pane_id":"p","split_id":"split","new_pane_id":"p2","new_surface_id":"s2","session_id":"session2","direction":"vertical","ratio":0.5}
+    {"command":"split_pane","workspace_id":"w","pane_id":"p","split_id":"split","new_pane_id":"p2","new_surface_id":"s2","session_id":"session2","direction":"vertical","ratio":0.5,"insert_first":true}
     {"command":"resize_split","workspace_id":"w","split_id":"split","ratio":0.6}
+
+`insert_first` (default false) puts the new pane first, a split to the left or above; `ratio`
+stays the original pane's share.
 
 Creating a workspace, surface, or split selects it and its ancestors. Selecting
 a surface also selects its pane and workspace. Closing a selected surface

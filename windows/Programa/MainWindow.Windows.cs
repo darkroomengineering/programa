@@ -154,6 +154,10 @@ public sealed partial class MainWindow
     internal string? PaneWorkspace(string paneId) =>
         _snapshot.Workspaces.FirstOrDefault(workspace => workspace.Panes.Any(pane => pane.Id == paneId))?.Id;
 
+    /// <summary>The selected tab of one of this window's panes, or null.</summary>
+    internal string? SelectedSurfaceOfPane(string paneId) =>
+        _snapshot.Workspaces.SelectMany(workspace => workspace.Panes).FirstOrDefault(pane => pane.Id == paneId)?.SelectedSurfaceId;
+
     internal string SelectedPaneOf(string workspaceId)
     {
         var workspace = _snapshot.Workspaces.FirstOrDefault(item => item.Id == workspaceId) ?? throw NotFound("workspace", workspaceId);

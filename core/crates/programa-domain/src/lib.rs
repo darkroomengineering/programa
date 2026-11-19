@@ -208,6 +208,9 @@ pub enum Command {
         session_id: String,
         direction: SplitDirection,
         ratio: f64,
+        /// The new pane goes first: a split to the left or above. `ratio` stays the original pane's share.
+        #[serde(default)]
+        insert_first: bool,
     },
     ResizeSplit {
         workspace_id: String,
@@ -671,6 +674,7 @@ impl Snapshot {
                 session_id,
                 direction,
                 ratio,
+                insert_first,
             } => {
                 validate_ratio(ratio)?;
                 validate_new_ids(self, [&split_id, &new_pane_id, &new_surface_id])?;
@@ -686,6 +690,9 @@ impl Snapshot {
                     direction,
                     ratio,
                 )?;
+                if insert_first {
+                    put_new_pane_first(&mut workspace.layout, &split_id);
+                }
                 workspace.panes.push(Pane {
                     id: new_pane_id.clone(),
                     selected_surface_id: new_surface_id.clone(),
@@ -1162,6 +1169,26 @@ fn clamped_insert_index(pane: &Pane, moved: &Surface, requested: usize) -> usize
 
 fn not_found(kind: &str, id: &str) -> DomainError {
     DomainError::new("not_found", format!("{kind} '{id}' was not found"))
+}
+
+/// Swaps the new split's children, so the new pane comes first and keeps the same share.
+fn put_new_pane_first(node: &mut LayoutNode, split_id: &str) {
+    if let LayoutNode::Split {
+        id,
+        ratio,
+        first,
+        second,
+        ..
+    } = node
+    {
+        if id == split_id {
+            std::mem::swap(first, second);
+            *ratio = 1.0 - *ratio;
+        } else {
+            put_new_pane_first(first, split_id);
+            put_new_pane_first(second, split_id);
+        }
+    }
 }
 
 fn replace_pane_with_split(

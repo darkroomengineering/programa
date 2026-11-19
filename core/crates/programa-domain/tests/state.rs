@@ -170,6 +170,7 @@ fn reorder_rejects_target_from_another_pane_without_mutation() {
         session_id: "session-b".into(),
         direction: SplitDirection::Horizontal,
         ratio: 0.5,
+        insert_first: false,
     })
     .unwrap();
     let before = core.snapshot().clone();
@@ -197,6 +198,7 @@ fn split_and_resize_retain_existing_session() {
         session_id: "session-b".into(),
         direction: SplitDirection::Vertical,
         ratio: 0.4,
+        insert_first: false,
     })
     .unwrap();
     core.dispatch(Command::ResizeSplit {
@@ -219,6 +221,49 @@ fn split_and_resize_retain_existing_session() {
 }
 
 #[test]
+fn a_split_to_the_left_puts_the_new_pane_first_with_the_same_share() {
+    let mut core = Core::default();
+    core.dispatch(create_workspace()).unwrap();
+    core.dispatch(Command::SplitPane {
+        workspace_id: "workspace-a".into(),
+        pane_id: "pane-a".into(),
+        split_id: "split-a".into(),
+        new_pane_id: "pane-b".into(),
+        new_surface_id: "surface-b".into(),
+        session_id: "session-b".into(),
+        direction: SplitDirection::Vertical,
+        ratio: 0.7,
+        insert_first: true,
+    })
+    .unwrap();
+    let workspace = &core.snapshot().workspaces[0];
+    assert_eq!(workspace.selected_pane_id, "pane-b");
+    match &workspace.layout {
+        LayoutNode::Split {
+            ratio,
+            first,
+            second,
+            ..
+        } => {
+            assert!((ratio - 0.3).abs() < 1e-9);
+            assert_eq!(
+                **first,
+                LayoutNode::Pane {
+                    pane_id: "pane-b".into()
+                }
+            );
+            assert_eq!(
+                **second,
+                LayoutNode::Pane {
+                    pane_id: "pane-a".into()
+                }
+            );
+        }
+        other => panic!("expected a split, got {other:?}"),
+    }
+}
+
+#[test]
 fn closing_final_surface_in_pane_collapses_split_and_selects_neighbor() {
     let mut core = Core::default();
     core.dispatch(create_workspace()).unwrap();
@@ -231,6 +276,7 @@ fn closing_final_surface_in_pane_collapses_split_and_selects_neighbor() {
         session_id: "session-b".into(),
         direction: SplitDirection::Horizontal,
         ratio: 0.5,
+        insert_first: false,
     })
     .unwrap();
     core.dispatch(Command::CloseSurface {
@@ -265,6 +311,7 @@ fn move_surface_collapses_empty_source_and_preserves_full_surface() {
         session_id: "session-b".into(),
         direction: SplitDirection::Vertical,
         ratio: 0.4,
+        insert_first: false,
     })
     .unwrap();
     core.dispatch(Command::SeedSnapshot {

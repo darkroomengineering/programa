@@ -8,6 +8,7 @@
 
 mod codex;
 mod hook;
+mod panes;
 mod permission;
 mod sidebar;
 mod transport;
@@ -31,7 +32,7 @@ Commands:
   list-workspaces                       List workspaces
   new-workspace [--cwd DIR] [--command CMD] [--name T]
   new-surface [--workspace ID] [--pane ID] [--cwd DIR] [--command CMD]
-  new-split [right|down] [--surface ID] [--cwd DIR] [--command CMD]
+  new-split [left|right|up|down] [--surface ID] [--cwd DIR] [--command CMD]
   select-workspace <ID>
   close-workspace [--workspace ID]
   rename-workspace <TITLE> [--workspace ID]
@@ -53,6 +54,20 @@ Commands:
   clear-log [--workspace ID]
   list-log [--limit N] [--workspace ID]
   sidebar-state [--workspace ID]        Everything the workspace's sidebar row shows
+  list-panes [--workspace ID]           Panes in layout order, the focused one starred
+  list-pane-surfaces [--workspace ID] [--pane ID]
+  focus-pane <ID> | --pane ID [--workspace ID]
+  new-pane [--direction left|right|up|down] [--type terminal] [--workspace ID]
+  resize-pane [-L|-R|-U|-D] [--amount CELLS] [--pane ID] [--workspace ID]
+  swap-pane --pane ID --target-pane ID  Swap the two panes' selected tabs
+  break-pane [--pane ID] [--surface ID] [--workspace ID]
+                                        Move a tab into a new workspace of its own
+  join-pane --target-pane ID [--pane ID] [--surface ID]
+                                        Move a tab (default: the pane's selected one) into another pane
+  last-pane [--workspace ID]            Focus the other pane
+  next-window | previous-window | last-window
+                                        Select the next, previous or last selected workspace
+  reorder-workspace <ID> (--index N | --before ID | --after ID) [--window ID]
   set-agent-state <working|blocked|idle|clear> [--surface ID] [--source NAME]
   list-ports                            List ports that terminals listen on
   stop-port <PORT> | --pid PID          Stop the process listening on a port
@@ -187,10 +202,23 @@ enum Command {
     ClearLog,
     ListLog,
     SidebarState,
+    ListPanes,
+    ListPaneSurfaces,
+    FocusPane,
+    NewPane,
+    ResizePane,
+    SwapPane,
+    BreakPane,
+    JoinPane,
+    LastPane,
+    NextWindow,
+    PreviousWindow,
+    LastWindow,
+    ReorderWorkspace,
 }
 
 impl Command {
-    const ALL: [Command; 60] = [
+    const ALL: [Command; 73] = [
         Command::Ping,
         Command::Identify,
         Command::Tree,
@@ -251,6 +279,19 @@ impl Command {
         Command::ClearLog,
         Command::ListLog,
         Command::SidebarState,
+        Command::ListPanes,
+        Command::ListPaneSurfaces,
+        Command::FocusPane,
+        Command::NewPane,
+        Command::ResizePane,
+        Command::SwapPane,
+        Command::BreakPane,
+        Command::JoinPane,
+        Command::LastPane,
+        Command::NextWindow,
+        Command::PreviousWindow,
+        Command::LastWindow,
+        Command::ReorderWorkspace,
     ];
 
     fn from_name(name: &str) -> Option<Command> {
@@ -319,6 +360,19 @@ impl Command {
             Command::ClearLog => "clear-log",
             Command::ListLog => "list-log",
             Command::SidebarState => "sidebar-state",
+            Command::ListPanes => "list-panes",
+            Command::ListPaneSurfaces => "list-pane-surfaces",
+            Command::FocusPane => "focus-pane",
+            Command::NewPane => "new-pane",
+            Command::ResizePane => "resize-pane",
+            Command::SwapPane => "swap-pane",
+            Command::BreakPane => "break-pane",
+            Command::JoinPane => "join-pane",
+            Command::LastPane => "last-pane",
+            Command::NextWindow => "next-window",
+            Command::PreviousWindow => "previous-window",
+            Command::LastWindow => "last-window",
+            Command::ReorderWorkspace => "reorder-workspace",
         }
     }
 
@@ -383,6 +437,19 @@ impl Command {
             Command::ClearLog => "workspace.clear_log",
             Command::ListLog => "workspace.list_log",
             Command::SidebarState => "workspace.sidebar_state",
+            Command::ListPanes => "pane.list",
+            Command::ListPaneSurfaces => "pane.surfaces",
+            Command::FocusPane => "pane.focus",
+            Command::NewPane => "pane.create",
+            Command::ResizePane => "pane.resize",
+            Command::SwapPane => "pane.swap",
+            Command::BreakPane => "pane.break",
+            Command::JoinPane => "pane.join",
+            Command::LastPane => "pane.last",
+            Command::NextWindow => "workspace.next",
+            Command::PreviousWindow => "workspace.previous",
+            Command::LastWindow => "workspace.last",
+            Command::ReorderWorkspace => "workspace.reorder",
         }
     }
 }
@@ -526,6 +593,9 @@ fn run(args: &[String], env: Env) -> i32 {
     }
     if request.command == Command::Race {
         return run_race(&path, &request.params);
+    }
+    if request.command == Command::ResizePane {
+        return panes::run_resize(&path, &request.params, json);
     }
     if request.command == Command::Usage {
         return run_usage(&path, &request.params, json, env);
@@ -1295,6 +1365,19 @@ fn build_params(
         | Command::ClearLog
         | Command::ListLog
         | Command::SidebarState => return sidebar::params(command, args, env),
+        Command::ListPanes
+        | Command::ListPaneSurfaces
+        | Command::FocusPane
+        | Command::NewPane
+        | Command::ResizePane
+        | Command::SwapPane
+        | Command::BreakPane
+        | Command::JoinPane
+        | Command::LastPane
+        | Command::NextWindow
+        | Command::PreviousWindow
+        | Command::LastWindow
+        | Command::ReorderWorkspace => return panes::params(command, args, env),
         Command::Ping
         | Command::Tree
         | Command::ListWorkspaces
@@ -1348,10 +1431,12 @@ fn build_params(
             let opts = parse_opts(command, args, &["--surface", "--cwd", "--command"], &[])?;
             let direction = match opts.positionals.as_slice() {
                 [] => "right".to_owned(),
-                [direction] if direction == "right" || direction == "down" => direction.clone(),
+                [direction] if ["left", "right", "up", "down"].contains(&direction.as_str()) => {
+                    direction.clone()
+                }
                 [direction] => {
                     return Err(UsageError(format!(
-                        "new-split: direction must be 'right' or 'down', not '{direction}'"
+                        "new-split: direction must be left, right, up or down, not '{direction}'"
                     )));
                 }
                 [_, extra, ..] => {
@@ -2189,6 +2274,19 @@ fn render(command: Command, result: &Value) -> String {
         | Command::ClearLog
         | Command::ListLog
         | Command::SidebarState => sidebar::render(command, result),
+        Command::ListPanes
+        | Command::ListPaneSurfaces
+        | Command::FocusPane
+        | Command::NewPane
+        | Command::ResizePane
+        | Command::SwapPane
+        | Command::BreakPane
+        | Command::JoinPane
+        | Command::LastPane
+        | Command::NextWindow
+        | Command::PreviousWindow
+        | Command::LastWindow
+        | Command::ReorderWorkspace => panes::render(command, result),
         Command::WaitSurface | Command::PromptAgent | Command::WatchEvents => {
             format_wait(command, result)
         }
@@ -2985,7 +3083,8 @@ mod tests {
             params(json!({"direction": "down", "cwd": "C:\\src", "initial_command": "git status"}))
         );
 
-        assert!(usage_error(&["new-split", "left"]).contains("'right' or 'down'"));
+        assert!(usage_error(&["new-split", "sideways"]).contains("left, right, up or down"));
+        assert_eq!(request(&["new-split", "left"]).params["direction"], "left");
         assert!(usage_error(&["new-split", "right", "down"]).contains("unexpected argument"));
     }
 
