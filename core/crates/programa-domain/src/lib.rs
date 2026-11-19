@@ -170,6 +170,13 @@ pub enum Command {
         surface_id: String,
         title: Option<String>,
     },
+    /// Pinning moves the tab to the end of its pane's pinned tabs; unpinning, to just after them.
+    SetSurfacePinned {
+        workspace_id: String,
+        pane_id: String,
+        surface_id: String,
+        pinned: bool,
+    },
     CreateSurface {
         workspace_id: String,
         pane_id: String,
@@ -511,6 +518,23 @@ impl Snapshot {
                     return Ok(false);
                 }
                 surface.title = title;
+                Ok(true)
+            }
+            Command::SetSurfacePinned {
+                workspace_id,
+                pane_id,
+                surface_id,
+                pinned,
+            } => {
+                let pane = pane_mut(workspace_mut(self, &workspace_id)?, &pane_id)?;
+                let index = surface_index(pane, &surface_id)?;
+                if pane.surfaces[index].is_pinned == pinned {
+                    return Ok(false);
+                }
+                let mut surface = pane.surfaces.remove(index);
+                surface.is_pinned = pinned;
+                let pinned_count = pane.surfaces.iter().filter(|s| s.is_pinned).count();
+                pane.surfaces.insert(pinned_count, surface);
                 Ok(true)
             }
             Command::CreateSurface {

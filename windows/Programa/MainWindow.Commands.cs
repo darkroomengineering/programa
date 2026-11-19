@@ -136,6 +136,8 @@ public sealed partial class MainWindow
     {
         var menu = new MenuFlyout();
         menu.Items.Add(MenuItem(Localizer.Get("RenameTab"), () => _ = RenameTabAsync(workspaceId, paneId, surfaceId)));
+        var pinned = IsPinnedSurface(surfaceId);
+        menu.Items.Add(MenuItem(Localizer.Get(pinned ? "UnpinTab" : "PinTab"), () => Apply(new { command = "set_surface_pinned", workspace_id = workspaceId, pane_id = paneId, surface_id = surfaceId, pinned = !pinned })));
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(MenuItem(Localizer.Get("MoveTabToNewWindow"), () => WindowRegistry.MoveSurfaceToNewWindow(workspaceId, paneId, surfaceId)));
         menu.Items.Add(new MenuFlyoutSeparator());

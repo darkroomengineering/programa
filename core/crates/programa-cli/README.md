@@ -19,6 +19,8 @@ A second binary, `programa-mcp` (`src/mcp.rs`), is the MCP server over stdio for
 `list-panes`, `list-pane-surfaces [--pane]`, `focus-pane <ID>`, `new-pane [--direction]`, `resize-pane -L|-R|-U|-D [--amount N]`,
 `swap-pane --pane --target-pane`, `break-pane`, `join-pane --target-pane`, `last-pane`, `next-window`, `previous-window`, `last-window`,
 `reorder-workspace <ID> (--index|--before|--after)`,
+`send-key [--force] [--answer-prompt] <key>`, `clear-history`, `trigger-flash`, `refresh-surfaces`, `surface-health`,
+`reorder-surface <ID> (--index|--before|--after)`, `tab-action <action> [--tab] [--title]`, `rename-tab <title>`,
 `list-ports`, `stop-port <PORT>|--pid PID` (a port resolves to its one listening pid).
 Run `programa help` for every flag.
 

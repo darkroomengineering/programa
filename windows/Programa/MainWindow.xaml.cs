@@ -890,6 +890,8 @@ public sealed partial class MainWindow : Window
         try
         {
             _snapshot = Dispatch(new { command = "select_surface", workspace_id = tag.WorkspaceId, pane_id = tag.PaneId, surface_id = tag.SurfaceId });
+            // Picking a tab you marked unread reads it.
+            if (_manualUnread.Remove(tag.SurfaceId) && _tabItems.TryGetValue(tag.SurfaceId, out var picked) && _terminals.TryGetValue(tag.SurfaceId, out var pickedTerminal)) picked.Header = TabHeader(pickedTerminal);
             // The row's derived title follows the focused tab; a tab you now see is read.
             UpdateSidebarRow(tag.WorkspaceId);
             MarkVisibleRead();

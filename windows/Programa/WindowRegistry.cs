@@ -495,6 +495,7 @@ internal static class WindowRegistry
         }
         var routed = (Text(p, "window_id") is { } windowId ? WindowById(windowId) : null)
             ?? (Text(p, "surface_id") is { } surfaceId ? OwnerOfSurface(surfaceId) : null)
+            ?? (Text(p, "tab_id") is { } tabId ? OwnerOfSurface(tabId) : null)
             ?? (Text(p, "workspace_id") is { } id ? OwnerOfWorkspace(id) : null)
             ?? (Text(p, "pane_id") is { } routedPane ? Open.FirstOrDefault(window => window.PaneWorkspace(routedPane) is not null) : null)
             ?? Current ?? Open[0];

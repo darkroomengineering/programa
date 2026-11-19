@@ -114,4 +114,6 @@
   <data name="SidebarShowLess" xml:space="preserve"><value>Show less</value></data>
   <data name="SidebarShowMoreDetails" xml:space="preserve"><value>Show more details</value></data>
   <data name="SidebarShowLessDetails" xml:space="preserve"><value>Show less details</value></data>
+  <data name="PinTab" xml:space="preserve"><value>Pin Tab</value></data>
+  <data name="UnpinTab" xml:space="preserve"><value>Unpin Tab</value></data>
 </root>

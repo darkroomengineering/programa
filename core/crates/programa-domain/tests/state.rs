@@ -742,3 +742,49 @@ fn worktree_children_follow_their_parent_and_open_its_folder() {
         .iter()
         .all(|w| w.parent_id.is_none()));
 }
+
+#[test]
+fn pinning_a_tab_moves_it_after_the_pinned_ones_and_unpinning_just_after_them() {
+    let mut core = Core::default();
+    core.dispatch(create_workspace()).unwrap();
+    add_surface(&mut core, "b");
+    add_surface(&mut core, "c");
+    let pin = |core: &mut Core, id: &str, pinned: bool| {
+        core.dispatch(Command::SetSurfacePinned {
+            workspace_id: "workspace-a".into(),
+            pane_id: "pane-a".into(),
+            surface_id: id.into(),
+            pinned,
+        })
+        .unwrap();
+    };
+    let order = |core: &Core| -> Vec<(String, bool)> {
+        core.snapshot().workspaces[0].panes[0]
+            .surfaces
+            .iter()
+            .map(|s| (s.id.clone(), s.is_pinned))
+            .collect()
+    };
+    pin(&mut core, "surface-c", true);
+    pin(&mut core, "surface-b", true);
+    assert_eq!(
+        order(&core),
+        [
+            ("surface-c".into(), true),
+            ("surface-b".into(), true),
+            ("surface-a".into(), false)
+        ]
+    );
+    let revision = core.snapshot().revision;
+    pin(&mut core, "surface-b", true);
+    assert_eq!(core.snapshot().revision, revision);
+    pin(&mut core, "surface-c", false);
+    assert_eq!(
+        order(&core),
+        [
+            ("surface-b".into(), true),
+            ("surface-c".into(), false),
+            ("surface-a".into(), false)
+        ]
+    );
+}

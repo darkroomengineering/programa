@@ -729,6 +729,7 @@ fn validate_command_sessions(
         | DomainCommand::SetWorkspaceParent { .. }
         | DomainCommand::SetWorkspaceCollapsed { .. }
         | DomainCommand::RenameSurface { .. }
+        | DomainCommand::SetSurfacePinned { .. }
         | DomainCommand::SelectSurface { .. }
         | DomainCommand::CloseSurface { .. }
         | DomainCommand::ReorderSurface { .. }

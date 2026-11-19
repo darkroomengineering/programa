@@ -118,6 +118,10 @@ Commands use a command tag and reject unknown fields.
     {"command":"split_pane","workspace_id":"w","pane_id":"p","split_id":"split","new_pane_id":"p2","new_surface_id":"s2","session_id":"session2","direction":"vertical","ratio":0.5}
     {"command":"split_pane","workspace_id":"w","pane_id":"p","split_id":"split","new_pane_id":"p2","new_surface_id":"s2","session_id":"session2","direction":"vertical","ratio":0.5,"insert_first":true}
     {"command":"resize_split","workspace_id":"w","split_id":"split","ratio":0.6}
+    {"command":"set_surface_pinned","workspace_id":"w","pane_id":"p","surface_id":"s","pinned":true}
+
+Pinned surfaces stay a prefix of their pane: pinning moves a surface to the end of the pinned
+ones, unpinning to just after them.
 
 `insert_first` (default false) puts the new pane first, a split to the left or above; `ratio`
 stays the original pane's share.

@@ -25,7 +25,7 @@ public sealed partial class MainWindow
         "markdown.open", "review.open", "review.refresh", "review.comment.add", "review.comment.remove", "review.comment.list", "review.send_comments",
         "window.list", "window.current", "window.create", "window.focus", "window.close", "workspace.move_to_window", "surface.move",
         .. SidebarMetadata.Methods, "workspace.sidebar_state", "workspace.reset_sidebar",
-        .. PaneControl.Methods,
+        .. PaneControl.Methods, .. SurfaceActionControl.Methods,
     ];
 
     /// <summary>Runs one request routed to this window (<see cref="WindowRegistry"/> owns the pipe) on
@@ -104,6 +104,7 @@ public sealed partial class MainWindow
         "workspace.sidebar_state" or "workspace.reset_sidebar" => SidebarFromControl(method, p),
         _ when SidebarMetadata.Methods.Contains(method) => SidebarFromControl(method, p),
         _ when PaneControl.Methods.Contains(method) => PaneFromControl(method, p),
+        _ when SurfaceActionControl.Methods.Contains(method) => SurfaceActionFromControl(method, p),
         _ => throw new ControlException("method_not_found", $"{method} is not available on Windows yet."),
     };
 
@@ -180,7 +181,11 @@ public sealed partial class MainWindow
     {
         var previous = SelectedWorkspace();
         var previousPane = previous?.SelectedPane;
+        // A workspace not on screen keeps its own selected pane and tab too, as on macOS.
+        var target = _snapshot.Workspaces.FirstOrDefault(workspace => workspace.Id == workspaceId && workspace.Id != previous?.Id)?.SelectedPane;
         _snapshot = Dispatch(command);
+        if (target is not null && _snapshot.Workspaces.Any(workspace => workspace.Id == workspaceId && workspace.Panes.Any(pane => pane.Id == target.Id)))
+            _snapshot = Dispatch(new { command = "select_surface", workspace_id = workspaceId, pane_id = target.Id, surface_id = target.SelectedSurfaceId });
         if (previous is not null && previousPane is not null && _snapshot.Workspaces.Any(workspace => workspace.Id == previous.Id))
             _snapshot = Dispatch(new { command = "select_surface", workspace_id = previous.Id, pane_id = previousPane.Id, surface_id = previousPane.SelectedSurfaceId });
         // Before the projection, so a terminal the projection builds (a visible split) takes them.
@@ -249,9 +254,15 @@ public sealed partial class MainWindow
         var (workspace, _, surface) = SurfaceTarget(p);
         var terminal = TerminalFor(workspace.Id, surface);
         terminal.EnsureStarted();
-        var lines = Math.Clamp(Number(p, "lines") ?? (Flag(p, "scrollback") ? 200 : 50), 1, 10_000);
-        return new { text = terminal.OutputText(lines) };
+        var text = terminal.OutputText(ReadLines(p));
+        // The fingerprint surface.send_if_unchanged compares, as on macOS.
+        return new { text, fingerprint = Fingerprint(text), workspace_id = workspace.Id, surface_id = surface, window_id = WindowId };
     }
+
+    private static int ReadLines(JsonElement p) => Math.Clamp(Number(p, "lines") ?? (Flag(p, "scrollback") ? 200 : 50), 1, 10_000);
+
+    internal static string Fingerprint(string text) =>
+        Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(text)));
 
     private void ReportAgentStateFromControl(JsonElement p)
     {

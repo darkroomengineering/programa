@@ -154,8 +154,7 @@ public sealed partial class MainWindow
                 id = surface.Id,
                 index,
                 title = titles.GetValueOrDefault(surface.Id) ?? string.Empty,
-                type = _panels.GetValueOrDefault(surface.Id) is ReviewPanel || _restoreReviews.ContainsKey(surface.Id) ? "review"
-                    : _panels.GetValueOrDefault(surface.Id) is MarkdownPanel || _restorePanels.ContainsKey(surface.Id) ? "markdown" : "terminal",
+                type = SurfaceType(surface.Id),
                 selected = surface.Id == pane.SelectedSurfaceId,
             }).ToList(),
         };

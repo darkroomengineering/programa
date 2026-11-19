@@ -106,20 +106,31 @@ public sealed partial class MainWindow
         foreach (var (surfaceId, item) in _tabItems)
             if (_terminals.TryGetValue(surfaceId, out var terminal)) item.Header = TabHeader(terminal);
         foreach (var (host, ring) in _paneRings.Values)
-            ring.Visibility = host.Child is TerminalView shown && _notifications.HasUnreadFor(shown.SurfaceId) ? Visibility.Visible : Visibility.Collapsed;
+            ring.Visibility = host.Child is TerminalView shown && HasUnread(shown.SurfaceId) ? Visibility.Visible : Visibility.Collapsed;
         foreach (var workspaceId in _sidebarRows.Keys.ToList()) UpdateSidebarRow(workspaceId);
     }
 
-    /// <summary>The tab's title, with a dot while it has unread notifications.</summary>
+    /// <summary>Tabs marked unread by tab.action mark_unread, until you pick them or mark them read.</summary>
+    private readonly HashSet<string> _manualUnread = new(StringComparer.Ordinal);
+
+    private bool HasUnread(string surfaceId) => _notifications.HasUnreadFor(surfaceId) || _manualUnread.Contains(surfaceId);
+
+    /// <summary>The tab's title, after a pin when it is pinned, with a dot while it is unread.</summary>
     private object TabHeader(TerminalView terminal)
     {
         var title = TabTitle(terminal);
-        if (!_notifications.HasUnreadFor(terminal.SurfaceId)) return title;
+        var pinned = IsPinnedSurface(terminal.SurfaceId);
+        var unread = HasUnread(terminal.SurfaceId);
+        if (!pinned && !unread) return title;
         var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        if (pinned) header.Children.Add(new FontIcon { Glyph = char.ConvertFromUtf32(0xE718), FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
         header.Children.Add(new TextBlock { Text = title });
-        header.Children.Add(new InfoBadge { Width = 8, Height = 8, VerticalAlignment = VerticalAlignment.Center });
+        if (unread) header.Children.Add(new InfoBadge { Width = 8, Height = 8, VerticalAlignment = VerticalAlignment.Center });
         return header;
     }
+
+    private bool IsPinnedSurface(string surfaceId) =>
+        _snapshot.Workspaces.SelectMany(workspace => workspace.Panes).SelectMany(pane => pane.Surfaces).Any(surface => surface.Id == surfaceId && surface.IsPinned);
 
     /// <summary>The ring drawn over a pane while its shown tab has unread notifications.</summary>
     private Border PaneRing(string paneId, Border host)

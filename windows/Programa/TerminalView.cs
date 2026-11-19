@@ -279,6 +279,27 @@ public sealed partial class TerminalView : UserControl, IDisposable
         DispatcherQueue.TryEnqueue(async () => { await Task.Delay(5000); WriteInitialCommand(session); });
     }
 
+    /// <summary>Presses a named key (surface.send_key) as the keyboard would, in the program's cursor
+    /// and keyboard modes; a plain letter or space is typed. False when the key has no encoding.</summary>
+    internal bool SendNamedKey(NamedKey key)
+    {
+        EnsureStarted();
+        if (_session is null) throw new ControlException("unavailable", "The terminal has not started.");
+        var mode = NativeTerminal.Mode(_session);
+        var bytes = key.Character is { } character && !key.Ctrl && !key.Alt
+            ? Encoding.UTF8.GetBytes((key.Shift ? char.ToUpperInvariant(character) : character).ToString())
+            : EncodeKey(key.Key, key.Ctrl, key.Alt, key.Shift, (mode & NativeTerminal.ModeAppCursor) != 0, (mode & NativeTerminal.ModeKittyDisambiguate) != 0);
+        if (bytes is null) return false;
+        NativeTerminal.Write(_session, bytes);
+        return true;
+    }
+
+    /// <summary>Redraws the terminal (surface.refresh).</summary>
+    internal void Refresh() => _canvas.Invalidate();
+
+    /// <summary>Whether the terminal is on screen in a window (surface.health in_window).</summary>
+    internal bool InWindow => XamlRoot is not null && IsLoaded;
+
     /// <summary>Pastes text as one block (bracketed when the program asked for it), so its newlines
     /// do not submit it line by line.</summary>
     internal void PasteText(string text)

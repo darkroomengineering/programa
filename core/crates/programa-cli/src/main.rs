@@ -11,6 +11,7 @@ mod hook;
 mod panes;
 mod permission;
 mod sidebar;
+mod tabs;
 mod transport;
 mod usage;
 
@@ -68,6 +69,17 @@ Commands:
   next-window | previous-window | last-window
                                         Select the next, previous or last selected workspace
   reorder-workspace <ID> (--index N | --before ID | --after ID) [--window ID]
+  send-key [--surface ID] [--force] [--answer-prompt] [--] <KEY>
+                                        enter, tab, escape, up, ctrl+c, shift+tab, alt+b, ...
+  clear-history [--surface ID]          Clear the terminal's scrollback
+  trigger-flash [--surface ID]          Flash the pane that shows the surface
+  refresh-surfaces                      Redraw the focused workspace's terminals
+  surface-health [--workspace ID]       Each surface's type and whether it is on screen
+  reorder-surface <ID> (--index N | --before ID | --after ID)
+  tab-action <ACTION> [--tab ID] [--title T]
+                                        rename, clear_name, pin, unpin, mark_read, mark_unread,
+                                        new_terminal_right, close_left, close_right, close_others
+  rename-tab [--tab ID] [--] <TITLE>
   set-agent-state <working|blocked|idle|clear> [--surface ID] [--source NAME]
   list-ports                            List ports that terminals listen on
   stop-port <PORT> | --pid PID          Stop the process listening on a port
@@ -215,10 +227,18 @@ enum Command {
     PreviousWindow,
     LastWindow,
     ReorderWorkspace,
+    SendKey,
+    ClearHistory,
+    TriggerFlash,
+    RefreshSurfaces,
+    SurfaceHealth,
+    ReorderSurface,
+    TabAction,
+    RenameTab,
 }
 
 impl Command {
-    const ALL: [Command; 73] = [
+    const ALL: [Command; 81] = [
         Command::Ping,
         Command::Identify,
         Command::Tree,
@@ -292,6 +312,14 @@ impl Command {
         Command::PreviousWindow,
         Command::LastWindow,
         Command::ReorderWorkspace,
+        Command::SendKey,
+        Command::ClearHistory,
+        Command::TriggerFlash,
+        Command::RefreshSurfaces,
+        Command::SurfaceHealth,
+        Command::ReorderSurface,
+        Command::TabAction,
+        Command::RenameTab,
     ];
 
     fn from_name(name: &str) -> Option<Command> {
@@ -373,6 +401,14 @@ impl Command {
             Command::PreviousWindow => "previous-window",
             Command::LastWindow => "last-window",
             Command::ReorderWorkspace => "reorder-workspace",
+            Command::SendKey => "send-key",
+            Command::ClearHistory => "clear-history",
+            Command::TriggerFlash => "trigger-flash",
+            Command::RefreshSurfaces => "refresh-surfaces",
+            Command::SurfaceHealth => "surface-health",
+            Command::ReorderSurface => "reorder-surface",
+            Command::TabAction => "tab-action",
+            Command::RenameTab => "rename-tab",
         }
     }
 
@@ -450,6 +486,14 @@ impl Command {
             Command::PreviousWindow => "workspace.previous",
             Command::LastWindow => "workspace.last",
             Command::ReorderWorkspace => "workspace.reorder",
+            Command::SendKey => "surface.send_key",
+            Command::ClearHistory => "surface.clear_history",
+            Command::TriggerFlash => "surface.trigger_flash",
+            Command::RefreshSurfaces => "surface.refresh",
+            Command::SurfaceHealth => "surface.health",
+            Command::ReorderSurface => "surface.reorder",
+            Command::TabAction => "tab.action",
+            Command::RenameTab => "tab.action",
         }
     }
 }
@@ -1378,6 +1422,14 @@ fn build_params(
         | Command::PreviousWindow
         | Command::LastWindow
         | Command::ReorderWorkspace => return panes::params(command, args, env),
+        Command::SendKey
+        | Command::ClearHistory
+        | Command::TriggerFlash
+        | Command::RefreshSurfaces
+        | Command::SurfaceHealth
+        | Command::ReorderSurface
+        | Command::TabAction
+        | Command::RenameTab => return tabs::params(command, args, env),
         Command::Ping
         | Command::Tree
         | Command::ListWorkspaces
@@ -2287,6 +2339,14 @@ fn render(command: Command, result: &Value) -> String {
         | Command::PreviousWindow
         | Command::LastWindow
         | Command::ReorderWorkspace => panes::render(command, result),
+        Command::SendKey
+        | Command::ClearHistory
+        | Command::TriggerFlash
+        | Command::RefreshSurfaces
+        | Command::SurfaceHealth
+        | Command::ReorderSurface
+        | Command::TabAction
+        | Command::RenameTab => tabs::render(command, result),
         Command::WaitSurface | Command::PromptAgent | Command::WatchEvents => {
             format_wait(command, result)
         }
