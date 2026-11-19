@@ -277,6 +277,9 @@ public sealed partial class MainWindow : Window
             // "N helpers running" under the status, as on macOS.
             var helpersLine = HelpersLine(workspace.Id);
             text.Children.Add(helpersLine);
+            // Status entries, markdown blocks, the latest log line and progress (macOS sidebar metadata).
+            var metadataLines = new StackPanel { Margin = new Thickness(0, 2, 0, 0), Visibility = Visibility.Collapsed };
+            text.Children.Add(metadataLines);
             var branchLine = new TextBlock { FontSize = 12, Opacity = 0.7, Margin = new Thickness(0, 2, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap };
             var directoryLine = new TextBlock { FontSize = 12, Opacity = 0.6, TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap };
             text.Children.Add(branchLine);
@@ -303,7 +306,7 @@ public sealed partial class MainWindow : Window
             var item = new ListViewItem { Content = row, Tag = workspace.Id, ContextFlyout = WorkspaceMenu(workspace) };
             list.Items.Add(item);
             if (workspace.Id == SelectedWorkspace()?.Id) list.SelectedItem = item;
-            _sidebarRows[workspace.Id] = new SidebarRow(item, icon, title, unread, elapsed, pill, pillIcon, pillLabel, message, branchLine, directoryLine, pullRequestLine, helpersLine);
+            _sidebarRows[workspace.Id] = new SidebarRow(item, icon, title, unread, elapsed, pill, pillIcon, pillLabel, message, branchLine, directoryLine, pullRequestLine, helpersLine, metadataLines);
             UpdateSidebarRow(workspace.Id);
         }
         list.SelectionChanged += (_, _) =>
@@ -388,11 +391,17 @@ public sealed partial class MainWindow : Window
         row.Directory.Visibility = directory is null ? Visibility.Collapsed : Visibility.Visible;
         UpdatePullRequestLine(workspace, row.PullRequest);
         UpdateHelpersLine(workspace.Id, row.Helpers);
+        // With no agent, the status line is the latest log message, as on macOS.
+        var latestLog = indicator is null ? SidebarMetadata.Of(workspaceId)?.Log.LastOrDefault() : null;
+        UpdateMetadataLines(workspaceId, row.Metadata, statusShowsLog: latestLog is not null);
         if (indicator is null)
         {
-            row.Pill.Visibility = row.Message.Visibility = Visibility.Collapsed;
-            row.Elapsed.Text = string.Empty;
-            AutomationProperties.SetName(row.Item, title);
+            row.Pill.Visibility = Visibility.Collapsed;
+            row.Message.Text = latestLog?.Message ?? string.Empty;
+            row.Message.Visibility = latestLog is null ? Visibility.Collapsed : Visibility.Visible;
+            row.Elapsed.Text = latestLog is null ? string.Empty
+                : AgentIndicator.Elapsed(now - latestLog.At) is var (logKey, logValue) ? string.Format(Localizer.Get(logKey), logValue) : Localizer.Get("ElapsedNow");
+            AutomationProperties.SetName(row.Item, latestLog is null ? title : $"{title}, {latestLog.Message}");
             return;
         }
         var label = Localizer.Get(indicator.LabelKey);
@@ -991,7 +1000,7 @@ public sealed partial class MainWindow : Window
         _core.Dispose();
     }
 
-    private sealed record SidebarRow(ListViewItem Item, ContentControl Icon, TextBlock Title, InfoBadge Unread, TextBlock Elapsed, Border Pill, FontIcon PillIcon, TextBlock PillLabel, TextBlock Message, TextBlock Branch, TextBlock Directory, HyperlinkButton PullRequest, HyperlinkButton Helpers);
+    private sealed record SidebarRow(ListViewItem Item, ContentControl Icon, TextBlock Title, InfoBadge Unread, TextBlock Elapsed, Border Pill, FontIcon PillIcon, TextBlock PillLabel, TextBlock Message, TextBlock Branch, TextBlock Directory, HyperlinkButton PullRequest, HyperlinkButton Helpers, StackPanel Metadata);
     private sealed record PaneTag(string WorkspaceId, string PaneId);
     private sealed record SurfaceTag(string WorkspaceId, string PaneId, string SurfaceId);
     private sealed record TabDragPayload(string WorkspaceId, string PaneId, string SurfaceId);

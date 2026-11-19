@@ -14,6 +14,8 @@ A second binary, `programa-mcp` (`src/mcp.rs`), is the MCP server over stdio for
 `new-split [right|down]`, `select-workspace`, `close-workspace`, `rename-workspace`, `focus-surface`,
 `close-surface`, `send` (escapes `\n \r \t \e \\`), `read-screen`, `notify --title`,
 `list-notifications`, `clear-notifications`, `set-agent-state <working|blocked|idle|clear>`,
+`set-status <key> <value> [--icon] [--color] [--url] [--priority] [--format] [--pid]`, `clear-status`, `list-status`,
+`set-progress <0.0-1.0> [--label]`, `clear-progress`, `log [--level] [--source] <message>`, `clear-log`, `list-log [--limit N]`, `sidebar-state`,
 `list-ports`, `stop-port <PORT>|--pid PID` (a port resolves to its one listening pid).
 Run `programa help` for every flag.
 

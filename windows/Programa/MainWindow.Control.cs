@@ -24,6 +24,7 @@ public sealed partial class MainWindow
         "surface.resume_agent", "workspace.action", "agent.event", "agent.needs_input", "surface.wait", "agent.prompt", "subscribe", "unsubscribe", "routes.list",
         "markdown.open", "review.open", "review.refresh", "review.comment.add", "review.comment.remove", "review.comment.list", "review.send_comments",
         "window.list", "window.current", "window.create", "window.focus", "window.close", "workspace.move_to_window", "surface.move",
+        .. SidebarMetadata.Methods, "workspace.sidebar_state", "workspace.reset_sidebar",
     ];
 
     /// <summary>Runs one request routed to this window (<see cref="WindowRegistry"/> owns the pipe) on
@@ -99,6 +100,8 @@ public sealed partial class MainWindow
         "agent.event" => AgentEventFromControl(p),
         "agent.needs_input" => NeedsInputFromControl(p),
         "workspace.action" => WorkspaceActionFromControl(p),
+        "workspace.sidebar_state" or "workspace.reset_sidebar" => SidebarFromControl(method, p),
+        _ when SidebarMetadata.Methods.Contains(method) => SidebarFromControl(method, p),
         _ => throw new ControlException("method_not_found", $"{method} is not available on Windows yet."),
     };
 

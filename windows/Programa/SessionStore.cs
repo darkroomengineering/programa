@@ -23,7 +23,13 @@ internal sealed record SavedSession(
     Dictionary<string, string>? MarkdownPanels = null,
     Dictionary<string, SessionReview>? ReviewPanels = null,
     string? WindowId = null,
-    List<SavedSession>? OtherWindows = null);
+    List<SavedSession>? OtherWindows = null,
+    Dictionary<string, SessionSidebar>? Sidebar = null);
+
+/// <summary>A workspace's sidebar log and progress, which macOS also restores.</summary>
+internal sealed record SessionSidebar(List<SessionLogEntry>? Log, SidebarProgress? Progress);
+
+internal sealed record SessionLogEntry(string Message, string Level, string? Source, DateTimeOffset At);
 
 internal static class SessionStore
 {

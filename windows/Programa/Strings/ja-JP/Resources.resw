@@ -110,4 +110,8 @@
   <data name="HelperMinutesSeconds" xml:space="preserve"><value>{0}分{1}秒</value></data>
   <data name="HelperMinutes" xml:space="preserve"><value>{0}分</value></data>
   <data name="HelperSeconds" xml:space="preserve"><value>{0}秒</value></data>
+  <data name="SidebarShowMore" xml:space="preserve"><value>もっと見る</value></data>
+  <data name="SidebarShowLess" xml:space="preserve"><value>折りたたむ</value></data>
+  <data name="SidebarShowMoreDetails" xml:space="preserve"><value>詳細をもっと見る</value></data>
+  <data name="SidebarShowLessDetails" xml:space="preserve"><value>詳細を折りたたむ</value></data>
 </root>

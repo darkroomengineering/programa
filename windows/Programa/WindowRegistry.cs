@@ -53,6 +53,7 @@ internal static class WindowRegistry
         StartEvents();
         RouteEngine.Start(_dispatcher);
         Helpers.Changed += workspaceId => OwnerOfWorkspace(workspaceId)?.OnHelpersChanged(workspaceId);
+        SidebarMetadata.Changed += workspaceId => OwnerOfWorkspace(workspaceId)?.OnSidebarMetadataChanged(workspaceId);
         // Merged worktrees go every 6 hours, starting two minutes after launch (macOS worktrees.autoRemoveMerged).
         Every(TimeSpan.FromMinutes(2), TimeSpan.FromHours(6), CleanUpMergedWorktrees);
         // Free space: 60 seconds after launch, then every 15 minutes (macOS StorageLowDiskMonitor).
@@ -142,6 +143,7 @@ internal static class WindowRegistry
             var before = _knownWorkspaces;
             _knownWorkspaces = now;
             Helpers.Retain(now.Keys);
+            SidebarMetadata.Retain(now.Keys);
             if (before is null || (!EventHub.Wants("workspace_lifecycle") && !RouteEngine.HasRoutes)) return;
             // Only an explicit rename changes the given name; a shell's title (every cd) does not.
             foreach (var (id, names) in now)

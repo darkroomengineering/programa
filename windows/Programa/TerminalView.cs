@@ -373,6 +373,17 @@ public sealed partial class TerminalView : UserControl, IDisposable
         MoveRouteView(state is null ? null : Tri(state), sessionId, resumed);
     }
 
+    /// <summary>workspace.reset_sidebar: forgets the reported agent state, unless a prompt is showing,
+    /// which stays until it is answered (macOS resetSidebarContext). Screen detection reads it again.</summary>
+    internal void ResetReportedState()
+    {
+        if (EffectiveStatus?.State == "blocked" || (ProgramStatus is null && HookStatus is null)) return;
+        ProgramStatus = HookStatus = null;
+        ProgramStatusChangedAt = DateTimeOffset.Now;
+        StatusChanged();
+        if (RoutesFromHooks) MoveRouteView(null, null, false);
+    }
+
     // ---- The routes' view (docs/program-status.md, Authority): only trusted reporters move it. Windows
     // has no signed program reports, so that is the hooks; it names its writer, the hook session.
 

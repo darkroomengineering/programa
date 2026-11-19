@@ -29,6 +29,8 @@ public sealed partial class MainWindow
         _restore = new Dictionary<string, SessionTerminal>(saved.Terminals, StringComparer.Ordinal);
         _restorePanels = new Dictionary<string, string>(saved.MarkdownPanels ?? [], StringComparer.Ordinal);
         _restoreReviews = new Dictionary<string, SessionReview>(saved.ReviewPanels ?? [], StringComparer.Ordinal);
+        foreach (var (workspaceId, sidebar) in saved.Sidebar ?? [])
+            if (_snapshot.Workspaces.Any(workspace => workspace.Id == workspaceId)) SidebarMetadata.Restore(workspaceId, sidebar);
         _sidebarVisible = saved.SidebarVisible;
         _sidebarWidth = Math.Clamp(saved.SidebarWidth, 160, 480);
         if (saved.Window is { } window) ApplyWindowPlacement(window);
@@ -63,7 +65,10 @@ public sealed partial class MainWindow
         try
         {
             using var core = JsonDocument.Parse(_core.SnapshotJson());
-            return new SavedSession(SessionStore.CurrentVersion, core.RootElement.Clone(), _sidebarVisible, _sidebarWidth, CurrentWindowPlacement(), terminals, SavedPanels(), SavedReviews(), WindowId);
+            var sidebar = _snapshot.Workspaces.Select(workspace => (workspace.Id, Saved: SidebarMetadata.Saved(workspace.Id)))
+                .Where(item => item.Saved is not null).ToDictionary(item => item.Id, item => item.Saved!, StringComparer.Ordinal);
+            return new SavedSession(SessionStore.CurrentVersion, core.RootElement.Clone(), _sidebarVisible, _sidebarWidth, CurrentWindowPlacement(), terminals, SavedPanels(), SavedReviews(), WindowId,
+                Sidebar: sidebar.Count > 0 ? sidebar : null);
         }
         catch (Exception error) when (error is CoreCommandException or JsonException)
         {

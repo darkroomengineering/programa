@@ -9,6 +9,7 @@
 mod codex;
 mod hook;
 mod permission;
+mod sidebar;
 mod transport;
 mod usage;
 
@@ -41,6 +42,17 @@ Commands:
   notify --title T [--subtitle S] [--body B] [--workspace ID] [--surface ID]
   list-notifications
   clear-notifications [--workspace ID]
+  set-status <KEY> <VALUE> [--icon NAME] [--color #HEX] [--url URL] [--priority N]
+             [--format plain|markdown] [--pid PID] [--workspace ID]
+                                        Show a status entry in the workspace's sidebar row
+  clear-status <KEY> [--workspace ID]
+  list-status [--workspace ID]
+  set-progress <0.0-1.0> [--label TEXT] [--workspace ID]
+  clear-progress [--workspace ID]
+  log [--level info|progress|success|warning|error] [--source NAME] [--workspace ID] [--] <MESSAGE>
+  clear-log [--workspace ID]
+  list-log [--limit N] [--workspace ID]
+  sidebar-state [--workspace ID]        Everything the workspace's sidebar row shows
   set-agent-state <working|blocked|idle|clear> [--surface ID] [--source NAME]
   list-ports                            List ports that terminals listen on
   stop-port <PORT> | --pid PID          Stop the process listening on a port
@@ -166,10 +178,19 @@ enum Command {
     WatchEvents,
     Routes,
     Usage,
+    SetStatus,
+    ClearStatus,
+    ListStatus,
+    SetProgress,
+    ClearProgress,
+    Log,
+    ClearLog,
+    ListLog,
+    SidebarState,
 }
 
 impl Command {
-    const ALL: [Command; 51] = [
+    const ALL: [Command; 60] = [
         Command::Ping,
         Command::Identify,
         Command::Tree,
@@ -221,6 +242,15 @@ impl Command {
         Command::WatchEvents,
         Command::Routes,
         Command::Usage,
+        Command::SetStatus,
+        Command::ClearStatus,
+        Command::ListStatus,
+        Command::SetProgress,
+        Command::ClearProgress,
+        Command::Log,
+        Command::ClearLog,
+        Command::ListLog,
+        Command::SidebarState,
     ];
 
     fn from_name(name: &str) -> Option<Command> {
@@ -280,6 +310,15 @@ impl Command {
             Command::WatchEvents => "watch-events",
             Command::Routes => "routes",
             Command::Usage => "usage",
+            Command::SetStatus => "set-status",
+            Command::ClearStatus => "clear-status",
+            Command::ListStatus => "list-status",
+            Command::SetProgress => "set-progress",
+            Command::ClearProgress => "clear-progress",
+            Command::Log => "log",
+            Command::ClearLog => "clear-log",
+            Command::ListLog => "list-log",
+            Command::SidebarState => "sidebar-state",
         }
     }
 
@@ -335,6 +374,15 @@ impl Command {
             Command::WatchEvents => "subscribe",
             Command::Routes => "routes.list",
             Command::Usage => "window.list",
+            Command::SetStatus => "workspace.set_status",
+            Command::ClearStatus => "workspace.clear_status",
+            Command::ListStatus => "workspace.list_status",
+            Command::SetProgress => "workspace.set_progress",
+            Command::ClearProgress => "workspace.clear_progress",
+            Command::Log => "workspace.log",
+            Command::ClearLog => "workspace.clear_log",
+            Command::ListLog => "workspace.list_log",
+            Command::SidebarState => "workspace.sidebar_state",
         }
     }
 }
@@ -1238,6 +1286,15 @@ fn build_params(
     let surface = |opts: &Opts| target(opts, "--surface", SURFACE_ENV, env);
     let workspace = |opts: &Opts| target(opts, "--workspace", WORKSPACE_ENV, env);
     match command {
+        Command::SetStatus
+        | Command::ClearStatus
+        | Command::ListStatus
+        | Command::SetProgress
+        | Command::ClearProgress
+        | Command::Log
+        | Command::ClearLog
+        | Command::ListLog
+        | Command::SidebarState => return sidebar::params(command, args, env),
         Command::Ping
         | Command::Tree
         | Command::ListWorkspaces
@@ -2123,6 +2180,15 @@ fn render(command: Command, result: &Value) -> String {
         Command::MoveWorkspaceToWindow => format!("OK {}\n", field(result, "window_id")),
         Command::Routes => format_routes(result),
         Command::Usage => String::new(),
+        Command::SetStatus
+        | Command::ClearStatus
+        | Command::ListStatus
+        | Command::SetProgress
+        | Command::ClearProgress
+        | Command::Log
+        | Command::ClearLog
+        | Command::ListLog
+        | Command::SidebarState => sidebar::render(command, result),
         Command::WaitSurface | Command::PromptAgent | Command::WatchEvents => {
             format_wait(command, result)
         }
