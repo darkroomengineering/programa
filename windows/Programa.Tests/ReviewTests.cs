@@ -66,6 +66,8 @@ public sealed class ReviewTests
         try
         {
             Git(repo, "init -q -b main");
+            // The tests compare exact bytes; a machine's core.autocrlf (CI runners: true) would add CRs.
+            Git(repo, "config core.autocrlf false");
             File.WriteAllText(Path.Combine(repo, "a.txt"), "one\ntwo\n");
             Git(repo, "add a.txt");
             Git(repo, "-c user.email=t@t -c user.name=t commit -q -m init");
@@ -100,6 +102,8 @@ public sealed class CheckpointTests
         try
         {
             Git(repo, "init -q -b main");
+            // The tests compare exact bytes; a machine's core.autocrlf (CI runners: true) would add CRs.
+            Git(repo, "config core.autocrlf false");
             File.WriteAllText(Path.Combine(repo, "a.txt"), "one\n");
             File.WriteAllText(Path.Combine(repo, ".gitignore"), "ignored.txt\n");
             Git(repo, "add -A");
