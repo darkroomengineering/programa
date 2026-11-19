@@ -116,4 +116,5 @@
   <data name="SidebarShowLessDetails" xml:space="preserve"><value>詳細を折りたたむ</value></data>
   <data name="PinTab" xml:space="preserve"><value>タブをピン留め</value></data>
   <data name="UnpinTab" xml:space="preserve"><value>タブのピン留めを解除</value></data>
+  <data name="HelperNumbered" xml:space="preserve"><value>ヘルパー {0}</value></data>
 </root>

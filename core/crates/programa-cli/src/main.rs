@@ -7,6 +7,7 @@
 //! result JSON in, text out) so it is unit tested without a server.
 
 mod codex;
+mod detection;
 mod hook;
 mod panes;
 mod permission;
@@ -81,6 +82,11 @@ Commands:
                                         rename, clear_name, pin, unpin, mark_read, mark_unread,
                                         new_terminal_right, close_left, close_right, close_others
   rename-tab [--tab ID] [--] <TITLE>
+  agent-detection list                  Screen manifests for agent detection, bundled and your own
+  agent-detection test [AGENT] [--surface ID]
+                                        Which manifest and state the surface's screen reads as
+  agent-detection scaffold <AGENT> [--surface ID] [--force]
+                                        Write a starter manifest from the surface's screen
   snapshot list                         Sessions kept at each launch, newest first
   snapshot restore [<ID>|latest]        Open an archived session as new windows
   drag-surface-to-split --surface ID <left|right|up|down>
@@ -243,10 +249,13 @@ enum Command {
     DragSurfaceToSplit,
     SnapshotList,
     SnapshotRestore,
+    AgentDetectionList,
+    AgentDetectionTest,
+    AgentDetectionScaffold,
 }
 
 impl Command {
-    const ALL: [Command; 84] = [
+    const ALL: [Command; 87] = [
         Command::Ping,
         Command::Identify,
         Command::Tree,
@@ -331,6 +340,9 @@ impl Command {
         Command::DragSurfaceToSplit,
         Command::SnapshotList,
         Command::SnapshotRestore,
+        Command::AgentDetectionList,
+        Command::AgentDetectionTest,
+        Command::AgentDetectionScaffold,
     ];
 
     fn from_name(name: &str) -> Option<Command> {
@@ -423,6 +435,9 @@ impl Command {
             Command::DragSurfaceToSplit => "drag-surface-to-split",
             Command::SnapshotList => "snapshot list",
             Command::SnapshotRestore => "snapshot restore",
+            Command::AgentDetectionList => "agent-detection list",
+            Command::AgentDetectionTest => "agent-detection test",
+            Command::AgentDetectionScaffold => "agent-detection scaffold",
         }
     }
 
@@ -511,6 +526,9 @@ impl Command {
             Command::DragSurfaceToSplit => "surface.drag_to_split",
             Command::SnapshotList => "snapshot.list",
             Command::SnapshotRestore => "snapshot.restore",
+            Command::AgentDetectionList => "agent.detection.list",
+            Command::AgentDetectionTest => "agent.detection.classify",
+            Command::AgentDetectionScaffold => "surface.read_text",
         }
     }
 }
@@ -654,6 +672,9 @@ fn run(args: &[String], env: Env) -> i32 {
     }
     if request.command == Command::Race {
         return run_race(&path, &request.params);
+    }
+    if request.command == Command::AgentDetectionScaffold {
+        return detection::run_scaffold(&path, &request.params, json, env);
     }
     if request.command == Command::ResizePane {
         return panes::run_resize(&path, &request.params, json);
@@ -1243,7 +1264,7 @@ fn parse_invocation(args: &[String], env: Env) -> Result<Invocation, UsageError>
     }
     // `worktree <subcommand>` and `layout <subcommand>` are one command named by both words.
     let (name, command_args) = match (name.as_str(), command_args.split_first()) {
-        ("worktree" | "layout" | "storage" | "snapshot", Some((sub, rest)))
+        ("worktree" | "layout" | "storage" | "snapshot" | "agent-detection", Some((sub, rest)))
             if !sub.starts_with('-') =>
         {
             (format!("{name} {sub}"), rest)
@@ -1275,6 +1296,11 @@ fn parse_invocation(args: &[String], env: Env) -> Result<Invocation, UsageError>
         ("storage", _) => {
             return Err(UsageError(
                 "storage: missing subcommand (scan or clean)".into(),
+            ))
+        }
+        ("agent-detection", _) => {
+            return Err(UsageError(
+                "agent-detection requires a subcommand: list, scaffold, test".into(),
             ))
         }
         ("snapshot", _) => {
@@ -1456,6 +1482,9 @@ fn build_params(
         | Command::RenameTab
         | Command::DragSurfaceToSplit => return tabs::params(command, args, env),
         Command::SnapshotList | Command::SnapshotRestore => return snapshot::params(command, args),
+        Command::AgentDetectionList
+        | Command::AgentDetectionTest
+        | Command::AgentDetectionScaffold => return detection::params(command, args, env),
         Command::Ping
         | Command::Tree
         | Command::ListWorkspaces
@@ -2375,6 +2404,9 @@ fn render(command: Command, result: &Value) -> String {
         | Command::RenameTab
         | Command::DragSurfaceToSplit => tabs::render(command, result),
         Command::SnapshotList | Command::SnapshotRestore => snapshot::render(command, result),
+        Command::AgentDetectionList
+        | Command::AgentDetectionTest
+        | Command::AgentDetectionScaffold => detection::render(command, result),
         Command::WaitSurface | Command::PromptAgent | Command::WatchEvents => {
             format_wait(command, result)
         }

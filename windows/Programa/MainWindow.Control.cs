@@ -26,7 +26,7 @@ public sealed partial class MainWindow
         "window.list", "window.current", "window.create", "window.focus", "window.close", "workspace.move_to_window", "surface.move",
         .. SidebarMetadata.Methods, "workspace.sidebar_state", "workspace.reset_sidebar",
         .. PaneControl.Methods, .. SurfaceActionControl.Methods,
-        "snapshot.list", "snapshot.restore",
+        "snapshot.list", "snapshot.restore", "agent.spawn", "agent.detection.list", "agent.detection.classify",
     ];
 
     /// <summary>Runs one request routed to this window (<see cref="WindowRegistry"/> owns the pipe) on
@@ -38,6 +38,8 @@ public sealed partial class MainWindow
             // Already on the UI thread (WindowRegistry routes there); these await without blocking it.
             : method == "surface.wait" ? WaitFromControlAsync(parameters)
             : method == "agent.prompt" ? PromptFromControlAsync(parameters)
+            // A helper in its own worktree runs git first, off the UI thread.
+            : method == "agent.spawn" ? Task.Run(() => SpawnAgentAsync(parameters))
             : OnUiThread(() => HandleControl(method, parameters));
 
     private Task<object?> OnUiThread(Func<object?> work)
@@ -103,6 +105,8 @@ public sealed partial class MainWindow
         "agent.needs_input" => NeedsInputFromControl(p),
         "workspace.action" => WorkspaceActionFromControl(p),
         "workspace.sidebar_state" or "workspace.reset_sidebar" => SidebarFromControl(method, p),
+        "agent.detection.list" => AgentDetection.List(),
+        "agent.detection.classify" => DetectionClassifyFromControl(p),
         _ when SidebarMetadata.Methods.Contains(method) => SidebarFromControl(method, p),
         _ when PaneControl.Methods.Contains(method) => PaneFromControl(method, p),
         _ when SurfaceActionControl.Methods.Contains(method) => SurfaceActionFromControl(method, p),

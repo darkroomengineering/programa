@@ -43,6 +43,47 @@ public sealed class AgentDetectionTests
             Directory.Delete(user, recursive: true);
         }
     }
+
+    [TestMethod]
+    public void ListAndClassifyReportSourcesRejectsAndTheMatch()
+    {
+        var user = Directory.CreateTempSubdirectory("programa-detect-").FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(user, "aider.json"), """
+                {"version":1,"agent":"aider","display_name":"My Aider","recognize":{"process_names":["aider"],"screen_patterns":["MY AIDER"]},
+                 "states":[{"bucket":"blocked","priority":9,"anchor_last_n_lines":3,"patterns":["Proceed\\?"],"confidence":"high","source_notes":"mine"}]}
+                """);
+            File.WriteAllText(Path.Combine(user, "bad.json"), """{"agent":"bad","states":[{"bucket":"idle","patterns":["(unclosed"]}]}""");
+            var (manifests, rejected) = AgentDetection.LoadAll(Bundled, user);
+            var aider = manifests.Single(manifest => manifest.Agent == "aider");
+            Assert.AreEqual(("override", "My Aider"), (aider.Source, aider.DisplayName));
+            CollectionAssert.AreEqual(new[] { "aider" }, aider.ProcessNames);
+            Assert.AreEqual("bundled", manifests.Single(manifest => manifest.Agent == "codex").Source);
+            Assert.AreEqual(("bad", "(unclosed"), (rejected.Single().Agent, rejected.Single().InvalidPatterns.Single()));
+            Assert.IsFalse(manifests.Any(manifest => manifest.Agent == "bad"));
+
+            var matched = AgentDetection.Classify("MY AIDER\nwork\nProceed?\n", null, manifests);
+            Assert.AreEqual(("screen_pattern", "aider", "blocked", "high", @"Proceed\?"),
+                ((string?)matched["recognized_via"], (string?)matched["agent"], (string?)matched["bucket"], (string?)matched["confidence"], (string?)matched["matched_pattern"]));
+            var explicitNoMatch = AgentDetection.Classify("nothing here", "aider", manifests);
+            Assert.AreEqual(("explicit", "aider", null), ((string?)explicitNoMatch["recognized_via"], (string?)explicitNoMatch["agent"], (string?)explicitNoMatch["bucket"]));
+            Assert.IsNull(AgentDetection.Classify("PS C:\\> dir", null, manifests)["agent"]);
+            Assert.AreEqual("not_found", Assert.ThrowsExactly<ControlException>(() => AgentDetection.Classify("x", "nobody", manifests)).Code);
+        }
+        finally
+        {
+            Directory.Delete(user, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void AHelperIsNamedAfterItsTaskThenItsRole()
+    {
+        Assert.AreEqual("Fix the flaky test", MainWindow.AutomaticHelperTitle("Fix the flaky test\nThen report back", "Explore", 2));
+        Assert.AreEqual("Explore", MainWindow.AutomaticHelperTitle(null, "Explore", 2));
+        Assert.AreEqual(80, MainWindow.AutomaticHelperTitle(new string('x', 200), null, 1).Length);
+    }
 }
 
 [TestClass]

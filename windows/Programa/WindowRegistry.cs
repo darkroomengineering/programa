@@ -515,6 +515,7 @@ internal static class WindowRegistry
             ?? (Text(p, "surface_id") is { } surfaceId ? OwnerOfSurface(surfaceId) : null)
             ?? (Text(p, "tab_id") is { } tabId ? OwnerOfSurface(tabId) : null)
             ?? (Text(p, "workspace_id") is { } id ? OwnerOfWorkspace(id) : null)
+            ?? (Text(p, "parent_workspace_id") is { } parentId ? OwnerOfWorkspace(parentId) : null)
             ?? (Text(p, "pane_id") is { } routedPane ? Open.FirstOrDefault(window => window.PaneWorkspace(routedPane) is not null) : null)
             ?? Current ?? Open[0];
         return routed.HandleControlAsync(method, p);

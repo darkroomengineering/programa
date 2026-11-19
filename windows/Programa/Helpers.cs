@@ -113,6 +113,12 @@ internal static class Helpers
 
     internal static void Reset() => Records.Clear();
 
+    /// <summary>A helper whose spawn failed leaves no record, as on macOS.</summary>
+    internal static void Discard(string id)
+    {
+        if (Records.Remove(id, out var helper)) Changed?.Invoke(helper.WorkspaceId);
+    }
+
     private static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>`agent.task.*`. <paramref name="workspaceOpen"/> and <paramref name="surfaceIn"/> check
