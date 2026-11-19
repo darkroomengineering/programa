@@ -6,6 +6,7 @@
 //! Everything except the transport is pure (argv + env in, request out;
 //! result JSON in, text out) so it is unit tested without a server.
 
+mod app;
 mod codex;
 mod detection;
 mod hook;
@@ -87,6 +88,10 @@ Commands:
                                         Which manifest and state the surface's screen reads as
   agent-detection scaffold <AGENT> [--surface ID] [--force]
                                         Write a starter manifest from the surface's screen
+  shortcuts                             Open Settings at Keyboard Shortcuts
+  list-shortcuts                        Each shortcut as the app resolves it
+  reload-config                         Re-read settings.json and the terminal configuration
+  feedback                              Open the GitHub issues page
   snapshot list                         Sessions kept at each launch, newest first
   snapshot restore [<ID>|latest]        Open an archived session as new windows
   drag-surface-to-split --surface ID <left|right|up|down>
@@ -252,10 +257,15 @@ enum Command {
     AgentDetectionList,
     AgentDetectionTest,
     AgentDetectionScaffold,
+    OpenShortcuts,
+    ListShortcuts,
+    ReloadConfig,
+    Feedback,
+    FeedbackSubmit,
 }
 
 impl Command {
-    const ALL: [Command; 87] = [
+    const ALL: [Command; 92] = [
         Command::Ping,
         Command::Identify,
         Command::Tree,
@@ -343,6 +353,11 @@ impl Command {
         Command::AgentDetectionList,
         Command::AgentDetectionTest,
         Command::AgentDetectionScaffold,
+        Command::OpenShortcuts,
+        Command::ListShortcuts,
+        Command::ReloadConfig,
+        Command::Feedback,
+        Command::FeedbackSubmit,
     ];
 
     fn from_name(name: &str) -> Option<Command> {
@@ -438,6 +453,12 @@ impl Command {
             Command::AgentDetectionList => "agent-detection list",
             Command::AgentDetectionTest => "agent-detection test",
             Command::AgentDetectionScaffold => "agent-detection scaffold",
+            Command::OpenShortcuts => "shortcuts",
+            Command::ListShortcuts => "list-shortcuts",
+            Command::ReloadConfig => "reload-config",
+            Command::Feedback => "feedback",
+            // Never named on the command line: `feedback` with --email, --body or --image.
+            Command::FeedbackSubmit => "feedback --body",
         }
     }
 
@@ -529,6 +550,11 @@ impl Command {
             Command::AgentDetectionList => "agent.detection.list",
             Command::AgentDetectionTest => "agent.detection.classify",
             Command::AgentDetectionScaffold => "surface.read_text",
+            Command::OpenShortcuts => "settings.open",
+            Command::ListShortcuts => "shortcuts.list",
+            Command::ReloadConfig => "app.reload_config",
+            Command::Feedback => "feedback.open",
+            Command::FeedbackSubmit => "feedback.submit",
         }
     }
 }
@@ -1317,6 +1343,7 @@ fn parse_invocation(args: &[String], env: Env) -> Result<Invocation, UsageError>
     };
     let name = &name;
     let command = match Command::from_name(name) {
+        Some(Command::Feedback) if app::sends_feedback(command_args) => Command::FeedbackSubmit,
         Some(command) => command,
         None if name.starts_with('-') => {
             return Err(UsageError(format!("unknown option '{name}'")));
@@ -1482,6 +1509,11 @@ fn build_params(
         | Command::RenameTab
         | Command::DragSurfaceToSplit => return tabs::params(command, args, env),
         Command::SnapshotList | Command::SnapshotRestore => return snapshot::params(command, args),
+        Command::OpenShortcuts
+        | Command::ListShortcuts
+        | Command::ReloadConfig
+        | Command::Feedback
+        | Command::FeedbackSubmit => return app::params(command, args),
         Command::AgentDetectionList
         | Command::AgentDetectionTest
         | Command::AgentDetectionScaffold => return detection::params(command, args, env),
@@ -2404,6 +2436,11 @@ fn render(command: Command, result: &Value) -> String {
         | Command::RenameTab
         | Command::DragSurfaceToSplit => tabs::render(command, result),
         Command::SnapshotList | Command::SnapshotRestore => snapshot::render(command, result),
+        Command::OpenShortcuts
+        | Command::ListShortcuts
+        | Command::ReloadConfig
+        | Command::Feedback
+        | Command::FeedbackSubmit => app::render(command, result),
         Command::AgentDetectionList
         | Command::AgentDetectionTest
         | Command::AgentDetectionScaffold => detection::render(command, result),

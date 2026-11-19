@@ -10,7 +10,8 @@ namespace Programa;
 /// and applied to every window at once.</summary>
 public sealed partial class MainWindow
 {
-    private async Task ShowSettingsAsync()
+    /// <summary>Settings, at Keyboard Shortcuts when <paramref name="target"/> is keyboardShortcuts (settings.open).</summary>
+    private async Task ShowSettingsAsync(string? target = null)
     {
         if (_dialogOpen || Root.XamlRoot is null) return;
         var app = AppSettings.Load();
@@ -69,8 +70,9 @@ public sealed partial class MainWindow
         bar.Items.Add(Section("SettingsCustomCommands", trustedDirectories, trustNote));
         bar.Items.Add(Section("SettingsShortcuts", shortcutPanel));
         bar.SelectionChanged += (sender, _) => page.Content = sender.SelectedItem?.Tag;
-        bar.SelectedItem = bar.Items[0];
-        page.Content = bar.Items[0].Tag;
+        var first = target == "keyboardShortcuts" ? bar.Items[^1] : bar.Items[0];
+        bar.SelectedItem = first;
+        page.Content = first.Tag;
         var content = new StackPanel { Spacing = 8, MinWidth = 560, Children = { bar, page } };
         var dialog = new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = Localizer.Get("Settings"), Content = content, PrimaryButtonText = Localizer.Get("Save"), CloseButtonText = Localizer.Get("Cancel"), DefaultButton = ContentDialogButton.Primary };
         dialog.Resources["ContentDialogMaxWidth"] = 720.0;

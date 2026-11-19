@@ -491,6 +491,12 @@ internal static class WindowRegistry
             case "agent.task.start" or "agent.task.update" or "agent.task.finish" or "agent.task.finish_session" or "agent.task.list":
                 return Task.FromResult<object?>(Helpers.FromControl(method, p, id => OwnerOfWorkspace(id) is not null,
                     (workspace, surface) => OwnerOfWorkspace(workspace)?.WorkspaceHasSurface(workspace, surface) == true, DateTimeOffset.UtcNow));
+            case "system.tree":
+                return Task.FromResult<object?>(Tree(p));
+            case "app.reload_config":
+                // settings.json and the terminal configuration, as their file watcher applies them.
+                ApplySettings();
+                return Task.FromResult<object?>(new { reloaded = true });
             case "snapshot.list":
                 return Task.FromResult<object?>(SessionHistory.List());
             case "snapshot.restore":
@@ -519,6 +525,30 @@ internal static class WindowRegistry
             ?? (Text(p, "pane_id") is { } routedPane ? Open.FirstOrDefault(window => window.PaneWorkspace(routedPane) is not null) : null)
             ?? Current ?? Open[0];
         return routed.HandleControlAsync(method, p);
+    }
+
+    /// <summary>system.tree, as on macOS: the focused window (every window with all_windows, or the one
+    /// holding workspace_id), with the focus and, given caller, where the calling terminal is.</summary>
+    private static object Tree(JsonElement p)
+    {
+        var only = Text(p, "workspace_id");
+        var focused = Text(p, "window_id") is { } windowId ? WindowById(windowId) ?? throw NotFound("window", windowId) : Current ?? Open.FirstOrDefault();
+        var windows = new List<object>();
+        if (only is not null)
+        {
+            var owner = OwnerOfWorkspace(only) ?? throw new ControlException("not_found", "Workspace not found", new { workspace_id = only });
+            windows.Add(owner.TreeWindow(Open.IndexOf(owner), owner == Current, only));
+        }
+        else
+        {
+            var all = Flag(p, "all_windows") ?? false;
+            for (var index = 0; index < Open.Count; index++)
+                if (all || Open[index] == focused) windows.Add(Open[index].TreeWindow(index, Open[index] == Current, null));
+        }
+        object? caller = null;
+        if (p.ValueKind == JsonValueKind.Object && p.TryGetProperty("caller", out var from) && Text(from, "workspace_id") is { } callerWorkspace)
+            caller = OwnerOfWorkspace(callerWorkspace)?.TreeCaller(callerWorkspace, Text(from, "surface_id") ?? Text(from, "tab_id"));
+        return new { active = focused?.TreeFocus(), caller, windows };
     }
 
     /// <summary>`surface.move`, as on macOS: a tab to a pane (pane_id), to a workspace's selected pane

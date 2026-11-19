@@ -48,6 +48,9 @@ internal static class Helpers
     internal static List<Helper> Of(string workspaceId) =>
         Records.Values.Where(helper => helper.Placement == "runs_with_parent" && Same(helper.WorkspaceId, workspaceId)).ToList();
 
+    /// <summary>Every helper in a workspace, whatever its placement (system.tree).</summary>
+    internal static List<Helper> InWorkspace(string workspaceId) => Records.Values.Where(helper => Same(helper.WorkspaceId, workspaceId)).ToList();
+
     internal static Helper Start(string id, string? parentId, string host, string? session, string? task, string? role, string? summary,
         string state, string placement, string workspaceId, string? surfaceId, DateTimeOffset now)
     {

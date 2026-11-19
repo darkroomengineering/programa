@@ -117,4 +117,5 @@
   <data name="PinTab" xml:space="preserve"><value>Pin Tab</value></data>
   <data name="UnpinTab" xml:space="preserve"><value>Unpin Tab</value></data>
   <data name="HelperNumbered" xml:space="preserve"><value>Helper {0}</value></data>
+  <data name="NotificationDefaultTitle" xml:space="preserve"><value>Notification</value></data>
 </root>

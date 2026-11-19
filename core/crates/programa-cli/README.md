@@ -24,6 +24,7 @@ A second binary, `programa-mcp` (`src/mcp.rs`), is the MCP server over stdio for
 `drag-surface-to-split --surface ID <left|right|up|down>`,
 `snapshot list`, `snapshot restore [<id>|latest]`,
 `agent-detection list`, `agent-detection test [agent]`, `agent-detection scaffold <agent> [--force]`,
+`shortcuts`, `list-shortcuts`, `reload-config`, `feedback`,
 `list-ports`, `stop-port <PORT>|--pid PID` (a port resolves to its one listening pid).
 Run `programa help` for every flag.
 

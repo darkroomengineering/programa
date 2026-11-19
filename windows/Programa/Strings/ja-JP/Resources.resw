@@ -117,4 +117,5 @@
   <data name="PinTab" xml:space="preserve"><value>タブをピン留め</value></data>
   <data name="UnpinTab" xml:space="preserve"><value>タブのピン留めを解除</value></data>
   <data name="HelperNumbered" xml:space="preserve"><value>ヘルパー {0}</value></data>
+  <data name="NotificationDefaultTitle" xml:space="preserve"><value>通知</value></data>
 </root>
