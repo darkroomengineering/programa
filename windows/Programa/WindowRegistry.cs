@@ -38,7 +38,11 @@ internal static class WindowRegistry
         if (!smoke) TerminalHost.Start();
         Notifications.ToastClicked += surfaceId => _dispatcher.TryEnqueue(() => JumpTo(surfaceId));
         Notifications.RegisterToasts();
-        var saved = SessionStore.Load();
+        // Before anything can overwrite it, the session goes into the history (snapshot.list); an
+        // unreadable one falls back to the newest archive that restores, as on macOS.
+        if (!smoke) SessionHistory.Rotate();
+        var hadSession = File.Exists(SessionStore.DefaultPath);
+        var saved = SessionStore.Load() ?? (hadSession && !smoke ? SessionHistory.NewestRestorable() : null);
         OpenWindow(smoke, saved);
         foreach (var other in saved?.OtherWindows ?? []) OpenWindow(false, other);
         TerminalHost.Retain(Open.SelectMany(window => window.SurfaceIds()));
@@ -307,7 +311,7 @@ internal static class WindowRegistry
             return;
         }
         // The last window: keep the windows that closed with it (a shutdown), then stop.
-        SaveAll(includeRecentlyClosed: true);
+        SaveAll(includeRecentlyClosed: true, clean: true);
         _autosave?.Stop();
         _control?.Dispose();
         _settingsWatcher?.Dispose();
@@ -315,7 +319,7 @@ internal static class WindowRegistry
 
     /// <summary>Writes every open window to the session file: the first at its root, the others under
     /// other_windows. No window with a workspace deletes it, so the next launch starts fresh.</summary>
-    internal static void SaveAll(bool includeRecentlyClosed = false)
+    internal static void SaveAll(bool includeRecentlyClosed = false, bool clean = false)
     {
         var now = DateTimeOffset.Now;
         RecentlyClosed.RemoveAll(item => now - item.ClosedAt > RecentlyClosedWindow);
@@ -326,14 +330,20 @@ internal static class WindowRegistry
             SessionStore.Delete();
             return;
         }
-        SessionStore.Save(sessions[0] with { OtherWindows = sessions.Count > 1 ? sessions.Skip(1).Select(item => item with { OtherWindows = null }).ToList() : null });
+        // A quit marks the session clean (snapshot.list clean_shutdown); every other save, unclean.
+        SessionStore.Save(sessions[0] with
+        {
+            OtherWindows = sessions.Count > 1 ? sessions.Skip(1).Select(item => item with { OtherWindows = null, CleanShutdown = null, SavedAt = null }).ToList() : null,
+            CleanShutdown = clean,
+            SavedAt = DateTimeOffset.UtcNow,
+        });
     }
 
     /// <summary>Quit: saves every window, then closes them all without asking again. The caller has
     /// already asked about running programs.</summary>
     internal static void Quit()
     {
-        SaveAll();
+        SaveAll(clean: true);
         _quitting = true;
         _autosave?.Stop();
         foreach (var window in Open.ToList()) window.CloseWithoutAsking();
@@ -481,6 +491,14 @@ internal static class WindowRegistry
             case "agent.task.start" or "agent.task.update" or "agent.task.finish" or "agent.task.finish_session" or "agent.task.list":
                 return Task.FromResult<object?>(Helpers.FromControl(method, p, id => OwnerOfWorkspace(id) is not null,
                     (workspace, surface) => OwnerOfWorkspace(workspace)?.WorkspaceHasSurface(workspace, surface) == true, DateTimeOffset.UtcNow));
+            case "snapshot.list":
+                return Task.FromResult<object?>(SessionHistory.List());
+            case "snapshot.restore":
+                // New windows only: an open window is never touched.
+                var (restoredWindows, restoredWorkspaces, restoredPanels) = SessionHistory.Restore(Text(p, "id"));
+                foreach (var restored in restoredWindows) OpenWindow(false, restored);
+                SaveAll();
+                return Task.FromResult<object?>(new { restored = new { windows = restoredWindows.Count, workspaces = restoredWorkspaces, panels = restoredPanels } });
             case "ports.list":
                 return Task.FromResult<object?>(PortsList());
             case "routes.list":

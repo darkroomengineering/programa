@@ -26,6 +26,7 @@ public sealed partial class MainWindow
         "window.list", "window.current", "window.create", "window.focus", "window.close", "workspace.move_to_window", "surface.move",
         .. SidebarMetadata.Methods, "workspace.sidebar_state", "workspace.reset_sidebar",
         .. PaneControl.Methods, .. SurfaceActionControl.Methods,
+        "snapshot.list", "snapshot.restore",
     ];
 
     /// <summary>Runs one request routed to this window (<see cref="WindowRegistry"/> owns the pipe) on

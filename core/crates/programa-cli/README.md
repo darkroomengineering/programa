@@ -22,6 +22,7 @@ A second binary, `programa-mcp` (`src/mcp.rs`), is the MCP server over stdio for
 `send-key [--force] [--answer-prompt] <key>`, `clear-history`, `trigger-flash`, `refresh-surfaces`, `surface-health`,
 `reorder-surface <ID> (--index|--before|--after)`, `tab-action <action> [--tab] [--title]`, `rename-tab <title>`,
 `drag-surface-to-split --surface ID <left|right|up|down>`,
+`snapshot list`, `snapshot restore [<id>|latest]`,
 `list-ports`, `stop-port <PORT>|--pid PID` (a port resolves to its one listening pid).
 Run `programa help` for every flag.
 

@@ -11,6 +11,7 @@ mod hook;
 mod panes;
 mod permission;
 mod sidebar;
+mod snapshot;
 mod tabs;
 mod transport;
 mod usage;
@@ -80,6 +81,8 @@ Commands:
                                         rename, clear_name, pin, unpin, mark_read, mark_unread,
                                         new_terminal_right, close_left, close_right, close_others
   rename-tab [--tab ID] [--] <TITLE>
+  snapshot list                         Sessions kept at each launch, newest first
+  snapshot restore [<ID>|latest]        Open an archived session as new windows
   drag-surface-to-split --surface ID <left|right|up|down>
                                         Move a tab into a new split beside its pane
   set-agent-state <working|blocked|idle|clear> [--surface ID] [--source NAME]
@@ -238,10 +241,12 @@ enum Command {
     TabAction,
     RenameTab,
     DragSurfaceToSplit,
+    SnapshotList,
+    SnapshotRestore,
 }
 
 impl Command {
-    const ALL: [Command; 82] = [
+    const ALL: [Command; 84] = [
         Command::Ping,
         Command::Identify,
         Command::Tree,
@@ -324,6 +329,8 @@ impl Command {
         Command::TabAction,
         Command::RenameTab,
         Command::DragSurfaceToSplit,
+        Command::SnapshotList,
+        Command::SnapshotRestore,
     ];
 
     fn from_name(name: &str) -> Option<Command> {
@@ -414,6 +421,8 @@ impl Command {
             Command::TabAction => "tab-action",
             Command::RenameTab => "rename-tab",
             Command::DragSurfaceToSplit => "drag-surface-to-split",
+            Command::SnapshotList => "snapshot list",
+            Command::SnapshotRestore => "snapshot restore",
         }
     }
 
@@ -500,6 +509,8 @@ impl Command {
             Command::TabAction => "tab.action",
             Command::RenameTab => "tab.action",
             Command::DragSurfaceToSplit => "surface.drag_to_split",
+            Command::SnapshotList => "snapshot.list",
+            Command::SnapshotRestore => "snapshot.restore",
         }
     }
 }
@@ -1232,7 +1243,9 @@ fn parse_invocation(args: &[String], env: Env) -> Result<Invocation, UsageError>
     }
     // `worktree <subcommand>` and `layout <subcommand>` are one command named by both words.
     let (name, command_args) = match (name.as_str(), command_args.split_first()) {
-        ("worktree" | "layout" | "storage", Some((sub, rest))) if !sub.starts_with('-') => {
+        ("worktree" | "layout" | "storage" | "snapshot", Some((sub, rest)))
+            if !sub.starts_with('-') =>
+        {
             (format!("{name} {sub}"), rest)
         }
         ("review", Some((sub, rest))) if sub == "comment" => match rest.split_first() {
@@ -1262,6 +1275,11 @@ fn parse_invocation(args: &[String], env: Env) -> Result<Invocation, UsageError>
         ("storage", _) => {
             return Err(UsageError(
                 "storage: missing subcommand (scan or clean)".into(),
+            ))
+        }
+        ("snapshot", _) => {
+            return Err(UsageError(
+                "snapshot requires a subcommand: list, restore".into(),
             ))
         }
         ("layout", _) => {
@@ -1437,6 +1455,7 @@ fn build_params(
         | Command::TabAction
         | Command::RenameTab
         | Command::DragSurfaceToSplit => return tabs::params(command, args, env),
+        Command::SnapshotList | Command::SnapshotRestore => return snapshot::params(command, args),
         Command::Ping
         | Command::Tree
         | Command::ListWorkspaces
@@ -2355,6 +2374,7 @@ fn render(command: Command, result: &Value) -> String {
         | Command::TabAction
         | Command::RenameTab
         | Command::DragSurfaceToSplit => tabs::render(command, result),
+        Command::SnapshotList | Command::SnapshotRestore => snapshot::render(command, result),
         Command::WaitSurface | Command::PromptAgent | Command::WatchEvents => {
             format_wait(command, result)
         }

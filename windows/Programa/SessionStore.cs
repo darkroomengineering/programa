@@ -24,7 +24,9 @@ internal sealed record SavedSession(
     Dictionary<string, SessionReview>? ReviewPanels = null,
     string? WindowId = null,
     List<SavedSession>? OtherWindows = null,
-    Dictionary<string, SessionSidebar>? Sidebar = null);
+    Dictionary<string, SessionSidebar>? Sidebar = null,
+    bool? CleanShutdown = null,
+    DateTimeOffset? SavedAt = null);
 
 /// <summary>A workspace's sidebar log and progress, which macOS also restores.</summary>
 internal sealed record SessionSidebar(List<SessionLogEntry>? Log, SidebarProgress? Progress);
@@ -56,6 +58,13 @@ internal static class SessionStore
     internal static string DefaultPath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programa",
         BuildIdentity.Value.Contains("0.0.0-dev", StringComparison.Ordinal) ? "session-dev.json" : "session.json");
+
+    /// <summary>A session file's bytes as a session, at any version, or null when they do not parse.</summary>
+    internal static SavedSession? Parse(byte[] bytes)
+    {
+        try { return JsonSerializer.Deserialize<SavedSession>(bytes, Options); }
+        catch (JsonException) { return null; }
+    }
 
     /// <summary>The saved session, or null when there is none or it cannot be read; an unreadable
     /// file is set aside as session.json.broken so it is not retried on every launch.</summary>
