@@ -54,6 +54,7 @@ a snapshot property.
       "selected_workspace_id": "workspace-uuid",
       "workspaces": [{
         "id": "workspace-uuid",
+        "title": "api",
         "selected_pane_id": "pane-uuid",
         "panes": [{
           "id": "pane-uuid",
@@ -85,6 +86,9 @@ Directions are horizontal and vertical. Ratios are finite and strictly between
 split IDs share one uniqueness namespace. Every workspace and pane is nonempty,
 selected IDs name owned children, and each pane appears once in its layout.
 The is_pinned field defaults to false when omitted, but output includes it.
+A workspace or surface title is the name the user gave it; it is omitted when there is
+none, and frontends then derive a name (the macOS app uses the focused
+terminal's title).
 
 ## Commands
 
@@ -94,6 +98,16 @@ Commands use a command tag and reject unknown fields.
     {"command":"create_workspace","workspace_id":"w","pane_id":"p","surface_id":"s","session_id":"session"}
     {"command":"select_workspace","workspace_id":"w"}
     {"command":"close_workspace","workspace_id":"w"}
+    {"command":"rename_workspace","workspace_id":"w","title":"api"}
+    {"command":"rename_surface","workspace_id":"w","pane_id":"p","surface_id":"s","title":"server"}
+    {"command":"set_workspace_pinned","workspace_id":"w","pinned":true}
+    {"command":"set_workspace_color","workspace_id":"w","color":"#1565C0"}
+    {"command":"set_workspace_description","workspace_id":"w","description":"api server"}
+    {"command":"move_workspace","workspace_id":"w","index":0}
+    {"command":"adopt_workspace","workspace":<workspace>}
+    {"command":"adopt_surface","workspace_id":"w","pane_id":"p","surface":<surface>,"before_surface_id":null}
+    {"command":"set_workspace_parent","workspace_id":"w","parent_id":"repo"}
+    {"command":"set_workspace_collapsed","workspace_id":"repo","collapsed":true}
     {"command":"create_surface","workspace_id":"w","pane_id":"p","surface_id":"s","session_id":"session"}
     {"command":"select_surface","workspace_id":"w","pane_id":"p","surface_id":"s"}
     {"command":"close_surface","workspace_id":"w","pane_id":"p","surface_id":"s"}
@@ -110,7 +124,21 @@ selects the item at its old index, or the preceding item at the tail. Closing a
 pane's final surface removes that pane and collapses its closest split parent to
 the sibling branch. If it was the workspace's final pane, the workspace closes.
 Closing the final workspace is valid and yields empty state with a null
-selected_workspace_id.
+selected_workspace_id. Rename (workspace or surface) trims the title; a null or blank title removes it.
+
+Pinned workspaces form a prefix of the list: pinning moves a workspace to the end
+of that prefix and unpinning to just after it, and move_workspace clamps the index
+to the workspace's own group. set_workspace_color takes `#RRGGBB` (stored upper
+case) and fails with `invalid_color` otherwise; a null or blank color, like a null
+or blank description, removes it. Snapshots carry `pinned`, `color` and
+`description` only when set. adopt_workspace adds a whole workspace from another core (the Windows
+app moving one between windows) with its ids, which must be new here, and selects it.
+adopt_surface does the same for one tab dropped on a pane of another window: it goes before
+before_surface_id (null: at the end) and is selected with its pane and workspace.
+set_workspace_parent nests a workspace under a top-level one (a git worktree under its
+repository's workspace); a null parent_id un-nests it. Nesting is one level deep, the list keeps
+every child right after its parent, a parent link that no longer leads to a top-level workspace
+is dropped, and selecting a child of a collapsed parent expands it.
 
 Reorder inserts immediately before before_surface_id; null means the trailing
 gap. Source and target must belong to the named workspace and pane. The resolved

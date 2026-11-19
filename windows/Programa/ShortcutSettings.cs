@@ -19,6 +19,38 @@ public sealed class ShortcutSettings
         ["select_tab_4"] = "alt-4", ["select_tab_5"] = "alt-5", ["select_tab_6"] = "alt-6",
         ["select_tab_7"] = "alt-7", ["select_tab_8"] = "alt-8", ["select_tab_9"] = "alt-9",
         ["copy"] = "ctrl-shift-c", ["paste"] = "ctrl-shift-v", ["paste_alternate"] = "shift-insert",
+        // Workspaces: the macOS ⌘ shortcuts with Ctrl+Shift, or plain Ctrl where it sends nothing
+        // to the terminal (digits, Page Up/Down). ⌘⇧W adds Alt because Ctrl+Shift+W closes a tab.
+        ["new_workspace"] = "ctrl-shift-n",
+        ["close_workspace"] = "ctrl-alt-shift-w",
+        ["rename_workspace"] = "ctrl-shift-r",
+        ["next_workspace"] = "ctrl-pagedown",
+        ["previous_workspace"] = "ctrl-pageup",
+        ["toggle_sidebar"] = "ctrl-shift-b",
+        // Notifications: ⌘⇧U and ⌘I on macOS.
+        ["jump_to_unread"] = "ctrl-shift-u",
+        ["show_notifications"] = "ctrl-shift-i",
+        // Navigation, from the macOS defaults: ⌘⇧P palette, ⌃Tab tabs, ⌘⇧T reopen (Alt added:
+        // Ctrl+Shift+T is new tab), ⌘⇧↩ zoom, ⌥⌘ arrows, ⌘F find, ⌘K clear, ⌘= ⌘- ⌘0 font size.
+        ["command_palette"] = "ctrl-shift-p",
+        ["next_tab"] = "ctrl-tab",
+        ["previous_tab"] = "ctrl-shift-tab",
+        ["reopen_tab"] = "ctrl-alt-shift-t",
+        ["new_claude_workspace"] = "ctrl-alt-shift-c",
+        ["new_window"] = "ctrl-alt-shift-n",
+        ["toggle_zoom"] = "ctrl-shift-enter",
+        ["focus_left"] = "ctrl-alt-left",
+        ["focus_right"] = "ctrl-alt-right",
+        ["focus_up"] = "ctrl-alt-up",
+        ["focus_down"] = "ctrl-alt-down",
+        ["find"] = "ctrl-shift-f",
+        ["clear_scrollback"] = "ctrl-shift-k",
+        ["font_bigger"] = "ctrl-equals",
+        ["font_smaller"] = "ctrl-minus",
+        ["font_reset"] = "ctrl-0",
+        ["select_workspace_1"] = "ctrl-1", ["select_workspace_2"] = "ctrl-2", ["select_workspace_3"] = "ctrl-3",
+        ["select_workspace_4"] = "ctrl-4", ["select_workspace_5"] = "ctrl-5", ["select_workspace_6"] = "ctrl-6",
+        ["select_workspace_7"] = "ctrl-7", ["select_workspace_8"] = "ctrl-8", ["select_workspace_9"] = "ctrl-9",
     };
 
     private static readonly HashSet<string> Reserved = ["ctrl-c", "ctrl-d", "ctrl-w"];
@@ -27,8 +59,28 @@ public sealed class ShortcutSettings
     private static readonly JsonDocumentOptions DocumentOptions = new() { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
     private static readonly JsonReaderOptions ReaderOptions = new() { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
     private readonly Dictionary<string, string> _values;
+    /// <summary>Action by binding, so a key press costs one lookup.</summary>
+    private readonly Dictionary<string, string> _actions;
 
-    private ShortcutSettings(Dictionary<string, string> values) => _values = values;
+    private ShortcutSettings(Dictionary<string, string> values)
+    {
+        _values = values;
+        _actions = values.ToDictionary(pair => pair.Value, pair => pair.Key, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The action bound to this key with the modifiers held now, or null.</summary>
+    public string? ActionFor(VirtualKey key)
+    {
+        var name = KeyName(key);
+        if (name.Length == 0) return null;
+        return _actions.GetValueOrDefault(Modifiers() + name);
+    }
+
+    private static string Modifiers() =>
+        (IsDown(VirtualKey.Control) ? "ctrl-" : "") + (IsDown(VirtualKey.Menu) ? "alt-" : "") + (IsDown(VirtualKey.Shift) ? "shift-" : "");
+
+    private static bool IsDown(VirtualKey key) =>
+        InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
 
     public IReadOnlyDictionary<string, string> Values => _values;
 
@@ -75,6 +127,38 @@ public sealed class ShortcutSettings
         var temporary = path + ".tmp";
         File.WriteAllBytes(temporary, updated);
         File.Move(temporary, path, true);
+    }
+
+    /// <summary>Sets top-level <c>section.key</c> values in the shared settings file, keeping every
+    /// other byte like <see cref="Save"/>. A null value writes JSON null.</summary>
+    internal static void SetValues(IEnumerable<(string Section, string Key, JsonNode? Value)> values)
+    {
+        var path = SettingsPath;
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var bytes = File.Exists(path) ? File.ReadAllBytes(path) : [];
+        try
+        {
+            foreach (var (section, key, value) in values) bytes = PatchValue(bytes, section, key, value?.ToJsonString() ?? "null");
+            JsonDocument.Parse(bytes.AsMemory(bytes.AsSpan().StartsWith((ReadOnlySpan<byte>)[0xEF, 0xBB, 0xBF]) ? 3 : 0), DocumentOptions).Dispose();
+        }
+        catch (JsonException error) { throw new InvalidDataException($"Invalid JSON in {path}", error); }
+        var temporary = path + ".tmp";
+        File.WriteAllBytes(temporary, bytes);
+        File.Move(temporary, path, true);
+    }
+
+    internal static byte[] PatchValue(byte[] original, string section, string key, string json)
+    {
+        var bom = original.AsSpan().StartsWith((ReadOnlySpan<byte>)[0xEF, 0xBB, 0xBF]) ? 3 : 0;
+        var text = Encoding.UTF8.GetString(original, bom, original.Length - bom);
+        var nl = text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+        var sectionJson = $"{{{nl}    {JsonSerializer.Serialize(key)}: {json}{nl}  }}";
+        if (string.IsNullOrWhiteSpace(text)) return Encoding.UTF8.GetBytes($"{{{nl}  {JsonSerializer.Serialize(section)}: {sectionJson}{nl}}}{nl}");
+        var root = ScanObject(original, bom, section);
+        if (root.Found is not { } found) return Insert(original, root, section, sectionJson, "  ", nl);
+        if (found.Type != JsonTokenType.StartObject) return Replace(original, found, sectionJson);
+        var inner = ScanObject(original, found.Start, key);
+        return inner.Found is { } member ? Replace(original, member, json) : Insert(original, inner, key, json, "    ", nl);
     }
 
     private readonly record struct Member(int Start, int End, JsonTokenType Type);
@@ -179,13 +263,7 @@ public sealed class ShortcutSettings
         return "{" + nl + string.Join("," + nl, lines) + nl + indent + "}";
     }
 
-    public bool Matches(string action, VirtualKey key)
-    {
-        var modifiers = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down) ? "ctrl-" : "";
-        modifiers += InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Menu).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down) ? "alt-" : "";
-        modifiers += InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down) ? "shift-" : "";
-        return string.Equals(_values[action], modifiers + KeyName(key), StringComparison.OrdinalIgnoreCase);
-    }
+    public bool Matches(string action, VirtualKey key) => string.Equals(ActionFor(key), action, StringComparison.Ordinal);
 
     internal static void Validate(IReadOnlyDictionary<string, string> values)
     {
@@ -216,12 +294,36 @@ public sealed class ShortcutSettings
         var parts = value.Split('-', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length < 2 || parts.Distinct(StringComparer.OrdinalIgnoreCase).Count() != parts.Length) return false;
         return parts[..^1].All(part => part is "ctrl" or "alt" or "shift")
-            && (parts[^1].Length == 1 && char.IsAsciiLetterOrDigit(parts[^1][0]) || parts[^1] is "comma" or "insert");
+            && (parts[^1].Length == 1 && char.IsAsciiLetterOrDigit(parts[^1][0]) || NamedKeys.Contains(parts[^1]));
     }
+
+    private static readonly HashSet<string> NamedKeys =
+        ["comma", "insert", "pageup", "pagedown", "tab", "enter", "left", "right", "up", "down", "equals", "minus"];
+
+    /// <summary>"ctrl-shift-n" as Windows shows shortcuts: "Ctrl+Shift+N".</summary>
+    public static string Display(string binding) => string.Join('+', binding.Split('-').Select(part => part switch
+    {
+        "pageup" => "PgUp",
+        "pagedown" => "PgDn",
+        "comma" => ",",
+        "equals" => "=",
+        "minus" => "-",
+        _ => char.ToUpperInvariant(part[0]) + part[1..],
+    }));
 
     private static string KeyName(VirtualKey key) => key switch
     {
         VirtualKey.Insert => "insert",
+        VirtualKey.PageUp => "pageup",
+        VirtualKey.PageDown => "pagedown",
+        VirtualKey.Tab => "tab",
+        VirtualKey.Enter => "enter",
+        VirtualKey.Left => "left",
+        VirtualKey.Right => "right",
+        VirtualKey.Up => "up",
+        VirtualKey.Down => "down",
+        (VirtualKey)187 => "equals",
+        (VirtualKey)189 => "minus",
         (VirtualKey)188 => "comma",
         >= VirtualKey.Number0 and <= VirtualKey.Number9 => ((int)key - (int)VirtualKey.Number0).ToString(),
         >= VirtualKey.A and <= VirtualKey.Z => ((char)('a' + (int)key - (int)VirtualKey.A)).ToString(),

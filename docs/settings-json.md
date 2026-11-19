@@ -131,7 +131,7 @@ Settings read by the Windows frontend only. The macOS app ignores this section.
 | `shortcuts` | object | see below | Windows keyboard bindings keyed by action id. |
 
 A binding is modifiers and one key joined by hyphens, for example `ctrl-shift-t`. Modifiers are
-`ctrl`, `alt` and `shift`; the key is one letter or digit, `comma` or `insert`. `ctrl-c`,
+`ctrl`, `alt` and `shift`; the key is one letter or digit, `comma`, `insert`, `pageup`, `pagedown`, `tab`, `enter`, `left`, `right`, `up`, `down`, `equals` or `minus`. `ctrl-c`,
 `ctrl-d` and `ctrl-w` are reserved for the terminal, and no two actions can share a binding.
 
 | Action id | Default |
@@ -141,7 +141,32 @@ A binding is modifiers and one key joined by hyphens, for example `ctrl-shift-t`
 | `close_tab` | `ctrl-shift-w` |
 | `split_vertical` | `ctrl-shift-d` |
 | `split_horizontal` | `ctrl-shift-e` |
-| `select_tab_1` to `select_tab_9` | `alt-1` to `alt-9` |
+| `select_tab_1` to `select_tab_9` | `alt-1` to `alt-9` (9 is the last tab) |
 | `copy` | `ctrl-shift-c` |
 | `paste` | `ctrl-shift-v` |
 | `paste_alternate` | `shift-insert` |
+| `new_workspace` | `ctrl-shift-n` |
+| `close_workspace` | `ctrl-alt-shift-w` |
+| `rename_workspace` | `ctrl-shift-r` |
+| `next_workspace` | `ctrl-pagedown` |
+| `previous_workspace` | `ctrl-pageup` |
+| `toggle_sidebar` | `ctrl-shift-b` |
+| `jump_to_unread` | `ctrl-shift-u` |
+| `show_notifications` | `ctrl-shift-i` |
+| `command_palette` | `ctrl-shift-p` |
+| `next_tab` | `ctrl-tab` |
+| `previous_tab` | `ctrl-shift-tab` |
+| `reopen_tab` | `ctrl-alt-shift-t` |
+| `new_claude_workspace` | `ctrl-alt-shift-c` |
+| `new_window` | `ctrl-alt-shift-n` |
+| `toggle_zoom` | `ctrl-shift-enter` |
+| `focus_left` | `ctrl-alt-left` |
+| `focus_right` | `ctrl-alt-right` |
+| `focus_up` | `ctrl-alt-up` |
+| `focus_down` | `ctrl-alt-down` |
+| `find` | `ctrl-shift-f` |
+| `clear_scrollback` | `ctrl-shift-k` |
+| `font_bigger` | `ctrl-equals` |
+| `font_smaller` | `ctrl-minus` |
+| `font_reset` | `ctrl-0` |
+| `select_workspace_1` to `select_workspace_9` | `ctrl-1` to `ctrl-9` (9 is the last workspace) |

@@ -21,12 +21,19 @@ public static class Program
             Console.WriteLine(BuildIdentity.Value);
             return;
         }
+        var conptyLoaded = LoadBundledConpty();
+        // Markdown panels' WebView2 data lives with the app's other data, not beside the executable,
+        // whose folder an update replaces.
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER")))
+            Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programa", BuildIdentity.Value.Contains("0.0.0-dev", StringComparison.Ordinal) ? "WebView2-dev" : "WebView2"));
         if (args.Contains("--verify-native-libraries", StringComparer.Ordinal))
         {
             using var core = new CoreClient();
             _ = core.Snapshot();
             _ = NativeProbe.programa_terminal_is_terminated(nint.Zero);
-            Console.WriteLine("ok");
+            var openConsole = File.Exists(Path.Combine(AppContext.BaseDirectory, "OpenConsole.exe"));
+            Console.WriteLine(conptyLoaded && openConsole ? "ok" : "bundled ConPTY missing (conpty.dll or OpenConsole.exe)");
+            if (!conptyLoaded || !openConsole) Environment.Exit(1);
             return;
         }
 
@@ -56,7 +63,7 @@ public static class Program
 
         try
         {
-            LaunchLog.Write($"launch: starting (smoke={smoke})");
+            LaunchLog.Write($"launch: starting (smoke={smoke}, conpty={(conptyLoaded ? "bundled" : "inbox")})");
             ComWrappersSupport.InitializeComWrappers();
             Application.Start(_1 =>
             {
@@ -71,6 +78,13 @@ public static class Program
             Environment.Exit(1);
         }
     }
+
+    /// <summary>Loads the bundled conpty.dll from the app folder (the extraction folder for
+    /// single-file builds, where the exe's own folder is not). The terminal library asks for
+    /// "conpty.dll" by name and Windows reuses a loaded module of that name, so every session runs
+    /// on the OpenConsole.exe beside it. False leaves sessions on the inbox ConPTY.</summary>
+    private static bool LoadBundledConpty() =>
+        NativeLibrary.TryLoad(Path.Combine(AppContext.BaseDirectory, "conpty.dll"), out _);
 }
 
 internal static partial class NativeProbe
@@ -87,6 +101,8 @@ public static class BuildIdentity
         .ToDictionary(attribute => attribute.Key, attribute => attribute.Value ?? "", StringComparer.Ordinal);
 
     public static string Value => $"programa {Get("ProgramaVersion")} (build {Get("ProgramaBuild")}, commit {Get("ProgramaCommit")})";
+
+    public static string Version => Get("ProgramaVersion");
 
     private static string Get(string key) => Metadata.TryGetValue(key, out var value) ? value : "unknown";
 }

@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/programa-cli",
     "crates/programa-domain",
     "crates/programa-ffi",
     "crates/programa-proto",

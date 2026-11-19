@@ -83,6 +83,7 @@ try {
     Invoke-Checked 'core formatting' { cargo fmt --manifest-path $CoreManifest --all -- --check }
     Invoke-Checked 'core tests' { cargo test --manifest-path $CoreManifest --workspace --locked --target x86_64-pc-windows-msvc --target-dir $CoreTarget }
     Invoke-Checked 'core release build' { cargo build --manifest-path $CoreManifest --package programa-ffi --release --locked --target x86_64-pc-windows-msvc --target-dir $CoreTarget }
+    Invoke-Checked 'CLI release build' { cargo build --manifest-path $CoreManifest --package programa-cli --release --locked --target x86_64-pc-windows-msvc --target-dir $CoreTarget }
 
     $TerminalManifest = Join-Path $RepositoryRoot 'core\crates\programa-terminal\Cargo.toml'
     Invoke-Checked 'terminal formatting' { cargo fmt --manifest-path $TerminalManifest -- --check }
@@ -93,6 +94,12 @@ try {
 
     Copy-Item -LiteralPath (Join-Path $CoreTarget 'x86_64-pc-windows-msvc\release\programa_core.dll') -Destination $NativeRoot
     Copy-Item -LiteralPath (Join-Path $TerminalTarget 'x86_64-pc-windows-msvc\release\programa_terminal.dll') -Destination $NativeRoot
+    # The terminal host, which keeps shells running across a quit (src/host.rs).
+    Copy-Item -LiteralPath (Join-Path $TerminalTarget 'x86_64-pc-windows-msvc\release\programa-host.exe') -Destination $NativeRoot
+    # The `programa` CLI; the app ships it as bin\programa.exe and puts it on PATH in its terminals.
+    Copy-Item -LiteralPath (Join-Path $CoreTarget 'x86_64-pc-windows-msvc\release\programa.exe') -Destination (Join-Path $NativeRoot 'programa-cli.exe')
+    # The MCP server agents in Programa terminals get (docs/mcp-server.md), built with the CLI.
+    Copy-Item -LiteralPath (Join-Path $CoreTarget 'x86_64-pc-windows-msvc\release\programa-mcp.exe') -Destination (Join-Path $NativeRoot 'programa-mcp.exe')
 
     $TestProject = Join-Path $RepositoryRoot 'windows\Programa.Tests\Programa.Tests.csproj'
     Invoke-Checked 'managed tests' { dotnet test $TestProject --configuration Release --runtime win-x64 --property:PublishSingleFile=false --property:ProgramaNativeDirectory=$NativeRoot }

@@ -22,6 +22,12 @@ public sealed partial class CoreClient : IDisposable
 
     public CoreSnapshot Snapshot() => ParseSnapshot(InvokeSnapshot());
 
+    /// <summary>The snapshot exactly as the core serializes it, for saving and seeding back.</summary>
+    public string SnapshotJson() => InvokeSnapshot();
+
+    /// <summary>Replaces the state with a saved snapshot (seed_snapshot validates it whole).</summary>
+    public CoreSnapshot Seed(JsonElement snapshot) => Dispatch(new { command = "seed_snapshot", snapshot });
+
     public CoreSnapshot Dispatch(object command)
     {
         var request = JsonSerializer.SerializeToUtf8Bytes(command, JsonOptions);

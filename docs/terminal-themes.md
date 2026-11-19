@@ -17,6 +17,18 @@ programa themes clear
 
 All surfaces write the same managed block in `~/Library/Application Support/com.darkroom.programa/config.ghostty`, preserving unrelated directives in that file. Setting one field (e.g. opacity) never disturbs another field Programa already manages there (e.g. theme or font) — but it also never captures a field it doesn't yet manage, even if that field currently resolves to a value from your own raw Ghostty config. Programa only ever writes the specific field you changed.
 
+## Windows
+
+The Windows app resolves the terminal look the same way, without a Settings page or `programa themes` yet:
+
+- With no configuration it matches Ghostty's defaults as the macOS app shows them: JetBrains Mono 13 (bundled, since Windows does not ship it), background `#282C34`, foreground `#FFFFFF`, Ghostty's palette, a block cursor and inverted selection.
+- It reads `%USERPROFILE%\.config\ghostty\config` and `config.ghostty` (or `%XDG_CONFIG_HOME%\ghostty\`), so a Ghostty config copied from a Mac works. Supported keys: `theme` (including `light:…,dark:…`, which follows Windows' app mode), `font-family`, `font-size`, `background`, `foreground`, `palette`, `cursor-color`, `cursor-text`, `selection-background` and `selection-foreground`.
+- Themes come from the same bundled catalog, plus `~\.config\ghostty\themes\`.
+- `app.terminalTheme` and `app.terminalFont` in `%USERPROFILE%\.config\programa\settings.json` override the Ghostty config, as on macOS.
+- `font-size` is in DIPs, which matches macOS points on comparable displays, so a Mac config looks the same size.
+
+Changes apply to new terminals after a relaunch; switching Windows between light and dark re-themes open terminals.
+
 ## settings.json
 
 Two independent `app.*` keys manage these settings as configuration in `~/.config/programa/settings.json`:

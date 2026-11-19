@@ -14,15 +14,39 @@ mod child;
 mod conpty;
 
 use blocking::{UnblockedReader, UnblockedWriter};
-use conpty::Conpty as Backend;
-use miow::pipe::{AnonRead, AnonWrite};
+
+
 use polling::{Event, Poller};
 
 pub const PTY_CHILD_EVENT_TOKEN: usize = 1;
 pub const PTY_READ_WRITE_TOKEN: usize = 2;
 
-type ReadPipe = UnblockedReader<AnonRead>;
-type WritePipe = UnblockedWriter<AnonWrite>;
+// Programa: boxed, so a pseudoconsole kept by another process (`remote`) can stand in for ConPTY.
+type ReadPipe = UnblockedReader<Box<dyn io::Read + Send>>;
+type WritePipe = UnblockedWriter<Box<dyn io::Write + Send>>;
+
+/// The local pseudoconsole, or one another process owns, which this end resizes through `resize`.
+pub enum Backend {
+    Conpty(Backend0),
+    Remote(Box<dyn OnResize + Send>),
+}
+
+type Backend0 = conpty::Conpty;
+
+impl From<Backend0> for Backend {
+    fn from(conpty: Backend0) -> Self {
+        Backend::Conpty(conpty)
+    }
+}
+
+impl OnResize for Backend {
+    fn on_resize(&mut self, window_size: WindowSize) {
+        match self {
+            Backend::Conpty(conpty) => conpty.on_resize(window_size),
+            Backend::Remote(remote) => remote.on_resize(window_size),
+        }
+    }
+}
 
 pub struct Pty {
     // XXX: Backend is required to be the first field, to ensure correct drop order. Dropping
@@ -35,6 +59,25 @@ pub struct Pty {
 
 pub fn new(config: &Options, window_size: WindowSize, _window_id: u64) -> Result<Pty> {
     conpty::new(config, window_size)
+}
+
+/// Programa: a terminal whose pseudoconsole lives in another process. Output arrives on `conout`,
+/// input leaves on `conin`, `resize` forwards window size changes, and `child` is the shell's
+/// process handle (opened by this process), whose exit ends the terminal.
+pub fn remote(
+    conout: impl io::Read + Send + 'static,
+    conin: impl io::Write + Send + 'static,
+    child: windows_sys::Win32::Foundation::HANDLE,
+    resize: Box<dyn OnResize + Send>,
+) -> Result<Pty> {
+    let conout: Box<dyn io::Read + Send> = Box::new(conout);
+    let conin: Box<dyn io::Write + Send> = Box::new(conin);
+    Ok(Pty::new(
+        Backend::Remote(resize),
+        UnblockedReader::new(conout, crate::event_loop::READ_BUFFER_SIZE),
+        UnblockedWriter::new(conin, crate::event_loop::READ_BUFFER_SIZE),
+        ChildExitWatcher::new(child)?,
+    ))
 }
 
 impl Pty {
