@@ -3,5 +3,17 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Programa">
-  <Grid x:Name="Root" />
+  <Grid x:Name="Root">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="200" />
+      <ColumnDefinition Width="*" />
+    </Grid.ColumnDefinitions>
+    <ContentControl x:Name="ToolbarHost" Grid.ColumnSpan="2" HorizontalContentAlignment="Stretch" />
+    <ListView x:Name="WorkspaceList" Grid.Row="1" SelectionMode="Single" />
+    <Grid x:Name="TerminalLayout" Grid.Row="1" Grid.Column="1" />
+  </Grid>
 </Window>

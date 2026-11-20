@@ -18,6 +18,7 @@ public sealed partial class MainWindow : Window
     private readonly CoreClient _core = new();
     private readonly Dictionary<string, TerminalView> _terminals = new(StringComparer.Ordinal);
     private readonly Dictionary<string, TabViewItem> _tabItems = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (ListViewItem Item, TextBlock Status)> _workspaceRows = new(StringComparer.Ordinal);
     private CoreSnapshot _snapshot;
     private ShortcutSettings _shortcuts;
     private string? _startupSettingsError;
@@ -33,7 +34,10 @@ public sealed partial class MainWindow : Window
         _shortcuts = LoadSettingsOrDefaults();
         _snapshot = _core.Snapshot();
         if (_snapshot.Workspaces.Count == 0)
-            _snapshot = Dispatch(new { command = "create_workspace", workspace_id = Id("workspace"), pane_id = Id("pane"), surface_id = Id("surface"), session_id = Id("session") });
+            _snapshot = Dispatch(CreateWorkspaceCommand());
+        ToolbarHost.Content = BuildToolbar();
+        AutomationProperties.SetName(WorkspaceList, Localizer.Get("Workspaces"));
+        WorkspaceList.SelectionChanged += OnWorkspaceSelectionChanged;
         Root.PreviewKeyDown += OnKeyDown;
         Root.Loaded += OnRootLoaded;
         Closed += OnClosed;
@@ -104,36 +108,107 @@ public sealed partial class MainWindow : Window
         _ = ShowErrorAsync(Localizer.Get("ShortcutError"), message);
     }
 
-    private void ProjectSnapshot()
+    private void ProjectSnapshot(bool focusTerminal = true)
     {
         _projecting = true;
         try
         {
-            foreach (var child in Root.Children) DetachTerminals(child);
-            Root.Children.Clear();
-            Root.RowDefinitions.Clear();
-            Root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            Root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            var toolbar = BuildToolbar();
-            Root.Children.Add(toolbar);
-            Grid.SetRow(toolbar, 0);
-
-            var workspace = SelectedWorkspace();
-            if (workspace is not null)
-            {
-                var layout = BuildLayout(workspace, workspace.Layout);
-                Root.Children.Add(layout);
-                Grid.SetRow(layout, 1);
-            }
+            DetachTerminals(TerminalLayout);
+            TerminalLayout.Children.Clear();
+            _tabItems.Clear();
+            if (SelectedWorkspace() is { } workspace)
+                TerminalLayout.Children.Add(BuildLayout(workspace, workspace.Layout));
             RemoveClosedTerminals();
+            ProjectWorkspaceList();
         }
         finally { _projecting = false; }
+        if (!focusTerminal) return;
         // Rebuilding the tree drops keyboard focus. Refocus once the new tree has been laid out,
         // unless a dialog is open and should keep it.
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
             if (!_dialogOpen) ActiveTerminal()?.FocusTerminal();
         });
+    }
+
+    private static object CreateWorkspaceCommand() => new
+    {
+        command = "create_workspace",
+        workspace_id = Id("workspace"),
+        pane_id = Id("pane"),
+        surface_id = Id("surface"),
+        session_id = Id("session"),
+    };
+
+    private void ProjectWorkspaceList()
+    {
+        if (!WorkspaceList.Items.Cast<ListViewItem>().Select(item => (string)item.Tag)
+            .SequenceEqual(_snapshot.Workspaces.Select(workspace => workspace.Id)))
+        {
+            WorkspaceList.Items.Clear();
+            _workspaceRows.Clear();
+            for (var index = 0; index < _snapshot.Workspaces.Count; index++)
+            {
+                var workspace = _snapshot.Workspaces[index];
+                var title = string.Format(Localizer.Get("WorkspaceNumberFormat"), index + 1);
+                var status = new TextBlock { Visibility = Visibility.Collapsed };
+                var content = new StackPanel();
+                content.Children.Add(new TextBlock { Text = title });
+                content.Children.Add(status);
+                var item = new ListViewItem { Tag = workspace.Id, Content = content, MinHeight = 44 };
+                AutomationProperties.SetName(item, title);
+                _workspaceRows.Add(workspace.Id, (item, status));
+                WorkspaceList.Items.Add(item);
+            }
+        }
+        WorkspaceList.SelectedItem = WorkspaceList.Items.Cast<ListViewItem>()
+            .FirstOrDefault(item => Equals(item.Tag, _snapshot.SelectedWorkspaceId));
+        foreach (var workspace in _snapshot.Workspaces) UpdateWorkspaceStatus(workspace);
+    }
+
+    private void UpdateWorkspaceStatus(WorkspaceSnapshot workspace)
+    {
+        if (!_workspaceRows.TryGetValue(workspace.Id, out var row)) return;
+        var states = workspace.Panes.SelectMany(pane => pane.Surfaces)
+            .Select(surface => _terminals.GetValueOrDefault(surface.Id)?.ProgramStatus?.State)
+            .ToHashSet(StringComparer.Ordinal);
+        var state = states.Contains("blocked") ? "blocked"
+            : states.Contains("error") ? "error"
+            : states.Contains("working") ? "working"
+            : states.Contains("done") ? "done"
+            : null;
+        var label = ProgramStatusLabel(state);
+        row.Status.Text = label ?? string.Empty;
+        row.Status.Visibility = label is null ? Visibility.Collapsed : Visibility.Visible;
+        AutomationProperties.SetItemStatus(row.Item, row.Status.Text);
+    }
+
+    private void OnWorkspaceSelectionChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (_projecting || WorkspaceList.SelectedItem is not ListViewItem { Tag: string workspaceId } ||
+            workspaceId == _snapshot.SelectedWorkspaceId) return;
+        Apply(new { command = "select_workspace", workspace_id = workspaceId }, focusTerminal: false);
+    }
+
+    private async Task CloseWorkspaceAsync()
+    {
+        if (_dialogOpen || Root.XamlRoot is null || SelectedWorkspace() is not { } workspace) return;
+        var title = Localizer.Get("CloseWorkspace");
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Root.XamlRoot,
+            Title = title,
+            Content = Localizer.Get("CloseWorkspaceConfirmation"),
+            PrimaryButtonText = title,
+            CloseButtonText = Localizer.Get("Cancel"),
+            DefaultButton = ContentDialogButton.Close,
+        };
+        ContentDialogResult result;
+        _dialogOpen = true;
+        try { result = await dialog.ShowAsync(); }
+        finally { _dialogOpen = false; }
+        if (result == ContentDialogResult.Primary && _snapshot.Workspaces.Any(item => item.Id == workspace.Id))
+            Apply(new { command = "close_workspace", workspace_id = workspace.Id });
     }
 
     private static void DetachTerminals(DependencyObject node)
@@ -152,9 +227,11 @@ public sealed partial class MainWindow : Window
     private CommandBar BuildToolbar()
     {
         var bar = new CommandBar { DefaultLabelPosition = CommandBarDefaultLabelPosition.Right };
+        bar.PrimaryCommands.Add(CommandButton(Localizer.Get("NewWorkspace"), Symbol.Add, (_, _) => Apply(CreateWorkspaceCommand())));
         bar.PrimaryCommands.Add(CommandButton(Localizer.Get("NewTab"), Symbol.Add, (_, _) => NewTab()));
         bar.PrimaryCommands.Add(CommandButton(Localizer.Get("SplitVertical"), Symbol.Add, (_, _) => Split("vertical")));
         bar.PrimaryCommands.Add(CommandButton(Localizer.Get("SplitHorizontal"), Symbol.Add, (_, _) => Split("horizontal")));
+        bar.SecondaryCommands.Add(CommandButton(Localizer.Get("CloseWorkspace"), Symbol.ClosePane, async (_, _) => await CloseWorkspaceAsync()));
         bar.SecondaryCommands.Add(CommandButton(Localizer.Get("Settings"), Symbol.Setting, async (_, _) => await ShowSettingsAsync()));
         return bar;
     }
@@ -270,16 +347,18 @@ public sealed partial class MainWindow : Window
         _ => Symbol.Document,
     };
 
+    private static string? ProgramStatusLabel(string? state) => state switch
+    {
+        "working" => Localizer.Get("ProgramStatusWorking"),
+        "blocked" => Localizer.Get("ProgramStatusBlocked"),
+        "done" => Localizer.Get("ProgramStatusDone"),
+        "error" => Localizer.Get("ProgramStatusError"),
+        _ => null,
+    };
+
     private static void ApplyProgramStatusLabel(TabViewItem item, TerminalView terminal)
     {
-        var label = terminal.ProgramStatus?.State switch
-        {
-            "working" => Localizer.Get("ProgramStatusWorking"),
-            "blocked" => Localizer.Get("ProgramStatusBlocked"),
-            "done" => Localizer.Get("ProgramStatusDone"),
-            "error" => Localizer.Get("ProgramStatusError"),
-            _ => null,
-        };
+        var label = ProgramStatusLabel(terminal.ProgramStatus?.State);
         AutomationProperties.SetItemStatus(item, label ?? string.Empty);
         if (label is null) item.ClearValue(ToolTipService.ToolTipProperty);
         else ToolTipService.SetToolTip(item, label);
@@ -294,6 +373,9 @@ public sealed partial class MainWindow : Window
             ApplyProgramStatusLabel(item, terminal);
             if (!string.IsNullOrEmpty(terminal.Title)) AutomationProperties.SetName(item, terminal.Title);
         }
+        var workspace = _snapshot.Workspaces.FirstOrDefault(workspace =>
+            workspace.Panes.Any(pane => pane.Surfaces.Any(surface => surface.Id == surfaceId)));
+        if (workspace is not null) UpdateWorkspaceStatus(workspace);
     }
 
     private static void ResizeVisualSplit(Grid grid, string direction, DragDeltaEventArgs args)
@@ -333,8 +415,18 @@ public sealed partial class MainWindow : Window
             {
                 var pane = workspace.Panes.FirstOrDefault(item => item.Surfaces.Any(surface => surface.Id == surfaceId));
                 if (pane is null) continue;
-                // Same command and last-surface handling as closing the tab by hand.
-                Apply(new { command = "close_surface", workspace_id = workspace.Id, pane_id = pane.Id, surface_id = surfaceId });
+                var command = new { command = "close_surface", workspace_id = workspace.Id, pane_id = pane.Id, surface_id = surfaceId };
+                if (workspace.Id == _snapshot.SelectedWorkspaceId) Apply(command);
+                else
+                {
+                    try
+                    {
+                        _snapshot = Dispatch(command);
+                        RemoveClosedTerminals();
+                        ProjectWorkspaceList();
+                    }
+                    catch (Exception error) { _ = ShowErrorAsync(Localizer.Get("CoreError"), error.Message); }
+                }
                 return;
             }
         });
@@ -424,13 +516,14 @@ public sealed partial class MainWindow : Window
     private void OnTabSelectionChanged(object sender, SelectionChangedEventArgs args)
     {
         if (_projecting || sender is not TabView tabs || tabs.SelectedItem is not TabViewItem { Tag: SurfaceTag tag }) return;
+        if (tag.WorkspaceId != _snapshot.SelectedWorkspaceId) return;
         SelectSurfaceWithoutProjection(tag, focusTerminal: true);
     }
 
     private void OnPaneGotFocus(object sender, RoutedEventArgs args)
     {
         if (_projecting || sender is not TabView tabs || tabs.SelectedItem is not TabViewItem { Tag: SurfaceTag tag }) return;
-        if (SelectedWorkspace() is not { } workspace) return;
+        if (SelectedWorkspace() is not { } workspace || workspace.Id != tag.WorkspaceId) return;
         if (workspace.SelectedPaneId != tag.PaneId || workspace.SelectedPane?.SelectedSurfaceId != tag.SurfaceId)
             SelectSurfaceWithoutProjection(tag, focusTerminal: false);
     }
@@ -520,13 +613,13 @@ public sealed partial class MainWindow : Window
         .SelectMany(workspace => workspace.Panes)
         .FirstOrDefault(pane => pane.Surfaces.Any(surface => surface.Id == surfaceId))?.Id;
 
-    private void Apply(object command)
+    private void Apply(object command, bool focusTerminal = true)
     {
         try
         {
             _snapshot = Dispatch(command);
             if (_snapshot.Workspaces.Count == 0) Close();
-            else ProjectSnapshot();
+            else ProjectSnapshot(focusTerminal);
         }
         catch (Exception error) { _ = ShowErrorAsync(Localizer.Get("CoreError"), error.Message); }
     }

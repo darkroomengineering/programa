@@ -7,4 +7,9 @@
   <data name="TerminalSpawnFailed" xml:space="preserve"><value>The terminal could not start.</value></data><data name="TerminalRetry" xml:space="preserve"><value>Retry</value></data><data name="TerminalCopy" xml:space="preserve"><value>Copy</value></data><data name="TerminalPaste" xml:space="preserve"><value>Paste</value></data><data name="TerminalAccessibilityName" xml:space="preserve"><value>Terminal</value></data>
   <data name="PasteConfirmTitle" xml:space="preserve"><value>Confirm paste</value></data><data name="PasteConfirmMessage" xml:space="preserve"><value>This text has line breaks or control characters, and the program in this terminal has not turned on bracketed paste, so it can run as soon as it is pasted.</value></data>
   <data name="ProgramStatusWorking" xml:space="preserve"><value>Working</value></data><data name="ProgramStatusBlocked" xml:space="preserve"><value>Needs input</value></data><data name="ProgramStatusDone" xml:space="preserve"><value>Done</value></data><data name="ProgramStatusError" xml:space="preserve"><value>Failed</value></data><data name="ProgramStatusProgressFormat" xml:space="preserve"><value>{0} ({1}%)</value></data>
+  <data name="Workspaces" xml:space="preserve"><value>Workspaces</value></data>
+  <data name="WorkspaceNumberFormat" xml:space="preserve"><value>Workspace {0}</value></data>
+  <data name="NewWorkspace" xml:space="preserve"><value>New workspace</value></data>
+  <data name="CloseWorkspace" xml:space="preserve"><value>Close workspace</value></data>
+  <data name="CloseWorkspaceConfirmation" xml:space="preserve"><value>Close this workspace and end all of its terminal sessions?</value></data>
 </root>
