@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Security.Cryptography;
+using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -99,7 +100,12 @@ internal static class TerminalHost
         {
             body["token"] = connection.Token;
             body["version"] = 1;
-            using var pipe = new NamedPipeClientStream(".", connection.Pipe[@"\\.\pipe\".Length..], PipeDirection.InOut);
+            const string localPrefix = @"\\.\pipe\";
+            if (!connection.Pipe.StartsWith(localPrefix, StringComparison.OrdinalIgnoreCase) ||
+                connection.Pipe.Length == localPrefix.Length)
+                return null;
+            using var pipe = new NamedPipeClientStream(".", connection.Pipe[localPrefix.Length..], PipeDirection.InOut,
+                PipeOptions.None, TokenImpersonationLevel.Identification);
             pipe.Connect(500);
             var request = Encoding.UTF8.GetBytes(body.ToJsonString() + "\n");
             pipe.Write(request);

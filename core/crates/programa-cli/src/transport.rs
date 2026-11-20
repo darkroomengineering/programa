@@ -90,13 +90,18 @@ pub fn exchange<S: Read + Write>(mut stream: S, request_line: &str) -> io::Resul
 /// right after accepting, so a short retry loop covers that window.
 #[cfg(windows)]
 fn connect(path: &str) -> io::Result<std::fs::File> {
+    use std::os::windows::fs::OpenOptionsExt;
+
     const ERROR_PIPE_BUSY: i32 = 231;
     const MAX_RETRIES: u32 = 20;
+    // A server at the configured pipe can identify this client without impersonating it.
+    const SECURITY_IDENTIFICATION: u32 = 1 << 16;
     let mut retries = 0;
     loop {
         match std::fs::OpenOptions::new()
             .read(true)
             .write(true)
+            .security_qos_flags(SECURITY_IDENTIFICATION)
             .open(path)
         {
             Ok(file) => return Ok(file),

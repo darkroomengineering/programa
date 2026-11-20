@@ -21,6 +21,8 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write};
+#[cfg(windows)]
+use std::os::windows::fs::OpenOptionsExt;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -67,9 +69,13 @@ pub fn read_line(stream: &mut impl Read) -> io::Result<String> {
 }
 
 fn connect(pipe: &str) -> io::Result<File> {
+    let mut options = OpenOptions::new();
+    options.read(true).write(true);
+    #[cfg(windows)]
+    options.security_qos_flags(0x0001_0000); // SECURITY_IDENTIFICATION
     // Every instance busy (ERROR_PIPE_BUSY): the host makes the next one at once.
     for _ in 0..100 {
-        match OpenOptions::new().read(true).write(true).open(pipe) {
+        match options.open(pipe) {
             Err(error) if error.raw_os_error() == Some(231) => {
                 std::thread::sleep(Duration::from_millis(10))
             }
