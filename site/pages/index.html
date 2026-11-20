@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#141010">
+    <title>Programa: a terminal for running many coding agents at once</title>
+    <link rel="icon" href="/favicon.ico" sizes="32x32">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="canonical" href="https://programa.darkroom.engineering/">
+    <meta property="og:title" content="Programa">
+    <meta name="twitter:title" content="Programa">
+    <meta property="og:site_name" content="Programa">
+    <meta property="og:locale" content="en_US">
+    <meta name="description" content="Programa is an open source terminal for running many coding agents in parallel. Every workspace shows whether its agent is working, blocked or idle, and a waiting agent&#x27;s pane lights up. Native macOS on Ghostty.">
+    <meta property="og:description" content="Run many coding agents in parallel and always know which one needs you.">
+    <meta name="twitter:description" content="Run many coding agents in parallel and always know which one needs you.">
+    <meta property="og:url" content="https://programa.darkroom.engineering/">
+    <meta property="og:image" content="https://programa.darkroom.engineering/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="The Programa app icon next to the name and the line Run many coding agents at once and always know which one needs you">
+    <meta name="twitter:card" content="summary_large_image">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Programa","url":"https://programa.darkroom.engineering/","description":"Programa is an open source terminal for running many coding agents in parallel. Every workspace shows whether its agent is working, blocked or idle, and a waiting agent's pane lights up. Native macOS on Ghostty.","applicationCategory":"DeveloperApplication","operatingSystem":"macOS 14 or later","downloadUrl":"https://github.com/darkroomengineering/programa/releases/latest/download/programa-macos.dmg","image":"https://programa.darkroom.engineering/og.png","license":"https://www.gnu.org/licenses/gpl-3.0.html","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"featureList":["Working, blocked or idle status for every agent workspace","Notifications that point at the agent waiting for you","Vertical workspace sidebar with branch, PR status and ports","Diff review panel that sends comments to the agent","Git worktrees as workspaces","Native Swift and AppKit with libghostty rendering"],"publisher":{"@type":"Organization","name":"Darkroom Engineering","url":"https://darkroom.engineering"}}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Programa","url":"https://programa.darkroom.engineering/"}</script>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main>
+      <header class="wrap">
+        <div class="hero">
+          <picture class="app-icon">
+            <source type="image/webp" srcset="/assets/app-icon-ea248d80-640w-Hdgg4pD1.webp 640w" sizes="(min-width: 800px) 112px, 88px">
+            <img src="/assets/app-icon-ea248d80-640w-BYHhZrMS.png" srcset="/assets/app-icon-ea248d80-640w-BYHhZrMS.png 640w" sizes="(min-width: 800px) 112px, 88px" width="1024" height="1024" alt="Programa app icon: a grid of red and orange squares on a dark tile" loading="eager" fetchpriority="auto" decoding="async" draggable="false">
+          </picture>
+          <h1 class="display">Programa</h1>
+          <p class="pitch">The open source terminal for running many coding agents at once and always knowing which one needs you. Native macOS on Ghostty, native Windows on WinUI.</p>
+          <ul class="downloads">
+            <li><a href="https://github.com/darkroomengineering/programa/releases/latest/download/programa-macos.dmg" class="download-primary">Download for Mac</a></li>
+            <li><a href="https://github.com/darkroomengineering/programa/releases/latest/download/programa-windows.exe" class="download-secondary">Windows preview</a></li>
+            <li><a href="https://github.com/darkroomengineering/programa" class="download-secondary">Source on GitHub</a></li>
+          </ul>
+          <p class="requirements">macOS 14 or later. The Mac app updates itself. The Windows app is in development: desktop interaction testing and macOS feature parity are incomplete. Free and open source under GPL-3.0.</p>
+        </div>
+      </header>
+      <div class="wrap">
+        <picture>
+          <source type="image/webp" srcset="/assets/workspace-7021d8da-640w-oqVetPTF.webp 640w, /assets/workspace-7021d8da-750w-CatNEmUl.webp 750w, /assets/workspace-7021d8da-828w-DxQej5Ke.webp 828w, /assets/workspace-7021d8da-1080w-CqjQrY0N.webp 1080w, /assets/workspace-7021d8da-1200w-R3PNnTVY.webp 1200w, /assets/workspace-7021d8da-1920w-t3nUUlmd.webp 1920w, /assets/workspace-7021d8da-2048w-DhGaYg6x.webp 2048w, /assets/workspace-7021d8da-2560w-LAAz3Q58.webp 2560w" sizes="(min-width: 800px) min(93.33vw, 1194.67px), 87.2vw">
+          <img src="/assets/workspace-7021d8da-2560w-ICK7-h-q.png" srcset="/assets/workspace-7021d8da-640w-jKFa_ZY8.png 640w, /assets/workspace-7021d8da-750w-Dgiae4W1.png 750w, /assets/workspace-7021d8da-828w-CHmi3GaF.png 828w, /assets/workspace-7021d8da-1080w-ZZMFQlAb.png 1080w, /assets/workspace-7021d8da-1200w-BNAnVSkg.png 1200w, /assets/workspace-7021d8da-1920w-CLsnEk2P.png 1920w, /assets/workspace-7021d8da-2048w-C216gleI.png 2048w, /assets/workspace-7021d8da-2560w-ICK7-h-q.png 2560w" sizes="(min-width: 800px) min(93.33vw, 1194.67px), 87.2vw" width="2560" height="1606" alt="Programa: workspace sidebar with agent status, a Claude Code session waiting for input" loading="eager" fetchpriority="high" decoding="async" draggable="false">
+        </picture>
+      </div>
+      <div class="wrap">
+        <div class="features">
+          <section class="feature">
+            <h2 class="feature-title">Know which agent needs you</h2>
+            <ul class="feature-list">
+              <li>Every workspace shows working, blocked or idle. Claude Code, Codex and OpenCode report it directly; Gemini CLI, Copilot CLI, Cursor Agent and Aider get it from reading the terminal screen.</li>
+              <li>A waiting agent's pane gets a ring, its tab lights up, and ⌘⇧U jumps to the latest unread.</li>
+              <li>A vertical sidebar shows the git branch, PR status, working directory, listening ports and latest notification for every workspace.</li>
+            </ul>
+          </section>
+          <section class="feature">
+            <h2 class="feature-title">Review and branch</h2>
+            <ul class="feature-list">
+              <li>A diff review panel beside an agent's terminal: comment on the diff and send the comments straight into the agent's input.</li>
+              <li><code class="code">programa worktree create</code> checks out a git worktree and opens it as its own workspace.</li>
+              <li><code class="code">programa race</code> fans one prompt across several agents, each in its own worktree, so you can compare approaches.</li>
+            </ul>
+          </section>
+          <section class="feature">
+            <h2 class="feature-title">Native and scriptable</h2>
+            <ul class="feature-list">
+              <li>Swift and AppKit with libghostty rendering, no Electron. It reads your existing Ghostty config for themes, fonts and colors.</li>
+              <li>Relaunch restores layout, directories and scrollback, and terminal processes survive Programa quitting or crashing.</li>
+              <li>A CLI, a Unix-socket JSON-RPC API and an MCP server, so agents can split panes and read a sibling pane's output.</li>
+            </ul>
+          </section>
+        </div>
+      </div>
+    </main>
+    <footer>
+      <div class="wrap footer-row">
+        <nav aria-label="Footer" class="footer-links">
+          <a href="/privacy" class="text-link">Privacy</a><a href="/support" class="text-link">Support</a></nav>
+        <a href="https://darkroom.engineering/incubator" class="text-link">A sidequest by Darkroom Engineering Incubator</a></div>
+    </footer>
+  </body>
+</html>
