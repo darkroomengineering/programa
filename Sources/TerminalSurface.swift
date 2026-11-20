@@ -207,7 +207,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
 
     private var rendererRealized = true
     private(set) var rendererLastVisibleAt: TimeInterval = Date().timeIntervalSince1970
-    private var rendererPortalVisible = false
+    private var rendererPortalVisibility: Bool?
 
     /// Whether the runtime Ghostty surface exists and has not begun teardown.
     ///
@@ -1664,6 +1664,10 @@ final class TerminalSurface: Identifiable, ObservableObject {
             return
         }
         guard let createdSurface = surface else { return }
+        // The portal can report occlusion before Ghostty has a surface to receive it.
+        if rendererPortalVisibility == false {
+            ghostty_surface_set_occlusion(createdSurface, false)
+        }
         TerminalSurfaceRegistry.shared.registerRuntimeSurface(createdSurface, ownerId: id)
         rendererRealized = true
         recordRuntimeSurfaceCreation()
@@ -2498,11 +2502,11 @@ final class TerminalSurface: Identifiable, ObservableObject {
     }
 
     var isRendererRealized: Bool { hasLiveSurface && rendererRealized }
-    var isRendererPortalVisible: Bool { rendererPortalVisible }
+    var isRendererPortalVisible: Bool { rendererPortalVisibility == true }
 
     func setRendererPortalVisible(_ visible: Bool) {
-        let wasVisible = rendererPortalVisible
-        rendererPortalVisible = visible
+        let wasVisible = isRendererPortalVisible
+        rendererPortalVisibility = visible
         if visible || wasVisible {
             noteBecameVisibleForRendererReclamation()
         }
@@ -2514,7 +2518,7 @@ final class TerminalSurface: Identifiable, ObservableObject {
 
     @MainActor
     func releaseRenderer() {
-        guard rendererRealized, !rendererPortalVisible else { return }
+        guard rendererRealized, !isRendererPortalVisible else { return }
         guard let surface = liveSurfaceForGhosttyAccess(reason: "renderer.release") else { return }
         if ghostty_surface_set_renderer_realized(surface, false) {
             rendererRealized = false
