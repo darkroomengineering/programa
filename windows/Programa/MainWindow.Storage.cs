@@ -139,7 +139,7 @@ public sealed partial class MainWindow
         }
         if (_storagePreview is { } preview)
         {
-            RenderStorageConfirmation(body, preview.Preview, preview.Options);
+            RenderStorageConfirmation(body, preview.Preview);
             return;
         }
         RenderLiveSessions(body);
@@ -226,7 +226,7 @@ public sealed partial class MainWindow
         }));
     }
 
-    private void RenderStorageConfirmation(StackPanel body, Storage.CleanResult preview, Storage.CleanOptions options)
+    private void RenderStorageConfirmation(StackPanel body, Storage.CleanResult preview)
     {
         var items = CleanItems(preview);
         body.Children.Add(Heading(Localizer.Get("StorageConfirmTitle")));
@@ -244,22 +244,22 @@ public sealed partial class MainWindow
         var cancel = new Button { Content = Localizer.Get("Cancel") };
         cancel.Click += (_, _) => { _storagePreview = null; RenderStorage(); };
         var remove = new Button { Content = Localizer.Get("StorageRemove"), IsEnabled = items.Count > 0 && !_storageBusy, Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
-        remove.Click += (_, _) => ConfirmStorageClean(options);
+        remove.Click += (_, _) => ConfirmStorageClean(preview);
         Grid.SetColumn(remove, 1);
         buttons.Children.Add(cancel);
         buttons.Children.Add(remove);
         body.Children.Add(buttons);
     }
 
-    /// <summary>Removes for real; the rules are checked again, so the result can keep more than the preview did.</summary>
-    private void ConfirmStorageClean(Storage.CleanOptions options)
+    private void ConfirmStorageClean(Storage.CleanResult preview)
     {
+        if (_storageBusy || _storagePreview is not { } pending || !ReferenceEquals(pending.Preview, preview)) return;
         var open = WindowRegistry.Windows.SelectMany(window => window.OpenDirectories()).ToList();
         var settings = WorktreeSettings.Load();
         _storagePreview = null;
         _storageBusy = true;
         RenderStorage();
-        _ = Task.Run(() => Storage.Clean(options with { DryRun = false }, open, settings)).ContinueWith(task =>
+        _ = Task.Run(() => Storage.CleanConfirmed(preview, pending.Options, open, settings)).ContinueWith(task =>
         {
             InvalidateStorage();
             lock (SessionSizes) SessionSizes.Clear();

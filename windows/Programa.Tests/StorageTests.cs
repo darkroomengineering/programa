@@ -88,15 +88,37 @@ public sealed class StorageTests
             Assert.IsTrue(mergedScan.SizeBytes > 0);
             Assert.AreEqual("external", scan.Single(item => item.Branch == "outside").Blocker);
 
-            var preview = Storage.Clean(new Storage.CleanOptions(DryRun: true, IgnoreGracePeriod: true), [repo], settings);
+            var options = new Storage.CleanOptions(IgnoreGracePeriod: true);
+            var preview = Storage.Clean(options, [repo], settings);
             CollectionAssert.AreEqual(new[] { merged }, preview.Removed.Select(item => item.Path).ToArray());
             Assert.IsTrue(Directory.Exists(merged), "a dry run removes nothing");
 
-            var cleaned = Storage.Clean(new Storage.CleanOptions(DryRun: false, IgnoreGracePeriod: true, Paths: [folder]), [repo], settings);
+            var addedLater = Path.Combine(folder, "repo", "later");
+            Git(repo, $"worktree add -q -b later \"{addedLater}\"");
+            var empty = Storage.CleanConfirmed(preview with { Removed = [] }, options, [repo], settings);
+            Assert.AreEqual(0, empty.Removed.Count, "an empty preview cannot authorize any deletion");
+            var wrongRepo = preview with { Removed = [mergedScan with { RepoRoot = outside }] };
+            Assert.AreEqual(0, Storage.CleanConfirmed(wrongRepo, options, [repo], settings).Removed.Count,
+                "the worktree path alone cannot authorize deletion");
+
+            var untracked = Path.Combine(merged, "new.txt");
+            File.WriteAllText(untracked, "keep");
+            var blocked = Storage.CleanConfirmed(preview, options, [repo], settings);
+            Assert.AreEqual(0, blocked.Removed.Count);
+            Assert.AreEqual("dirty", blocked.Kept.Single().Blocker);
+            Assert.IsTrue(File.Exists(untracked));
+            File.Delete(untracked);
+
+            var cleaned = Storage.CleanConfirmed(preview, options, [repo], settings);
             CollectionAssert.AreEqual(new[] { merged }, cleaned.Removed.Select(item => item.Path).ToArray());
             Assert.IsFalse(Directory.Exists(merged));
+            Assert.IsTrue(Directory.Exists(addedLater), "a worktree discovered after the preview stays");
             Assert.IsTrue(Directory.Exists(outside), "external worktrees stay without include_external");
             Assert.AreEqual(0, cleaned.CachesRemoved.Count + cleaned.CachesKept.Count, "no cache without a category or item");
+
+            var direct = Storage.Clean(options with { DryRun = false, Paths = [folder] }, [repo], settings);
+            CollectionAssert.AreEqual(new[] { addedLater }, direct.Removed.Select(item => item.Path).ToArray());
+            Assert.IsFalse(Directory.Exists(addedLater), "an explicit non-preview clean keeps its path selection semantics");
         }
         finally
         {

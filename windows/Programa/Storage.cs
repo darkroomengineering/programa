@@ -81,7 +81,13 @@ internal static partial class Storage
 
     /// <summary>`storage.clean`: removes (or with DryRun lists) the removable worktrees and the selected
     /// caches. Worktrees go with `git worktree remove` without --force; branches stay.</summary>
-    internal static CleanResult Clean(CleanOptions options, IReadOnlyCollection<string> open, WorktreeSettings settings)
+    internal static CleanResult Clean(CleanOptions options, IReadOnlyCollection<string> open, WorktreeSettings settings) =>
+        Clean(options, open, settings, confirmed: null);
+
+    internal static CleanResult CleanConfirmed(CleanResult preview, CleanOptions options, IReadOnlyCollection<string> open, WorktreeSettings settings) =>
+        Clean(options with { DryRun = false }, open, settings, preview);
+
+    private static CleanResult Clean(CleanOptions options, IReadOnlyCollection<string> open, WorktreeSettings settings, CleanResult? confirmed)
     {
         var removed = new List<Worktree>();
         var kept = new List<Kept>();
@@ -89,6 +95,8 @@ internal static partial class Storage
         var worktrees = ScanWorktrees(open, settings, options.IncludeExternal, options.IgnoreGracePeriod, sizes: options.Worktrees);
         foreach (var worktree in options.Worktrees ? worktrees : [])
         {
+            if (confirmed is not null && !confirmed.Removed.Any(item =>
+                Worktrees.SamePath(item.RepoRoot, worktree.RepoRoot) && Worktrees.SamePath(item.Path, worktree.Path))) continue;
             if (options.Paths is { Count: > 0 } paths && !paths.Any(path => Worktrees.Contains(Path.GetFullPath(path), worktree.Path))) continue;
             if (worktree.Blocker is { } blocker) kept.Add(new(worktree.Path, blocker));
             else if (options.DryRun) removed.Add(worktree);
@@ -103,6 +111,8 @@ internal static partial class Storage
             var projects = worktrees.Select(worktree => worktree.Path).Concat(worktrees.Select(worktree => worktree.RepoRoot)).ToList();
             foreach (var cache in ScanCaches(projects).Where(selected))
             {
+                if (confirmed is not null && !confirmed.CachesRemoved.Any(item =>
+                    item.Id == cache.Id && Worktrees.SamePath(item.Path, cache.Path))) continue;
                 if (cache.Blocker is not null) cachesKept.Add(cache);
                 else if (options.DryRun || RemoveCache(cache, projects)) cachesRemoved.Add(cache);
                 else cachesKept.Add(cache with { Blocker = "tool_failed" });
