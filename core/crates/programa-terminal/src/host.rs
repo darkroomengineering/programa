@@ -73,6 +73,7 @@ fn connect(pipe: &str) -> io::Result<File> {
     options.read(true).write(true);
     #[cfg(windows)]
     options.security_qos_flags(0x0001_0000); // SECURITY_IDENTIFICATION
+
     // Every instance busy (ERROR_PIPE_BUSY): the host makes the next one at once.
     for _ in 0..100 {
         match options.open(pipe) {
