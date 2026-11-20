@@ -10,11 +10,14 @@ mod app;
 mod codex;
 mod detection;
 mod hook;
+mod panels;
 mod panes;
 mod permission;
 mod sidebar;
 mod snapshot;
+mod system;
 mod tabs;
+mod tmux;
 mod transport;
 mod usage;
 
@@ -142,6 +145,37 @@ Commands:
   list-windows | current-window | new-window
   focus-window --window ID | close-window --window ID
   move-workspace-to-window [--workspace ID] --window ID|new
+  current-workspace                     Print the selected workspace's id
+  list-panels [--workspace ID]          The workspace's surfaces with their type, the focused one starred
+  focus-panel --panel ID [--workspace ID]
+  send-panel --panel ID [--workspace ID] [--force] [--answer-prompt] [--] <TEXT>
+  send-key-panel --panel ID [--workspace ID] [--force] [--answer-prompt] [--] <KEY>
+  handoff --from ID [--lines N] [--note TEXT] [--to ID] [--force]
+                                        Paste a pane's last lines (default 200) into a prompt, unsubmitted
+  recap open <SLUG> [--workspace ID] [--window ID] | recap list
+                                        Recaps in <repo>/.programa/recaps/<slug>.md
+  capture-pane [--workspace ID] [--surface ID] [--scrollback] [--lines N]
+  display-message [-p|--print] <TEXT>   Print it (-p) or post it as a notification
+  find-window [--content] [--select] <QUERY>
+                                        Workspaces whose title (or screen) contains the query
+  set-buffer [--name NAME] [--] <TEXT> | list-buffers
+  paste-buffer [--name NAME] [--workspace ID] [--surface ID]
+  pipe-pane [--workspace ID] [--surface ID] (--command CMD | <CMD>)
+                                        Pipe the surface's text to a PowerShell command ($input)
+  respawn-pane [--workspace ID] [--surface ID] [--command CMD | <CMD>]
+                                        Type a command (default: a new shell) into the surface
+  set-hook [--list] [--unset EVENT] | <EVENT> <COMMAND>
+  wait-for [-S|--signal] <NAME> [--timeout SECONDS]
+                                        Wait for (default 30 s) or signal a named token
+  rpc <METHOD> [JSON-PARAMS]            Call a v2 method and print its raw result
+  agent-event --event TYPE [--provider P] [--session-id ID] [--turn-id ID] [--item-id ID]
+              [--label TEXT] [--resolution R] [--workspace ID] [--surface ID]
+  opencode-hook <session-start|prompt-submit|stop|notification|session-end> [--cwd DIR] [--session ID]
+  claude-teams [CLAUDE-ARGS...]         Claude Code with agent teams on (teammates in process)
+  config check [--file PATH]            Check settings.json; exits 1 when it has problems
+  themes [list] | themes set <THEME> | themes set [--light T] [--dark T] [--font NAME] [--font-size N]
+  themes clear                          Terminal theme and font in settings.json
+  welcome                               The welcome screen and its shortcuts
   help                                  Show this help
 
 Global flags:
@@ -262,10 +296,33 @@ enum Command {
     ReloadConfig,
     Feedback,
     FeedbackSubmit,
+    CapturePane,
+    DisplayMessage,
+    FindWindow,
+    SetBuffer,
+    ListBuffers,
+    PasteBuffer,
+    PipePane,
+    RespawnPane,
+    SetHook,
+    WaitFor,
+    CurrentWorkspace,
+    ListPanels,
+    FocusPanel,
+    SendPanel,
+    SendKeyPanel,
+    Handoff,
+    RecapOpen,
+    RecapList,
+    Rpc,
+    AgentEvent,
+    ConfigCheck,
+    Themes,
+    Welcome,
 }
 
 impl Command {
-    const ALL: [Command; 92] = [
+    const ALL: [Command; 115] = [
         Command::Ping,
         Command::Identify,
         Command::Tree,
@@ -358,6 +415,29 @@ impl Command {
         Command::ReloadConfig,
         Command::Feedback,
         Command::FeedbackSubmit,
+        Command::CapturePane,
+        Command::DisplayMessage,
+        Command::FindWindow,
+        Command::SetBuffer,
+        Command::ListBuffers,
+        Command::PasteBuffer,
+        Command::PipePane,
+        Command::RespawnPane,
+        Command::SetHook,
+        Command::WaitFor,
+        Command::CurrentWorkspace,
+        Command::ListPanels,
+        Command::FocusPanel,
+        Command::SendPanel,
+        Command::SendKeyPanel,
+        Command::Handoff,
+        Command::RecapOpen,
+        Command::RecapList,
+        Command::Rpc,
+        Command::AgentEvent,
+        Command::ConfigCheck,
+        Command::Themes,
+        Command::Welcome,
     ];
 
     fn from_name(name: &str) -> Option<Command> {
@@ -459,6 +539,29 @@ impl Command {
             Command::Feedback => "feedback",
             // Never named on the command line: `feedback` with --email, --body or --image.
             Command::FeedbackSubmit => "feedback --body",
+            Command::CapturePane => "capture-pane",
+            Command::DisplayMessage => "display-message",
+            Command::FindWindow => "find-window",
+            Command::SetBuffer => "set-buffer",
+            Command::ListBuffers => "list-buffers",
+            Command::PasteBuffer => "paste-buffer",
+            Command::PipePane => "pipe-pane",
+            Command::RespawnPane => "respawn-pane",
+            Command::SetHook => "set-hook",
+            Command::WaitFor => "wait-for",
+            Command::CurrentWorkspace => "current-workspace",
+            Command::ListPanels => "list-panels",
+            Command::FocusPanel => "focus-panel",
+            Command::SendPanel => "send-panel",
+            Command::SendKeyPanel => "send-key-panel",
+            Command::Handoff => "handoff",
+            Command::RecapOpen => "recap open",
+            Command::RecapList => "recap list",
+            Command::Rpc => "rpc",
+            Command::AgentEvent => "agent-event",
+            Command::ConfigCheck => "config check",
+            Command::Themes => "themes",
+            Command::Welcome => "welcome",
         }
     }
 
@@ -555,6 +658,29 @@ impl Command {
             Command::ReloadConfig => "app.reload_config",
             Command::Feedback => "feedback.open",
             Command::FeedbackSubmit => "feedback.submit",
+            Command::CapturePane => "surface.read_text",
+            Command::DisplayMessage => "notification.create",
+            Command::FindWindow => "workspace.list",
+            Command::SetBuffer => "",
+            Command::ListBuffers => "",
+            Command::PasteBuffer => "surface.send_text",
+            Command::PipePane => "surface.read_text",
+            Command::RespawnPane => "surface.send_text",
+            Command::SetHook => "",
+            Command::WaitFor => "",
+            Command::CurrentWorkspace => "workspace.current",
+            Command::ListPanels => "surface.list",
+            Command::FocusPanel => "surface.focus",
+            Command::SendPanel => "surface.send_text",
+            Command::SendKeyPanel => "surface.send_key",
+            Command::Handoff => "surface.send_paste",
+            Command::RecapOpen => "markdown.open",
+            Command::RecapList => "",
+            Command::Rpc => "",
+            Command::AgentEvent => "agent.event",
+            Command::ConfigCheck => "",
+            Command::Themes => "",
+            Command::Welcome => "shortcuts.list",
         }
     }
 }
@@ -613,6 +739,19 @@ fn run(args: &[String], env: Env) -> i32 {
             let _ = transport::round_trip(&path, &line);
         }
         // Codex reads the hook's stdout; an empty JSON object asks for nothing.
+        emit("{}\n");
+        return 0;
+    }
+    // Every argument is Claude's, --help included, as on macOS.
+    if args.first().map(String::as_str) == Some("claude-teams") {
+        return system::run_claude_teams(&args[1..], env);
+    }
+    if args.first().map(String::as_str) == Some("opencode-hook") {
+        // Run by Programa's OpenCode plugin with --cwd and --session; stdin JSON is optional.
+        let path = resolve_socket_path(None, env);
+        for (line, _) in hook::opencode_request_lines(&args[1..], env) {
+            let _ = transport::round_trip(&path, &line);
+        }
         emit("{}\n");
         return 0;
     }
@@ -693,6 +832,12 @@ fn run(args: &[String], env: Env) -> i32 {
     };
 
     let path = resolve_socket_path(socket.as_deref(), env);
+    let local = tmux::run(request.command, &path, &request.params, json, env)
+        .or_else(|| panels::run(request.command, &path, &request.params, json))
+        .or_else(|| system::run(request.command, &path, &request.params, json, env));
+    if let Some(code) = local {
+        return code;
+    }
     if request.command == Command::WatchEvents {
         return run_watch_events(&path, &request.params);
     }
@@ -1047,6 +1192,16 @@ fn run_open_all(path: &str, params: &Map<String, Value>) -> i32 {
     i32::from(failed)
 }
 
+/// One request and its result, or the error message (or that Programa is not running).
+fn call(path: &str, method: &str, params: Value) -> Result<Value, String> {
+    transport::round_trip(
+        path,
+        &json!({ "id": 1, "method": method, "params": params }).to_string(),
+    )
+    .map_err(|_| format!("Programa is not running (no {ENDPOINT_KIND} at {path})"))
+    .and_then(|line| parse_response(&line))
+}
+
 fn text_param<'a>(params: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
     params.get(key).and_then(Value::as_str)
 }
@@ -1339,6 +1494,21 @@ fn parse_invocation(args: &[String], env: Env) -> Result<Invocation, UsageError>
                 "layout: missing subcommand (save, apply or list)".into(),
             ))
         }
+        ("recap", Some((sub, rest))) if sub == "open" || sub == "list" => {
+            (format!("recap {sub}"), rest)
+        }
+        ("recap", Some((sub, _))) if !sub.starts_with('-') => {
+            return Err(UsageError(format!(
+                "Unknown recap subcommand: {sub}. Usage: programa recap open <slug>|list"
+            )))
+        }
+        ("recap", _) => return Err(UsageError("Usage: programa recap open <slug>|list".into())),
+        ("config", Some((sub, rest))) if sub == "check" => ("config check".to_owned(), rest),
+        ("config", _) => {
+            return Err(UsageError(
+                "config: expected 'check'. Usage: programa config check [--file <path>]".into(),
+            ))
+        }
         _ => (name.clone(), command_args),
     };
     let name = &name;
@@ -1509,6 +1679,29 @@ fn build_params(
         | Command::RenameTab
         | Command::DragSurfaceToSplit => return tabs::params(command, args, env),
         Command::SnapshotList | Command::SnapshotRestore => return snapshot::params(command, args),
+        Command::CapturePane
+        | Command::DisplayMessage
+        | Command::FindWindow
+        | Command::SetBuffer
+        | Command::ListBuffers
+        | Command::PasteBuffer
+        | Command::PipePane
+        | Command::RespawnPane
+        | Command::SetHook
+        | Command::WaitFor => return tmux::params(command, args, env),
+        Command::CurrentWorkspace
+        | Command::ListPanels
+        | Command::FocusPanel
+        | Command::SendPanel
+        | Command::SendKeyPanel
+        | Command::Handoff
+        | Command::RecapOpen
+        | Command::RecapList => return panels::params(command, args, env),
+        Command::Rpc
+        | Command::AgentEvent
+        | Command::ConfigCheck
+        | Command::Themes
+        | Command::Welcome => return system::params(command, args, env),
         Command::OpenShortcuts
         | Command::ListShortcuts
         | Command::ReloadConfig
@@ -2436,6 +2629,29 @@ fn render(command: Command, result: &Value) -> String {
         | Command::RenameTab
         | Command::DragSurfaceToSplit => tabs::render(command, result),
         Command::SnapshotList | Command::SnapshotRestore => snapshot::render(command, result),
+        Command::CapturePane
+        | Command::DisplayMessage
+        | Command::FindWindow
+        | Command::SetBuffer
+        | Command::ListBuffers
+        | Command::PasteBuffer
+        | Command::PipePane
+        | Command::RespawnPane
+        | Command::SetHook
+        | Command::WaitFor => tmux::render(command, result),
+        Command::CurrentWorkspace
+        | Command::ListPanels
+        | Command::FocusPanel
+        | Command::SendPanel
+        | Command::SendKeyPanel
+        | Command::Handoff
+        | Command::RecapOpen
+        | Command::RecapList => panels::render(command, result),
+        Command::Rpc
+        | Command::AgentEvent
+        | Command::ConfigCheck
+        | Command::Themes
+        | Command::Welcome => system::render(command, result),
         Command::OpenShortcuts
         | Command::ListShortcuts
         | Command::ReloadConfig

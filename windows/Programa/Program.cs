@@ -21,6 +21,15 @@ public static class Program
             Console.WriteLine(BuildIdentity.Value);
             return;
         }
+        // Headless modes behind `programa config check` and `programa themes`, which read stdout from a pipe.
+        if (args.FirstOrDefault() is SettingsCheck.LaunchArgument or ThemesCommand.LaunchArgument)
+        {
+            using var output = SettingsCheck.Utf8Writer(Console.OpenStandardOutput());
+            using var error = SettingsCheck.Utf8Writer(Console.OpenStandardError());
+            Environment.Exit(args[0] == SettingsCheck.LaunchArgument
+                ? SettingsCheck.Run(args.ElementAtOrDefault(1), ShortcutSettings.SettingsPath, output, error)
+                : ThemesCommand.Run(args[1..], ShortcutSettings.SettingsPath, ThemesCommand.ThemeDirectories(), output, error));
+        }
         var conptyLoaded = LoadBundledConpty();
         // Markdown panels' WebView2 data lives with the app's other data, not beside the executable,
         // whose folder an update replaces.

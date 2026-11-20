@@ -25,7 +25,18 @@ A second binary, `programa-mcp` (`src/mcp.rs`), is the MCP server over stdio for
 `snapshot list`, `snapshot restore [<id>|latest]`,
 `agent-detection list`, `agent-detection test [agent]`, `agent-detection scaffold <agent> [--force]`,
 `shortcuts`, `list-shortcuts`, `reload-config`, `feedback`,
-`list-ports`, `stop-port <PORT>|--pid PID` (a port resolves to its one listening pid).
+`list-ports`, `stop-port <PORT>|--pid PID` (a port resolves to its one listening pid),
+`current-workspace`, `list-panels [--workspace]`, `focus-panel --panel`, `send-panel --panel [--force] [--answer-prompt] <text>`,
+`send-key-panel --panel [--force] [--answer-prompt] <key>`, `handoff --from [--lines N] [--note] [--to] [--force]`,
+`recap open <slug>|list` (`<repo>/.programa/recaps`), `rpc <method> [json-params]` (prints the raw result),
+`agent-event --event <type> [--provider] [--session-id] [--turn-id] [--item-id] [--label] [--resolution]`,
+`opencode-hook <session-start|prompt-submit|stop|notification|session-end> [--cwd] [--session]` (run by the OpenCode plugin; prints `{}`),
+`claude-teams [claude-args...]` (Claude Code with agent teams on, `--teammate-mode in-process`, and Programa's MCP config and hooks),
+`config check [--file PATH]` and `themes [list|set|clear]` (run the app headless: `programa.exe --check-settings`, `--themes`),
+`welcome`, and the tmux-compatible `capture-pane`, `display-message [-p]`, `find-window [--content] [--select]`,
+`set-buffer [--name]`, `list-buffers`, `paste-buffer [--name]`, `pipe-pane --command` (PowerShell, the pane's text on stdin),
+`respawn-pane [--command]`, `set-hook [--list|--unset]` and `wait-for [-S] <name> [--timeout]` (`tmux.rs`; buffers and hooks in
+`~/.programa/tmux-compat-store.json`, signals in `~/.programa/run/wait-for`, as on macOS).
 Run `programa help` for every flag.
 
 `--surface` and `--workspace` default to `PROGRAMA_SURFACE_ID` / `PROGRAMA_WORKSPACE_ID` (never for
