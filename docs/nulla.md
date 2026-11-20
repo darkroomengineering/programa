@@ -33,6 +33,16 @@ The [native renderer lifecycle](../Sources/RendererRealization.swift) already re
 
 ### Reproduce and compare
 
+The [ten-workspace Debug baseline](https://github.com/darkroomengineering/programa/actions/runs/44830672831/job/136616436343) reported the following on one hosted macOS run. Values below come from `footprint`. Its IOSurface row reports dirty bytes. The existing quiet-pane restore assertions passed in the same fixture.
+
+| Phase | Physical footprint | Process peak | Dirty IOSurface | Dirty MALLOC_SMALL |
+| --- | ---: | ---: | ---: | ---: |
+| Restored, before workspace visits | 69 MB | 71 MB | 3344 KB | 42 MB |
+| After visiting ten workspaces | 197 MB | 200 MB | 8704 KB | 133 MB |
+| After 60 seconds without input | 184 MB | 200 MB | 4416 KB | 134 MB |
+
+The hosted run points first to retained heap after churn. At the settled sample, `vmmap` reported 129.2 MB allocated in the default malloc zone and 0% reported fragmentation in that zone. Use a separate allocation trace with Instruments or `MallocStackLogging` to attribute the live allocations to call sites. Keep allocation tracing out of the footprint comparison because it changes the workload. The hosted display fixture still needs a higher-resolution counterpart to assess the renderer memory seen on the M1 Max.
+
 For a hosted Debug spot check, dispatch the CI workflow with `gh workflow run ci.yml --ref <branch> -f renderer_memory=true`. In the socket integration job, **Profile renderer memory after restoring ten workspaces** logs native `footprint` and `vmmap` output before workspace visits, after visiting all ten and returning to the initially selected workspace, and after 60 seconds without input. The fixture also checks PTY identity and restored scrollback across relaunches. Use these samples to select the native trace to investigate. Use matched, alternating runs on one device for a performance comparison.
 
 1. On a dedicated macOS desktop or VM, use the same display dimensions, scale, OS, shell configuration, and saved fixture for each build. Use one window with ten workspaces and one terminal per workspace. Seed identical scrollback and start from identical clean test profiles. Record the app commit, Ghostty pin, build configuration, device and OS. Prefer release-equivalent builds for performance and use the tagged Debug build for app behavior checks.
