@@ -48,6 +48,8 @@ internal static class McpConfig
                 if (to.Exists && to.Length == from.Length && to.LastWriteTimeUtc == from.LastWriteTimeUtc) continue;
                 from.CopyTo(to.FullName, overwrite: true);
             }
+            // The staged CLI runs this app headless (`config check`, `themes`) and finds it here.
+            if (Environment.ProcessPath is { } app) File.WriteAllText(Path.Combine(target, "app-path"), app);
             return target;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)

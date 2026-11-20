@@ -280,11 +280,22 @@ fn ignore_ctrl_c() {
 #[cfg(not(windows))]
 fn ignore_ctrl_c() {}
 
-/// The app this CLI ships with: `bin\programa.exe` sits in the app's folder.
+/// The app this CLI ships with.
 fn app_executable() -> Option<std::path::PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    let app = exe.parent()?.parent()?.join("programa.exe");
-    app.is_file().then_some(app)
+    app_beside(std::env::current_exe().ok()?.parent()?)
+}
+
+/// The app named by the `app-path` file it writes beside the copy of this CLI it stages in
+/// %LOCALAPPDATA%\Programa (the installed app unpacks to %TEMP%), else `programa.exe` in the folder
+/// above `bin` (a development build's output).
+fn app_beside(bin: &std::path::Path) -> Option<std::path::PathBuf> {
+    let written = std::fs::read_to_string(bin.join("app-path"))
+        .ok()
+        .map(|path| std::path::PathBuf::from(path.trim()));
+    written
+        .into_iter()
+        .chain(bin.parent().map(|folder| folder.join("programa.exe")))
+        .find(|app| app.is_file())
 }
 
 /// Runs the app headless with its output passed through; exits 2 when it cannot run, as macOS's
@@ -472,6 +483,29 @@ mod tests {
             Ok(other) => Err(format!("{other:?}")),
             Err(UsageError(message)) => Err(message),
         }
+    }
+
+    #[test]
+    fn the_cli_finds_its_app_by_the_path_written_beside_it_else_above_bin() {
+        let root = std::env::temp_dir().join(format!("programa-app-path-{}", std::process::id()));
+        let bin = root.join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        assert_eq!(app_beside(&bin), None);
+        let dev = root.join("programa.exe");
+        std::fs::write(&dev, "").unwrap();
+        assert_eq!(app_beside(&bin), Some(dev.clone()));
+        let installed = root.join("installed.exe");
+        std::fs::write(&installed, "").unwrap();
+        std::fs::write(bin.join("app-path"), format!("{}\r\n", installed.display())).unwrap();
+        assert_eq!(app_beside(&bin), Some(installed));
+        // A stale path falls back to the folder above bin.
+        std::fs::write(
+            bin.join("app-path"),
+            root.join("gone.exe").display().to_string(),
+        )
+        .unwrap();
+        assert_eq!(app_beside(&bin), Some(dev));
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
