@@ -1,5 +1,9 @@
 # Programa agent notes
 
+## Governing direction
+
+[Nulla](https://github.com/darkroomengineering/nulla) governs how Programa is built and verified. Before changing Programa, read the canonical [rules](https://github.com/darkroomengineering/nulla/blob/main/RULES.md) and relevant [decisions](https://github.com/darkroomengineering/nulla/blob/main/DECISIONS.md) on its default branch. Follow the project's [critical journeys and performance checks](docs/nulla.md) for expected behavior and measurement. Resolve conflicts with Nulla through its approval process.
+
 ## Initial setup
 
 Run the setup script to initialize submodules and build GhosttyKit:
