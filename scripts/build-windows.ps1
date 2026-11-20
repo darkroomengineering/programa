@@ -89,7 +89,7 @@ try {
     Invoke-Checked 'terminal formatting' { cargo fmt --manifest-path $TerminalManifest -- --check }
     Invoke-Checked 'terminal tests' { cargo test --manifest-path $TerminalManifest --locked --target x86_64-pc-windows-msvc --target-dir $TerminalTarget }
     $TerminalVendorManifest = Join-Path $RepositoryRoot 'core\vendor\alacritty_terminal\Cargo.toml'
-    Invoke-Checked 'terminal read regression' { cargo test --manifest-path $TerminalVendorManifest --locked --lib parses_buffered_bytes_before_returning_a_terminal_read_error --target x86_64-pc-windows-msvc --target-dir $TerminalTarget }
+    Invoke-Checked 'terminal read regression' { cargo test --manifest-path $TerminalVendorManifest --locked --lib event_loop::tests --target x86_64-pc-windows-msvc --target-dir $TerminalTarget }
     Invoke-Checked 'terminal release build' { cargo build --manifest-path $TerminalManifest --release --locked --target x86_64-pc-windows-msvc --target-dir $TerminalTarget }
 
     Copy-Item -LiteralPath (Join-Path $CoreTarget 'x86_64-pc-windows-msvc\release\programa_core.dll') -Destination $NativeRoot

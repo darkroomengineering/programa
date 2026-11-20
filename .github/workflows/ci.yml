@@ -229,7 +229,7 @@ jobs:
           # alone.
           cargo test --manifest-path core/Cargo.toml -p programad --locked --lib -- --ignored --test-threads=1
           cargo test --manifest-path core/crates/programa-terminal/Cargo.toml --locked
-          cargo test --manifest-path core/vendor/alacritty_terminal/Cargo.toml --locked --lib parses_buffered_bytes_before_returning_a_terminal_read_error
+          cargo test --manifest-path core/vendor/alacritty_terminal/Cargo.toml --locked --lib event_loop::tests
 
       - name: Smoke test programad
         run: |
