@@ -233,14 +233,16 @@ def main():
 
         def capture_allocations(phase):
             require(current.poll() is None, f"App exited before {phase} allocation capture")
+            print(f"--- allocation history: {phase} ---", flush=True)
             args.allocations.mkdir(parents=True, exist_ok=True)
             output = args.allocations / f"{phase}.txt"
             with output.open("w") as report:
                 subprocess.run(
-                    ["malloc_history", str(current.pid), "-callTree", "-invert", "-ignoreThreads", "-noContent"],
-                    stdout=report, check=True, timeout=120,
+                    ["malloc_history", str(current.pid), "-allBySize"],
+                    stdout=report, check=True, timeout=180,
                 )
-            require(output.stat().st_size > 0, f"Empty allocation report for {phase}")
+            with output.open() as report:
+                require(any(" bytes:" in line for line in report), f"No allocation stacks for {phase}")
 
         def visit_workspace(workspace):
             workspace_id = workspace["id"]

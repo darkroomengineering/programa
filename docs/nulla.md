@@ -45,7 +45,7 @@ The hosted run points first to retained heap after churn. At the settled sample,
 
 The [occlusion candidate spot check](https://github.com/darkroomengineering/programa/actions/runs/44830957961/job/136617816779) passed the same lifecycle assertions. Its settled footprint was 185 MB, with 4416 KB of dirty IOSurface and 134 MB of dirty MALLOC_SMALL. The baseline and candidate each ran once on separate hosted runners. The samples establish no performance gain.
 
-Dispatch `gh workflow run ci.yml --ref <branch> -f renderer_allocations=true` to collect live allocation call trees at restore and after churn has settled. Download the `renderer-allocations` artifact from the socket integration job. Keep stack logging disabled for footprint comparisons.
+Dispatch `gh workflow run ci.yml --ref <branch> -f renderer_allocations=true` to collect live allocations grouped by stack and sorted by size at restore and after churn has settled. Download the `renderer-allocations` artifact from the socket integration job. Keep stack logging disabled for footprint comparisons.
 
 For a hosted Debug spot check, dispatch the CI workflow with `gh workflow run ci.yml --ref <branch> -f renderer_memory=true`. In the socket integration job, **Profile renderer memory after restoring ten workspaces** logs native `footprint` and `vmmap` output before workspace visits, after visiting all ten and returning to the initially selected workspace, and after 60 seconds without input. The fixture also checks PTY identity and restored scrollback across relaunches. Use these samples to select the native trace to investigate. Use matched, alternating runs on one device for a performance comparison.
 
