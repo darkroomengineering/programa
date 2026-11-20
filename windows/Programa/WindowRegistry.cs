@@ -485,7 +485,7 @@ internal static class WindowRegistry
                 var (tornWorkspace, tornPane) = tornFrom.LocateSurface(tornId);
                 var torn = MoveSurfaceToNewWindow(tornWorkspace, tornPane, tornId, new Windows.Graphics.PointInt32((int)tornX, (int)tornY));
                 return Task.FromResult<object?>(new { surface_id = tornId, window_id = torn.WindowId, workspace_id = torn.SelectedWorkspaceId });
-            case "debug.command_palette.toggle" or "debug.command_palette.results" or "debug.type" when BuildIdentity.Value.Contains("0.0.0-dev", StringComparison.Ordinal):
+            case "debug.command_palette.toggle" or "debug.command_palette.results" or "debug.type" or "debug.shortcut.simulate" when BuildIdentity.Value.Contains("0.0.0-dev", StringComparison.Ordinal):
                 var paletteWindow = method == "debug.type" ? Open.FirstOrDefault(window => window.PaletteOpen) ?? Current! : Text(p, "window_id") is null ? Current! : RequiredWindow(p);
                 return Task.FromResult<object?>(paletteWindow.PaletteDebug(method, p));
             case "agent.task.start" or "agent.task.update" or "agent.task.finish" or "agent.task.finish_session" or "agent.task.list":

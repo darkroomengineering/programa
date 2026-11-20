@@ -81,7 +81,8 @@ public sealed partial class MainWindow
     {
         var position = AppWindow.Position;
         var size = AppWindow.Size;
-        var maximized = AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Maximized };
+        // A full-screen window comes back maximized.
+        var maximized = _windowedPresenter is not null || AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Maximized };
         return new SessionWindow(position.X, position.Y, size.Width, size.Height, maximized);
     }
 

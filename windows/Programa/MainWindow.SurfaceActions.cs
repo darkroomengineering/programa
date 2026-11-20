@@ -122,16 +122,20 @@ public sealed partial class MainWindow
         var surface = Text(p, "surface_id") ?? workspace.SelectedPane?.SelectedSurfaceId ?? throw new ControlException("not_found", "No focused surface");
         var pane = workspace.Panes.FirstOrDefault(item => item.Surfaces.Any(candidate => candidate.Id == surface))
             ?? throw new ControlException("not_found", "Surface not found", new { surface_id = surface });
-        if (_paneRings.TryGetValue(pane.Id, out var ring))
-        {
-            ring.Ring.Visibility = Visibility.Visible;
-            var timer = DispatcherQueue.CreateTimer();
-            timer.Interval = TimeSpan.FromMilliseconds(900);
-            timer.IsRepeating = false;
-            timer.Tick += (_, _) => RefreshUnreadIndicators();
-            timer.Start();
-        }
+        FlashPane(pane.Id);
         return SurfaceResult(workspace, surface);
+    }
+
+    /// <summary>Lights a pane's ring for a moment (Flash Focused Panel, surface.trigger_flash).</summary>
+    private void FlashPane(string paneId)
+    {
+        if (!_paneRings.TryGetValue(paneId, out var ring)) return;
+        ring.Ring.Visibility = Visibility.Visible;
+        var timer = DispatcherQueue.CreateTimer();
+        timer.Interval = TimeSpan.FromMilliseconds(900);
+        timer.IsRepeating = false;
+        timer.Tick += (_, _) => RefreshUnreadIndicators();
+        timer.Start();
     }
 
     private object RefreshFromControl(JsonElement p)

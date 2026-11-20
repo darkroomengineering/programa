@@ -51,6 +51,27 @@ public sealed class ShortcutSettings
         ["select_workspace_1"] = "ctrl-1", ["select_workspace_2"] = "ctrl-2", ["select_workspace_3"] = "ctrl-3",
         ["select_workspace_4"] = "ctrl-4", ["select_workspace_5"] = "ctrl-5", ["select_workspace_6"] = "ctrl-6",
         ["select_workspace_7"] = "ctrl-7", ["select_workspace_8"] = "ctrl-8", ["select_workspace_9"] = "ctrl-9",
+        // The rest of the macOS actions, by the same rules: ⌘R ⌘⇧E, ⌘G ⌘⇧F, ⌘⇧H ⌘P ⌘O ⌘⇧, ⌘Q.
+        // Ctrl+Alt+letter is AltGr on many layouts (AltGr+F types [ in Czech), so the ⌥⌘ ones add
+        // Shift: close others (⌥⌘T) is Ctrl+Alt+Shift+O and find previous (⌥⌘G) Ctrl+Alt+Shift+G.
+        // Full screen is F11, closing a window Ctrl+Shift+F4 and feedback (⌥⌘F) Ctrl+Shift+F1,
+        // as Windows places them. An empty binding is no shortcut; Open Review has none on macOS either.
+        ["rename_tab"] = "ctrl-alt-shift-r",
+        ["edit_workspace_description"] = "ctrl-alt-shift-e",
+        ["close_other_tabs"] = "ctrl-alt-shift-o",
+        ["find_next"] = "ctrl-shift-g",
+        ["find_previous"] = "ctrl-alt-shift-g",
+        ["hide_find"] = "ctrl-alt-shift-f",
+        ["use_selection_for_find"] = "",
+        ["trigger_flash"] = "ctrl-shift-h",
+        ["go_to_workspace"] = "ctrl-alt-shift-p",
+        ["open_folder"] = "ctrl-shift-o",
+        ["open_review"] = "",
+        ["toggle_full_screen"] = "f11",
+        ["reload_configuration"] = "ctrl-shift-comma",
+        ["send_feedback"] = "ctrl-shift-f1",
+        ["close_window"] = "ctrl-shift-f4",
+        ["quit"] = "ctrl-shift-q",
     };
 
     private static readonly HashSet<string> Reserved = ["ctrl-c", "ctrl-d", "ctrl-w"];
@@ -65,7 +86,7 @@ public sealed class ShortcutSettings
     private ShortcutSettings(Dictionary<string, string> values)
     {
         _values = values;
-        _actions = values.ToDictionary(pair => pair.Value, pair => pair.Key, StringComparer.OrdinalIgnoreCase);
+        _actions = values.Where(pair => pair.Value.Length > 0).ToDictionary(pair => pair.Value, pair => pair.Key, StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>The action bound to this key with the modifiers held now, or null.</summary>
@@ -263,6 +284,9 @@ public sealed class ShortcutSettings
         return "{" + nl + string.Join("," + nl, lines) + nl + indent + "}";
     }
 
+    /// <summary>The action bound to a binding such as "ctrl-shift-g", or null.</summary>
+    public string? ActionForBinding(string binding) => binding.Trim().Length == 0 ? null : _actions.GetValueOrDefault(Normalize(binding));
+
     public bool Matches(string action, VirtualKey key) => string.Equals(ActionFor(key), action, StringComparison.Ordinal);
 
     internal static void Validate(IReadOnlyDictionary<string, string> values)
@@ -271,6 +295,7 @@ public sealed class ShortcutSettings
         foreach (var action in Defaults.Keys)
         {
             if (!values.TryGetValue(action, out var raw)) throw new InvalidDataException($"Missing shortcut '{action}'.");
+            if (raw.Trim().Length == 0) continue;
             if (!IsValid(raw.Trim().ToLowerInvariant())) throw new InvalidDataException($"Shortcut '{action}' is invalid: '{raw}'.");
             var binding = Normalize(raw);
             if (Reserved.Contains(binding)) throw new InvalidDataException($"Shortcut '{binding}' is reserved for the terminal.");
@@ -281,6 +306,7 @@ public sealed class ShortcutSettings
     private static string Normalize(string value)
     {
         var parts = value.Trim().ToLowerInvariant().Split('-', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return string.Empty;
         var result = new List<string>(4);
         if (parts.Contains("ctrl")) result.Add("ctrl");
         if (parts.Contains("alt")) result.Add("alt");
@@ -292,16 +318,19 @@ public sealed class ShortcutSettings
     private static bool IsValid(string value)
     {
         var parts = value.Split('-', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length < 2 || parts.Distinct(StringComparer.OrdinalIgnoreCase).Count() != parts.Length) return false;
+        // A function key may stand alone; any other key needs a modifier, or it would never reach the terminal.
+        if (parts.Length == 0 || parts.Length == 1 && !IsFunctionKey(parts[0]) || parts.Distinct(StringComparer.OrdinalIgnoreCase).Count() != parts.Length) return false;
         return parts[..^1].All(part => part is "ctrl" or "alt" or "shift")
-            && (parts[^1].Length == 1 && char.IsAsciiLetterOrDigit(parts[^1][0]) || NamedKeys.Contains(parts[^1]));
+            && (parts[^1].Length == 1 && char.IsAsciiLetterOrDigit(parts[^1][0]) || NamedKeys.Contains(parts[^1]) || IsFunctionKey(parts[^1]));
     }
+
+    private static bool IsFunctionKey(string key) => key.Length is 2 or 3 && key[0] == 'f' && int.TryParse(key[1..], out var number) && number is >= 1 and <= 12;
 
     private static readonly HashSet<string> NamedKeys =
         ["comma", "insert", "pageup", "pagedown", "tab", "enter", "left", "right", "up", "down", "equals", "minus"];
 
     /// <summary>"ctrl-shift-n" as Windows shows shortcuts: "Ctrl+Shift+N".</summary>
-    public static string Display(string binding) => string.Join('+', binding.Split('-').Select(part => part switch
+    public static string Display(string binding) => string.Join('+', binding.Split('-', StringSplitOptions.RemoveEmptyEntries).Select(part => part switch
     {
         "pageup" => "PgUp",
         "pagedown" => "PgDn",
@@ -325,6 +354,7 @@ public sealed class ShortcutSettings
         (VirtualKey)187 => "equals",
         (VirtualKey)189 => "minus",
         (VirtualKey)188 => "comma",
+        >= VirtualKey.F1 and <= VirtualKey.F12 => $"f{(int)key - (int)VirtualKey.F1 + 1}",
         >= VirtualKey.Number0 and <= VirtualKey.Number9 => ((int)key - (int)VirtualKey.Number0).ToString(),
         >= VirtualKey.A and <= VirtualKey.Z => ((char)('a' + (int)key - (int)VirtualKey.A)).ToString(),
         _ => "",

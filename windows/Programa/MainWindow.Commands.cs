@@ -63,7 +63,52 @@ public sealed partial class MainWindow
         ["select_workspace_5"] = () => SelectWorkspaceByNumber(5), ["select_workspace_6"] = () => SelectWorkspaceByNumber(6),
         ["select_workspace_7"] = () => SelectWorkspaceByNumber(7), ["select_workspace_8"] = () => SelectWorkspaceByNumber(8),
         ["select_workspace_9"] = () => SelectWorkspaceByNumber(9),
+        ["rename_tab"] = () => { if (SelectedWorkspace() is { SelectedPane: { } pane } workspace) _ = RenameTabAsync(workspace.Id, pane.Id, pane.SelectedSurfaceId); },
+        ["edit_workspace_description"] = () => { if (SelectedWorkspace() is { } workspace) _ = EditDescriptionAsync(workspace.Id); },
+        ["close_other_tabs"] = () => { if (SelectedWorkspace() is { SelectedPane: { } pane } workspace) CloseOtherTabs(workspace.Id, pane.Id, pane.SelectedSurfaceId); },
+        ["find_next"] = () => ActiveTerminal()?.FindAgain(next: true),
+        ["find_previous"] = () => ActiveTerminal()?.FindAgain(next: false),
+        ["hide_find"] = () => ActiveTerminal()?.CloseFind(),
+        ["use_selection_for_find"] = () => ActiveTerminal()?.FindSelection(),
+        ["trigger_flash"] = () => { if (SelectedWorkspace() is { } workspace) FlashPane(workspace.SelectedPaneId); },
+        ["go_to_workspace"] = () => _ = ShowCommandPaletteAsync(workspacesOnly: true),
+        ["open_folder"] = () => _ = OpenFolderAsync(),
+        ["open_review"] = () => { if (ActiveTerminal() is not null) _ = OpenReviewFromUiAsync(); },
+        ["toggle_full_screen"] = ToggleFullScreen,
+        ["reload_configuration"] = WindowRegistry.ApplySettings,
+        ["send_feedback"] = () => OpenFeedback(),
+        ["close_window"] = () => _ = CloseWindowAsync(),
+        ["quit"] = () => _ = QuitAsync(),
     };
+
+    /// <summary>Open Folder (macOS ⌘O): a new workspace in the folder you pick.</summary>
+    private async Task OpenFolderAsync()
+    {
+        if (_dialogOpen) return;
+        // ponytail: the system picker cannot start in the workspace's directory; the newer WinAppSDK picker can, if that matters.
+        var picker = new Windows.Storage.Pickers.FolderPicker { SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.ComputerFolder };
+        picker.FileTypeFilter.Add("*");
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+        if (await picker.PickSingleFolderAsync() is not { } folder) return;
+        _nextTerminalDirectory = folder.Path;
+        NewWorkspace();
+    }
+
+    /// <summary>The window's own presenter while it is full screen, so leaving keeps it maximized or where it was.</summary>
+    private Microsoft.UI.Windowing.AppWindowPresenter? _windowedPresenter;
+
+    /// <summary>Full screen (macOS ⌃⌘F, F11 here) and back to the window as it was.</summary>
+    private void ToggleFullScreen()
+    {
+        if (_windowedPresenter is { } windowed)
+        {
+            _windowedPresenter = null;
+            AppWindow.SetPresenter(windowed);
+            return;
+        }
+        _windowedPresenter = AppWindow.Presenter;
+        AppWindow.SetPresenter(Microsoft.UI.Windowing.AppWindowPresenterKind.FullScreen);
+    }
 
     private void OnKeyDown(object sender, KeyRoutedEventArgs args)
     {
@@ -217,22 +262,20 @@ public sealed partial class MainWindow
     }
 
     /// <summary>The command palette (macOS ⌘⇧P): every shortcut action, workspaces to go to and tab
-    /// commands, filtered as you type; Enter or a click runs the highlighted one.</summary>
-    private async Task ShowCommandPaletteAsync()
+    /// commands, filtered as you type; Enter or a click runs the highlighted one. With
+    /// <paramref name="workspacesOnly"/> it is the workspace switcher (Go to Workspace, macOS ⌘P).</summary>
+    private async Task ShowCommandPaletteAsync(bool workspacesOnly = false)
     {
         if (_dialogOpen || Root.XamlRoot is null) return;
         var entries = new List<(string Label, string Hint, Action Run)>();
-        foreach (var (action, run) in Commands)
+        foreach (var (action, run) in workspacesOnly ? new Dictionary<string, Action>() : Commands)
         {
-            if (action is "command_palette" or "paste_alternate" || action.StartsWith("select_tab_", StringComparison.Ordinal) || action.StartsWith("select_workspace_", StringComparison.Ordinal)) continue;
+            if (action is "command_palette" or "paste_alternate" or "go_to_workspace" || action.StartsWith("select_tab_", StringComparison.Ordinal) || action.StartsWith("select_workspace_", StringComparison.Ordinal)) continue;
             entries.Add((Localizer.Get($"Shortcut_{action}"), ShortcutSettings.Display(_shortcuts.Values[action]), run));
         }
-        if (SelectedWorkspace() is { } current && current.SelectedPane is { } pane)
+        if (!workspacesOnly && SelectedWorkspace() is { } current && current.SelectedPane is { } pane)
         {
             var surfaceId = pane.SelectedSurfaceId;
-            entries.Add((Localizer.Get("RenameTab"), string.Empty, () => _ = RenameTabAsync(current.Id, pane.Id, surfaceId)));
-            entries.Add((Localizer.Get("CloseOtherTabs"), string.Empty, () => CloseOtherTabs(current.Id, pane.Id, surfaceId)));
-            if (ActiveTerminal() is not null) entries.Add((Localizer.Get("ReviewOpen"), string.Empty, () => _ = OpenReviewFromUiAsync()));
             if (ActiveTerminal() is { LastAgentSession: not null } resumable && !IsBusy(resumable)) entries.Add((Localizer.Get("ResumeAgentSession"), string.Empty, () => ResumeAgentFromPalette(resumable)));
             entries.Add((Localizer.Get("MoveTabToNewWindow"), string.Empty, () => WindowRegistry.MoveSurfaceToNewWindow(current.Id, pane.Id, surfaceId)));
         }
@@ -240,20 +283,18 @@ public sealed partial class MainWindow
         {
             var id = workspace.Id;
             var name = _sidebarRows.GetValueOrDefault(id)?.Title.Text ?? workspace.Title ?? id;
-            entries.Add((string.Format(Localizer.Get("GoToWorkspace"), name), string.Empty, () => Apply(new { command = "select_workspace", workspace_id = id })));
+            entries.Add((workspacesOnly ? name : string.Format(Localizer.Get("GoToWorkspace"), name), string.Empty, () => Apply(new { command = "select_workspace", workspace_id = id })));
         }
         var keywords = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (label, hint, words, run) in ConfigPaletteEntries())
+        foreach (var (label, hint, words, run) in workspacesOnly ? [] : ConfigPaletteEntries().ToList())
         {
             entries.Add((label, hint, run));
             keywords[label] = words;
         }
-        entries.AddRange(LayoutPaletteEntries());
-        entries.Add((Localizer.Get("CloseWindow"), string.Empty, () => _ = CloseWindowAsync()));
-        entries.Add((Localizer.Get("QuitPrograma"), string.Empty, () => _ = QuitAsync()));
+        if (!workspacesOnly) entries.AddRange(LayoutPaletteEntries());
 
-        var query = new TextBox { PlaceholderText = Localizer.Get("CommandPalettePlaceholder"), MinWidth = 480 };
-        AutomationProperties.SetName(query, Localizer.Get("Shortcut_command_palette"));
+        var query = new TextBox { PlaceholderText = Localizer.Get(workspacesOnly ? "GoToWorkspacePlaceholder" : "CommandPalettePlaceholder"), MinWidth = 480 };
+        AutomationProperties.SetName(query, Localizer.Get(workspacesOnly ? "Shortcut_go_to_workspace" : "Shortcut_command_palette"));
         var list = new ListView { SelectionMode = ListViewSelectionMode.Single, IsItemClickEnabled = true, MaxHeight = 400 };
         Action? chosen = null;
         var dialog = new ContentDialog { XamlRoot = Root.XamlRoot, CloseButtonText = Localizer.Get("Cancel") };
@@ -320,7 +361,8 @@ public sealed partial class MainWindow
     internal bool PaletteOpen => _palette is not null;
 
     /// <summary>Dev builds: debug.command_palette.toggle opens or closes the palette, .results lists its
-    /// rows, and debug.type types into its query, a newline running the highlighted row.</summary>
+    /// rows, debug.type types into its query, a newline running the highlighted row, and
+    /// debug.shortcut.simulate runs the action a key combination is bound to.</summary>
     internal object PaletteDebug(string method, JsonElement p)
     {
         switch (method)
@@ -340,6 +382,13 @@ public sealed partial class MainWindow
                         .Select(item => ((Grid)item.Content).Children.OfType<TextBlock>().ToArray())
                         .Select(text => new { title = text[0].Text, subtitle = text[1].Text }).ToList(), // read here, on the UI thread
                 };
+            case "debug.shortcut.simulate":
+                // A binding as settings.json writes it (ctrl-shift-g), or with + as macOS does.
+                var combo = (Text(p, "combo") ?? string.Empty).Replace('+', '-');
+                if (_shortcuts.ActionForBinding(combo) is not { } action || !Commands.TryGetValue(action, out var run))
+                    throw new ControlException("not_found", $"No action is bound to {combo}.");
+                run();
+                return new { action };
             default: // debug.type
                 var palette = _palette ?? throw new ControlException("not_found", "No command palette is open.");
                 var parts = (Text(p, "text") ?? string.Empty).Split('\n');

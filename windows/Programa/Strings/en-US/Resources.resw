@@ -118,4 +118,21 @@
   <data name="UnpinTab" xml:space="preserve"><value>Unpin Tab</value></data>
   <data name="HelperNumbered" xml:space="preserve"><value>Helper {0}</value></data>
   <data name="NotificationDefaultTitle" xml:space="preserve"><value>Notification</value></data>
+  <data name="Shortcut_rename_tab" xml:space="preserve"><value>Rename tab</value></data>
+  <data name="Shortcut_edit_workspace_description" xml:space="preserve"><value>Edit workspace description</value></data>
+  <data name="Shortcut_close_other_tabs" xml:space="preserve"><value>Close other tabs in pane</value></data>
+  <data name="Shortcut_find_next" xml:space="preserve"><value>Find next</value></data>
+  <data name="Shortcut_find_previous" xml:space="preserve"><value>Find previous</value></data>
+  <data name="Shortcut_hide_find" xml:space="preserve"><value>Hide find bar</value></data>
+  <data name="Shortcut_use_selection_for_find" xml:space="preserve"><value>Use selection for find</value></data>
+  <data name="Shortcut_trigger_flash" xml:space="preserve"><value>Flash focused pane</value></data>
+  <data name="Shortcut_go_to_workspace" xml:space="preserve"><value>Go to workspace…</value></data>
+  <data name="Shortcut_open_folder" xml:space="preserve"><value>Open folder</value></data>
+  <data name="Shortcut_open_review" xml:space="preserve"><value>Open review panel</value></data>
+  <data name="Shortcut_toggle_full_screen" xml:space="preserve"><value>Toggle full screen</value></data>
+  <data name="Shortcut_reload_configuration" xml:space="preserve"><value>Reload configuration</value></data>
+  <data name="Shortcut_send_feedback" xml:space="preserve"><value>Send feedback</value></data>
+  <data name="Shortcut_close_window" xml:space="preserve"><value>Close window</value></data>
+  <data name="Shortcut_quit" xml:space="preserve"><value>Quit Programa</value></data>
+  <data name="GoToWorkspacePlaceholder" xml:space="preserve"><value>Go to a workspace</value></data>
 </root>

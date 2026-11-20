@@ -72,6 +72,26 @@ public sealed partial class TerminalView
         _findBox.SelectAll();
     }
 
+    /// <summary>Find Next / Find Previous (macOS ⌘G, ⌥⌘G), as Enter and Shift+Enter; with no query the bar opens.</summary>
+    public void FindAgain(bool next)
+    {
+        if (_findBox.Text.Length == 0) ShowFind();
+        else FindNext(forward: !next);
+    }
+
+    public void CloseFind()
+    {
+        if (_findBar.Visibility == Visibility.Visible) HideFind();
+    }
+
+    /// <summary>Use Selection for Find (macOS ⌘E): the selection's first line becomes the query.</summary>
+    public void FindSelection()
+    {
+        if (_session is null || !NativeTerminal.TryCopySelection(_session, out var text) || text.Split('\n')[0].TrimEnd('\r') is not { Length: > 0 } line) return;
+        _findBox.Text = line;
+        ShowFind();
+    }
+
     private void HideFind()
     {
         _findBar.Visibility = Visibility.Collapsed;

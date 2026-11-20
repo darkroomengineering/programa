@@ -45,4 +45,24 @@ public sealed class CoreProjectionTests
         duplicate["close_tab"] = duplicate["new_tab"];
         Assert.ThrowsExactly<InvalidDataException>(() => ShortcutSettings.Create(duplicate));
     }
+
+    [TestMethod]
+    public void AnActionCanHaveNoShortcutAndFunctionKeysStandAlone()
+    {
+        var values = ShortcutSettings.Defaults.ToDictionary(pair => pair.Key, pair => pair.Value);
+        // Unbound actions never clash with each other, and an emptied default is unbound too.
+        values["find"] = " ";
+        values["toggle_full_screen"] = "F12";
+        values["close_window"] = "ctrl-shift-F4";
+        var settings = ShortcutSettings.Create(values);
+        Assert.AreEqual(("", "", "", "f12", "ctrl-shift-f4"), (settings.Values["find"], settings.Values["open_review"], settings.Values["use_selection_for_find"], settings.Values["toggle_full_screen"], settings.Values["close_window"]));
+        Assert.AreEqual(("", "F11", "Ctrl+Shift+F1"), (ShortcutSettings.Display(""), ShortcutSettings.Display(ShortcutSettings.Defaults["toggle_full_screen"]), ShortcutSettings.Display(ShortcutSettings.Defaults["send_feedback"])));
+
+        // Any other key still needs a modifier, and F13 and up are not keys here.
+        foreach (var bad in new[] { "g", "f13", "f0", "ctrl-f99" })
+        {
+            values["find"] = bad;
+            Assert.ThrowsExactly<InvalidDataException>(() => ShortcutSettings.Create(values), bad);
+        }
+    }
 }
