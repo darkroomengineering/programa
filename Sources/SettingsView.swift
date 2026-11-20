@@ -1551,10 +1551,12 @@ private struct ThemeWindowThumbnail: View {
             .frame(height: 8)
             .background(.ultraThinMaterial)
 
+            artwork("ThemeThumbnail\(appearance)Back")
+
             RoundedRectangle(cornerRadius: 2, style: .continuous)
                 .fill(Color.accentColor)
                 .frame(width: 36.2, height: 6)
-                .offset(x: 10.46, y: 19.7)
+                .offset(x: 10.46, y: 18.6)
 
             artwork("ThemeThumbnail\(appearance)Front")
         }
