@@ -14,28 +14,13 @@ enum WorkspaceMountPolicy {
         isCycleHot: Bool,
         maxMounted: Int
     ) -> [UUID] {
+        if isCycleHot, pinnedIds.isEmpty, let selected { return [selected] }
+
         let existing = Set(orderedTabIds)
         let clampedMax = max(1, maxMounted)
         var ordered = current.filter { existing.contains($0) }
 
-        if let selected, existing.contains(selected) {
-            ordered.removeAll { $0 == selected }
-            ordered.insert(selected, at: 0)
-        }
-
-        if isCycleHot, let selected {
-            ordered.removeAll { $0 == selected }
-            ordered.insert(selected, at: 0)
-        }
-
-        if isCycleHot,
-           pinnedIds.isEmpty,
-           let selected {
-            ordered.removeAll { $0 != selected }
-        }
-
-        // Ensure pinned ids (retiring handoff workspaces) are always retained at highest priority.
-        // This runs after warming to prevent neighbor warming from evicting the retiring workspace.
+        // Pinned workspaces take priority over the other mounted workspaces.
         let prioritizedPinnedIds = pinnedIds
             .filter { existing.contains($0) && $0 != selected }
             .sorted { lhs, rhs in
@@ -43,7 +28,7 @@ enum WorkspaceMountPolicy {
                 let rhsIndex = orderedTabIds.firstIndex(of: rhs) ?? .max
                 return lhsIndex < rhsIndex
             }
-        if let selected, existing.contains(selected) {
+        if let selected, isCycleHot || existing.contains(selected) {
             ordered.removeAll { $0 == selected }
             ordered.insert(selected, at: 0)
         }
