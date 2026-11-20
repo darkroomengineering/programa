@@ -52,6 +52,10 @@ on:
         description: Trace live allocations before and after visiting ten restored workspaces.
         type: boolean
         default: false
+      renderer_returning_user:
+        description: Use a profile that has already seen Setup Assistant for memory captures.
+        type: boolean
+        default: false
       lag_combo:
         description: >-
           Key the typing-lag harness repeats. "up" (the default, and what
@@ -824,17 +828,25 @@ jobs:
 
       - name: Profile renderer memory after restoring ten workspaces
         if: github.event_name == 'workflow_dispatch' && inputs.renderer_memory
+        env:
+          RETURNING_USER: ${{ inputs.renderer_returning_user }}
         run: |
           set -euo pipefail
           APP="$(./scripts/locate-built-app.sh --configuration Debug --primary 'Programa DEV' --derived-data-root "$PROGRAMA_DERIVED_DATA_DIR")"
-          python3 tests_v2/test_restored_scrollback_survives_relaunch.py --app "$APP" --renderer-memory
+          set -- --app "$APP" --renderer-memory
+          if [[ "$RETURNING_USER" == true ]]; then set -- "$@" --returning-user; fi
+          python3 tests_v2/test_restored_scrollback_survives_relaunch.py "$@"
 
       - name: Attribute allocations before and after workspace churn
         if: github.event_name == 'workflow_dispatch' && inputs.renderer_allocations
+        env:
+          RETURNING_USER: ${{ inputs.renderer_returning_user }}
         run: |
           set -euo pipefail
           APP="$(./scripts/locate-built-app.sh --configuration Debug --primary 'Programa DEV' --derived-data-root "$PROGRAMA_DERIVED_DATA_DIR")"
-          python3 tests_v2/test_restored_scrollback_survives_relaunch.py --app "$APP" --allocations "$RUNNER_TEMP/renderer-allocations"
+          set -- --app "$APP" --allocations "$RUNNER_TEMP/renderer-allocations"
+          if [[ "$RETURNING_USER" == true ]]; then set -- "$@" --returning-user; fi
+          python3 tests_v2/test_restored_scrollback_survives_relaunch.py "$@"
 
       - name: Upload workspace allocation reports
         if: always() && github.event_name == 'workflow_dispatch' && inputs.renderer_allocations

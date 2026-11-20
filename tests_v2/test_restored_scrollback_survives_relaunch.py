@@ -90,6 +90,7 @@ def main():
     profiling = parser.add_mutually_exclusive_group()
     profiling.add_argument("--renderer-memory", action="store_true")
     profiling.add_argument("--allocations", type=Path)
+    parser.add_argument("--returning-user", action="store_true")
     args = parser.parse_args()
     profile_memory = args.renderer_memory or args.allocations is not None
     app = args.app.resolve()
@@ -145,6 +146,8 @@ def main():
             # test_scrollback_privacy_recovery.py for why a plist in the isolated
             # home would not be read.
             launch_arguments = ["-socketControlMode", "full", "-sessionPersistScrollback", "YES"]
+            if args.returning_user:
+                launch_arguments += ["-programaWelcomeShown", "YES"]
             log = (root / f"app-{time.time_ns()}.log").open("wb")
             try:
                 app_environment = environment | {"MallocStackLogging": "1"} if record_allocations else environment
