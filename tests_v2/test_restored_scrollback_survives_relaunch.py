@@ -87,6 +87,7 @@ while True:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--app", required=True, type=Path)
+    parser.add_argument("--renderer-memory", action="store_true")
     app = parser.parse_args().app.resolve()
     require(os.environ.get("CI") == "true", "This lifecycle test runs only in CI")
     info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
@@ -216,6 +217,23 @@ def main():
         def wal_bytes(surface):
             return sum(path.stat().st_size for path in (sessions / surface).glob("wal.log*") if path.is_file())
 
+        def workspaces():
+            return rpc(control, "workspace.list")["workspaces"]
+
+        def capture_memory(phase):
+            require(current.poll() is None, f"App exited before {phase} sample")
+            print(f"--- renderer memory: {phase} ---", flush=True)
+            subprocess.run(["footprint", str(current.pid)], check=True, timeout=30)
+            subprocess.run(["vmmap", "--summary", str(current.pid)], check=True, timeout=30)
+
+        def visit_workspace(workspace):
+            workspace_id = workspace["id"]
+            rpc(control, "workspace.select", {"workspace_id": workspace_id})
+            surfaces = rpc(control, "surface.list", {"workspace_id": workspace_id})["surfaces"]
+            require(len(surfaces) == 1, f"Expected one terminal in workspace {workspace_id}")
+            eventually("selected terminal prompt or retained output",
+                       lambda: restored_scrollback(surfaces[0]["id"]))
+
         try:
             launch()
             created = rpc(control, "workspace.create", {
@@ -254,11 +272,38 @@ def main():
             eventually("marker recorded in the first session's WAL", lambda: any(
                 marker.encode() in path.read_bytes() for path in session.glob("wal.log*")))
             eventually("first session in autosave snapshot", lambda: surface.lower() in primary.read_text().lower(), timeout=100)
+            if args.renderer_memory:
+                fixture_ids = [row["id"] for row in workspaces()]
+                require(0 < len(fixture_ids) <= 10, "Unexpected starting workspace count")
+                for _ in range(10 - len(fixture_ids)):
+                    created = rpc(control, "workspace.create", {"working_directory": str(root)})
+                    fixture_ids.append(created["workspace_id"])
+                for workspace in workspaces():
+                    visit_workspace(workspace)
+                def fixture_saved():
+                    snapshot = primary.read_text().lower()
+                    return all(workspace_id.lower() in snapshot for workspace_id in fixture_ids)
+
+                eventually("ten workspaces in autosave snapshot", fixture_saved, timeout=100)
             before = heartbeat()["time"]
             kill_app()
             eventually("child survives first app crash", lambda: alive_after(before))
 
             launch()
+            if args.renderer_memory:
+                def complete_fixture():
+                    rows = workspaces()
+                    return rows if len(rows) == 10 else None
+
+                restored_workspaces = eventually("ten restored workspaces", complete_fixture)
+                capture_memory("restored before visiting")
+                initially_selected = next(row for row in restored_workspaces if row["selected"])
+                for workspace in restored_workspaces:
+                    visit_workspace(workspace)
+                visit_workspace(initially_selected)
+                capture_memory("after visiting ten workspaces")
+                time.sleep(60)
+                capture_memory("after 60 seconds without input")
             restored = reattached_surface()
             eventually("marker restored after the first relaunch", lambda: marker in restored_scrollback(restored))
             eventually("restored session in autosave snapshot", lambda: restored.lower() in primary.read_text().lower(),

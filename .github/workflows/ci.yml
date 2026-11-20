@@ -44,6 +44,10 @@ on:
         description: Run shared-core and Windows checks without the macOS test jobs
         type: boolean
         default: false
+      renderer_memory:
+        description: Capture native renderer memory during a ten-workspace restore and churn.
+        type: boolean
+        default: false
       lag_combo:
         description: >-
           Key the typing-lag harness repeats. "up" (the default, and what
@@ -813,6 +817,13 @@ jobs:
           set -euo pipefail
           APP="$(./scripts/locate-built-app.sh --configuration Debug --primary 'Programa DEV' --derived-data-root "$PROGRAMA_DERIVED_DATA_DIR")"
           python3 tests_v2/test_restored_scrollback_survives_relaunch.py --app "$APP"
+
+      - name: Profile renderer memory after restoring ten workspaces
+        if: github.event_name == 'workflow_dispatch' && inputs.renderer_memory
+        run: |
+          set -euo pipefail
+          APP="$(./scripts/locate-built-app.sh --configuration Debug --primary 'Programa DEV' --derived-data-root "$PROGRAMA_DERIVED_DATA_DIR")"
+          python3 tests_v2/test_restored_scrollback_survives_relaunch.py --app "$APP" --renderer-memory
 
       - name: Cleanup virtual display
         if: always()
