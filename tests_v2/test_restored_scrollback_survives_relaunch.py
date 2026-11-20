@@ -88,7 +88,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--app", required=True, type=Path)
     parser.add_argument("--renderer-memory", action="store_true")
-    app = parser.parse_args().app.resolve()
+    args = parser.parse_args()
+    app = args.app.resolve()
     require(os.environ.get("CI") == "true", "This lifecycle test runs only in CI")
     info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
     executable = app / "Contents/MacOS" / info["CFBundleExecutable"]
