@@ -26,6 +26,7 @@ PROGRAMA_TERMINAL_API void programa_terminal_free(ProgramaTerminalSession *sessi
 PROGRAMA_TERMINAL_API int32_t programa_terminal_write(ProgramaTerminalSession *session, const uint8_t *data, size_t len);
 PROGRAMA_TERMINAL_API int32_t programa_terminal_resize(ProgramaTerminalSession *session, uint16_t cols, uint16_t rows, uint16_t cell_width, uint16_t cell_height);
 PROGRAMA_TERMINAL_API int32_t programa_terminal_scroll(ProgramaTerminalSession *session, int32_t lines);
+PROGRAMA_TERMINAL_API int32_t programa_terminal_find(ProgramaTerminalSession *session, const uint8_t *query, size_t len, bool forward, bool continue_search, bool *found);
 PROGRAMA_TERMINAL_API int32_t programa_terminal_snapshot_json(ProgramaTerminalSession *session, ProgramaTerminalBuffer *out);
 PROGRAMA_TERMINAL_API uint64_t programa_terminal_generation(ProgramaTerminalSession *session);
 PROGRAMA_TERMINAL_API uint64_t programa_terminal_program_status_generation(ProgramaTerminalSession *session);

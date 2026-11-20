@@ -12,4 +12,10 @@
   <data name="NewWorkspace" xml:space="preserve"><value>New workspace</value></data>
   <data name="CloseWorkspace" xml:space="preserve"><value>Close workspace</value></data>
   <data name="CloseWorkspaceConfirmation" xml:space="preserve"><value>Close this workspace and end all of its terminal sessions?</value></data>
+  <data name="TerminalFind" xml:space="preserve"><value>Find in Terminal</value></data>
+  <data name="TerminalFindNext" xml:space="preserve"><value>Next match</value></data>
+  <data name="TerminalFindPrevious" xml:space="preserve"><value>Previous match</value></data>
+  <data name="TerminalFindClose" xml:space="preserve"><value>Close find</value></data>
+  <data name="TerminalFindNoMatch" xml:space="preserve"><value>No matches</value></data>
+  <data name="TerminalFindFailed" xml:space="preserve"><value>Search failed</value></data>
 </root>

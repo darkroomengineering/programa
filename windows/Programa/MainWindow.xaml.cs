@@ -565,6 +565,7 @@ public sealed partial class MainWindow : Window
 
     private void OnKeyDown(object sender, KeyRoutedEventArgs args)
     {
+        if (ActiveTerminal()?.IsFindEditorFocused() == true) return;
         if (_shortcuts.Matches("new_tab", args.Key)) NewTab();
         else if (_shortcuts.Matches("close_tab", args.Key)) CloseSelectedTab();
         else if (_shortcuts.Matches("split_vertical", args.Key)) Split("vertical");

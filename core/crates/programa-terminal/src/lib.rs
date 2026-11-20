@@ -11,10 +11,11 @@ use std::thread::JoinHandle;
 use alacritty_terminal::event::{Event, EventListener, Notify, OnResize, WindowSize};
 use alacritty_terminal::event_loop::{EventLoop, EventLoopSender, Msg, Notifier};
 use alacritty_terminal::grid::{Dimensions, Scroll};
-use alacritty_terminal::index::{Column, Line, Point, Side};
+use alacritty_terminal::index::{Boundary, Column, Direction, Line, Point, Side};
 use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::term::cell::Flags;
+use alacritty_terminal::term::search::RegexSearch;
 use alacritty_terminal::term::{Config as TermConfig, Term, TermMode};
 use alacritty_terminal::tty::{self, Options as PtyOptions, Shell};
 use alacritty_terminal::vte::ansi::{Color, NamedColor};
@@ -521,6 +522,63 @@ fn scroll_to_bottom<T: EventListener>(term: &mut Term<T>) -> bool {
     true
 }
 
+fn literal_search(query: &str) -> Result<RegexSearch, i32> {
+    let mut pattern = String::from("(?i:");
+    for character in query.chars() {
+        if r"\.^$|?*+()[]{}".contains(character) {
+            pattern.push('\\');
+        }
+        pattern.push(character);
+    }
+    pattern.push(')');
+    RegexSearch::new(&pattern).map_err(|_| STATUS_INVALID_ARGUMENT)
+}
+
+fn find_match<T: EventListener>(
+    term: &mut Term<T>,
+    search: &mut RegexSearch,
+    forward: bool,
+    continue_search: bool,
+) -> bool {
+    let offset = term.grid().display_offset();
+    let selection = term
+        .selection
+        .as_ref()
+        .and_then(|selection| selection.to_range(term));
+    let (origin, direction, side) = if forward {
+        let origin = match selection.filter(|_| continue_search) {
+            Some(range) => range.end.add(term, Boundary::None, 1),
+            None => Point::new(viewport_line(0, offset), Column(0)),
+        };
+        (origin, Direction::Right, Side::Left)
+    } else {
+        let origin = match selection.filter(|_| continue_search) {
+            Some(range) => range.start.sub(term, Boundary::None, 1),
+            None => Point::new(
+                viewport_line(term.screen_lines() - 1, offset),
+                term.last_column(),
+            ),
+        };
+        (origin, Direction::Left, Side::Right)
+    };
+    let Some(found) = term.search_next(search, origin, direction, side, None) else {
+        return false;
+    };
+
+    let mut selection = Selection::new(SelectionType::Simple, *found.start(), Side::Left);
+    selection.update(*found.end(), Side::Right);
+    term.selection = Some(selection);
+
+    let top = viewport_line(0, offset);
+    let bottom = viewport_line(term.screen_lines() - 1, offset);
+    if found.start().line < top {
+        term.scroll_display(Scroll::Delta(top.0 - found.start().line.0));
+    } else if found.end().line > bottom {
+        term.scroll_display(Scroll::Delta(bottom.0 - found.end().line.0));
+    }
+    true
+}
+
 fn paste_bytes(data: &[u8], requested: bool, mode: &TermMode) -> Vec<u8> {
     let enabled = requested && mode.contains(TermMode::BRACKETED_PASTE);
     if !enabled {
@@ -775,6 +833,36 @@ pub unsafe extern "C" fn programa_terminal_scroll(
         let value = session(value)?;
         value.term.lock().scroll_display(Scroll::Delta(lines));
         value.state.changed();
+        Ok(())
+    })
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_find(
+    value: *mut ProgramaTerminalSession,
+    query: *const u8,
+    len: usize,
+    forward: bool,
+    continue_search: bool,
+    found: *mut bool,
+) -> i32 {
+    ffi_status(|| {
+        if found.is_null() || len == 0 || len > 1024 {
+            return Err(STATUS_INVALID_ARGUMENT);
+        }
+        *found = false;
+        let value = session(value)?;
+        let query = std::str::from_utf8(bytes(query, len)?).map_err(|_| STATUS_INVALID_ARGUMENT)?;
+        let mut search = literal_search(query)?;
+        *found = find_match(
+            &mut value.term.lock(),
+            &mut search,
+            forward,
+            continue_search,
+        );
+        if *found {
+            value.state.changed();
+        }
         Ok(())
     })
 }
@@ -1083,6 +1171,30 @@ mod tests {
         assert!(cursor_is_visible(0, &mode));
         mode.remove(TermMode::SHOW_CURSOR);
         assert!(!cursor_is_visible(0, &mode));
+    }
+
+    #[test]
+    fn find_selects_literal_matches_in_scrollback_and_wraps() {
+        let mut term = term();
+        let mut parser = Processor::<StdSyncHandler>::new();
+        parser.advance(&mut term, b"a.b\r\naxb\r\nold\r\nA.B\r\nlast");
+        let mut search = literal_search("a.b").unwrap();
+
+        assert!(find_match(&mut term, &mut search, false, false));
+        assert_eq!(term.selection_to_string().as_deref(), Some("A.B"));
+        assert_eq!(term.grid().display_offset(), 0);
+
+        assert!(find_match(&mut term, &mut search, false, true));
+        assert_eq!(term.selection_to_string().as_deref(), Some("a.b"));
+        assert_eq!(term.grid().display_offset(), 2);
+
+        assert!(find_match(&mut term, &mut search, false, true));
+        assert_eq!(term.selection_to_string().as_deref(), Some("A.B"));
+        assert_eq!(term.grid().display_offset(), 1);
+
+        let mut missing = literal_search("missing").unwrap();
+        assert!(!find_match(&mut term, &mut missing, true, false));
+        assert_eq!(term.selection_to_string().as_deref(), Some("A.B"));
     }
 
     #[test]

@@ -33,6 +33,9 @@ public sealed class TerminalView : UserControl, IDisposable
     private readonly Grid _root = new();
     private readonly CanvasControl _canvas = new();
     private readonly TextBox _input = new();
+    private readonly TextBox _findQuery = new() { MaxLength = 256 };
+    private readonly TextBlock _findStatus = new() { TextWrapping = TextWrapping.Wrap };
+    private readonly StackPanel _findBar = new() { Visibility = Visibility.Collapsed, Spacing = 4, Margin = new Thickness(4) };
     private readonly Border _spawnFailure = new();
     private readonly TextBlock _spawnFailureDetail = new() { TextWrapping = TextWrapping.Wrap };
     private readonly Button _retry = new();
@@ -58,12 +61,18 @@ public sealed class TerminalView : UserControl, IDisposable
     private DateTimeOffset _lastClick;
     private Point _lastClickPoint;
     private uint _clickCount;
+    private string? _lastFindQuery;
 
     public TerminalView(string surfaceId)
     {
         SurfaceId = surfaceId;
         IsTabStop = true;
         AutomationProperties.SetName(this, Localizer.Get("TerminalAccessibilityName"));
+
+        _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        _root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        BuildFindBar();
+        _root.Children.Add(_findBar);
 
         _canvas.ClearColor = Colors.Transparent;
         _canvas.Draw += DrawTerminal;
@@ -73,6 +82,7 @@ public sealed class TerminalView : UserControl, IDisposable
         _canvas.PointerReleased += PointerReleased;
         _canvas.PointerWheelChanged += PointerWheelChanged;
         _canvas.ContextFlyout = BuildContextMenu();
+        Grid.SetRow(_canvas, 1);
         _root.Children.Add(_canvas);
 
         _input.Opacity = 0.01;
@@ -94,6 +104,7 @@ public sealed class TerminalView : UserControl, IDisposable
         _input.TextCompositionChanged += InputCompositionChanged;
         _input.TextCompositionEnded += InputCompositionEnded;
         _input.KeyDown += InputKeyDown;
+        Grid.SetRow(_input, 1);
         _root.Children.Add(_input);
 
         _retry.Content = Localizer.Get("TerminalRetry");
@@ -107,6 +118,7 @@ public sealed class TerminalView : UserControl, IDisposable
         _spawnFailure.VerticalAlignment = VerticalAlignment.Center;
         _spawnFailure.Padding = new Thickness(24);
         _spawnFailure.Visibility = Visibility.Collapsed;
+        Grid.SetRow(_spawnFailure, 1);
         _root.Children.Add(_spawnFailure);
 
         Content = _root;
@@ -228,6 +240,8 @@ public sealed class TerminalView : UserControl, IDisposable
         _paintedGeneration = 0;
         _exitRaised = false;
         _programStatusGeneration = 0;
+        _lastFindQuery = null;
+        _findStatus.Text = string.Empty;
         if (ProgramStatus is not null)
         {
             ProgramStatus = null;
@@ -652,9 +666,85 @@ public sealed class TerminalView : UserControl, IDisposable
         copy.Click += (_, _) => Copy();
         var paste = new MenuFlyoutItem { Text = Localizer.Get("TerminalPaste") };
         paste.Click += (_, _) => Paste();
+        var find = new MenuFlyoutItem { Text = Localizer.Get("TerminalFind") };
+        find.Click += (_, _) => ShowFind();
         menu.Items.Add(copy);
         menu.Items.Add(paste);
+        menu.Items.Add(find);
         return menu;
+    }
+
+    internal void ShowFind()
+    {
+        _findBar.Visibility = Visibility.Visible;
+        _findQuery.Focus(FocusState.Programmatic);
+        _findQuery.SelectAll();
+    }
+
+    internal bool IsFindEditorFocused() => _findQuery.FocusState != FocusState.Unfocused;
+
+    private void BuildFindBar()
+    {
+        var label = Localizer.Get("TerminalFind");
+        _findQuery.PlaceholderText = label;
+        AutomationProperties.SetName(_findQuery, label);
+        _findQuery.TextChanged += (_, _) =>
+        {
+            _lastFindQuery = null;
+            _findStatus.Text = string.Empty;
+        };
+        _findQuery.KeyDown += (_, args) =>
+        {
+            if (args.Key != VirtualKey.Enter) return;
+            FindMatch(forward: true);
+            args.Handled = true;
+        };
+
+        var controls = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+        controls.Children.Add(FindButton("TerminalFindPrevious", Symbol.Back, () => FindMatch(forward: false)));
+        controls.Children.Add(FindButton("TerminalFindNext", Symbol.Forward, () => FindMatch(forward: true)));
+        controls.Children.Add(FindButton("TerminalFindClose", Symbol.Cancel, CloseFind));
+
+        _findBar.Children.Add(_findQuery);
+        _findBar.Children.Add(controls);
+        _findBar.Children.Add(_findStatus);
+        AutomationProperties.SetLiveSetting(_findStatus, AutomationLiveSetting.Polite);
+        _findBar.KeyDown += (_, args) =>
+        {
+            if (args.Key != VirtualKey.Escape) return;
+            CloseFind();
+            args.Handled = true;
+        };
+    }
+
+    private static Button FindButton(string key, Symbol symbol, Action action)
+    {
+        var label = Localizer.Get(key);
+        var button = new Button { Content = new SymbolIcon(symbol), MinWidth = 44, MinHeight = 44 };
+        ToolTipService.SetToolTip(button, label);
+        AutomationProperties.SetName(button, label);
+        button.Click += (_, _) => action();
+        return button;
+    }
+
+    private void CloseFind()
+    {
+        _findBar.Visibility = Visibility.Collapsed;
+        _lastFindQuery = null;
+        _findStatus.Text = string.Empty;
+        FocusTerminal();
+    }
+
+    private void FindMatch(bool forward)
+    {
+        var query = _findQuery.Text;
+        if (query.Length == 0 || _session is not { } session) return;
+        var status = NativeTerminal.Find(session, query, forward, _lastFindQuery == query, out var found);
+        _lastFindQuery = found ? query : null;
+        _findStatus.Text = status != 0
+            ? Localizer.Get("TerminalFindFailed")
+            : found ? string.Empty : Localizer.Get("TerminalFindNoMatch");
+        FrameworkElementAutomationPeer.FromElement(_findStatus)?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
     }
 
     private static (nuint Col, nuint Row) CellAt(Point point) => ((nuint)Math.Max(0, (int)(point.X / CellWidth)), (nuint)Math.Max(0, (int)(point.Y / CellHeight)));
@@ -697,6 +787,10 @@ internal static class NativeTerminal
     [DllImport(Dll, EntryPoint = "programa_terminal_write")] private static extern int WriteNative(SafeSessionHandle session, byte[] data, nuint length);
     [DllImport(Dll, EntryPoint = "programa_terminal_resize")] internal static extern int Resize(SafeSessionHandle session, ushort cols, ushort rows, ushort cellWidth, ushort cellHeight);
     [DllImport(Dll, EntryPoint = "programa_terminal_scroll")] internal static extern int Scroll(SafeSessionHandle session, int lines);
+    [DllImport(Dll, EntryPoint = "programa_terminal_find")]
+    private static extern int FindNative(SafeSessionHandle session, byte[] query, nuint length,
+        [MarshalAs(UnmanagedType.I1)] bool forward, [MarshalAs(UnmanagedType.I1)] bool continueSearch,
+        [MarshalAs(UnmanagedType.I1)] out bool found);
     [DllImport(Dll, EntryPoint = "programa_terminal_snapshot_json")] internal static extern int Snapshot(SafeSessionHandle session, out Buffer buffer);
     [DllImport(Dll, EntryPoint = "programa_terminal_generation")] internal static extern ulong Generation(SafeSessionHandle session);
     [DllImport(Dll, EntryPoint = "programa_terminal_program_status_generation")] internal static extern ulong ProgramStatusGeneration(SafeSessionHandle session);
@@ -722,6 +816,11 @@ internal static class NativeTerminal
         return session.IsInvalid ? null : session;
     }
     internal static int Write(SafeSessionHandle session, byte[] data) => WriteNative(session, data, (nuint)data.Length);
+    internal static int Find(SafeSessionHandle session, string query, bool forward, bool continueSearch, out bool found)
+    {
+        var bytes = Encoding.UTF8.GetBytes(query);
+        return FindNative(session, bytes, (nuint)bytes.Length, forward, continueSearch, out found);
+    }
     internal static int Paste(SafeSessionHandle session, byte[] data, bool bracketed) => PasteNative(session, data, (nuint)data.Length, bracketed);
     internal static bool PasteNeedsConfirmation(SafeSessionHandle session, byte[] data) => PasteNeedsConfirmationNative(session, data, (nuint)data.Length);
     internal static bool TryCopySelection(SafeSessionHandle session, out string value)

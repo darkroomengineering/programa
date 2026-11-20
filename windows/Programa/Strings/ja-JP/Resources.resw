@@ -12,4 +12,10 @@
   <data name="NewWorkspace" xml:space="preserve"><value>新しいワークスペース</value></data>
   <data name="CloseWorkspace" xml:space="preserve"><value>ワークスペースを閉じる</value></data>
   <data name="CloseWorkspaceConfirmation" xml:space="preserve"><value>このワークスペースを閉じて、すべてのターミナルセッションを終了しますか？</value></data>
+  <data name="TerminalFind" xml:space="preserve"><value>ターミナル内を検索</value></data>
+  <data name="TerminalFindNext" xml:space="preserve"><value>次の一致</value></data>
+  <data name="TerminalFindPrevious" xml:space="preserve"><value>前の一致</value></data>
+  <data name="TerminalFindClose" xml:space="preserve"><value>検索を閉じる</value></data>
+  <data name="TerminalFindNoMatch" xml:space="preserve"><value>一致なし</value></data>
+  <data name="TerminalFindFailed" xml:space="preserve"><value>検索に失敗しました</value></data>
 </root>

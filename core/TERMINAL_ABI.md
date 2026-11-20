@@ -98,12 +98,21 @@ caller sends ESC O A instead of ESC [ A for the arrow keys.
     int32_t programa_terminal_resize(session, uint16_t cols, uint16_t rows,
                                      uint16_t cell_width, uint16_t cell_height);
     int32_t programa_terminal_scroll(session, int32_t lines);
+    int32_t programa_terminal_find(session, const uint8_t *query, size_t len,
+                                    bool forward, bool continue_search, bool *found);
 
 Resize checks the same limits as create but does not raise small values: fewer
 than 2 columns or rows, or a zero cell size, returns INVALID_ARGUMENT, where
 create would raise it to the minimum. A valid size informs the PTY; a size
 equal to the current one is a no-op. Scroll moves the viewport into scrollback by lines
 (positive is toward older output).
+
+Find searches the active terminal grid and its scrollback for literal,
+case-insensitive UTF-8 text (1 to 1024 bytes). It starts at the leading edge of
+the viewport for the requested direction and wraps around the grid. With
+continue_search set, it starts just beyond the current selection. A match
+becomes the terminal selection and the viewport scrolls to reveal it. A
+successful call sets found even when the query has no matches.
 
 ## Snapshot and change notification
 
