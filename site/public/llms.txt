@@ -1,0 +1,9 @@
+# Programa
+
+> Programa is an open source terminal for running many coding agents in parallel. Every workspace shows whether its agent is working, blocked or idle, and a waiting agent's pane lights up. Native macOS on Ghostty.
+
+## Pages
+
+- [Programa: a terminal for running many coding agents at once](https://programa.darkroom.engineering/index.md): Programa is an open source terminal for running many coding agents in parallel. Every workspace shows whether its agent is working, blocked or idle, and a waiting agent's pane lights up. Native macOS on Ghostty.
+- [Privacy policy · Programa](https://programa.darkroom.engineering/privacy.md): Programa has no analytics, no crash reporting and no accounts. It contacts GitHub to check for updates, and runs your own gh CLI to show pull request status.
+- [Support · Programa](https://programa.darkroom.engineering/support.md): Get help with Programa on GitHub. Include your macOS or Windows version, the Programa version, and what happened.

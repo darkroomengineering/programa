@@ -1,6 +1,4 @@
-dist
 .vercel
-.output
 
 # Environment
 .env*.local
@@ -12,6 +10,4 @@ node_modules/
 # System Files
 .DS_Store
 
-# @visio/styling artifacts
-.visio/
 *.tsbuildinfo

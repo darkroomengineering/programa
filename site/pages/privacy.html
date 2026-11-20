@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#141010">
+    <title>Privacy policy · Programa</title>
+    <link rel="icon" href="/favicon.ico" sizes="32x32">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="canonical" href="https://programa.darkroom.engineering/privacy">
+    <meta property="og:title" content="Privacy policy · Programa">
+    <meta property="og:site_name" content="Programa">
+    <meta property="og:locale" content="en_US">
+    <meta name="description" content="Programa has no analytics, no crash reporting and no accounts. It contacts GitHub to check for updates, and runs your own gh CLI to show pull request status.">
+    <meta property="og:description" content="Programa has no analytics, no crash reporting and no accounts. It contacts GitHub to check for updates, and runs your own gh CLI to show pull request status.">
+    <meta property="og:url" content="https://programa.darkroom.engineering/privacy">
+    <meta property="og:image" content="https://programa.darkroom.engineering/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="The Programa app icon next to the name and the line Run many coding agents at once and always know which one needs you">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main>
+      <div class="wrap prose">
+        <a href="/" class="home-link">Programa</a>
+        <article class="article">
+          <h1 class="prose-heading">Programa privacy policy</h1>
+          <p>Programa does not collect personal data. It has no accounts, no analytics and no crash reporting, and Darkroom Engineering runs no server for it. Your terminals, sessions and settings stay on your computer.</p>
+          <p><strong>Updates.</strong> Once a day the Mac app downloads the update feed from the Programa releases on GitHub, and downloads a new version when there is one. It sends no system profile with the check. GitHub sees the request like any other download, under <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" class="text-link">GitHub's privacy statement</a>.</p>
+          <p><strong>Pull request status.</strong> To show a branch's pull request and checks in the sidebar, Programa runs the GitHub CLI (<code>gh</code>) installed on your computer, signed in as you. Those requests go from your computer to GitHub, the same as running <code>gh</code> yourself.</p>
+          <p><strong>What runs in it.</strong> The agents and programs you start in a Programa terminal make their own network requests under their own policies. Programa does not send their output anywhere.</p>
+          <p>Questions: <a href="https://github.com/darkroomengineering/programa/issues" class="text-link">open an issue on GitHub</a>.</p>
+          <p>Last updated: November 12, 2026.</p>
+        </article>
+      </div>
+    </main>
+    <footer>
+      <div class="wrap footer-row">
+        <nav aria-label="Footer" class="footer-links">
+          <a href="/privacy" data-active aria-current="page" class="text-link">Privacy</a><a href="/support" class="text-link">Support</a></nav>
+        <a href="https://darkroom.engineering/incubator" class="text-link">A sidequest by Darkroom Engineering Incubator</a></div>
+    </footer>
+  </body>
+</html>
