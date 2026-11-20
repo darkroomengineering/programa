@@ -21,7 +21,7 @@ internal static class McpConfig
     internal static void Write()
     {
         var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programa");
-        var dev = BuildIdentity.Value.Contains("0.0.0-dev", StringComparison.Ordinal) ? "-dev" : string.Empty;
+        var dev = BuildIdentity.DevSuffix;
         BinDirectory = StageTools(Path.Combine(folder, $"bin{dev}"));
         var server = Path.Combine(BinDirectory, "programa-mcp.exe");
         if (File.Exists(server))

@@ -55,6 +55,19 @@ public sealed class ControlServerTests
     }
 
     [TestMethod]
+    public void ATaggedDevBuildNamesItsPipeAndFilesApart()
+    {
+        const string dev = "programa 0.0.0-dev (build 0, commit local)";
+        Assert.AreEqual("-dev", BuildIdentity.DevSuffixFor(dev, null));
+        Assert.AreEqual("-dev-copy-mode", BuildIdentity.DevSuffixFor(dev, "Copy-Mode"));
+        // A tag that could leave the folder or the pipe namespace is ignored.
+        Assert.AreEqual("-dev", BuildIdentity.DevSuffixFor(dev, @"..\x"));
+        Assert.AreEqual("-dev", BuildIdentity.DevSuffixFor(dev, new string('a', 33)));
+        // The installed app never takes a tag.
+        Assert.AreEqual("", BuildIdentity.DevSuffixFor("programa 0.7.0 (build 9, commit abc)", "x"));
+    }
+
+    [TestMethod]
     public void EachBuildHasItsOwnPipe()
     {
         StringAssert.StartsWith(ControlServer.PipePath, @"\\.\pipe\programa-");

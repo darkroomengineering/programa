@@ -22,9 +22,7 @@ internal static class TerminalHost
     /// <summary>Sessions that were running when this app started: their terminals reattach.</summary>
     internal static HashSet<string> LiveAtLaunch { get; private set; } = new(StringComparer.Ordinal);
 
-    private static bool Dev => BuildIdentity.Value.Contains("0.0.0-dev", StringComparison.Ordinal);
-
-    private static string StatePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programa", Dev ? "terminal-host-dev.json" : "terminal-host.json");
+    private static string StatePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programa", $"terminal-host{BuildIdentity.DevSuffix}.json");
 
     internal static void Start()
     {
@@ -43,7 +41,7 @@ internal static class TerminalHost
                 LaunchLog.Write("terminal host: programa-host.exe is missing; terminals run in the app");
                 return;
             }
-            var connection = new Connection($@"\\.\pipe\programa-host{(Dev ? "-dev" : "")}-{Environment.UserName}-{Hex(16)}", Hex(32));
+            var connection = new Connection($@"\\.\pipe\programa-host{BuildIdentity.DevSuffix}-{Environment.UserName}-{Hex(16)}", Hex(32));
             // The pipe name and token stay out of the command line; the host drops them before any shell starts.
             var start = new ProcessStartInfo(exe) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(exe)! };
             start.Environment["PROGRAMA_HOST_PIPE"] = connection.Pipe;

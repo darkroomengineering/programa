@@ -28,8 +28,7 @@ internal sealed class ControlServer : IDisposable
     internal ControlServer(Func<string, JsonElement, Task<object?>> handler) => _handler = handler;
 
     /// <summary>Development builds listen on their own pipe, so they never answer for the installed app.</summary>
-    internal static string PipeName { get; } =
-        (BuildIdentity.Value.Contains("0.0.0-dev", StringComparison.Ordinal) ? "programa-dev-" : "programa-") + Environment.UserName;
+    internal static string PipeName { get; } = $"programa{BuildIdentity.DevSuffix}-{Environment.UserName}";
 
     /// <summary>The path exported to terminals as PROGRAMA_SOCKET_PATH.</summary>
     internal static string PipePath => $@"\\.\pipe\{PipeName}";

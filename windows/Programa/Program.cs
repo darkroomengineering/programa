@@ -25,7 +25,7 @@ public static class Program
         // Markdown panels' WebView2 data lives with the app's other data, not beside the executable,
         // whose folder an update replaces.
         if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER")))
-            Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programa", BuildIdentity.Value.Contains("0.0.0-dev", StringComparison.Ordinal) ? "WebView2-dev" : "WebView2"));
+            Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programa", $"WebView2{BuildIdentity.DevSuffix}"));
         if (args.Contains("--verify-native-libraries", StringComparer.Ordinal))
         {
             using var core = new CoreClient();
@@ -105,4 +105,14 @@ public static class BuildIdentity
     public static string Version => Get("ProgramaVersion");
 
     private static string Get(string key) => Metadata.TryGetValue(key, out var value) ? value : "unknown";
+
+    /// <summary>What a development build adds to the names of its pipe and files: "-dev", or "-dev-<tag>"
+    /// with PROGRAMA_DEV_TAG (letters, digits and hyphens), so tagged dev builds run side by side as
+    /// macOS reload.sh --tag builds do. Empty for an installed build.</summary>
+    public static string DevSuffix { get; } = DevSuffixFor(Value, Environment.GetEnvironmentVariable("PROGRAMA_DEV_TAG"));
+
+    internal static string DevSuffixFor(string identity, string? tag) =>
+        !identity.Contains("0.0.0-dev", StringComparison.Ordinal) ? string.Empty
+        : tag is { Length: > 0 and <= 32 } && tag.All(c => char.IsAsciiLetterOrDigit(c) || c == '-') ? $"-dev-{tag.ToLowerInvariant()}"
+        : "-dev";
 }

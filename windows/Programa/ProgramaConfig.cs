@@ -29,7 +29,7 @@ internal static class ProgramaConfig
 
     /// <summary>Dev builds keep their own, as they do their session and hooks files.</summary>
     internal static string TrustStorePath { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programa",
-        BuildIdentity.Value.Contains("0.0.0-dev", StringComparison.Ordinal) ? "trusted-directories-dev.json" : "trusted-directories.json");
+        $"trusted-directories{BuildIdentity.DevSuffix}.json");
 
     /// <summary>settings.json's customCommands.trustedDirectories, which replaces the stored roots when set.</summary>
     internal static Func<IReadOnlyList<string>?> ManagedRoots { get; set; } = () => AppSettings.Load().TrustedDirectories;

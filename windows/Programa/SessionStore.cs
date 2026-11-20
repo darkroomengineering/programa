@@ -57,7 +57,7 @@ internal static class SessionStore
     /// app's (the macOS Debug builds are isolated the same way).</summary>
     internal static string DefaultPath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programa",
-        BuildIdentity.Value.Contains("0.0.0-dev", StringComparison.Ordinal) ? "session-dev.json" : "session.json");
+        $"session{BuildIdentity.DevSuffix}.json");
 
     /// <summary>A session file's bytes as a session, at any version, or null when they do not parse.</summary>
     internal static SavedSession? Parse(byte[] bytes)
