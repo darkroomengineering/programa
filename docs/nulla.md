@@ -62,6 +62,8 @@ For a hosted Debug spot check, dispatch the CI workflow with `gh workflow run ci
 
 The [v2 socket contract](../contracts/v2/methods.json) already supplies build-known method data to generated Swift. Run `scripts/check-v2-contract.sh` when it changes. Apply the same approach to static inputs when a journey trace shows repeated runtime work. Renderer visibility, PTY data, display geometry, and user configuration depend on runtime inputs. Prefer the existing AppKit and Ghostty visibility and draw paths on macOS and WinUI and ConPTY on Windows.
 
+Theme picker wallpaper and window artwork ship as generated layers in the Xcode asset catalog. Regenerate them from the repository root with `swift scripts/generate-theme-thumbnails.swift Assets.xcassets`. Verify the light, dark, and split system previews on a macOS desktop when changing the art or the thumbnail dimensions. The live system accent and material stay in the picker.
+
 Programa currently ships native platform interfaces. Windows uses the Rust shared core and macOS uses Swift and GhosttyKit. Track the shared-core language and shared renderer-generation requirements as open adoption items against Nulla's platform rules.
 
 Keep the fixture, commands, immutable build revisions, raw traces, behavior results, and budget verdict with the change. Existing CI thresholds retain their current scope. Device-floor references, native journey budgets, and release approval require human sign-off under Nulla. Record those approvals against the applicable reference, budget revision, and release artifact.
