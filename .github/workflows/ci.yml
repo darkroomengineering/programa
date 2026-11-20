@@ -48,6 +48,10 @@ on:
         description: Capture native renderer memory during a ten-workspace restore and churn.
         type: boolean
         default: false
+      renderer_allocations:
+        description: Trace live allocations before and after visiting ten restored workspaces.
+        type: boolean
+        default: false
       lag_combo:
         description: >-
           Key the typing-lag harness repeats. "up" (the default, and what
@@ -824,6 +828,20 @@ jobs:
           set -euo pipefail
           APP="$(./scripts/locate-built-app.sh --configuration Debug --primary 'Programa DEV' --derived-data-root "$PROGRAMA_DERIVED_DATA_DIR")"
           python3 tests_v2/test_restored_scrollback_survives_relaunch.py --app "$APP" --renderer-memory
+
+      - name: Attribute allocations before and after workspace churn
+        if: github.event_name == 'workflow_dispatch' && inputs.renderer_allocations
+        run: |
+          set -euo pipefail
+          APP="$(./scripts/locate-built-app.sh --configuration Debug --primary 'Programa DEV' --derived-data-root "$PROGRAMA_DERIVED_DATA_DIR")"
+          python3 tests_v2/test_restored_scrollback_survives_relaunch.py --app "$APP" --allocations "$RUNNER_TEMP/renderer-allocations"
+
+      - name: Upload workspace allocation reports
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.renderer_allocations
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: renderer-allocations
+          path: ${{ runner.temp }}/renderer-allocations/
 
       - name: Cleanup virtual display
         if: always()

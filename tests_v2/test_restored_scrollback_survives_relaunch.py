@@ -87,8 +87,11 @@ while True:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--app", required=True, type=Path)
-    parser.add_argument("--renderer-memory", action="store_true")
+    profiling = parser.add_mutually_exclusive_group()
+    profiling.add_argument("--renderer-memory", action="store_true")
+    profiling.add_argument("--allocations", type=Path)
     args = parser.parse_args()
+    profile_memory = args.renderer_memory or args.allocations is not None
     app = args.app.resolve()
     require(os.environ.get("CI") == "true", "This lifecycle test runs only in CI")
     info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
@@ -136,7 +139,7 @@ def main():
                         owned[pid] = started
                         changed = True
 
-        def launch():
+        def launch(*, record_allocations=False):
             nonlocal current
             # Preferences ride the NSUserDefaults argument domain; see
             # test_scrollback_privacy_recovery.py for why a plist in the isolated
@@ -144,8 +147,9 @@ def main():
             launch_arguments = ["-socketControlMode", "full", "-sessionPersistScrollback", "YES"]
             log = (root / f"app-{time.time_ns()}.log").open("wb")
             try:
+                app_environment = environment | {"MallocStackLogging": "1"} if record_allocations else environment
                 current = subprocess.Popen([str(executable), *launch_arguments],
-                                           env=environment, stdout=log, stderr=subprocess.STDOUT)
+                                           env=app_environment, stdout=log, stderr=subprocess.STDOUT)
                 table = processes()
                 require(current.pid in table, "Launched app exited before identity capture")
                 owned[current.pid] = table[current.pid][1]
@@ -227,6 +231,17 @@ def main():
             subprocess.run(["footprint", str(current.pid)], check=True, timeout=30)
             subprocess.run(["vmmap", "--summary", str(current.pid)], check=True, timeout=30)
 
+        def capture_allocations(phase):
+            require(current.poll() is None, f"App exited before {phase} allocation capture")
+            args.allocations.mkdir(parents=True, exist_ok=True)
+            output = args.allocations / f"{phase}.txt"
+            with output.open("w") as report:
+                subprocess.run(
+                    ["malloc_history", str(current.pid), "-callTree", "-invert", "-ignoreThreads", "-noContent"],
+                    stdout=report, check=True, timeout=120,
+                )
+            require(output.stat().st_size > 0, f"Empty allocation report for {phase}")
+
         def visit_workspace(workspace):
             workspace_id = workspace["id"]
             rpc(control, "workspace.select", {"workspace_id": workspace_id})
@@ -273,7 +288,7 @@ def main():
             eventually("marker recorded in the first session's WAL", lambda: any(
                 marker.encode() in path.read_bytes() for path in session.glob("wal.log*")))
             eventually("first session in autosave snapshot", lambda: surface.lower() in primary.read_text().lower(), timeout=100)
-            if args.renderer_memory:
+            if profile_memory:
                 fixture_ids = [row["id"] for row in workspaces()]
                 require(0 < len(fixture_ids) <= 10, "Unexpected starting workspace count")
                 for _ in range(10 - len(fixture_ids)):
@@ -290,21 +305,28 @@ def main():
             kill_app()
             eventually("child survives first app crash", lambda: alive_after(before))
 
-            launch()
-            if args.renderer_memory:
+            launch(record_allocations=args.allocations is not None)
+            if profile_memory:
                 def complete_fixture():
                     rows = workspaces()
                     return rows if len(rows) == 10 else None
 
                 restored_workspaces = eventually("ten restored workspaces", complete_fixture)
-                capture_memory("restored before visiting")
+                if args.renderer_memory:
+                    capture_memory("restored before visiting")
+                else:
+                    capture_allocations("restored")
                 initially_selected = next(row for row in restored_workspaces if row["selected"])
                 for workspace in restored_workspaces:
                     visit_workspace(workspace)
                 visit_workspace(initially_selected)
-                capture_memory("after visiting ten workspaces")
+                if args.renderer_memory:
+                    capture_memory("after visiting ten workspaces")
                 time.sleep(60)
-                capture_memory("after 60 seconds without input")
+                if args.renderer_memory:
+                    capture_memory("after 60 seconds without input")
+                else:
+                    capture_allocations("settled")
             restored = reattached_surface()
             eventually("marker restored after the first relaunch", lambda: marker in restored_scrollback(restored))
             eventually("restored session in autosave snapshot", lambda: restored.lower() in primary.read_text().lower(),
