@@ -89,6 +89,9 @@ public sealed class NamedKeysTests
         Assert.AreEqual((CopyAction.SearchPrevious, 1), Press("N"));
         Assert.AreEqual((CopyAction.Exit, 1), Press("q"));
         Assert.AreEqual((CopyAction.None, 1), Press("ctrl-c"));
-        Assert.AreEqual((CopyAction.None, 1), Press("{"));
+        // { and } jump between shell prompts, with a count.
+        Assert.AreEqual((CopyAction.PromptUp, 1), Press("{"));
+        Press("2");
+        Assert.AreEqual((CopyAction.PromptDown, 2), Press("}"));
     }
 }

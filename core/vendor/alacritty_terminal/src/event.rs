@@ -103,8 +103,10 @@ pub trait OnResize {
 pub trait EventListener {
     fn send_event(&self, _event: Event) {}
 
-    /// Every chunk read from the PTY, in order, before the parser sees it.
-    fn pty_output(&self, _bytes: &[u8]) {}
+    /// Every chunk read from the PTY, in order, before the parser sees it. A listener pushes to
+    /// `prompts` the offset just past each shell prompt mark in the chunk (OSC 133;A), in order:
+    /// the event loop parses up to each one and marks the cursor's row (`Term::mark_prompt`).
+    fn pty_output(&self, _bytes: &[u8], _prompts: &mut Vec<usize>) {}
 }
 
 /// Null sink for events.

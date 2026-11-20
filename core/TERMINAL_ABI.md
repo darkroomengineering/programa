@@ -366,8 +366,13 @@ cursor, 3 clears it, 4 selects `count` whole lines from the cursor's line, 5 mov
 cursor to the selection's start and keeps the selection (a find's match), 10 to 16 move
 the cursor up, down, left, right, to the line's start, its end and its first text, 20 to
 23 scroll a page up, a page down, half a page up and half a page down keeping the
-cursor's screen row, 24 goes to the top of scrollback and 25 back to the prompt line.
-Moves and scrolls repeat `count` times (1 to 9999). Commands other than 0 and 1 fail with
+cursor's screen row, 24 goes to the top of scrollback and 25 back to the prompt line,
+26 and 27 go to the start of the shell prompt above or below the cursor's line (a row
+where the shell sent OSC 133;A; the mark stays with the row through scrolling, reflow
+and scrollback, a clear drops it, and the alternate screen has none), or the
+furthest one there is when fewer than `count` are left, scrolling it into view (the
+cursor stays when there is none). Moves, scrolls and prompt jumps repeat `count` times
+(1 to 9999). Commands other than 0 and 1 fail with
 INVALID_ARGUMENT outside copy mode. A find in copy mode scrolls before it selects, so the
 match stays as found.
 

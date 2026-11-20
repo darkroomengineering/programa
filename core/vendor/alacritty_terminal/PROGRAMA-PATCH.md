@@ -37,3 +37,17 @@ Programa adds `EventListener::pty_output`, a default no-op method that
 parser sees it. vte drops OSC numbers it does not know, so the OSC 7501
 Program Status scanner in `programa-terminal` reads the raw bytes through this
 hook instead of through the `Handler`.
+
+Programa records shell prompts for copy mode's `{` and `}`. `Row` has a `prompt`
+flag that `Row::reset` clears, so a mark moves with its row through scrolling and
+scrollback and goes when the row is cleared or its scrollback line is dropped or
+recycled. `pty_output` takes a `prompts` vector: the listener pushes the offset just
+past each OSC 133;A in the chunk, and `pty_read` parses up to each offset, then calls
+`Term::mark_prompt`, which flags the cursor's row on the primary screen (the
+alternate screen gets none). A chunk without marks is parsed in one call as before.
+When a reflow pulls a row's leading cells up into the previous wrapped row, the flag
+moves up with them (`grid/resize.rs`). The flag makes `Row` five machine words
+instead of four, so `Storage::swap` uses `slice::swap` instead of upstream's
+four-word copy. The focused test `marks_the_cursor_row_at_each_prompt_mark` in
+`src/event_loop.rs` feeds bytes whose BELs a test listener reports as marks and
+checks which rows get flagged.

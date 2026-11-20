@@ -532,7 +532,9 @@ impl Default for Scanner {
 }
 
 impl Scanner {
-    pub(crate) fn feed(&mut self, bytes: &[u8], mut on_sequence: impl FnMut(Sequence<'_>)) {
+    /// Calls `on_sequence` with each sequence and the offset in `bytes` just past its last byte
+    /// there (for `ESC \`, past the ESC).
+    pub(crate) fn feed(&mut self, bytes: &[u8], mut on_sequence: impl FnMut(Sequence<'_>, usize)) {
         let mut index = 0;
         while index < bytes.len() {
             match self.state {
@@ -552,7 +554,7 @@ impl Scanner {
                             ScanState::Osc
                         }
                         b'c' => {
-                            on_sequence(Sequence::Reset);
+                            on_sequence(Sequence::Reset, index);
                             ScanState::Ground
                         }
                         0x1b => ScanState::Escape,
@@ -564,11 +566,11 @@ impl Scanner {
                     index += 1;
                     match byte {
                         0x07 => {
-                            on_sequence(Sequence::Osc(&self.payload, Terminator::Bel));
+                            on_sequence(Sequence::Osc(&self.payload, Terminator::Bel), index);
                             self.state = ScanState::Ground;
                         }
                         0x1b => {
-                            on_sequence(Sequence::Osc(&self.payload, Terminator::St));
+                            on_sequence(Sequence::Osc(&self.payload, Terminator::St), index);
                             self.state = ScanState::Escape;
                         }
                         0x18 | 0x1a => self.state = ScanState::Ground,
@@ -622,6 +624,8 @@ pub(crate) struct FeedResult {
     pub notifications: Vec<Notification>,
     /// The last working directory the shell reported in this chunk.
     pub cwd: Option<String>,
+    /// Where each shell prompt mark (OSC 133;A) ends in this chunk, in order.
+    pub prompts: Vec<usize>,
 }
 
 /// The scanner and the store for one terminal.
@@ -635,7 +639,7 @@ impl ProgramStatus {
     pub(crate) fn feed(&mut self, bytes: &[u8]) -> FeedResult {
         let mut result = FeedResult::default();
         let store = &mut self.store;
-        self.scanner.feed(bytes, |sequence| match sequence {
+        self.scanner.feed(bytes, |sequence, end| match sequence {
             Sequence::Reset => result.changed |= store.reset_all(),
             Sequence::Osc(payload, terminator) => {
                 if let Some(body) = payload.strip_prefix(REPORT_PREFIX) {
@@ -651,6 +655,7 @@ impl ProgramStatus {
                     }
                 } else if is_prompt(payload) {
                     result.changed |= store.drop_transient();
+                    result.prompts.push(end);
                 } else if let Some(cwd) = parse_cwd(payload) {
                     result.cwd = Some(cwd);
                 } else if let Some(notification) = parse_notification(payload) {
@@ -1068,7 +1073,7 @@ mod tests {
         let mut scanner = Scanner::default();
         let mut found = Vec::new();
         for chunk in chunks {
-            scanner.feed(chunk, |sequence| match sequence {
+            scanner.feed(chunk, |sequence, _| match sequence {
                 Sequence::Osc(payload, terminator) => {
                     found.push((payload.to_vec(), Some(terminator)))
                 }

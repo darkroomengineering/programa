@@ -256,7 +256,7 @@ impl EventListener for EventProxy {
         }
     }
 
-    fn pty_output(&self, bytes: &[u8]) {
+    fn pty_output(&self, bytes: &[u8], prompts: &mut Vec<usize>) {
         // This runs before each chunk is parsed, so the flag covers that chunk's answers.
         let remaining = self.0.replay.load(Ordering::Acquire);
         let muted = remaining > 0;
@@ -271,6 +271,7 @@ impl EventListener for EventProxy {
             tap(bytes);
         }
         let result = lock(&self.0.program_status).feed(bytes);
+        prompts.extend_from_slice(&result.prompts);
         if result.changed {
             self.0
                 .program_status_generation
@@ -1810,7 +1811,8 @@ pub unsafe extern "C" fn programa_terminal_selection_update(
 /// cursor on the selection's start and keep it (a find's match), 10-16 move the cursor (up, down,
 /// left, right, line start, line end, first text of the line), 20-25 scroll and keep the cursor on
 /// its screen row (page up, page down, half page up, half page down), or go to the top of
-/// scrollback or back to the prompt. Moves and scrolls repeat `count` times.
+/// scrollback or back to the prompt, 26-27 go to the start of the shell prompt above or below
+/// the cursor's line (OSC 133;A). Moves, scrolls and prompt jumps repeat `count` times.
 #[no_mangle]
 pub unsafe extern "C" fn programa_terminal_copy_mode(
     value: *mut ProgramaTerminalSession,
@@ -1910,6 +1912,28 @@ fn copy_mode<T: EventListener>(term: &mut Term<T>, command: u32, count: i32) -> 
             term.scroll_display(Scroll::Bottom);
             let line = term.grid().cursor.point.line;
             term.vi_goto_point(Point::new(line, Column(0)));
+        }
+        26 | 27 => {
+            // The count-th prompt that way, or the furthest there is (Ghostty's jump_to_prompt).
+            let from = term.vi_mode_cursor.point.line.0;
+            let grid = term.grid();
+            let prompt = |line: &i32| grid[Line(*line)].prompt;
+            let count = count as usize;
+            let target = if command == 26 {
+                (term.topmost_line().0..from)
+                    .rev()
+                    .filter(prompt)
+                    .take(count)
+                    .last()
+            } else {
+                (from + 1..=term.bottommost_line().0)
+                    .filter(prompt)
+                    .take(count)
+                    .last()
+            };
+            if let Some(line) = target {
+                term.vi_goto_point(Point::new(Line(line), Column(0)));
+            }
         }
         _ => return Err(STATUS_INVALID_ARGUMENT),
     }
@@ -2177,6 +2201,112 @@ mod tests {
             (cursor_snapshot(&term).visible, term.grid().display_offset()),
             (false, 1)
         );
+    }
+
+    /// As the event loop does: parse up to each prompt mark the scanner finds and mark its row.
+    fn feed_prompts(term: &mut Term<EventProxy>, state: &Arc<SharedState>, bytes: &[u8]) {
+        let mut prompts = Vec::new();
+        EventProxy(state.clone()).pty_output(bytes, &mut prompts);
+        let mut parser = Processor::<StdSyncHandler>::new();
+        let mut parsed = 0;
+        for end in prompts {
+            parser.advance(term, &bytes[parsed..end]);
+            term.mark_prompt();
+            parsed = end;
+        }
+        parser.advance(term, &bytes[parsed..]);
+    }
+
+    /// Where a prompt jump (26 up, 27 down) puts the copy-mode cursor, and that line's text.
+    fn jump(term: &mut Term<EventProxy>, command: u32, count: i32) -> (i32, String) {
+        copy_mode(term, command, count).unwrap();
+        let line = term.vi_mode_cursor.point.line.0;
+        copy_mode(term, 4, 1).unwrap();
+        let text = term.selection_to_string().unwrap_or_default();
+        copy_mode(term, 3, 1).unwrap();
+        (line, text.trim_end().to_owned())
+    }
+
+    fn resize(term: &mut Term<EventProxy>, cols: usize) {
+        term.resize(TermSize {
+            cols,
+            lines: 3,
+            cell_width: 8,
+            cell_height: 16,
+        });
+    }
+
+    #[test]
+    fn copy_mode_jumps_between_prompts() {
+        let (mut term, state) = term_with_state();
+        // Three prompts (BEL and ST marks) on an 8x3 screen; two scroll into scrollback.
+        feed_prompts(
+            &mut term,
+            &state,
+            b"\x1b]133;A\x07$ a\r\nout\r\n\x1b]133;A\x1b\\$ b\r\nout\r\nout\r\n\x1b]133;A\x07$ c",
+        );
+        copy_mode(&mut term, 1, 1).unwrap();
+        assert_eq!(jump(&mut term, 26, 1), (-1, "$ b".into()));
+        assert_eq!(term.grid().display_offset(), 1);
+        // Fewer prompts than the count: the furthest. None that way: the cursor stays.
+        assert_eq!(jump(&mut term, 26, 5), (-3, "$ a".into()));
+        assert_eq!(jump(&mut term, 26, 1), (-3, "$ a".into()));
+        assert_eq!(jump(&mut term, 27, 2), (2, "$ c".into()));
+        assert_eq!(jump(&mut term, 27, 1), (2, "$ c".into()));
+        copy_mode(&mut term, 0, 1).unwrap();
+
+        // Reflowed to two columns, each prompt starts on the first of its rows.
+        resize(&mut term, 2);
+        copy_mode(&mut term, 1, 1).unwrap();
+        assert_eq!(jump(&mut term, 26, 1), (1, "$ c".into()));
+        assert_eq!(jump(&mut term, 26, 1), (-5, "$ b".into()));
+        assert_eq!(jump(&mut term, 26, 1), (-9, "$ a".into()));
+        copy_mode(&mut term, 0, 1).unwrap();
+        // And back to eight.
+        resize(&mut term, 8);
+        copy_mode(&mut term, 1, 1).unwrap();
+        assert_eq!(jump(&mut term, 26, 9), (-3, "$ a".into()));
+        assert_eq!(jump(&mut term, 27, 1), (-1, "$ b".into()));
+        copy_mode(&mut term, 0, 1).unwrap();
+
+        // Clearing scrollback drops its prompts; the rows it frees come back unmarked.
+        term.grid_mut().clear_history();
+        feed_prompts(&mut term, &state, b"\r\nx\r\ny\r\nz");
+        copy_mode(&mut term, 1, 1).unwrap();
+        assert_eq!(jump(&mut term, 26, 1), (-1, "$ c".into()));
+        assert_eq!(jump(&mut term, 26, 1), (-1, "$ c".into()));
+        copy_mode(&mut term, 0, 1).unwrap();
+
+        // The alternate screen has no prompts.
+        feed_prompts(
+            &mut term,
+            &state,
+            b"\x1b[?1049h\x1b]133;A\x07$ alt\r\nx\r\ny",
+        );
+        copy_mode(&mut term, 1, 1).unwrap();
+        assert_eq!(jump(&mut term, 26, 1), (2, "y".into()));
+        copy_mode(&mut term, 0, 1).unwrap();
+        feed_prompts(&mut term, &state, b"\x1b[?1049l");
+        copy_mode(&mut term, 1, 1).unwrap();
+        assert_eq!(jump(&mut term, 26, 1), (-1, "$ c".into()));
+    }
+
+    #[test]
+    fn prompt_jumps_skip_prompts_scrollback_dropped() {
+        let (mut term, state) = term_with_state();
+        term.set_options(TermConfig {
+            scrolling_history: 2,
+            ..TermConfig::default()
+        });
+        // Seven rows on a three-row screen with two of scrollback: "$ 1" and its output go.
+        feed_prompts(
+            &mut term,
+            &state,
+            b"\x1b]133;A\x07$ 1\r\no\r\n\x1b]133;A\x07$ 2\r\no\r\n\x1b]133;A\x07$ 3\r\no\r\n\x1b]133;A\x07$ 4",
+        );
+        copy_mode(&mut term, 1, 1).unwrap();
+        assert_eq!(jump(&mut term, 26, 1), (0, "$ 3".into()));
+        assert_eq!(jump(&mut term, 26, 9), (-2, "$ 2".into()));
     }
 
     #[test]

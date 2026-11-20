@@ -10,6 +10,7 @@ internal enum CopyAction
 {
     None, Exit, ToggleVisual, Copy, CopyLines, Up, Down, Left, Right, LineStart, LineEnd, FirstText,
     PageUp, PageDown, HalfPageUp, HalfPageDown, Top, Bottom, Search, SearchNext, SearchPrevious,
+    PromptUp, PromptDown,
 }
 
 /// <summary>The copy mode keys, as macOS resolves them (Sources/TerminalCopyMode.swift): a count prefix,
@@ -88,7 +89,8 @@ internal sealed class CopyModeKeys
             "/" => CopyAction.Search,
             "n" => CopyAction.SearchNext,
             "N" => CopyAction.SearchPrevious,
-            // ponytail: { and } (previous / next prompt) need prompt marks the terminal core does not keep yet.
+            "{" => CopyAction.PromptUp,
+            "}" => CopyAction.PromptDown,
             _ => CopyAction.None,
         };
         return (action, count);
@@ -230,7 +232,7 @@ public sealed partial class TerminalView
                     CopyAction.Up => 10u, CopyAction.Down => 11u, CopyAction.Left => 12u, CopyAction.Right => 13u,
                     CopyAction.LineStart => 14u, CopyAction.LineEnd => 15u, CopyAction.FirstText => 16u,
                     CopyAction.PageUp => 20u, CopyAction.PageDown => 21u, CopyAction.HalfPageUp => 22u, CopyAction.HalfPageDown => 23u,
-                    CopyAction.Top => 24u, _ => 25u,
+                    CopyAction.Top => 24u, CopyAction.Bottom => 25u, CopyAction.PromptUp => 26u, _ => 27u,
                 });
                 break;
         }

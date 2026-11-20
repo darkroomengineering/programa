@@ -22,6 +22,9 @@ pub struct Row<T> {
     /// This is the upper bound on the number of elements in the row, which have been modified
     /// since the last reset. All cells after this point are guaranteed to be equal.
     pub(crate) occ: usize,
+
+    /// Programa: a shell prompt starts on this row (OSC 133;A, `Term::mark_prompt`).
+    pub prompt: bool,
 }
 
 impl<T: PartialEq> PartialEq for Row<T> {
@@ -52,7 +55,7 @@ impl<T: Default> Row<T> {
             inner.set_len(columns);
         }
 
-        Row { inner, occ: 0 }
+        Row { inner, occ: 0, prompt: false }
     }
 
     /// Increase the number of columns in the row.
@@ -107,6 +110,7 @@ impl<T: Default> Row<T> {
         }
 
         self.occ = 0;
+        self.prompt = false;
     }
 }
 
@@ -114,7 +118,7 @@ impl<T: Default> Row<T> {
 impl<T> Row<T> {
     #[inline]
     pub fn from_vec(vec: Vec<T>, occ: usize) -> Row<T> {
-        Row { inner: vec, occ }
+        Row { inner: vec, occ, prompt: false }
     }
 
     #[inline]
