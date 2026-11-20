@@ -197,7 +197,7 @@ public sealed partial class MainWindow
             Directory.CreateDirectory(directory);
             var path = Path.Combine(directory, ReportFileName(title, Localizer.Get("HelperReportFileName")));
             File.WriteAllText(path, summary);
-            SplitPanel(JsonSerializer.SerializeToElement(new { surface_id = surfaceId }), new MarkdownPanel(path), focus: true);
+            SplitPanel(JsonSerializer.SerializeToElement(new { surface_id = surfaceId }), NewMarkdownPanel(path), focus: true);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ControlException)
         {

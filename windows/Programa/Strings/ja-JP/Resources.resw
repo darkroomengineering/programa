@@ -137,4 +137,12 @@
   <data name="GoToWorkspacePlaceholder" xml:space="preserve"><value>ワークスペースに移動</value></data>
   <data name="Shortcut_toggle_terminal_copy_mode" xml:space="preserve"><value>ターミナルのコピーモードを切り替え</value></data>
   <data name="CopyModeIndicator" xml:space="preserve"><value>vim</value></data>
+  <data name="MarkdownCompareBefore" xml:space="preserve"><value>変更前</value></data>
+  <data name="MarkdownCompareAfter" xml:space="preserve"><value>変更後</value></data>
+  <data name="MarkdownTruncated" xml:space="preserve"><value>このファイルは 2 MB を超えています。最初の 2 MB のみ表示しています。</value></data>
+  <data name="MarkdownFileUnavailableTitle" xml:space="preserve"><value>ファイルを利用できません</value></data>
+  <data name="MarkdownFileUnavailableMessage" xml:space="preserve"><value>ファイルが移動または削除された可能性があります。</value></data>
+  <data name="ExternalOpenTitle" xml:space="preserve"><value>{0} で開きますか？</value></data>
+  <data name="ExternalOpenDefaultApp" xml:space="preserve"><value>既定のアプリ</value></data>
+  <data name="ExternalOpenOpen" xml:space="preserve"><value>開く</value></data>
 </root>

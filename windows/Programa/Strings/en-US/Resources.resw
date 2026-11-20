@@ -137,4 +137,12 @@
   <data name="GoToWorkspacePlaceholder" xml:space="preserve"><value>Go to a workspace</value></data>
   <data name="Shortcut_toggle_terminal_copy_mode" xml:space="preserve"><value>Toggle terminal copy mode</value></data>
   <data name="CopyModeIndicator" xml:space="preserve"><value>vim</value></data>
+  <data name="MarkdownCompareBefore" xml:space="preserve"><value>Before</value></data>
+  <data name="MarkdownCompareAfter" xml:space="preserve"><value>After</value></data>
+  <data name="MarkdownTruncated" xml:space="preserve"><value>This file is larger than 2 MB. Only the first 2 MB is shown.</value></data>
+  <data name="MarkdownFileUnavailableTitle" xml:space="preserve"><value>File unavailable</value></data>
+  <data name="MarkdownFileUnavailableMessage" xml:space="preserve"><value>The file may have been moved or deleted.</value></data>
+  <data name="ExternalOpenTitle" xml:space="preserve"><value>Open in {0}?</value></data>
+  <data name="ExternalOpenDefaultApp" xml:space="preserve"><value>the default app</value></data>
+  <data name="ExternalOpenOpen" xml:space="preserve"><value>Open</value></data>
 </root>

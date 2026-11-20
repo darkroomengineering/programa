@@ -126,7 +126,7 @@ Commands:
   layout save <NAME> [--force]          Save the selected workspace's panes and splits
   layout apply <NAME> [--workspace ID] [--cwd DIR]
   layout list
-  markdown [open] <FILE> [--surface ID] [--direction right|down] [--focus]
+  markdown [open] <FILE> [--surface ID] [--workspace ID] [--window ID] [--direction D] [--focus]
   review open [--surface ID] [--mode worktree|branch] [--base-branch REF] [--direction D] [--focus]
   review refresh [--surface REVIEW]
   review comment add <FILE> <START>[-<END>] <TEXT> [--surface REVIEW]
@@ -2217,10 +2217,30 @@ fn build_params(
             }
         }
         Command::MarkdownOpen => {
-            let opts = parse_opts(command, args, &["--surface", "--direction"], &["--focus"])?;
+            let opts = parse_opts(
+                command,
+                args,
+                &["--surface", "--workspace", "--window", "--direction"],
+                &["--focus"],
+            )?;
             let path = one_positional(command, &opts, "file path")?;
             put(&mut params, "path", Some(absolute(path)));
-            put(&mut params, "surface_id", surface(&opts));
+            // As on macOS, --workspace or --window opens beside that one's focused surface, not this terminal.
+            let window = opts.value("--window");
+            let elsewhere = window.is_some() || opts.value("--workspace").is_some();
+            let source = if elsewhere {
+                opts.value("--surface")
+            } else {
+                surface(&opts)
+            };
+            put(&mut params, "surface_id", source);
+            let workspace = if window.is_some() {
+                opts.value("--workspace")
+            } else {
+                workspace(&opts)
+            };
+            put(&mut params, "workspace_id", workspace);
+            put(&mut params, "window_id", window);
             put(&mut params, "direction", opts.value("--direction"));
             if opts.has("--focus") {
                 params.insert("focus".to_owned(), json!(true));
@@ -2376,7 +2396,12 @@ fn render(command: Command, result: &Value) -> String {
             .collect(),
         Command::LayoutSave => format!("OK {}\n", field(result, "path")),
         Command::LayoutApply => format!("OK {}\n", field(result, "workspace_id")),
-        Command::MarkdownOpen => format!("OK {}\n", field(result, "surface_id")),
+        Command::MarkdownOpen => format!(
+            "OK surface={} pane={} path={}\n",
+            field(result, "surface_id"),
+            field(result, "pane_id"),
+            field(result, "path")
+        ),
         // `--print` prints the command; otherwise it was typed into the terminal.
         Command::Race => String::new(),
         Command::WorkspaceAction | Command::CloseWindow => "OK\n".to_owned(),
@@ -3645,6 +3670,30 @@ mod tests {
         assert_eq!(
             usage_error(&["markdown"]),
             "markdown open: missing file path"
+        );
+        // In a terminal it opens beside that terminal; --workspace or --window aims elsewhere.
+        let env = |name: &str| match name {
+            SURFACE_ENV => Some("surface-here".to_owned()),
+            WORKSPACE_ENV => Some("workspace-here".to_owned()),
+            _ => None,
+        };
+        let here = request_with(&["markdown", "a.md"], &env);
+        assert_eq!(here.params["surface_id"], json!("surface-here"));
+        let workspace = request_with(&["markdown", "a.md", "--workspace", "w2"], &env);
+        assert_eq!(workspace.params["workspace_id"], json!("w2"));
+        assert!(workspace.params.get("surface_id").is_none());
+        let window = request_with(&["markdown", "a.md", "--window", "win2"], &env);
+        assert_eq!(window.params["window_id"], json!("win2"));
+        assert!(
+            window.params.get("surface_id").is_none()
+                && window.params.get("workspace_id").is_none()
+        );
+        assert_eq!(
+            render(
+                Command::MarkdownOpen,
+                &json!({"surface_id": "s1", "pane_id": "p1", "path": "C:\\a.md"})
+            ),
+            "OK surface=s1 pane=p1 path=C:\\a.md\n"
         );
     }
 
