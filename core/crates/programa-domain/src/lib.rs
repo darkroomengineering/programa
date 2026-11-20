@@ -29,6 +29,25 @@ impl Default for Snapshot {
 #[serde(deny_unknown_fields)]
 pub struct Workspace {
     pub id: String,
+    /// A name the user gave the workspace; frontends derive one when it is absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// Pinned workspaces stay together at the top of the list.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pinned: bool,
+    /// The sidebar color, `#RRGGBB`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// A line the user wrote under the title.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// The workspace this one nests under in the sidebar (a git worktree under its repository's
+    /// workspace). One level deep; the list keeps every child right after its parent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    /// A parent whose children the sidebar hides.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub collapsed: bool,
     pub selected_pane_id: String,
     pub panes: Vec<Pane>,
     pub layout: LayoutNode,
@@ -49,6 +68,9 @@ pub struct Surface {
     pub session_id: String,
     #[serde(default)]
     pub is_pinned: bool,
+    /// A name the user gave the tab; frontends show the program's title when it is absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -91,6 +113,70 @@ pub enum Command {
     CloseWorkspace {
         workspace_id: String,
     },
+    /// A null or blank title removes the custom name.
+    RenameWorkspace {
+        workspace_id: String,
+        title: Option<String>,
+    },
+    /// Pinning moves the workspace to the end of the pinned ones at the top; unpinning, to just
+    /// after them.
+    SetWorkspacePinned {
+        workspace_id: String,
+        pinned: bool,
+    },
+    /// `#RRGGBB`; null or blank removes the color.
+    SetWorkspaceColor {
+        workspace_id: String,
+        color: Option<String>,
+    },
+    /// A null or blank description removes it.
+    SetWorkspaceDescription {
+        workspace_id: String,
+        description: Option<String>,
+    },
+    /// Moves the workspace to `index`, kept within its group (pinned or not).
+    MoveWorkspace {
+        workspace_id: String,
+        index: usize,
+    },
+    /// Nests a workspace under another (null removes it): the parent must be top level and the
+    /// child must have no children of its own.
+    SetWorkspaceParent {
+        workspace_id: String,
+        parent_id: Option<String>,
+    },
+    /// Hides or shows a parent's children in the sidebar.
+    SetWorkspaceCollapsed {
+        workspace_id: String,
+        collapsed: bool,
+    },
+    /// Adds a whole workspace from another core as is (the Windows app moving it between
+    /// windows), and selects it. Its ids must be new to this core.
+    AdoptWorkspace {
+        workspace: Workspace,
+    },
+    /// Adds one surface from another core (the Windows app moving a tab between windows) to a
+    /// pane, before `before_surface_id` or at the end, and selects it. Its ids must be new here.
+    AdoptSurface {
+        workspace_id: String,
+        pane_id: String,
+        surface: Surface,
+        before_surface_id: Option<String>,
+    },
+    /// A null or blank title removes the custom name.
+    RenameSurface {
+        workspace_id: String,
+        pane_id: String,
+        surface_id: String,
+        title: Option<String>,
+    },
+    /// Pinning moves the tab to the end of its pane's pinned tabs; unpinning, to just after them.
+    SetSurfacePinned {
+        workspace_id: String,
+        pane_id: String,
+        surface_id: String,
+        pinned: bool,
+    },
     CreateSurface {
         workspace_id: String,
         pane_id: String,
@@ -129,6 +215,9 @@ pub enum Command {
         session_id: String,
         direction: SplitDirection,
         ratio: f64,
+        /// The new pane goes first: a split to the left or above. `ratio` stays the original pane's share.
+        #[serde(default)]
+        insert_first: bool,
     },
     ResizeSplit {
         workspace_id: String,
@@ -174,6 +263,9 @@ impl Core {
     pub fn dispatch(&mut self, command: Command) -> Result<&Snapshot, DomainError> {
         let mut candidate = self.snapshot.clone();
         let changed = candidate.apply(command)?;
+        if changed {
+            candidate.canonicalize_hierarchy();
+        }
         candidate.validate()?;
         if changed {
             candidate.revision =
@@ -210,6 +302,12 @@ impl Snapshot {
                 validate_id("session_id", &session_id)?;
                 self.workspaces.push(Workspace {
                     id: workspace_id.clone(),
+                    title: None,
+                    pinned: false,
+                    color: None,
+                    description: None,
+                    parent_id: None,
+                    collapsed: false,
                     selected_pane_id: pane_id.clone(),
                     panes: vec![Pane {
                         id: pane_id.clone(),
@@ -218,6 +316,7 @@ impl Snapshot {
                             id: surface_id,
                             session_id,
                             is_pinned: false,
+                            title: None,
                         }],
                     }],
                     layout: LayoutNode::Pane { pane_id },
@@ -226,16 +325,216 @@ impl Snapshot {
                 Ok(true)
             }
             Command::SelectWorkspace { workspace_id } => {
-                workspace_index(self, &workspace_id)?;
+                let index = workspace_index(self, &workspace_id)?;
+                // Selecting a hidden child opens its parent's folder.
+                let parent = self.workspaces[index].parent_id.clone();
+                let expanded =
+                    match parent.and_then(|id| self.workspaces.iter_mut().find(|w| w.id == id)) {
+                        Some(parent) if parent.collapsed => {
+                            parent.collapsed = false;
+                            true
+                        }
+                        _ => false,
+                    };
                 if self.selected_workspace_id.as_deref() == Some(&workspace_id) {
-                    return Ok(false);
+                    return Ok(expanded);
                 }
                 self.selected_workspace_id = Some(workspace_id);
+                Ok(true)
+            }
+            Command::SetWorkspaceParent {
+                workspace_id,
+                parent_id,
+            } => {
+                let index = workspace_index(self, &workspace_id)?;
+                if let Some(parent_id) = &parent_id {
+                    let parent = &self.workspaces[workspace_index(self, parent_id)?];
+                    let has_children = self
+                        .workspaces
+                        .iter()
+                        .any(|w| w.parent_id.as_deref() == Some(workspace_id.as_str()));
+                    if *parent_id == workspace_id || parent.parent_id.is_some() || has_children {
+                        return Err(DomainError::new(
+                            "invalid_parent",
+                            "a workspace nests one level deep, under a top-level workspace",
+                        ));
+                    }
+                }
+                if self.workspaces[index].parent_id == parent_id {
+                    return Ok(false);
+                }
+                self.workspaces[index].parent_id = parent_id;
+                Ok(true)
+            }
+            Command::SetWorkspaceCollapsed {
+                workspace_id,
+                collapsed,
+            } => {
+                let workspace = workspace_mut(self, &workspace_id)?;
+                if workspace.collapsed == collapsed {
+                    return Ok(false);
+                }
+                workspace.collapsed = collapsed;
                 Ok(true)
             }
             Command::CloseWorkspace { workspace_id } => {
                 let index = workspace_index(self, &workspace_id)?;
                 remove_workspace(self, index);
+                Ok(true)
+            }
+            Command::RenameWorkspace {
+                workspace_id,
+                title,
+            } => {
+                let title = title
+                    .map(|title| title.trim().to_owned())
+                    .filter(|title| !title.is_empty());
+                let workspace = workspace_mut(self, &workspace_id)?;
+                if workspace.title == title {
+                    return Ok(false);
+                }
+                workspace.title = title;
+                Ok(true)
+            }
+            Command::SetWorkspacePinned {
+                workspace_id,
+                pinned,
+            } => {
+                let index = workspace_index(self, &workspace_id)?;
+                if self.workspaces[index].pinned == pinned {
+                    return Ok(false);
+                }
+                let mut workspace = self.workspaces.remove(index);
+                workspace.pinned = pinned;
+                let pinned_count = self.workspaces.iter().filter(|w| w.pinned).count();
+                self.workspaces.insert(pinned_count, workspace);
+                Ok(true)
+            }
+            Command::SetWorkspaceColor {
+                workspace_id,
+                color,
+            } => {
+                let color = color
+                    .map(|color| color.trim().to_ascii_uppercase())
+                    .filter(|color| !color.is_empty());
+                if let Some(color) = &color {
+                    let hex = color.strip_prefix('#').unwrap_or_default();
+                    if hex.len() != 6 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+                        return Err(DomainError::new(
+                            "invalid_color",
+                            format!("{color} is not a #RRGGBB color"),
+                        ));
+                    }
+                }
+                let workspace = workspace_mut(self, &workspace_id)?;
+                if workspace.color == color {
+                    return Ok(false);
+                }
+                workspace.color = color;
+                Ok(true)
+            }
+            Command::SetWorkspaceDescription {
+                workspace_id,
+                description,
+            } => {
+                let description = description
+                    .map(|description| description.trim().to_owned())
+                    .filter(|description| !description.is_empty());
+                let workspace = workspace_mut(self, &workspace_id)?;
+                if workspace.description == description {
+                    return Ok(false);
+                }
+                workspace.description = description;
+                Ok(true)
+            }
+            Command::AdoptWorkspace { workspace } => {
+                let mut next = self.clone();
+                let id = workspace.id.clone();
+                // A pinned workspace joins the end of the pinned ones, any other the end of the list.
+                let at = if workspace.pinned {
+                    next.workspaces.iter().filter(|w| w.pinned).count()
+                } else {
+                    next.workspaces.len()
+                };
+                next.workspaces.insert(at, workspace);
+                next.selected_workspace_id = Some(id);
+                next.validate()?;
+                *self = next;
+                Ok(true)
+            }
+            Command::AdoptSurface {
+                workspace_id,
+                pane_id,
+                surface,
+                before_surface_id,
+            } => {
+                let mut next = self.clone();
+                let workspace = workspace_mut(&mut next, &workspace_id)?;
+                let pane = pane_mut(workspace, &pane_id)?;
+                let at = match before_surface_id.as_deref() {
+                    Some(before) => surface_index(pane, before)?,
+                    None => pane.surfaces.len(),
+                };
+                pane.selected_surface_id = surface.id.clone();
+                pane.surfaces.insert(at, surface);
+                workspace.selected_pane_id = pane_id;
+                next.selected_workspace_id = Some(workspace_id);
+                next.validate()?;
+                *self = next;
+                Ok(true)
+            }
+            Command::MoveWorkspace {
+                workspace_id,
+                index,
+            } => {
+                let from = workspace_index(self, &workspace_id)?;
+                let pinned_count = self.workspaces.iter().filter(|w| w.pinned).count();
+                let (low, high) = if self.workspaces[from].pinned {
+                    (0, pinned_count - 1)
+                } else {
+                    (pinned_count, self.workspaces.len() - 1)
+                };
+                let to = index.clamp(low, high);
+                if to == from {
+                    return Ok(false);
+                }
+                let workspace = self.workspaces.remove(from);
+                self.workspaces.insert(to, workspace);
+                Ok(true)
+            }
+            Command::RenameSurface {
+                workspace_id,
+                pane_id,
+                surface_id,
+                title,
+            } => {
+                let title = title
+                    .map(|title| title.trim().to_owned())
+                    .filter(|title| !title.is_empty());
+                let pane = pane_mut(workspace_mut(self, &workspace_id)?, &pane_id)?;
+                let index = surface_index(pane, &surface_id)?;
+                let surface = &mut pane.surfaces[index];
+                if surface.title == title {
+                    return Ok(false);
+                }
+                surface.title = title;
+                Ok(true)
+            }
+            Command::SetSurfacePinned {
+                workspace_id,
+                pane_id,
+                surface_id,
+                pinned,
+            } => {
+                let pane = pane_mut(workspace_mut(self, &workspace_id)?, &pane_id)?;
+                let index = surface_index(pane, &surface_id)?;
+                if pane.surfaces[index].is_pinned == pinned {
+                    return Ok(false);
+                }
+                let mut surface = pane.surfaces.remove(index);
+                surface.is_pinned = pinned;
+                let pinned_count = pane.surfaces.iter().filter(|s| s.is_pinned).count();
+                pane.surfaces.insert(pinned_count, surface);
                 Ok(true)
             }
             Command::CreateSurface {
@@ -252,6 +551,7 @@ impl Snapshot {
                     id: surface_id.clone(),
                     session_id,
                     is_pinned: false,
+                    title: None,
                 });
                 pane.selected_surface_id = surface_id;
                 workspace.selected_pane_id = pane_id;
@@ -398,6 +698,7 @@ impl Snapshot {
                 session_id,
                 direction,
                 ratio,
+                insert_first,
             } => {
                 validate_ratio(ratio)?;
                 validate_new_ids(self, [&split_id, &new_pane_id, &new_surface_id])?;
@@ -413,6 +714,9 @@ impl Snapshot {
                     direction,
                     ratio,
                 )?;
+                if insert_first {
+                    put_new_pane_first(&mut workspace.layout, &split_id);
+                }
                 workspace.panes.push(Pane {
                     id: new_pane_id.clone(),
                     selected_surface_id: new_surface_id.clone(),
@@ -420,6 +724,7 @@ impl Snapshot {
                         id: new_surface_id,
                         session_id,
                         is_pinned: false,
+                        title: None,
                     }],
                 });
                 workspace.selected_pane_id = new_pane_id;
@@ -442,6 +747,40 @@ impl Snapshot {
                 Ok(true)
             }
         }
+    }
+
+    /// Keeps every child right after its parent, in their current order, and drops a parent link
+    /// that no longer leads to a top-level workspace here (closed, or left in another window).
+    fn canonicalize_hierarchy(&mut self) {
+        let top_level: HashSet<String> = self
+            .workspaces
+            .iter()
+            .filter(|w| w.parent_id.is_none())
+            .map(|w| w.id.clone())
+            .collect();
+        for workspace in &mut self.workspaces {
+            if workspace
+                .parent_id
+                .as_ref()
+                .is_some_and(|parent| !top_level.contains(parent) || *parent == workspace.id)
+            {
+                workspace.parent_id = None;
+            }
+        }
+        if self.workspaces.iter().all(|w| w.parent_id.is_none()) {
+            return;
+        }
+        let mut ordered = Vec::with_capacity(self.workspaces.len());
+        for parent in self.workspaces.iter().filter(|w| w.parent_id.is_none()) {
+            ordered.push(parent.clone());
+            ordered.extend(
+                self.workspaces
+                    .iter()
+                    .filter(|w| w.parent_id.as_deref() == Some(parent.id.as_str()))
+                    .cloned(),
+            );
+        }
+        self.workspaces = ordered;
     }
 
     pub fn validate(&self) -> Result<(), DomainError> {
@@ -854,6 +1193,26 @@ fn clamped_insert_index(pane: &Pane, moved: &Surface, requested: usize) -> usize
 
 fn not_found(kind: &str, id: &str) -> DomainError {
     DomainError::new("not_found", format!("{kind} '{id}' was not found"))
+}
+
+/// Swaps the new split's children, so the new pane comes first and keeps the same share.
+fn put_new_pane_first(node: &mut LayoutNode, split_id: &str) {
+    if let LayoutNode::Split {
+        id,
+        ratio,
+        first,
+        second,
+        ..
+    } = node
+    {
+        if id == split_id {
+            std::mem::swap(first, second);
+            *ratio = 1.0 - *ratio;
+        } else {
+            put_new_pane_first(first, split_id);
+            put_new_pane_first(second, split_id);
+        }
+    }
 }
 
 fn replace_pane_with_split(

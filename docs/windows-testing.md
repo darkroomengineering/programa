@@ -44,9 +44,12 @@ Also run `programa-windows.exe --smoke`, which drives the real WinUI startup
 `windows-build` job does and exits non-zero on failure -- this is the
 closest automated proxy to "does a window actually appear," and it is worth
 running on a clean machine even though CI already runs it on windows-latest.
-If any of these fail, or if the app produces no window with no error, read
-`%LOCALAPPDATA%\Programa\launch.log`, which records every launch attempt and
-its outcome, success or failure.
+The smoke test opens a fresh workspace and records its outcome in
+`%LOCALAPPDATA%\Programa\launch-smoke.log`. For an ordinary launch, read
+`%LOCALAPPDATA%\Programa\launch.log`.
+
+With a terminal running, launch the same executable again. The second process
+should exit and leave the first process and its terminal running.
 
 The rolling aliases are `programa-macos.dmg` and `programa-windows.exe`.
 Retained candidate releases contain the build-specific filenames, allowing

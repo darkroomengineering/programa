@@ -86,7 +86,7 @@ Programa keeps what tmux is good at and adds what agents need:
 
 | | tmux | Programa |
 |---|---|---|
-| Sessions survive the app quitting or crashing | yes, detach and reattach | yes, on macOS: terminal processes keep running and the app reattaches live on relaunch |
+| Sessions survive the app quitting or crashing | yes, detach and reattach | yes, on macOS and Windows: terminal processes keep running and the app reattaches live on relaunch |
 | Which agent needs me | no | working, blocked, or idle per workspace; a ring on the pane, a lit tab, ⌘⇧U to the latest unread |
 | Git branch, PR, ports, working directory per session | no | in the sidebar, always |
 | Review an agent's diff and send comments back to it | no | built-in review panel |

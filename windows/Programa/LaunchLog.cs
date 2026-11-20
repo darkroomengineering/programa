@@ -13,7 +13,7 @@ internal static partial class LaunchLog
     internal static string LogPath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Programa",
-        "launch.log");
+        BuildIdentity.IsSmoke ? "launch-smoke.log" : "launch.log");
 
     /// <summary>Set once the main window has been shown. Before that an unhandled exception means launch failed.</summary>
     internal static volatile bool LaunchCompleted;

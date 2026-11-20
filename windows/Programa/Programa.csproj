@@ -44,13 +44,39 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.6.5" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
     <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
+    <!-- Windows Terminal's ConPTY: its runtimes/ conpty.dll is copied automatically, and
+         OpenConsole.exe (below) runs each session instead of the inbox conhost, which mangles
+         OSC color queries and repaints the screen. Program.LoadBundledConpty wires it up. -->
+    <PackageReference Include="Microsoft.Windows.Console.ConPTY" Version="1.25.261109001" GeneratePathProperty="true" />
     <!-- Keep equal to windows.vpk in ship.json. -->
     <PackageReference Include="Velopack" Version="1.2.161" />
+    <PackageReference Include="Markdig" Version="0.38.0" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(ProgramaNativeDirectory)' != ''">
     <Content Include="$(ProgramaNativeDirectory)\programa_core.dll" Link="programa_core.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="$(ProgramaNativeDirectory)\programa_terminal.dll" Link="programa_terminal.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- The `programa` CLI (core/crates/programa-cli), on PATH inside Programa terminals. -->
+    <Content Include="$(ProgramaNativeDirectory)\programa-cli.exe" Link="bin\programa.exe" Condition="Exists('$(ProgramaNativeDirectory)\programa-cli.exe')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="$(ProgramaNativeDirectory)\programa-mcp.exe" Link="bin\programa-mcp.exe" Condition="Exists('$(ProgramaNativeDirectory)\programa-mcp.exe')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- The terminal host (core/crates/programa-terminal/src/host.rs), beside conpty.dll and OpenConsole.exe. -->
+    <Content Include="$(ProgramaNativeDirectory)\programa-host.exe" Link="programa-host.exe" Condition="Exists('$(ProgramaNativeDirectory)\programa-host.exe')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="$(PkgMicrosoft_Windows_Console_ConPTY)\build\native\runtimes\x64\OpenConsole.exe" Link="OpenConsole.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- JetBrains Mono is Ghostty's embedded default font (the macOS app's default). -->
+    <Content Include="Fonts\*.ttf" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- The same Ghostty theme catalog the macOS app bundles. -->
+    <Content Include="..\..\Resources\ghostty\themes\*" Link="themes\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- Screen-based agent detection manifests, shared with macOS (docs/agent-detection-manifests.md). -->
+    <Content Include="..\..\Resources\AgentDetection\*.json" Link="AgentDetection\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- The offline mermaid.js the macOS markdown panel bundles, for ```mermaid diagrams. -->
+    <Content Include="..\..\Resources\mermaid.min.js" Link="Markdown\mermaid.min.js" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Programa.Tests" />
   </ItemGroup>
 
   <ItemGroup>

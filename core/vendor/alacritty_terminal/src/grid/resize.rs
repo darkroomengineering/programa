@@ -164,6 +164,9 @@ impl<T: GridCell + Default + PartialEq> Grid<T> {
             // Add removed cells to previous row and reflow content.
             last_row.append(&mut cells);
 
+            // Programa: a prompt that started this row now starts in the previous one.
+            last_row.prompt |= mem::take(&mut row.prompt);
+
             let cursor_buffer_line = self.lines - self.cursor.point.line.0 as usize - 1;
 
             if i == cursor_buffer_line && reflow {

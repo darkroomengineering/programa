@@ -15,11 +15,14 @@ use alacritty_terminal::index::{Column, Line, Point, Side};
 use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::term::cell::Flags;
+use alacritty_terminal::term::color::Colors as TermColors;
 use alacritty_terminal::term::{Config as TermConfig, Term, TermMode};
 use alacritty_terminal::tty::{self, Options as PtyOptions, Shell};
+use alacritty_terminal::vte::ansi::CursorShape;
 use alacritty_terminal::vte::ansi::{Color, NamedColor};
 use serde::{Deserialize, Serialize};
 
+pub mod host;
 mod program_status;
 use program_status::ProgramStatus;
 
@@ -159,11 +162,31 @@ struct SharedState {
     terminated: AtomicBool,
     error: Mutex<Option<String>>,
     title: Mutex<Option<String>>,
+    /// Text a program stored with OSC 52, waiting for the frontend to put it on the clipboard.
+    clipboard: Mutex<Option<String>>,
+    /// OSC 777/9 desktop notifications waiting for the frontend.
+    notifications: Mutex<Vec<program_status::Notification>>,
+    /// The working directory the shell last reported (OSC 7 or 9;9), and a counter that moves
+    /// on every report, so a frontend notices a new prompt in the same directory.
+    cwd: Mutex<Option<String>>,
+    cwd_generation: AtomicU64,
+    colors: Mutex<Colors>,
     program_status: Mutex<ProgramStatus>,
     program_status_generation: AtomicU64,
     signal: Signal,
     sender: Mutex<Option<EventLoopSender>>,
+    /// The terminal host's copy of each output chunk, before it is parsed.
+    tap: Mutex<Option<Tap>>,
+    /// In the terminal host: the app's terminal answers the program's queries, not this one.
+    quiet: bool,
+    /// Bytes of past output still to come after a reattach, during which nothing is answered or
+    /// notified again; `muted` while they are parsed.
+    replay: AtomicU64,
+    muted: AtomicBool,
 }
+
+/// Receives every chunk of a session's output (the terminal host forwards it to the app).
+pub(crate) type Tap = Box<dyn FnMut(&[u8]) + Send>;
 
 impl SharedState {
     fn changed(&self) {
@@ -176,7 +199,12 @@ impl SharedState {
         self.changed();
     }
 
+    /// The terminal's own answers (device reports, color queries, OSC 7501 probes); never what
+    /// the person types, which goes straight to the notifier.
     fn write_to_pty(&self, bytes: Vec<u8>) {
+        if self.quiet || self.muted.load(Ordering::Acquire) {
+            return;
+        }
         if let Some(sender) = lock(&self.sender).as_ref() {
             if let Err(error) = sender.send(Msg::Input(Cow::Owned(bytes))) {
                 self.fail(error.to_string());
@@ -207,12 +235,43 @@ impl EventListener for EventProxy {
                 self.0.changed();
             }
             Event::PtyWrite(text) => self.0.write_to_pty(text.into_bytes()),
+            // OSC 10/11/4 queries. Agents ask for the background to pick a light or dark theme.
+            // ponytail: answers from the configured colors, not colors the program itself set
+            // with OSC 4/10/11 (the term is locked while this runs); rare enough to skip.
+            Event::ColorRequest(index, format) => {
+                let color = lock(&self.0.colors).query(index);
+                let reply = format(alacritty_terminal::vte::ansi::Rgb {
+                    r: color.r,
+                    g: color.g,
+                    b: color.b,
+                });
+                self.0.write_to_pty(reply.into_bytes());
+            }
+            // OSC 52 write; reading the clipboard (ClipboardLoad) stays denied, as in Ghostty.
+            Event::ClipboardStore(_, text) => {
+                *lock(&self.0.clipboard) = Some(text);
+                self.0.changed();
+            }
             _ => {}
         }
     }
 
-    fn pty_output(&self, bytes: &[u8]) {
+    fn pty_output(&self, bytes: &[u8], prompts: &mut Vec<usize>) {
+        // This runs before each chunk is parsed, so the flag covers that chunk's answers.
+        let remaining = self.0.replay.load(Ordering::Acquire);
+        let muted = remaining > 0;
+        if muted {
+            self.0.replay.store(
+                remaining.saturating_sub(bytes.len() as u64),
+                Ordering::Release,
+            );
+        }
+        self.0.muted.store(muted, Ordering::Release);
+        if let Some(tap) = lock(&self.0.tap).as_mut() {
+            tap(bytes);
+        }
         let result = lock(&self.0.program_status).feed(bytes);
+        prompts.extend_from_slice(&result.prompts);
         if result.changed {
             self.0
                 .program_status_generation
@@ -222,11 +281,27 @@ impl EventListener for EventProxy {
         if !result.reply.is_empty() {
             self.0.write_to_pty(result.reply);
         }
+        if let Some(cwd) = result.cwd {
+            *lock(&self.0.cwd) = Some(cwd);
+            self.0.cwd_generation.fetch_add(1, Ordering::Release);
+            self.0.changed();
+        }
+        if !result.notifications.is_empty() && !muted {
+            let mut pending = lock(&self.0.notifications);
+            pending.extend(result.notifications);
+            // A frontend that stops reading must not grow this without bound.
+            let excess = pending.len().saturating_sub(MAX_PENDING_NOTIFICATIONS);
+            pending.drain(..excess);
+            drop(pending);
+            self.0.changed();
+        }
     }
 }
 
-#[derive(Deserialize, Default)]
-struct CreateConfig {
+const MAX_PENDING_NOTIFICATIONS: usize = 64;
+
+#[derive(Deserialize, Serialize, Default, Clone)]
+pub(crate) struct CreateConfig {
     shell: Option<String>,
     #[serde(default)]
     args: Vec<String>,
@@ -237,9 +312,111 @@ struct CreateConfig {
     rows: Option<u16>,
     cell_width: Option<u16>,
     cell_height: Option<u16>,
+    #[serde(default)]
+    colors: ColorsConfig,
+    /// Start PowerShell with Programa's shell integration (working directory, prompt marks).
+    #[serde(default)]
+    shell_integration: bool,
+    /// Output saved by session restore, shown as scrollback above the new shell.
+    restore_text: Option<String>,
+    /// Run the shell in the terminal host, reattaching to the session of this id when it is
+    /// still running there (host.rs); without a reachable host the shell runs here.
+    host: Option<host::HostConfig>,
+}
+
+/// Colors the frontend resolved from its theme. Each field overrides Ghostty's default.
+#[derive(Deserialize, Serialize, Default, Clone)]
+struct ColorsConfig {
+    #[serde(default)]
+    palette: HashMap<u8, [u8; 3]>,
+    foreground: Option<[u8; 3]>,
+    background: Option<[u8; 3]>,
+    cursor: Option<[u8; 3]>,
+}
+
+#[derive(Clone, Copy)]
+struct Colors {
+    palette: [Rgba; 256],
+    foreground: Rgba,
+    background: Rgba,
+    cursor: Rgba,
+}
+
+impl Default for Colors {
+    /// Ghostty's defaults (src/config/Config.zig, src/terminal/color.zig): the macOS app's look.
+    fn default() -> Self {
+        let foreground = rgb([0xFF, 0xFF, 0xFF]);
+        Self {
+            palette: std::array::from_fn(|index| xterm(index as u8)),
+            foreground,
+            background: rgb([0x28, 0x2C, 0x34]),
+            cursor: foreground,
+        }
+    }
+}
+
+impl ColorsConfig {
+    fn resolve(&self) -> Colors {
+        let mut colors = Colors::default();
+        for (&index, &value) in &self.palette {
+            colors.palette[usize::from(index)] = rgb(value);
+        }
+        colors.foreground = self.foreground.map_or(colors.foreground, rgb);
+        colors.background = self.background.map_or(colors.background, rgb);
+        colors.cursor = self.cursor.map_or(colors.foreground, rgb);
+        colors
+    }
+}
+
+impl Colors {
+    /// Answer for an OSC 4/10/11/12 query: 0-255 are the palette, 256-258 the default
+    /// foreground, background and cursor (vte's NamedColor numbering).
+    fn query(&self, index: usize) -> Rgba {
+        match index {
+            0..=255 => self.palette[index],
+            256 => self.foreground,
+            257 => self.background,
+            _ => self.cursor,
+        }
+    }
+
+    /// A cell color, preferring what the program set with OSC 4/10/11 over the theme.
+    fn resolve(&self, color: Color, overrides: &TermColors) -> Rgba {
+        let index = match color {
+            Color::Spec(value) => return rgb([value.r, value.g, value.b]),
+            Color::Indexed(index) => usize::from(index),
+            Color::Named(name) => match name {
+                // Dim and bright foregrounds have no palette slot; dim is drawn translucent.
+                NamedColor::DimForeground | NamedColor::BrightForeground => {
+                    NamedColor::Foreground as usize
+                }
+                NamedColor::DimBlack => 0,
+                NamedColor::DimRed => 1,
+                NamedColor::DimGreen => 2,
+                NamedColor::DimYellow => 3,
+                NamedColor::DimBlue => 4,
+                NamedColor::DimMagenta => 5,
+                NamedColor::DimCyan => 6,
+                NamedColor::DimWhite => 7,
+                other => other as usize,
+            },
+        };
+        overrides[index].map_or_else(
+            || self.query(index),
+            |value| rgb([value.r, value.g, value.b]),
+        )
+    }
+}
+
+fn rgb([r, g, b]: [u8; 3]) -> Rgba {
+    Rgba { r, g, b, a: 255 }
 }
 
 pub struct ProgramaTerminalSession {
+    /// The shell's process id (0 when unknown).
+    shell_pid: u32,
+    /// The terminal host running this session, when it runs there.
+    host: Option<host::HostConfig>,
     term: Arc<FairMutex<Term<EventProxy>>>,
     notifier: Notifier,
     size: Mutex<TermSize>,
@@ -256,41 +433,72 @@ pub struct ProgramaTerminalSession {
 
 impl ProgramaTerminalSession {
     fn spawn(config: CreateConfig) -> Result<Self, String> {
+        Self::spawn_with(config, None, false)
+    }
+
+    /// `tap` and `quiet` are the terminal host's: it forwards the output and leaves answering the
+    /// program to the app's terminal.
+    pub(crate) fn spawn_with(
+        config: CreateConfig,
+        tap: Option<Tap>,
+        quiet: bool,
+    ) -> Result<Self, String> {
         let size = validate_size(TermSize {
             cols: usize::from(config.cols.unwrap_or(80).max(2)),
             lines: usize::from(config.rows.unwrap_or(24).max(2)),
             cell_width: config.cell_width.unwrap_or(8).max(1),
             cell_height: config.cell_height.unwrap_or(16).max(1),
         })?;
-        let shell_path = config.shell.unwrap_or_else(default_shell);
-        let mut env = config.env;
-        env.entry("TERM".to_owned())
-            .or_insert_with(|| "xterm-256color".to_owned());
-        let mut options = PtyOptions::default();
-        options.shell = Some(Shell::new(shell_path, config.args));
-        options.working_directory = config
-            .working_directory
-            .map(Into::into)
-            .or_else(home_directory);
-        options.drain_on_exit = true;
-        options.env = env;
-        let pty = tty::new(&options, size.window_size(), 0).map_err(|error| error.to_string())?;
+        // In the terminal host when the app runs one, else (or when it cannot be reached) here.
+        #[cfg(windows)]
+        let remote = config.host.clone().and_then(|host| {
+            remote_pty(&host, &config, size)
+                .ok()
+                .map(|remote| (host, remote))
+        });
+        #[cfg(not(windows))]
+        let remote: Option<(host::HostConfig, (tty::Pty, u32, u64, bool))> = None;
+        let (pty, shell_pid, replay, attached, host) = match remote {
+            Some((host, (pty, pid, replay, attached))) => (pty, pid, replay, attached, Some(host)),
+            None => {
+                let (pty, pid) = local_pty(&config, size)?;
+                (pty, pid, 0, false, None)
+            }
+        };
         let state = Arc::new(SharedState {
             generation: AtomicU64::new(1),
             terminated: AtomicBool::new(false),
             error: Mutex::new(None),
             title: Mutex::new(None),
+            clipboard: Mutex::new(None),
+            notifications: Mutex::new(Vec::new()),
+            cwd: Mutex::new(None),
+            cwd_generation: AtomicU64::new(0),
+            colors: Mutex::new(config.colors.resolve()),
             program_status: Mutex::new(ProgramStatus::default()),
             program_status_generation: AtomicU64::new(0),
             signal: Signal::new()?,
             sender: Mutex::new(None),
+            tap: Mutex::new(tap),
+            quiet,
+            replay: AtomicU64::new(replay),
+            muted: AtomicBool::new(false),
         });
         let proxy = EventProxy(state.clone());
-        let term = Arc::new(FairMutex::new(Term::new(
-            TermConfig::default(),
-            &size,
-            proxy.clone(),
-        )));
+        let term_config = TermConfig {
+            kitty_keyboard: true,
+            ..TermConfig::default()
+        };
+        let term = Arc::new(FairMutex::new(Term::new(term_config, &size, proxy.clone())));
+        // Before the event loop starts, so the shell's first output lands below it. A reattached
+        // session replays its own output instead.
+        if let Some(text) = config
+            .restore_text
+            .as_deref()
+            .filter(|text| !text.is_empty() && !attached)
+        {
+            restore_output(&mut term.lock(), text);
+        }
         let event_loop = EventLoop::new(term.clone(), proxy, pty, true, false)
             .map_err(|error| error.to_string())?;
         let notifier = Notifier(event_loop.channel());
@@ -303,7 +511,25 @@ impl ProgramaTerminalSession {
             size: Mutex::new(size),
             state,
             io_thread: Mutex::new(Some(io_thread)),
+            shell_pid,
+            host,
         })
+    }
+
+    /// The terminal host types what its app sent.
+    pub(crate) fn type_input(&self, bytes: &[u8]) {
+        self.notifier.notify(Cow::Owned(bytes.to_vec()));
+    }
+
+    pub(crate) fn resize_to(&self, cols: u16, rows: u16, cell_width: u16, cell_height: u16) {
+        if let Ok(size) = validate_size(TermSize {
+            cols: usize::from(cols.max(2)),
+            lines: usize::from(rows.max(2)),
+            cell_width: cell_width.max(1),
+            cell_height: cell_height.max(1),
+        }) {
+            self.resize(size);
+        }
     }
 
     fn resize(&self, next: TermSize) {
@@ -350,6 +576,123 @@ impl Drop for ProgramaTerminalSession {
     }
 }
 
+/// A ConPTY in this process, and its shell's process id.
+fn local_pty(config: &CreateConfig, size: TermSize) -> Result<(tty::Pty, u32), String> {
+    let (shell_path, args) = match config.shell.clone() {
+        Some(shell) => (shell, config.args.clone()),
+        None => default_shell(config.args.clone(), config.shell_integration),
+    };
+    let mut env = config.env.clone();
+    // Same terminal identity as the macOS app (TerminalSurface.managedTerminalProgram), so
+    // agents take their Ghostty paths: truecolor, kitty keyboard, Shift+Enter.
+    for (key, value) in [
+        ("TERM", "xterm-256color"),
+        ("COLORTERM", "truecolor"),
+        ("TERM_PROGRAM", "ghostty"),
+    ] {
+        env.entry(key.to_owned())
+            .or_insert_with(|| value.to_owned());
+    }
+    let mut options = PtyOptions::default();
+    options.shell = Some(Shell::new(shell_path, args));
+    options.working_directory = config
+        .working_directory
+        .clone()
+        .map(Into::into)
+        .or_else(home_directory);
+    options.drain_on_exit = true;
+    options.env = env;
+    let pty = tty::new(&options, size.window_size(), 0).map_err(|error| error.to_string())?;
+    // The shell process, so the frontend can tell whether something is running in it.
+    #[cfg(windows)]
+    let shell_pid = pty
+        .child_watcher()
+        .pid()
+        .map_or(0, std::num::NonZeroU32::get);
+    #[cfg(not(windows))]
+    let shell_pid = 0u32;
+    Ok((pty, shell_pid))
+}
+
+/// The session `host.id` in the terminal host: reattached when it still runs there (sized to this
+/// terminal, and with how many bytes of past output follow), else started there. The pty, the
+/// shell's process id, the replay length, and whether it was reattached.
+#[cfg(windows)]
+fn remote_pty(
+    host: &host::HostConfig,
+    config: &CreateConfig,
+    size: TermSize,
+) -> std::io::Result<(tty::Pty, u32, u64, bool)> {
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+    };
+    let (output, answer, attached) =
+        match host::request(host, serde_json::json!({ "op": "attach", "id": host.id })) {
+            Ok((output, answer)) => (output, answer, true),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let mut spawned = config.clone();
+                spawned.host = None;
+                spawned.restore_text = None;
+                // The host was started by an earlier app: new shells get this app's environment.
+                for (key, value) in std::env::vars() {
+                    if !spawned
+                        .env
+                        .keys()
+                        .any(|existing| existing.eq_ignore_ascii_case(&key))
+                    {
+                        spawned.env.insert(key, value);
+                    }
+                }
+                let (output, answer) = host::request(
+                    host,
+                    serde_json::json!({ "op": "spawn", "id": host.id, "config": spawned }),
+                )?;
+                (output, answer, false)
+            }
+            Err(error) => return Err(error),
+        };
+    let pid = answer["pid"].as_u64().unwrap_or(0) as u32;
+    let replay = answer["replay"].as_u64().unwrap_or(0);
+    let (input, _) = host::request(host, serde_json::json!({ "op": "input", "id": host.id }))?;
+    if attached {
+        HostResize(host.clone()).on_resize(size.window_size());
+    }
+    let child = unsafe {
+        OpenProcess(
+            PROCESS_SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
+            0,
+            pid,
+        )
+    };
+    if child.is_null() {
+        return Err(std::io::Error::last_os_error());
+    }
+    let pty = tty::remote(
+        output,
+        input,
+        child as _,
+        Box::new(HostResize(host.clone())),
+    )?;
+    Ok((pty, pid, replay, attached))
+}
+
+/// Window size changes of a terminal whose ConPTY the host owns.
+#[cfg(windows)]
+struct HostResize(host::HostConfig);
+
+#[cfg(windows)]
+impl OnResize for HostResize {
+    fn on_resize(&mut self, size: WindowSize) {
+        let _ = host::request(
+            &self.0,
+            serde_json::json!({
+                "op": "resize", "id": self.0.id, "cols": size.num_cols, "rows": size.num_lines,
+                "cell_width": size.cell_width, "cell_height": size.cell_height,
+            }),
+        );
+    }
+}
+
 #[derive(Serialize)]
 struct Snapshot {
     generation: u64,
@@ -368,6 +711,8 @@ struct CursorSnapshot {
     column: usize,
     row: usize,
     visible: bool,
+    /// "block", "underline" or "beam", as the program set it with DECSCUSR.
+    shape: &'static str,
 }
 
 #[derive(Serialize)]
@@ -395,6 +740,8 @@ struct CellSnapshot {
     underline: bool,
     undercurl: bool,
     strikethrough: bool,
+    /// SGR 2 (faint); drawn at half opacity like Ghostty's default `faint-opacity`.
+    dim: bool,
 }
 
 #[derive(Clone, Copy, Serialize)]
@@ -420,6 +767,7 @@ fn snapshot(session: &ProgramaTerminalSession) -> Snapshot {
         end_row: range.end.line.0 + offset as i32,
         block: range.is_block,
     });
+    let colors = *lock(&session.state.colors);
     let mut cells = Vec::with_capacity(grid.columns() * grid.screen_lines());
     for row in 0..grid.screen_lines() {
         let line = viewport_line(row, offset);
@@ -437,8 +785,8 @@ fn snapshot(session: &ProgramaTerminalSession) -> Snapshot {
                     text.extend(extra);
                 }
             }
-            let mut foreground = resolve_color(cell.fg);
-            let mut background = resolve_color(cell.bg);
+            let mut foreground = colors.resolve(cell.fg, term.colors());
+            let mut background = colors.resolve(cell.bg, term.colors());
             let inverse = cell.flags.contains(Flags::INVERSE);
             if inverse {
                 std::mem::swap(&mut foreground, &mut background);
@@ -466,20 +814,16 @@ fn snapshot(session: &ProgramaTerminalSession) -> Snapshot {
                 underline: cell.flags.intersects(Flags::ALL_UNDERLINES),
                 undercurl: cell.flags.contains(Flags::UNDERCURL),
                 strikethrough: cell.flags.contains(Flags::STRIKEOUT),
+                dim: cell.flags.contains(Flags::DIM),
             });
         }
     }
-    let cursor_point = grid.cursor.point;
     Snapshot {
         generation: session.state.generation.load(Ordering::Acquire),
         columns: grid.columns(),
         rows: grid.screen_lines(),
         display_offset: offset,
-        cursor: CursorSnapshot {
-            column: cursor_point.column.0,
-            row: cursor_point.line.0.max(0) as usize,
-            visible: cursor_is_visible(offset, term.mode()),
-        },
+        cursor: cursor_snapshot(&term),
         selection,
         cells,
         terminated: session.state.terminated.load(Ordering::Acquire),
@@ -487,15 +831,198 @@ fn snapshot(session: &ProgramaTerminalSession) -> Snapshot {
     }
 }
 
-fn default_shell() -> String {
+/// The terminal's cursor, or in copy mode the copy-mode cursor, as a block wherever it is in view.
+fn cursor_snapshot<T>(term: &Term<T>) -> CursorSnapshot {
+    let offset = term.grid().display_offset();
+    if term.mode().contains(TermMode::VI) {
+        let point = term.vi_mode_cursor.point;
+        let row = point.line.0 + offset as i32;
+        return CursorSnapshot {
+            column: point.column.0,
+            row: row.max(0) as usize,
+            visible: (0..term.screen_lines() as i32).contains(&row),
+            shape: "block",
+        };
+    }
+    let cursor_point = term.grid().cursor.point;
+    CursorSnapshot {
+        column: cursor_point.column.0,
+        row: cursor_point.line.0.max(0) as usize,
+        visible: cursor_is_visible(offset, term.mode()),
+        shape: match term.cursor_style().shape {
+            CursorShape::Underline => "underline",
+            CursorShape::Beam => "beam",
+            _ => "block",
+        },
+    }
+}
+
+/// The PowerShell integration (see the script), run after the profile with `-NoExit
+/// -EncodedCommand`, which the script execution policy does not block.
+#[cfg(windows)]
+const POWERSHELL_INTEGRATION: &str = include_str!("powershell-integration.ps1");
+
+#[cfg(windows)]
+fn powershell_integration_args() -> Vec<String> {
+    use base64::Engine;
+    let utf16: Vec<u8> = POWERSHELL_INTEGRATION
+        .encode_utf16()
+        .flat_map(u16::to_le_bytes)
+        .collect();
+    vec![
+        "-NoLogo".to_owned(),
+        "-NoExit".to_owned(),
+        "-EncodedCommand".to_owned(),
+        base64::engine::general_purpose::STANDARD.encode(utf16),
+    ]
+}
+
+/// PowerShell 7 when installed, then Windows PowerShell, then COMSPEC: the closest Windows
+/// match to a macOS login shell. Default args only apply to a shell this function picked;
+/// `integration` adds the shell integration to PowerShell.
+fn default_shell(args: Vec<String>, integration: bool) -> (String, Vec<String>) {
     #[cfg(windows)]
     {
-        std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_owned())
+        let on_path = |name: &str| {
+            std::env::var_os("PATH").and_then(|path| {
+                std::env::split_paths(&path)
+                    .map(|dir| dir.join(name))
+                    .find(|candidate| candidate.is_file())
+            })
+        };
+        let powershell = on_path("pwsh.exe").or_else(|| on_path("powershell.exe"));
+        if let Some(path) = powershell {
+            let args = match (args.is_empty(), integration) {
+                (true, true) => powershell_integration_args(),
+                (true, false) => vec!["-NoLogo".to_owned()],
+                (false, _) => args,
+            };
+            return (path.to_string_lossy().into_owned(), args);
+        }
+        (
+            std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_owned()),
+            args,
+        )
     }
     #[cfg(not(windows))]
     {
-        std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_owned())
+        let _ = integration;
+        (
+            std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_owned()),
+            args,
+        )
     }
+}
+
+/// Stable mode bits for `programa_terminal_mode`, independent of alacritty's TermMode layout.
+const MODE_APP_CURSOR: u32 = 1;
+const MODE_MOUSE_REPORTING: u32 = 1 << 1;
+const MODE_FOCUS_EVENTS: u32 = 1 << 2;
+const MODE_KITTY_DISAMBIGUATE: u32 = 1 << 3;
+const MODE_ALT_SCREEN: u32 = 1 << 4;
+
+fn mode_bits(mode: &TermMode) -> u32 {
+    [
+        (TermMode::APP_CURSOR, MODE_APP_CURSOR),
+        (TermMode::MOUSE_MODE, MODE_MOUSE_REPORTING),
+        (TermMode::FOCUS_IN_OUT, MODE_FOCUS_EVENTS),
+        (TermMode::DISAMBIGUATE_ESC_CODES, MODE_KITTY_DISAMBIGUATE),
+        (TermMode::ALT_SCREEN, MODE_ALT_SCREEN),
+    ]
+    .into_iter()
+    .filter(|(flag, _)| mode.intersects(*flag))
+    .fold(0, |bits, (_, bit)| bits | bit)
+}
+
+const MOUSE_PRESS: u32 = 0;
+const MOUSE_RELEASE: u32 = 1;
+const MOUSE_MOTION: u32 = 2;
+const MOUSE_MOD_SHIFT: u32 = 1;
+const MOUSE_MOD_ALT: u32 = 2;
+const MOUSE_MOD_CTRL: u32 = 4;
+
+/// xterm mouse report for the program's current mouse mode, or None when it is not listening.
+/// `button` is 0 left, 1 middle, 2 right, 64 wheel up, 65 wheel down; `col`/`row` are 0-based.
+fn mouse_report(
+    mode: &TermMode,
+    button: u32,
+    action: u32,
+    col: usize,
+    row: usize,
+    mods: u32,
+) -> Option<Vec<u8>> {
+    // Button 3 is "no button held", only meaningful for any-event motion (mode 1003).
+    let valid = matches!(button, 0..=2 | 64 | 65) || (button == 3 && action == MOUSE_MOTION);
+    if !valid || !mode.intersects(TermMode::MOUSE_MODE) {
+        return None;
+    }
+    let motion_mode = if button == 3 {
+        TermMode::MOUSE_MOTION
+    } else {
+        TermMode::MOUSE_DRAG | TermMode::MOUSE_MOTION
+    };
+    if action == MOUSE_MOTION && !mode.intersects(motion_mode) {
+        return None;
+    }
+    let mut code = button;
+    if action == MOUSE_MOTION {
+        code += 32;
+    }
+    if mods & MOUSE_MOD_SHIFT != 0 {
+        code += 4;
+    }
+    if mods & MOUSE_MOD_ALT != 0 {
+        code += 8;
+    }
+    if mods & MOUSE_MOD_CTRL != 0 {
+        code += 16;
+    }
+    let (x, y) = (col + 1, row + 1);
+    if mode.contains(TermMode::SGR_MOUSE) {
+        let suffix = if action == MOUSE_RELEASE { 'm' } else { 'M' };
+        return Some(format!("\x1b[<{code};{x};{y}{suffix}").into_bytes());
+    }
+    // X10/normal encoding has no release button; it reports 3 instead.
+    if action == MOUSE_RELEASE {
+        code = (code & !3) | 3;
+    }
+    let mut out = b"\x1b[M".to_vec();
+    out.push(32 + code as u8);
+    for position in [x, y] {
+        if mode.contains(TermMode::UTF8_MOUSE) {
+            let value = char::from_u32(32 + position.min(2015) as u32)?;
+            out.extend(value.to_string().as_bytes());
+        } else {
+            out.push((32 + position.min(223)) as u8);
+        }
+    }
+    Some(out)
+}
+
+/// What a wheel step does: a mouse report when the program listens, arrow keys in an
+/// alternate-screen program that allows alternate scroll, otherwise local scrollback.
+enum Wheel {
+    Report(Vec<u8>),
+    Arrows(Vec<u8>),
+    Scrollback(i32),
+}
+
+fn wheel_action(mode: &TermMode, lines: i32, col: usize, row: usize, mods: u32) -> Wheel {
+    let steps = lines.unsigned_abs() as usize;
+    let button = if lines > 0 { 64 } else { 65 };
+    if let Some(report) = mouse_report(mode, button, MOUSE_PRESS, col, row, mods) {
+        return Wheel::Report(report.repeat(steps));
+    }
+    if mode.contains(TermMode::ALT_SCREEN | TermMode::ALTERNATE_SCROLL) {
+        let arrow = match (lines > 0, mode.contains(TermMode::APP_CURSOR)) {
+            (true, true) => b"\x1bOA",
+            (true, false) => b"\x1b[A",
+            (false, true) => b"\x1bOB",
+            (false, false) => b"\x1b[B",
+        };
+        return Wheel::Arrows(arrow.repeat(steps));
+    }
+    Wheel::Scrollback(lines)
 }
 
 fn home_directory() -> Option<std::path::PathBuf> {
@@ -589,60 +1116,6 @@ fn xterm(index: u8) -> Rgba {
     Rgba { r, g, b, a: 255 }
 }
 
-fn resolve_color(color: Color) -> Rgba {
-    match color {
-        Color::Spec(rgb) => Rgba {
-            r: rgb.r,
-            g: rgb.g,
-            b: rgb.b,
-            a: 255,
-        },
-        Color::Indexed(index) => xterm(index),
-        Color::Named(name) => match name {
-            NamedColor::Foreground => Rgba {
-                r: 220,
-                g: 220,
-                b: 220,
-                a: 255,
-            },
-            NamedColor::Background => Rgba {
-                r: 20,
-                g: 20,
-                b: 24,
-                a: 255,
-            },
-            NamedColor::Cursor | NamedColor::BrightForeground => Rgba {
-                r: 255,
-                g: 255,
-                b: 255,
-                a: 255,
-            },
-            NamedColor::DimForeground => Rgba {
-                r: 150,
-                g: 150,
-                b: 150,
-                a: 255,
-            },
-            NamedColor::Black | NamedColor::DimBlack => xterm(0),
-            NamedColor::Red | NamedColor::DimRed => xterm(1),
-            NamedColor::Green | NamedColor::DimGreen => xterm(2),
-            NamedColor::Yellow | NamedColor::DimYellow => xterm(3),
-            NamedColor::Blue | NamedColor::DimBlue => xterm(4),
-            NamedColor::Magenta | NamedColor::DimMagenta => xterm(5),
-            NamedColor::Cyan | NamedColor::DimCyan => xterm(6),
-            NamedColor::White | NamedColor::DimWhite => xterm(7),
-            NamedColor::BrightBlack => xterm(8),
-            NamedColor::BrightRed => xterm(9),
-            NamedColor::BrightGreen => xterm(10),
-            NamedColor::BrightYellow => xterm(11),
-            NamedColor::BrightBlue => xterm(12),
-            NamedColor::BrightMagenta => xterm(13),
-            NamedColor::BrightCyan => xterm(14),
-            NamedColor::BrightWhite => xterm(15),
-        },
-    }
-}
-
 unsafe fn bytes<'a>(data: *const u8, len: usize) -> Result<&'a [u8], i32> {
     if len == 0 {
         return Ok(&[]);
@@ -716,6 +1189,28 @@ pub unsafe extern "C" fn programa_terminal_create(
             ptr::null_mut()
         }
     }
+}
+
+/// Ends the shell when the terminal host runs it: the tab was closed, not the app. Freeing a
+/// session only detaches from the host, so the shell keeps running across a quit.
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_kill(value: *mut ProgramaTerminalSession) -> i32 {
+    ffi_status(|| {
+        let value = session(value)?;
+        if let Some(host) = &value.host {
+            let _ = host::request(host, serde_json::json!({ "op": "kill", "id": host.id }));
+        }
+        Ok(())
+    })
+}
+
+/// Whether the terminal host runs this session's shell (so it survives the app).
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_is_hosted(value: *mut ProgramaTerminalSession) -> bool {
+    catch_unwind(AssertUnwindSafe(|| {
+        session(value).is_ok_and(|value| value.host.is_some())
+    }))
+    .unwrap_or(false)
 }
 
 #[no_mangle]
@@ -836,16 +1331,407 @@ pub unsafe extern "C" fn programa_terminal_program_status_json(
     })
 }
 
+/// # Safety
+///
+/// `value` is null or a live handle from `programa_terminal_create`.
 #[no_mangle]
-pub unsafe extern "C" fn programa_terminal_application_cursor(
-    value: *mut ProgramaTerminalSession,
-) -> bool {
+pub unsafe extern "C" fn programa_terminal_mode(value: *mut ProgramaTerminalSession) -> u32 {
     catch_unwind(AssertUnwindSafe(|| {
         session(value)
-            .map(|value| value.term.lock().mode().contains(TermMode::APP_CURSOR))
-            .unwrap_or(false)
+            .map(|value| mode_bits(value.term.lock().mode()))
+            .unwrap_or(0)
+    }))
+    .unwrap_or(0)
+}
+
+/// # Safety
+///
+/// `value` is null or a live handle from `programa_terminal_create`.
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_mouse(
+    value: *mut ProgramaTerminalSession,
+    button: u32,
+    action: u32,
+    col: usize,
+    row: usize,
+    mods: u32,
+) -> bool {
+    catch_unwind(AssertUnwindSafe(|| {
+        let Ok(value) = session(value) else {
+            return false;
+        };
+        let mode = *value.term.lock().mode();
+        match mouse_report(&mode, button, action, col, row, mods) {
+            Some(report) => {
+                value.notifier.notify(Cow::Owned(report));
+                true
+            }
+            None => false,
+        }
     }))
     .unwrap_or(false)
+}
+
+/// # Safety
+///
+/// `value` is null or a live handle from `programa_terminal_create`.
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_focus(
+    value: *mut ProgramaTerminalSession,
+    focused: bool,
+) -> i32 {
+    ffi_status(|| {
+        let value = session(value)?;
+        if value.term.lock().mode().contains(TermMode::FOCUS_IN_OUT) {
+            let report: &[u8] = if focused { b"\x1b[I" } else { b"\x1b[O" };
+            value.notifier.notify(Cow::Borrowed(report));
+        }
+        Ok(())
+    })
+}
+
+/// # Safety
+///
+/// `value` is null or a live handle from `programa_terminal_create`.
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_wheel(
+    value: *mut ProgramaTerminalSession,
+    lines: i32,
+    col: usize,
+    row: usize,
+    mods: u32,
+) -> i32 {
+    ffi_status(|| {
+        let value = session(value)?;
+        if lines == 0 {
+            return Ok(());
+        }
+        let mut term = value.term.lock();
+        let action = wheel_action(term.mode(), lines, col, row, mods);
+        match action {
+            Wheel::Report(bytes) | Wheel::Arrows(bytes) => {
+                drop(term);
+                value.notifier.notify(Cow::Owned(bytes));
+            }
+            Wheel::Scrollback(lines) => {
+                term.scroll_display(Scroll::Delta(lines));
+                drop(term);
+                value.state.changed();
+            }
+        }
+        Ok(())
+    })
+}
+
+/// # Safety
+///
+/// `value` is null or a live handle from `programa_terminal_create`; `out` is null or writable.
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_take_clipboard(
+    value: *mut ProgramaTerminalSession,
+    out: *mut ProgramaTerminalBuffer,
+) -> i32 {
+    ffi_status(|| {
+        clear_buffer(out)?;
+        let text = lock(&session(value)?.state.clipboard).take();
+        match text {
+            Some(text) => set_buffer(out, text.into_bytes()),
+            None => Ok(()),
+        }
+    })
+}
+
+/// The last `max_lines` lines of output, scrollback included, as plain text: soft-wrapped lines
+/// joined and trailing blanks trimmed. Session restore saves it.
+fn output_text<T>(term: &Term<T>, max_lines: usize) -> String {
+    // Count back from the last line with text, not from the blank rows under the prompt.
+    let mut bottom = term.bottommost_line();
+    while bottom > term.topmost_line() && term.grid()[bottom].is_clear() {
+        bottom -= 1;
+    }
+    let wanted = Line(bottom.0 - (max_lines.max(1) as i32 - 1));
+    let top = wanted.max(term.topmost_line());
+    term.bounds_to_string(
+        Point::new(top, Column(0)),
+        Point::new(bottom, term.last_column()),
+    )
+    .trim_end()
+    .to_owned()
+}
+
+/// The most text a restore replays, so a damaged session file cannot stall startup.
+const MAX_RESTORE_BYTES: usize = 1 << 20;
+
+/// Replays saved output as scrollback: the lines are written, then the screen is erased, which
+/// on the main screen moves them into history, and the cursor goes home for the new shell.
+fn restore_output<T: EventListener>(term: &mut Term<T>, text: &str) {
+    let start = text.len().saturating_sub(MAX_RESTORE_BYTES);
+    let start = (start..=text.len())
+        .find(|&index| text.is_char_boundary(index))
+        .unwrap_or(text.len());
+    let mut bytes = Vec::with_capacity(text.len() - start + 16);
+    for line in text[start..].lines() {
+        bytes.extend(
+            line.chars()
+                .filter(|c| !c.is_control())
+                .collect::<String>()
+                .as_bytes(),
+        );
+        bytes.extend_from_slice(b"\r\n");
+    }
+    bytes.extend_from_slice(b"\x1b[2J\x1b[H");
+    alacritty_terminal::vte::ansi::Processor::<alacritty_terminal::vte::ansi::StdSyncHandler>::new(
+    )
+    .advance(term, &bytes);
+}
+
+/// # Safety
+///
+/// `value` is null or a live handle from `programa_terminal_create`; `out` is null or writable.
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_text(
+    value: *mut ProgramaTerminalSession,
+    max_lines: u32,
+    out: *mut ProgramaTerminalBuffer,
+) -> i32 {
+    ffi_status(|| {
+        clear_buffer(out)?;
+        let text = output_text(&*session(value)?.term.lock(), max_lines as usize);
+        set_buffer(out, text.into_bytes())
+    })
+}
+
+/// Escapes `text` so the regex search matches it literally.
+fn literal_pattern(text: &str) -> String {
+    let mut pattern = String::with_capacity(text.len() * 2);
+    for character in text.chars() {
+        if "\\.+*?()|[]{}^$#&-~".contains(character) {
+            pattern.push('\\');
+        }
+        pattern.push(character);
+    }
+    pattern
+}
+
+/// Selects the next match of `text` (literal, smart case: case-insensitive unless it has an
+/// uppercase letter) after the current selection (`forward`) or before it, starting from the
+/// bottom of the screen (backward) or the top of scrollback (forward) when nothing is selected.
+fn find<T: EventListener>(term: &mut Term<T>, text: &str, forward: bool) -> bool {
+    use alacritty_terminal::index::{Boundary, Direction};
+    use alacritty_terminal::term::search::RegexSearch;
+    let Ok(mut regex) = RegexSearch::new(&literal_pattern(text)) else {
+        return false;
+    };
+    let range = term
+        .selection
+        .as_ref()
+        .and_then(|selection| selection.to_range(term));
+    let (origin, direction, side) = match (range, forward) {
+        (Some(range), true) => (
+            range.end.add(term, Boundary::None, 1),
+            Direction::Right,
+            Side::Left,
+        ),
+        (Some(range), false) => (
+            range.start.sub(term, Boundary::None, 1),
+            Direction::Left,
+            Side::Right,
+        ),
+        (None, true) => (
+            Point::new(term.topmost_line(), Column(0)),
+            Direction::Right,
+            Side::Left,
+        ),
+        (None, false) => (
+            Point::new(term.bottommost_line(), term.last_column()),
+            Direction::Left,
+            Side::Right,
+        ),
+    };
+    let Some(found) = term.search_next(&mut regex, origin, direction, side, None) else {
+        return false;
+    };
+    let mut selection = Selection::new(SelectionType::Simple, *found.start(), Side::Left);
+    selection.update(*found.end(), Side::Right);
+    // Scroll first: in copy mode a scroll stretches the selection to the copy-mode cursor.
+    term.selection = None;
+    term.scroll_to_point(*found.start());
+    term.selection = Some(selection);
+    true
+}
+
+/// # Safety
+///
+/// `value` is null or a live handle from `programa_terminal_create`; `text` points to `len`
+/// readable UTF-8 bytes.
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_find(
+    value: *mut ProgramaTerminalSession,
+    text: *const u8,
+    len: usize,
+    forward: bool,
+) -> bool {
+    catch_unwind(AssertUnwindSafe(|| {
+        let (Ok(value), Ok(text)) = (session(value), bytes(text, len)) else {
+            return false;
+        };
+        let Ok(text) = std::str::from_utf8(text) else {
+            return false;
+        };
+        if text.is_empty() {
+            return false;
+        }
+        let found = find(&mut value.term.lock(), text, forward);
+        value.state.changed();
+        found
+    }))
+    .unwrap_or(false)
+}
+
+/// # Safety
+///
+/// `value` is null or a live handle from `programa_terminal_create`.
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_shell_pid(value: *mut ProgramaTerminalSession) -> u32 {
+    catch_unwind(AssertUnwindSafe(|| {
+        session(value).map(|v| v.shell_pid).unwrap_or(0)
+    }))
+    .unwrap_or(0)
+}
+
+/// # Safety
+///
+/// `value` is null or a live handle from `programa_terminal_create`.
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_cwd_generation(
+    value: *mut ProgramaTerminalSession,
+) -> u64 {
+    catch_unwind(AssertUnwindSafe(|| {
+        session(value)
+            .map(|v| v.state.cwd_generation.load(Ordering::Acquire))
+            .unwrap_or(0)
+    }))
+    .unwrap_or(0)
+}
+
+/// # Safety
+///
+/// `value` is null or a live handle from `programa_terminal_create`; `out` is null or writable.
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_cwd(
+    value: *mut ProgramaTerminalSession,
+    out: *mut ProgramaTerminalBuffer,
+) -> i32 {
+    ffi_status(|| {
+        clear_buffer(out)?;
+        match lock(&session(value)?.state.cwd).clone() {
+            Some(cwd) => set_buffer(out, cwd.into_bytes()),
+            None => Ok(()),
+        }
+    })
+}
+
+/// The OSC 8 hyperlink of the visible cell at (`column`, `row`), if it has one.
+fn link_at<T>(term: &Term<T>, column: usize, row: usize) -> Option<String> {
+    let grid = term.grid();
+    if row >= grid.screen_lines() || column >= grid.columns() {
+        return None;
+    }
+    let line = Line(row as i32 - grid.display_offset() as i32);
+    grid[line][Column(column)]
+        .hyperlink()
+        .map(|link| link.uri().to_owned())
+}
+
+/// # Safety
+///
+/// `value` is null or a live handle from `programa_terminal_create`; `out` is null or writable.
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_link_at(
+    value: *mut ProgramaTerminalSession,
+    column: usize,
+    row: usize,
+    out: *mut ProgramaTerminalBuffer,
+) -> i32 {
+    ffi_status(|| {
+        clear_buffer(out)?;
+        let link = link_at(&session(value)?.term.lock(), column, row);
+        match link {
+            Some(uri) => set_buffer(out, uri.into_bytes()),
+            None => Ok(()),
+        }
+    })
+}
+
+/// # Safety
+///
+/// `value` is null or a live handle from `programa_terminal_create`.
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_selection_clear(
+    value: *mut ProgramaTerminalSession,
+) -> i32 {
+    ffi_status(|| {
+        let value = session(value)?;
+        value.term.lock().selection = None;
+        value.state.changed();
+        Ok(())
+    })
+}
+
+/// # Safety
+///
+/// `value` is null or a live handle from `programa_terminal_create`.
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_clear_scrollback(
+    value: *mut ProgramaTerminalSession,
+) -> i32 {
+    ffi_status(|| {
+        let value = session(value)?;
+        value.term.lock().grid_mut().clear_history();
+        value.state.changed();
+        Ok(())
+    })
+}
+
+/// # Safety
+///
+/// `value` is null or a live handle from `programa_terminal_create`; `out` is null or writable.
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_take_notifications(
+    value: *mut ProgramaTerminalSession,
+    out: *mut ProgramaTerminalBuffer,
+) -> i32 {
+    ffi_status(|| {
+        clear_buffer(out)?;
+        let pending = std::mem::take(&mut *lock(&session(value)?.state.notifications));
+        if pending.is_empty() {
+            return Ok(());
+        }
+        set_buffer(
+            out,
+            serde_json::to_vec(&pending).map_err(|_| STATUS_FAILED)?,
+        )
+    })
+}
+
+/// # Safety
+///
+/// `value` is null or a live handle from `programa_terminal_create`; `colors` points to
+/// `len` readable bytes of a JSON colors object (see the create config).
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_set_colors(
+    value: *mut ProgramaTerminalSession,
+    colors: *const u8,
+    len: usize,
+) -> i32 {
+    ffi_status(|| {
+        let value = session(value)?;
+        let config: ColorsConfig =
+            serde_json::from_slice(bytes(colors, len)?).map_err(|_| STATUS_INVALID_ARGUMENT)?;
+        *lock(&value.state.colors) = config.resolve();
+        value.state.changed();
+        Ok(())
+    })
 }
 
 #[no_mangle]
@@ -917,6 +1803,141 @@ pub unsafe extern "C" fn programa_terminal_selection_update(
         value.state.changed();
         Ok(())
     })
+}
+
+/// Keyboard copy mode (macOS `TerminalCopyMode.swift`), on alacritty's vi mode: a cursor of its own
+/// that the snapshot reports, and a selection that follows it. `command`: 0 leave, 1 enter, 2 start
+/// a selection at the cursor, 3 clear it, 4 select `count` whole lines from the cursor's, 5 put the
+/// cursor on the selection's start and keep it (a find's match), 10-16 move the cursor (up, down,
+/// left, right, line start, line end, first text of the line), 20-25 scroll and keep the cursor on
+/// its screen row (page up, page down, half page up, half page down), or go to the top of
+/// scrollback or back to the prompt, 26-27 go to the start of the shell prompt above or below
+/// the cursor's line (OSC 133;A). Moves, scrolls and prompt jumps repeat `count` times.
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_copy_mode(
+    value: *mut ProgramaTerminalSession,
+    command: u32,
+    count: u32,
+) -> i32 {
+    ffi_status(|| {
+        let value = session(value)?;
+        copy_mode(
+            &mut value.term.lock(),
+            command,
+            count.clamp(1, 9_999) as i32,
+        )?;
+        value.state.changed();
+        Ok(())
+    })
+}
+
+fn copy_mode<T: EventListener>(term: &mut Term<T>, command: u32, count: i32) -> Result<(), i32> {
+    use alacritty_terminal::vi_mode::ViMotion;
+    let active = term.mode().contains(TermMode::VI);
+    if command > 1 && !active {
+        return Err(STATUS_INVALID_ARGUMENT);
+    }
+    let clamp = |term: &Term<T>, line: i32| {
+        Line(line.clamp(term.topmost_line().0, term.bottommost_line().0))
+    };
+    match command {
+        0 | 1 => {
+            term.selection = None;
+            if active != (command == 1) {
+                term.toggle_vi_mode();
+            }
+        }
+        2 => {
+            let mut selection =
+                Selection::new(SelectionType::Simple, term.vi_mode_cursor.point, Side::Left);
+            selection.include_all();
+            term.selection = Some(selection);
+        }
+        3 => term.selection = None,
+        4 => {
+            let line = term.vi_mode_cursor.point.line;
+            let mut selection = Selection::new(
+                SelectionType::Lines,
+                Point::new(line, Column(0)),
+                Side::Left,
+            );
+            selection.update(
+                Point::new(clamp(term, line.0 + count - 1), Column(0)),
+                Side::Right,
+            );
+            term.selection = Some(selection);
+        }
+        5 => {
+            // Out of the way while the cursor moves, or the move would stretch it to the cursor.
+            let selection = term.selection.take();
+            if let Some(range) = selection
+                .as_ref()
+                .and_then(|selection| selection.to_range(term))
+            {
+                term.vi_goto_point(range.start);
+            }
+            term.selection = selection;
+        }
+        10..=16 => {
+            let motion = [
+                ViMotion::Up,
+                ViMotion::Down,
+                ViMotion::Left,
+                ViMotion::Right,
+                ViMotion::First,
+                ViMotion::Last,
+                ViMotion::FirstOccupied,
+            ][(command - 10) as usize];
+            for _ in 0..count {
+                term.vi_motion(motion);
+            }
+        }
+        20..=23 => {
+            let page = term.screen_lines() as i32;
+            let lines = [page, -page, page / 2, -(page / 2)][(command - 20) as usize] * count;
+            let point = term.vi_mode_cursor.point;
+            let before = term.grid().display_offset() as i32;
+            term.scroll_display(Scroll::Delta(lines));
+            let moved = term.grid().display_offset() as i32 - before;
+            // The cursor keeps its screen row; with the view already at that end, it goes the whole way.
+            let target = clamp(term, point.line.0 - if moved == 0 { lines } else { moved });
+            term.vi_goto_point(Point::new(target, point.column));
+        }
+        24 => {
+            term.scroll_display(Scroll::Top);
+            let top = term.topmost_line();
+            term.vi_goto_point(Point::new(top, Column(0)));
+        }
+        25 => {
+            term.scroll_display(Scroll::Bottom);
+            let line = term.grid().cursor.point.line;
+            term.vi_goto_point(Point::new(line, Column(0)));
+        }
+        26 | 27 => {
+            // The count-th prompt that way, or the furthest there is (Ghostty's jump_to_prompt).
+            let from = term.vi_mode_cursor.point.line.0;
+            let grid = term.grid();
+            let prompt = |line: &i32| grid[Line(*line)].prompt;
+            let count = count as usize;
+            let target = if command == 26 {
+                (term.topmost_line().0..from)
+                    .rev()
+                    .filter(prompt)
+                    .take(count)
+                    .last()
+            } else {
+                (from + 1..=term.bottommost_line().0)
+                    .filter(prompt)
+                    .take(count)
+                    .last()
+            };
+            if let Some(line) = target {
+                term.vi_goto_point(Point::new(Line(line), Column(0)));
+            }
+        }
+        _ => return Err(STATUS_INVALID_ARGUMENT),
+    }
+    Ok(())
 }
 
 #[no_mangle]
@@ -1027,27 +2048,420 @@ mod tests {
     use alacritty_terminal::vte::ansi::{Processor, StdSyncHandler};
     use std::time::{Duration, Instant};
 
-    fn term() -> Term<EventProxy> {
+    fn term_with_state() -> (Term<EventProxy>, Arc<SharedState>) {
         let state = Arc::new(SharedState {
             generation: AtomicU64::new(0),
             terminated: AtomicBool::new(false),
             error: Mutex::new(None),
             title: Mutex::new(None),
+            clipboard: Mutex::new(None),
+            notifications: Mutex::new(Vec::new()),
+            cwd: Mutex::new(None),
+            cwd_generation: AtomicU64::new(0),
+            colors: Mutex::new(Colors::default()),
             program_status: Mutex::new(ProgramStatus::default()),
             program_status_generation: AtomicU64::new(0),
             signal: Signal::new().unwrap(),
             sender: Mutex::new(None),
+            tap: Mutex::new(None),
+            quiet: false,
+            replay: AtomicU64::new(0),
+            muted: AtomicBool::new(false),
         });
-        Term::new(
-            TermConfig::default(),
-            &TermSize {
-                cols: 8,
-                lines: 3,
-                cell_width: 8,
-                cell_height: 16,
-            },
-            EventProxy(state),
+        let config = TermConfig {
+            kitty_keyboard: true,
+            ..TermConfig::default()
+        };
+        let size = TermSize {
+            cols: 8,
+            lines: 3,
+            cell_width: 8,
+            cell_height: 16,
+        };
+        (Term::new(config, &size, EventProxy(state.clone())), state)
+    }
+
+    fn term() -> Term<EventProxy> {
+        term_with_state().0
+    }
+
+    fn feed(term: &mut Term<EventProxy>, bytes: &[u8]) {
+        Processor::<StdSyncHandler>::new().advance(term, bytes);
+    }
+
+    #[test]
+    fn mode_bits_track_what_programs_enable() {
+        let mut term = term();
+        assert_eq!(mode_bits(term.mode()), 0);
+        // Kitty flags are per screen, so push after entering the alternate screen.
+        feed(
+            &mut term,
+            b"\x1b[?1h\x1b[?1000h\x1b[?1004h\x1b[?1049h\x1b[>1u",
+        );
+        assert_eq!(
+            mode_bits(term.mode()),
+            MODE_APP_CURSOR
+                | MODE_MOUSE_REPORTING
+                | MODE_FOCUS_EVENTS
+                | MODE_KITTY_DISAMBIGUATE
+                | MODE_ALT_SCREEN
+        );
+        feed(&mut term, b"\x1b[<u\x1b[?1000l");
+        assert_eq!(
+            mode_bits(term.mode()) & (MODE_KITTY_DISAMBIGUATE | MODE_MOUSE_REPORTING),
+            0
+        );
+    }
+
+    #[test]
+    fn osc8_links_are_found_by_cell() {
+        let (mut term, _) = term_with_state();
+        feed(
+            &mut term,
+            b"see \x1b]8;;https://example.com/a\x1b\\here\x1b]8;;\x1b\\ now",
+        );
+        assert_eq!(
+            link_at(&term, 4, 0).as_deref(),
+            Some("https://example.com/a")
+        );
+        assert_eq!(
+            link_at(&term, 7, 0).as_deref(),
+            Some("https://example.com/a")
+        );
+        assert_eq!(link_at(&term, 0, 0), None);
+        assert_eq!(link_at(&term, 9, 0), None);
+        assert_eq!(link_at(&term, 500, 0), None);
+    }
+
+    #[test]
+    fn copy_mode_moves_its_own_cursor_and_selects_from_it() {
+        let (mut term, _) = term_with_state();
+        // Five lines on an 8x3 screen, two in scrollback; the cursor ends after "e5".
+        feed(&mut term, b"a1\r\nb2 xy\r\nc3\r\nd4\r\ne5");
+        assert_eq!(copy_mode(&mut term, 10, 1), Err(STATUS_INVALID_ARGUMENT));
+        copy_mode(&mut term, 1, 1).unwrap();
+        assert_eq!(
+            (cursor_snapshot(&term).row, cursor_snapshot(&term).column),
+            (2, 2)
+        );
+
+        // Yank two lines from the cursor's: "c3" and "d4".
+        copy_mode(&mut term, 10, 2).unwrap();
+        copy_mode(&mut term, 4, 2).unwrap();
+        assert_eq!(term.selection_to_string().unwrap(), "c3\nd4\n");
+
+        // A visual selection follows the cursor; up past the screen scrolls into scrollback.
+        copy_mode(&mut term, 3, 1).unwrap();
+        copy_mode(&mut term, 14, 1).unwrap();
+        copy_mode(&mut term, 2, 1).unwrap();
+        copy_mode(&mut term, 10, 1).unwrap();
+        copy_mode(&mut term, 15, 1).unwrap();
+        assert_eq!(term.selection_to_string().unwrap(), "y\nc");
+        copy_mode(&mut term, 14, 1).unwrap();
+        assert_eq!(term.selection_to_string().unwrap(), "b2 xy\nc");
+        assert_eq!(term.grid().display_offset(), 1);
+
+        // The top of scrollback, then back to the prompt line.
+        copy_mode(&mut term, 24, 1).unwrap();
+        assert_eq!(
+            (
+                term.vi_mode_cursor.point.line.0,
+                term.grid().display_offset()
+            ),
+            (-2, 2)
+        );
+        copy_mode(&mut term, 25, 1).unwrap();
+        assert_eq!(
+            (cursor_snapshot(&term).row, term.grid().display_offset()),
+            (2, 0)
+        );
+
+        // A page down from the top keeps the cursor's screen row; leaving clears the selection.
+        copy_mode(&mut term, 24, 1).unwrap();
+        copy_mode(&mut term, 21, 1).unwrap();
+        assert_eq!(
+            (cursor_snapshot(&term).row, term.vi_mode_cursor.point.line.0),
+            (0, 0)
+        );
+        // After a find, the cursor goes to the match, which stays selected.
+        assert!(find(&mut term, "xy", false));
+        copy_mode(&mut term, 5, 1).unwrap();
+        assert_eq!(
+            (
+                term.vi_mode_cursor.point.line.0,
+                term.vi_mode_cursor.point.column.0
+            ),
+            (-1, 3)
+        );
+        assert_eq!(term.selection_to_string().unwrap(), "xy");
+        copy_mode(&mut term, 0, 1).unwrap();
+        assert!(term.selection.is_none() && !term.mode().contains(TermMode::VI));
+        // The view stays where copy mode left it, so the shell's cursor is out of sight.
+        assert_eq!(
+            (cursor_snapshot(&term).visible, term.grid().display_offset()),
+            (false, 1)
+        );
+    }
+
+    /// As the event loop does: parse up to each prompt mark the scanner finds and mark its row.
+    fn feed_prompts(term: &mut Term<EventProxy>, state: &Arc<SharedState>, bytes: &[u8]) {
+        let mut prompts = Vec::new();
+        EventProxy(state.clone()).pty_output(bytes, &mut prompts);
+        let mut parser = Processor::<StdSyncHandler>::new();
+        let mut parsed = 0;
+        for end in prompts {
+            parser.advance(term, &bytes[parsed..end]);
+            term.mark_prompt();
+            parsed = end;
+        }
+        parser.advance(term, &bytes[parsed..]);
+    }
+
+    /// Where a prompt jump (26 up, 27 down) puts the copy-mode cursor, and that line's text.
+    fn jump(term: &mut Term<EventProxy>, command: u32, count: i32) -> (i32, String) {
+        copy_mode(term, command, count).unwrap();
+        let line = term.vi_mode_cursor.point.line.0;
+        copy_mode(term, 4, 1).unwrap();
+        let text = term.selection_to_string().unwrap_or_default();
+        copy_mode(term, 3, 1).unwrap();
+        (line, text.trim_end().to_owned())
+    }
+
+    fn resize(term: &mut Term<EventProxy>, cols: usize) {
+        term.resize(TermSize {
+            cols,
+            lines: 3,
+            cell_width: 8,
+            cell_height: 16,
+        });
+    }
+
+    #[test]
+    fn copy_mode_jumps_between_prompts() {
+        let (mut term, state) = term_with_state();
+        // Three prompts (BEL and ST marks) on an 8x3 screen; two scroll into scrollback.
+        feed_prompts(
+            &mut term,
+            &state,
+            b"\x1b]133;A\x07$ a\r\nout\r\n\x1b]133;A\x1b\\$ b\r\nout\r\nout\r\n\x1b]133;A\x07$ c",
+        );
+        copy_mode(&mut term, 1, 1).unwrap();
+        assert_eq!(jump(&mut term, 26, 1), (-1, "$ b".into()));
+        assert_eq!(term.grid().display_offset(), 1);
+        // Fewer prompts than the count: the furthest. None that way: the cursor stays.
+        assert_eq!(jump(&mut term, 26, 5), (-3, "$ a".into()));
+        assert_eq!(jump(&mut term, 26, 1), (-3, "$ a".into()));
+        assert_eq!(jump(&mut term, 27, 2), (2, "$ c".into()));
+        assert_eq!(jump(&mut term, 27, 1), (2, "$ c".into()));
+        copy_mode(&mut term, 0, 1).unwrap();
+
+        // Reflowed to two columns, each prompt starts on the first of its rows.
+        resize(&mut term, 2);
+        copy_mode(&mut term, 1, 1).unwrap();
+        assert_eq!(jump(&mut term, 26, 1), (1, "$ c".into()));
+        assert_eq!(jump(&mut term, 26, 1), (-5, "$ b".into()));
+        assert_eq!(jump(&mut term, 26, 1), (-9, "$ a".into()));
+        copy_mode(&mut term, 0, 1).unwrap();
+        // And back to eight.
+        resize(&mut term, 8);
+        copy_mode(&mut term, 1, 1).unwrap();
+        assert_eq!(jump(&mut term, 26, 9), (-3, "$ a".into()));
+        assert_eq!(jump(&mut term, 27, 1), (-1, "$ b".into()));
+        copy_mode(&mut term, 0, 1).unwrap();
+
+        // Clearing scrollback drops its prompts; the rows it frees come back unmarked.
+        term.grid_mut().clear_history();
+        feed_prompts(&mut term, &state, b"\r\nx\r\ny\r\nz");
+        copy_mode(&mut term, 1, 1).unwrap();
+        assert_eq!(jump(&mut term, 26, 1), (-1, "$ c".into()));
+        assert_eq!(jump(&mut term, 26, 1), (-1, "$ c".into()));
+        copy_mode(&mut term, 0, 1).unwrap();
+
+        // The alternate screen has no prompts.
+        feed_prompts(
+            &mut term,
+            &state,
+            b"\x1b[?1049h\x1b]133;A\x07$ alt\r\nx\r\ny",
+        );
+        copy_mode(&mut term, 1, 1).unwrap();
+        assert_eq!(jump(&mut term, 26, 1), (2, "y".into()));
+        copy_mode(&mut term, 0, 1).unwrap();
+        feed_prompts(&mut term, &state, b"\x1b[?1049l");
+        copy_mode(&mut term, 1, 1).unwrap();
+        assert_eq!(jump(&mut term, 26, 1), (-1, "$ c".into()));
+    }
+
+    #[test]
+    fn prompt_jumps_skip_prompts_scrollback_dropped() {
+        let (mut term, state) = term_with_state();
+        term.set_options(TermConfig {
+            scrolling_history: 2,
+            ..TermConfig::default()
+        });
+        // Seven rows on a three-row screen with two of scrollback: "$ 1" and its output go.
+        feed_prompts(
+            &mut term,
+            &state,
+            b"\x1b]133;A\x07$ 1\r\no\r\n\x1b]133;A\x07$ 2\r\no\r\n\x1b]133;A\x07$ 3\r\no\r\n\x1b]133;A\x07$ 4",
+        );
+        copy_mode(&mut term, 1, 1).unwrap();
+        assert_eq!(jump(&mut term, 26, 1), (0, "$ 3".into()));
+        assert_eq!(jump(&mut term, 26, 9), (-2, "$ 2".into()));
+    }
+
+    #[test]
+    fn find_walks_matches_from_the_bottom_and_back() {
+        let (mut term, _) = term_with_state();
+        // Three lines on an 8x3 screen: "foo a", "x.y foo", "Foo b".
+        feed(&mut term, b"foo a\r\nx.y foo\r\nFoo b");
+        let selected = |term: &Term<EventProxy>| term.selection_to_string().unwrap_or_default();
+        let start_line = |term: &Term<EventProxy>| {
+            term.selection
+                .as_ref()
+                .unwrap()
+                .to_range(term)
+                .unwrap()
+                .start
+                .line
+                .0
+        };
+
+        // Backward from the bottom: the newest match first; lowercase is case-insensitive.
+        assert!(find(&mut term, "foo", false));
+        assert_eq!((selected(&term), start_line(&term)), ("Foo".into(), 2));
+        assert!(find(&mut term, "foo", false));
+        assert_eq!(start_line(&term), 1);
+        assert!(find(&mut term, "foo", true));
+        assert_eq!(start_line(&term), 2);
+
+        // An uppercase letter makes it case-sensitive, and regex characters are literal.
+        term.selection = None;
+        assert!(find(&mut term, "Foo", false));
+        assert_eq!(start_line(&term), 2);
+        assert!(find(&mut term, "x.y", false));
+        assert_eq!(selected(&term), "x.y");
+        assert!(!find(&mut term, "missing", false));
+    }
+
+    #[test]
+    fn saved_output_restores_as_scrollback_above_an_empty_screen() {
+        let (mut term, _) = term_with_state();
+        feed(&mut term, b"one\r\ntwo\r\nthree\r\nfour\r\n");
+        let saved = output_text(&term, 1000);
+        assert_eq!(saved, "one\ntwo\nthree\nfour");
+        // The blank row under the cursor does not count.
+        assert_eq!(output_text(&term, 2), "three\nfour");
+
+        let (mut restored, _) = term_with_state();
+        // Escape bytes in a damaged session file are dropped, not interpreted.
+        restore_output(&mut restored, &format!("{saved}\n\x1b[31mred"));
+        assert_eq!(
+            output_text(&restored, 1000),
+            "one\ntwo\nthree\nfour\n[31mred"
+        );
+        // The screen is empty and the cursor home, so the new shell starts at the top.
+        let screen = restored.bounds_to_string(
+            Point::new(Line(0), Column(0)),
+            Point::new(Line(2), restored.last_column()),
+        );
+        assert_eq!(screen.trim(), "");
+        assert_eq!(restored.grid().cursor.point, Point::new(Line(0), Column(0)));
+    }
+
+    #[test]
+    fn osc52_store_reaches_the_frontend_clipboard() {
+        let (mut term, state) = term_with_state();
+        feed(&mut term, b"\x1b]52;c;aGVsbG8=\x07");
+        assert_eq!(lock(&state.clipboard).as_deref(), Some("hello"));
+    }
+
+    #[test]
+    fn colors_default_to_ghostty_and_take_theme_overrides() {
+        let rgb = |color: Rgba| (color.r, color.g, color.b);
+        let defaults = Colors::default();
+        assert_eq!(rgb(defaults.query(257)), (0x28, 0x2C, 0x34));
+        assert_eq!(rgb(defaults.query(256)), (0xFF, 0xFF, 0xFF));
+        assert_eq!(rgb(defaults.query(1)), (0xCC, 0x66, 0x66));
+
+        let theme: ColorsConfig = serde_json::from_str(
+            r#"{"palette":{"1":[1,2,3]},"foreground":[9,9,9],"background":[7,7,7]}"#,
         )
+        .unwrap();
+        let colors = theme.resolve();
+        assert_eq!(rgb(colors.query(1)), (1, 2, 3));
+        assert_eq!(rgb(colors.query(257)), (7, 7, 7));
+        // An unset cursor follows the foreground, as in Ghostty.
+        assert_eq!(rgb(colors.query(258)), (9, 9, 9));
+    }
+
+    #[test]
+    fn cells_prefer_colors_the_program_set() {
+        let (mut term, _) = term_with_state();
+        let colors = Colors::default();
+        let red = Color::Named(NamedColor::Red);
+        assert_eq!(colors.resolve(red, term.colors()).r, 0xCC);
+        // OSC 4 sets palette entry 1; the program's choice wins over the theme.
+        feed(&mut term, b"\x1b]4;1;rgb:12/34/56\x07");
+        let resolved = colors.resolve(red, term.colors());
+        assert_eq!((resolved.r, resolved.g, resolved.b), (0x12, 0x34, 0x56));
+    }
+
+    #[test]
+    fn mouse_reports_follow_the_requested_encoding() {
+        let none = TermMode::empty();
+        assert_eq!(mouse_report(&none, 0, MOUSE_PRESS, 0, 0, 0), None);
+
+        let sgr = TermMode::MOUSE_REPORT_CLICK | TermMode::SGR_MOUSE;
+        let report = |mode, button, action, mods| {
+            String::from_utf8(mouse_report(&mode, button, action, 9, 4, mods).unwrap()).unwrap()
+        };
+        assert_eq!(report(sgr, 0, MOUSE_PRESS, 0), "\x1b[<0;10;5M");
+        assert_eq!(report(sgr, 0, MOUSE_RELEASE, 0), "\x1b[<0;10;5m");
+        assert_eq!(
+            report(sgr, 2, MOUSE_PRESS, MOUSE_MOD_CTRL | MOUSE_MOD_SHIFT),
+            "\x1b[<22;10;5M"
+        );
+        // Click-only tracking ignores motion; drag tracking reports it with +32.
+        assert_eq!(mouse_report(&sgr, 0, MOUSE_MOTION, 9, 4, 0), None);
+        let drag = sgr | TermMode::MOUSE_DRAG;
+        assert_eq!(report(drag, 0, MOUSE_MOTION, 0), "\x1b[<32;10;5M");
+        // Motion with no button only in any-event mode.
+        assert_eq!(mouse_report(&drag, 3, MOUSE_MOTION, 9, 4, 0), None);
+        assert_eq!(
+            report(sgr | TermMode::MOUSE_MOTION, 3, MOUSE_MOTION, 0),
+            "\x1b[<35;10;5M"
+        );
+
+        let x10 = TermMode::MOUSE_REPORT_CLICK;
+        assert_eq!(
+            mouse_report(&x10, 0, MOUSE_RELEASE, 9, 4, 0).unwrap(),
+            b"\x1b[M#*%"
+        );
+    }
+
+    #[test]
+    fn wheel_reports_scrolls_or_sends_arrows_by_mode() {
+        let normal = TermMode::ALTERNATE_SCROLL;
+        assert!(matches!(
+            wheel_action(&normal, 3, 0, 0, 0),
+            Wheel::Scrollback(3)
+        ));
+
+        let alt = TermMode::ALT_SCREEN | TermMode::ALTERNATE_SCROLL;
+        let Wheel::Arrows(bytes) = wheel_action(&alt, -2, 0, 0, 0) else {
+            panic!("expected arrows")
+        };
+        assert_eq!(bytes, b"\x1b[B\x1b[B");
+        let Wheel::Arrows(bytes) = wheel_action(&(alt | TermMode::APP_CURSOR), 1, 0, 0, 0) else {
+            panic!("expected arrows")
+        };
+        assert_eq!(bytes, b"\x1bOA");
+
+        let mouse = alt | TermMode::MOUSE_REPORT_CLICK | TermMode::SGR_MOUSE;
+        let Wheel::Report(bytes) = wheel_action(&mouse, 2, 0, 0, 0) else {
+            panic!("expected a report")
+        };
+        assert_eq!(bytes, b"\x1b[<64;1;1M\x1b[<64;1;1M");
     }
 
     #[test]
@@ -1167,10 +2581,12 @@ mod tests {
             STATUS_OK
         );
 
+        // The echoed command line holds the variable names, so only the expanded output
+        // contains MARKER-ghostty: proof the session exported TERM_PROGRAM.
         #[cfg(windows)]
-        let input = "echo %PROGRAMA_TEST_MARKER%\r\nexit\r\n";
+        let input = "echo %PROGRAMA_TEST_MARKER%-%TERM_PROGRAM%\r\nexit\r\n";
         #[cfg(unix)]
-        let input = "echo \"$PROGRAMA_TEST_MARKER\"\nexit\n";
+        let input = "echo \"$PROGRAMA_TEST_MARKER-$TERM_PROGRAM\"\nexit\n";
         assert_eq!(
             unsafe { programa_terminal_write(session.0, input.as_ptr(), input.len()) },
             STATUS_OK
@@ -1193,7 +2609,7 @@ mod tests {
                 .iter()
                 .filter_map(|cell| cell["text"].as_str())
                 .collect::<String>();
-            marker_seen |= visible_text.contains(MARKER);
+            marker_seen |= visible_text.contains(&format!("{MARKER}-ghostty"));
             terminated |= unsafe { programa_terminal_is_terminated(session.0) };
             if !(marker_seen && terminated) {
                 std::thread::sleep(Duration::from_millis(10));
@@ -1202,6 +2618,146 @@ mod tests {
 
         assert!(marker_seen, "PTY output never contained the marker");
         assert!(terminated, "PTY termination event was not observed");
+    }
+
+    /// A shell in the terminal host keeps running when the app's session goes (a quit), and the
+    /// next session of that id shows its past output and drives it; a kill ends it.
+    #[cfg(windows)]
+    #[test]
+    fn the_terminal_host_keeps_a_shell_running_across_a_detach() {
+        let pipe = format!(r"\\.\pipe\programa-host-test-{}", std::process::id());
+        let token = "test-token".to_owned();
+        let (served_pipe, served_token) = (pipe.clone(), token.clone());
+        std::thread::spawn(move || host::serve(&served_pipe, &served_token, None));
+        let host_config = host::HostConfig {
+            pipe: pipe.clone(),
+            token,
+            id: "surface-1".to_owned(),
+        };
+        let list = || {
+            host::request(&host_config, serde_json::json!({ "op": "list" }))
+                .map(|(_, answer)| answer["sessions"].clone())
+        };
+        let started = Instant::now();
+        while list().is_err() && started.elapsed() < Duration::from_secs(5) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let config = serde_json::to_vec(&serde_json::json!({
+            "shell": "cmd.exe", "args": ["/D", "/Q"], "cols": 80, "rows": 24, "host": host_config,
+        }))
+        .unwrap();
+        let open = || {
+            let mut error = ProgramaTerminalBuffer::default();
+            let raw =
+                unsafe { programa_terminal_create(config.as_ptr(), config.len(), &mut error) };
+            assert!(!raw.is_null(), "create failed: {}", take_buffer(error));
+            SessionGuard(raw)
+        };
+        let shows = |session: &SessionGuard, text: &str| {
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while Instant::now() < deadline {
+                let mut output = ProgramaTerminalBuffer::default();
+                unsafe { programa_terminal_snapshot_json(session.0, &mut output) };
+                let snapshot: serde_json::Value =
+                    serde_json::from_slice(take_buffer(output).as_bytes()).unwrap();
+                let visible: String = snapshot["cells"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter_map(|cell| cell["text"].as_str())
+                    .collect();
+                if visible.contains(text) {
+                    return true;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            false
+        };
+        let type_line = |session: &SessionGuard, line: &str| unsafe {
+            programa_terminal_write(session.0, line.as_ptr(), line.len())
+        };
+
+        let first = open();
+        type_line(&first, "echo first-%COMSPEC:~0,0%marker\r\n");
+        assert!(
+            shows(&first, "first-marker"),
+            "the hosted shell never answered"
+        );
+        assert_eq!(list().unwrap()[0]["attached"], true);
+        drop(first);
+        std::thread::sleep(Duration::from_millis(300));
+        assert_eq!(
+            list().unwrap().as_array().unwrap().len(),
+            1,
+            "the shell outlives the app's session"
+        );
+
+        let second = open();
+        assert!(
+            shows(&second, "first-marker"),
+            "a reattach shows the past output"
+        );
+        type_line(&second, "echo second-%COMSPEC:~0,0%marker\r\n");
+        assert!(
+            shows(&second, "second-marker"),
+            "a reattached shell takes input"
+        );
+        unsafe { programa_terminal_kill(second.0) };
+        assert!(
+            list().unwrap().as_array().unwrap().is_empty(),
+            "a kill ends the shell"
+        );
+    }
+
+    /// The default PowerShell with the integration reports its working directory at the first
+    /// prompt, which proves the encoded script runs despite the script execution policy.
+    #[cfg(windows)]
+    #[test]
+    fn powershell_integration_reports_the_working_directory() {
+        let directory = std::env::temp_dir();
+        let directory = directory
+            .to_string_lossy()
+            .trim_end_matches('\\')
+            .to_owned();
+        let config = serde_json::to_vec(&serde_json::json!({
+            "working_directory": directory,
+            "shell_integration": true,
+            "cols": 120,
+            "rows": 30
+        }))
+        .unwrap();
+        let mut error = ProgramaTerminalBuffer::default();
+        let raw = unsafe { programa_terminal_create(config.as_ptr(), config.len(), &mut error) };
+        assert!(!raw.is_null(), "PTY spawn failed: {}", take_buffer(error));
+        let session = SessionGuard(raw);
+        // The shell is a live process the frontend can inspect.
+        let pid = unsafe { programa_terminal_shell_pid(session.0) };
+        assert!(pid != 0 && pid != std::process::id());
+
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let mut cwd = String::new();
+        while Instant::now() < deadline {
+            let mut out = ProgramaTerminalBuffer::default();
+            assert_eq!(
+                unsafe { programa_terminal_cwd(session.0, &mut out) },
+                STATUS_OK
+            );
+            cwd = take_buffer(out);
+            if !cwd.is_empty() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        // TEMP can be a short 8.3 path (CI runners: RUNNER~1) while PowerShell reports the long one.
+        let real = |path: &str| {
+            std::fs::canonicalize(path).map(|path| path.to_string_lossy().to_lowercase())
+        };
+        assert!(
+            cwd.eq_ignore_ascii_case(&directory)
+                || (real(&cwd).is_ok() && real(&cwd).ok() == real(&directory).ok()),
+            "reported {cwd:?}, expected {directory:?}"
+        );
+        assert!(unsafe { programa_terminal_cwd_generation(session.0) } >= 1);
     }
 
     #[cfg(unix)]

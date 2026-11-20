@@ -229,7 +229,7 @@ jobs:
           # alone.
           cargo test --manifest-path core/Cargo.toml -p programad --locked --lib -- --ignored --test-threads=1
           cargo test --manifest-path core/crates/programa-terminal/Cargo.toml --locked
-          cargo test --manifest-path core/vendor/alacritty_terminal/Cargo.toml --locked --lib parses_buffered_bytes_before_returning_a_terminal_read_error
+          cargo test --manifest-path core/vendor/alacritty_terminal/Cargo.toml --locked --lib event_loop::tests
 
       - name: Smoke test programad
         run: |
@@ -283,7 +283,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $exe = "$env:RUNNER_TEMP/programa-windows-ci/programa-windows.exe"
-          $logPath = "$env:LOCALAPPDATA\Programa\launch.log"
+          $logPath = "$env:LOCALAPPDATA\Programa\launch-smoke.log"
           if (Test-Path -LiteralPath $logPath) { Remove-Item -LiteralPath $logPath -Force }
 
           # Runs the full WinUI startup path -- Application.Start, MainWindow created and
@@ -315,15 +315,15 @@ jobs:
           if (-not $ok) {
             Write-Output "Smoke test FAILED. Exit code: $exitCode"
             if ($logContent) {
-              Write-Output '--- launch.log ---'
+              Write-Output '--- launch-smoke.log ---'
               Write-Output $logContent
             } else {
-              Write-Output "No launch.log was written at $logPath."
+              Write-Output "No smoke log was written at $logPath."
             }
             throw "WinUI launch smoke test failed (exit code $exitCode, log at $logPath)."
           }
           Write-Output "Smoke test passed. Exit code: $exitCode"
-          Write-Output '--- launch.log ---'
+          Write-Output '--- launch-smoke.log ---'
           Write-Output $logContent
 
       - name: Upload Windows executable

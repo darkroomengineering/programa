@@ -24,11 +24,10 @@ using Windows.UI.ViewManagement;
 
 namespace Programa;
 
-public sealed class TerminalView : UserControl, IDisposable
+public sealed partial class TerminalView : UserControl, IDisposable
 {
-    private const float FontSize = 13f;
-    private const float CellWidth = 8f;
-    private const float CellHeight = 18f;
+    /// <summary>Space between the pane edge and the grid, as the macOS app's terminal card (8pt).</summary>
+    private const float Padding = 8f;
 
     private readonly Grid _root = new();
     private readonly CanvasControl _canvas = new();
@@ -39,10 +38,27 @@ public sealed class TerminalView : UserControl, IDisposable
     private readonly object _snapshotGate = new();
     private readonly AccessibilitySettings _accessibilitySettings = new();
     private readonly UISettings _uiSettings = new();
-    private readonly CanvasTextFormat _normalFormat = CreateTextFormat(bold: false, italic: false);
-    private readonly CanvasTextFormat _boldFormat = CreateTextFormat(bold: true, italic: false);
-    private readonly CanvasTextFormat _italicFormat = CreateTextFormat(bold: false, italic: true);
-    private readonly CanvasTextFormat _boldItalicFormat = CreateTextFormat(bold: true, italic: true);
+    private CanvasTextFormat _normalFormat;
+    private CanvasTextFormat _boldFormat;
+    private CanvasTextFormat _italicFormat;
+    private CanvasTextFormat _boldItalicFormat;
+    private TerminalAppearance _appearance;
+    /// <summary>Cell size in DIPs, measured from the font and snapped to whole device pixels.</summary>
+    private float _cellWidth = 8f;
+    private float _cellHeight = 18f;
+    private float _metricsScale;
+    private bool _focused;
+    private readonly string? _initialDirectory;
+    /// <summary>Saved output shown above the first shell, then dropped.</summary>
+    private string? _restoreText;
+    /// <summary>A command typed into the first shell (CLI --command), then dropped.</summary>
+    private string? _initialCommand;
+    private readonly IReadOnlyDictionary<string, string>? _extraEnvironment;
+    private ulong _cwdGeneration;
+    private float _fontSize;
+    private readonly Border _findBar = new();
+    private readonly TextBox _findBox = new();
+    private readonly TextBlock _findStatus = new();
     private NativeTerminal.SafeSessionHandle? _session;
     private RegisteredWaitHandle? _registeredWait;
     private EventWaitHandle? _event;
@@ -58,12 +74,31 @@ public sealed class TerminalView : UserControl, IDisposable
     private DateTimeOffset _lastClick;
     private Point _lastClickPoint;
     private uint _clickCount;
+    /// <summary>The button whose press the program received, so its motion and release go there too.</summary>
+    private uint? _mouseButton;
+    private (nuint Col, nuint Row) _lastMouseCell = (nuint.MaxValue, nuint.MaxValue);
+    private bool _suppressContextMenu;
+    /// <summary>Wheel travel not yet sent, in 1/120ths of a line, so precision touchpads scroll smoothly.</summary>
+    private int _wheelRemainder;
 
-    public TerminalView(string surfaceId)
+    public TerminalView(string surfaceId, string workspaceId, string? initialDirectory = null, string? restoreText = null, string? initialCommand = null, IReadOnlyDictionary<string, string>? extraEnvironment = null)
     {
         SurfaceId = surfaceId;
+        WorkspaceId = workspaceId;
+        _initialDirectory = initialDirectory;
+        _restoreText = restoreText;
+        _initialCommand = initialCommand;
+        _extraEnvironment = extraEnvironment;
         IsTabStop = true;
         AutomationProperties.SetName(this, Localizer.Get("TerminalAccessibilityName"));
+        _appearance = TerminalAppearance.For(Application.Current.RequestedTheme == ApplicationTheme.Dark);
+        _fontSize = _appearance.FontSize;
+        _normalFormat = CreateTextFormat(bold: false, italic: false);
+        _boldFormat = CreateTextFormat(bold: true, italic: false);
+        _italicFormat = CreateTextFormat(bold: false, italic: true);
+        _boldItalicFormat = CreateTextFormat(bold: true, italic: true);
+        BuildFindBar();
+        BuildCopyBadge();
 
         _canvas.ClearColor = Colors.Transparent;
         _canvas.Draw += DrawTerminal;
@@ -73,6 +108,12 @@ public sealed class TerminalView : UserControl, IDisposable
         _canvas.PointerReleased += PointerReleased;
         _canvas.PointerWheelChanged += PointerWheelChanged;
         _canvas.ContextFlyout = BuildContextMenu();
+        // A right click the program received as a mouse report must not also open the menu.
+        _canvas.ContextRequested += (_, args) =>
+        {
+            args.Handled = _suppressContextMenu;
+            _suppressContextMenu = false;
+        };
         _root.Children.Add(_canvas);
 
         _input.Opacity = 0.01;
@@ -82,8 +123,8 @@ public sealed class TerminalView : UserControl, IDisposable
         _input.VerticalAlignment = VerticalAlignment.Top;
         _input.IsSpellCheckEnabled = false;
         _input.IsTextPredictionEnabled = false;
-        _input.FontFamily = new FontFamily("Cascadia Mono, Consolas");
-        _input.FontSize = FontSize;
+        _input.FontFamily = new FontFamily(_appearance.FontFamily);
+        _input.FontSize = _appearance.FontSize;
         _input.Padding = new Thickness(0);
         _input.BorderThickness = new Thickness(0);
         _input.Background = new SolidColorBrush(Colors.Transparent);
@@ -94,6 +135,8 @@ public sealed class TerminalView : UserControl, IDisposable
         _input.TextCompositionChanged += InputCompositionChanged;
         _input.TextCompositionEnded += InputCompositionEnded;
         _input.KeyDown += InputKeyDown;
+        _input.GotFocus += (_, _) => SetFocused(true);
+        _input.LostFocus += (_, _) => SetFocused(false);
         _root.Children.Add(_input);
 
         _retry.Content = Localizer.Get("TerminalRetry");
@@ -113,17 +156,56 @@ public sealed class TerminalView : UserControl, IDisposable
         Loaded += (_, _) =>
         {
             var session = _session;
+            // The window's app.appearance can differ from the app mode the terminal was built with.
+            ApplyAppearance(reloadFont: false);
             if (session is null) StartSession();
             else Refresh(session);
-        };
-        ActualThemeChanged += (_, _) =>
-        {
-            if (_composing) ShowCompositionProxy();
+            // A terminal shown again after a tab switch repaints from its last snapshot.
             _canvas.Invalidate();
         };
+        // A "light:A,dark:B" theme follows the window's mode, like macOS appearance.
+        ActualThemeChanged += (_, _) => ApplyAppearance(reloadFont: false);
+    }
+
+    /// <summary>Settings changed the terminal theme or font: picks them up, keeping this terminal's zoom.</summary>
+    internal void ReloadAppearance() => ApplyAppearance(reloadFont: true);
+
+    private void ApplyAppearance(bool reloadFont)
+    {
+        var zoom = FontSizeOverride;
+        var appearance = TerminalAppearance.For(ActualTheme != ElementTheme.Light);
+        if (!reloadFont && appearance == _appearance) return;
+        _appearance = appearance;
+        if (_session is { } session) NativeTerminal.SetColors(session, JsonSerializer.SerializeToUtf8Bytes(_appearance.CoreColors));
+        if (reloadFont)
+        {
+            _input.FontFamily = new FontFamily(_appearance.FontFamily);
+            SetFontSize(zoom ?? _appearance.FontSize, force: true);
+        }
+        if (_composing) ShowCompositionProxy();
+        _canvas.Invalidate();
+    }
+
+    private void SetFocused(bool focused)
+    {
+        _focused = focused;
+        if (_session is { } session) NativeTerminal.Focus(session, focused);
+        _canvas.Invalidate();
     }
 
     public string SurfaceId { get; }
+
+    /// <summary>The workspace this terminal opened in; exported to the shell as PROGRAMA_WORKSPACE_ID.</summary>
+    public string WorkspaceId { get; internal set; }
+
+    /// <summary>The working directory the shell last reported, or null before its first prompt.</summary>
+    internal string? Cwd { get; private set; }
+
+    /// <summary>Where the shell is: its last report, or the directory it started in.</summary>
+    internal string? WorkingDirectory => Cwd ?? _initialDirectory;
+
+    /// <summary>Raised on the UI thread with the surface id at each directory report (each prompt).</summary>
+    internal event Action<string>? CwdChanged;
 
     /// <summary>Raised once, on the UI thread, when the shell has exited. The owner closes the surface.</summary>
     internal event Action<string>? Exited;
@@ -138,8 +220,16 @@ public sealed class TerminalView : UserControl, IDisposable
     /// Kept current for hidden surfaces too.</summary>
     internal ProgramStatusRecord? ProgramStatus { get; private set; }
 
+    /// <summary>When the program last changed its status records; drives the sidebar's elapsed
+    /// time and the "(stale)" mark.</summary>
+    internal DateTimeOffset ProgramStatusChangedAt { get; private set; } = DateTimeOffset.Now;
+
     /// <summary>Raised on the UI thread with the surface id when <see cref="ProgramStatus"/> changes.</summary>
     internal event Action<string>? ProgramStatusChanged;
+
+    /// <summary>Raised on the UI thread with (surface id, title, body) when the program asks for a
+    /// desktop notification (OSC 777 or OSC 9).</summary>
+    internal event Action<string, string, string>? NotificationRequested;
 
     /// <summary>True once at least one terminal snapshot has been painted. Used by the
     /// `--smoke` CI launch check to confirm the native terminal session actually produced
@@ -151,10 +241,285 @@ public sealed class TerminalView : UserControl, IDisposable
 
     public void FocusTerminal() => _input.Focus(FocusState.Programmatic);
 
+    /// <summary>The shell's process id, or 0 before it starts.</summary>
+    internal uint ShellPid => _session is null ? 0 : NativeTerminal.ShellPid(_session);
+
+    /// <summary>True once the shell has exited; such a terminal cannot be reopened.</summary>
+    internal bool HasExited => _exitRaised;
+
+    /// <summary>Starts the shell now, for a terminal created by a control command in a workspace
+    /// that is not on screen; a terminal otherwise starts when first shown.</summary>
+    internal void EnsureStarted()
+    {
+        if (_session is null && !_disposed) StartSession(focus: false);
+    }
+
+    /// <summary>Types text into the terminal as if pasted without brackets (surface.send_text).
+    /// Line feeds become carriage returns, which Windows shells read as Enter.</summary>
+    internal void SendText(string text)
+    {
+        EnsureStarted();
+        if (_session is null) throw new ControlException("unavailable", "The terminal has not started.");
+        var normalized = text.Replace("\r\n", "\r", StringComparison.Ordinal).Replace('\n', '\r');
+        NativeTerminal.Write(_session, Encoding.UTF8.GetBytes(normalized));
+    }
+
+    /// <summary>Runs a command line in this terminal: now when the shell has shown its prompt, else at
+    /// its first prompt (PowerShell drops input typed before that), or after 5 seconds for a shell
+    /// without the integration.</summary>
+    internal void QueueCommand(string command)
+    {
+        EnsureStarted();
+        if (_session is not { } session) return;
+        if (_cwdGeneration > 0)
+        {
+            NativeTerminal.Write(session, Encoding.UTF8.GetBytes(command.TrimEnd('\r', '\n') + "\r"));
+            return;
+        }
+        _initialCommand = command;
+        DispatcherQueue.TryEnqueue(async () => { await Task.Delay(5000); WriteInitialCommand(session); });
+    }
+
+    /// <summary>Presses a named key (surface.send_key) as the keyboard would, in the program's cursor
+    /// and keyboard modes; a plain letter or space is typed. False when the key has no encoding.</summary>
+    internal bool SendNamedKey(NamedKey key)
+    {
+        EnsureStarted();
+        if (_session is null) throw new ControlException("unavailable", "The terminal has not started.");
+        var mode = NativeTerminal.Mode(_session);
+        var bytes = key.Character is { } character && !key.Ctrl && !key.Alt
+            ? Encoding.UTF8.GetBytes((key.Shift ? char.ToUpperInvariant(character) : character).ToString())
+            : EncodeKey(key.Key, key.Ctrl, key.Alt, key.Shift, (mode & NativeTerminal.ModeAppCursor) != 0, (mode & NativeTerminal.ModeKittyDisambiguate) != 0);
+        if (bytes is null) return false;
+        NativeTerminal.Write(_session, bytes);
+        return true;
+    }
+
+    /// <summary>A directory a shell reported over the socket (surface.report_pwd), as its OSC 7 would.</summary>
+    internal void ReportCwd(string path)
+    {
+        if (Cwd == path) return;
+        Cwd = path;
+        CwdChanged?.Invoke(SurfaceId);
+    }
+
+    /// <summary>Redraws the terminal (surface.refresh).</summary>
+    internal void Refresh() => _canvas.Invalidate();
+
+    /// <summary>Whether the terminal is on screen in a window (surface.health in_window).</summary>
+    internal bool InWindow => XamlRoot is not null && IsLoaded;
+
+    /// <summary>Pastes text as one block (bracketed when the program asked for it), so its newlines
+    /// do not submit it line by line.</summary>
+    internal void PasteText(string text)
+    {
+        EnsureStarted();
+        if (_session is null) throw new ControlException("unavailable", "The terminal has not started.");
+        NativeTerminal.Paste(_session, Encoding.UTF8.GetBytes(text.Replace("\r\n", "\n")), true);
+    }
+
+    /// <summary>The state an agent hook reported over the control pipe (surface.report_agent_state).</summary>
+    internal ProgramStatusRecord? HookStatus { get; private set; }
+
+    /// <summary>The status the sidebar and tab show: the program's own OSC 7501 report outranks a hook
+    /// report, as on macOS (docs/program-status.md, Authority).</summary>
+    internal ProgramStatusRecord? EffectiveStatus => ProgramStatus ?? HookStatus ?? DetectedStatus;
+
+    /// <summary>The state read off the screen by an agent detection manifest; any report wins over it.</summary>
+    internal ProgramStatusRecord? DetectedStatus { get; private set; }
+
+    /// <summary>The last agent session this terminal ran, kept after it exits so it can be resumed.</summary>
+    internal AgentSession? LastAgentSession { get; set; }
+
+    /// <summary>A Claude Code hook named <see cref="LastAgentSession"/>, so no guess replaces it.</summary>
+    internal bool AgentSessionFromHook { get; set; }
+
+    /// <summary>The macOS agent_state (working, blocked, idle, or null for none) and who reported it:
+    /// "program" (OSC 7501), "hooks" (surface.report_agent_state, agent.needs_input) or "inferred"
+    /// (screen detection), in that order of authority. done and error read as idle.</summary>
+    internal (string? State, string? Source) AgentState =>
+        ProgramStatus is { } program ? (Tri(program.State), "program")
+        : HookStatus is { } hook ? (Tri(hook.State), "hooks")
+        : DetectedStatus is { } detected ? (Tri(detected.State), "inferred")
+        : (null, null);
+
+    private static string Tri(string state) => state is "working" or "blocked" ? state : "idle";
+
+    /// <summary>The OSC 7501 root record as the socket shows it: no record text, only whether a message exists.</summary>
+    internal object? ProgramStatusJson => ProgramStatus is { } record
+        ? new { state = record.State, kind = record.Kind, progress = record.Progress, app = record.App, has_message = record.Msg is { Length: > 0 }, updated_at = ProgramStatusChangedAt.ToUnixTimeMilliseconds() / 1000.0 }
+        : null;
+
+    private (string? State, string? Source, string? Program) _publishedState;
+
+    /// <summary>Raised on the UI thread when <see cref="AgentState"/> or the program's state changes.</summary>
+    internal event Action<TerminalView>? AgentStateChanged;
+
+    /// <summary>Every status change: the window's header refresh, waits, and agent_state frames for
+    /// subscribers, sent when the state, its source or the program's own state changes.</summary>
+    private void StatusChanged()
+    {
+        ProgramStatusChanged?.Invoke(SurfaceId);
+        var (state, source) = AgentState;
+        BadgeRouteTransition(state, source);
+        var current = (state, source, ProgramStatus?.State);
+        if (current == _publishedState) return;
+        _publishedState = current;
+        AgentStateChanged?.Invoke(this);
+        EventHub.Publish("agent_state", SurfaceId, source == "program"
+            ? new { @event = "agent_state", workspace_id = WorkspaceId, surface_id = SurfaceId, state, source, program_status = ProgramStatusJson, ts = EventHub.Now }
+            : new { @event = "agent_state", workspace_id = WorkspaceId, surface_id = SurfaceId, state, source, ts = EventHub.Now });
+    }
+
+    private bool _draft;
+    private DateTimeOffset _lastKeystroke;
+
+    /// <summary>A person has typed input here that is not sent yet: typed since the last Return,
+    /// Ctrl+C or Ctrl+U, with a keystroke in the last 60 seconds (macOS draft_in_progress).</summary>
+    internal bool HasDraft => _draft && DateTimeOffset.Now - _lastKeystroke < TimeSpan.FromSeconds(60);
+
+    private void NoteKeyBytes(byte[] bytes)
+    {
+        _lastKeystroke = DateTimeOffset.Now;
+        // Return, Ctrl+C and Ctrl+U end a draft; anything else (text, Backspace, arrows) keeps one going.
+        if (bytes is [13] or [3] or [21]) _draft = false;
+        else if (bytes is [127] or [8]) { }
+        else if (bytes.Length > 0 && bytes[0] != 27) _draft = true;
+    }
+
+    /// <summary>A hook's report over the socket (surface.report_agent_state, agent.needs_input). It
+    /// moves the badge, unless <paramref name="routeOnly"/>, and the routes' view. A
+    /// <paramref name="resumed"/> report (a tool finished) only ends a stop for input by its writer.</summary>
+    internal void ReportHookState(string? state, string? app, string? sessionId = null, bool routeOnly = false, bool resumed = false, string? kind = null)
+    {
+        // Before the badge moves, so this report is not also seen as an untrusted badge transition.
+        RoutesFromHooks = true;
+        if (!routeOnly)
+        {
+            HookStatus = state is null ? null : new ProgramStatusRecord(state, kind, null, app, null, null);
+            ProgramStatusChangedAt = DateTimeOffset.Now;
+            StatusChanged();
+        }
+        MoveRouteView(state is null ? null : Tri(state), sessionId, resumed);
+    }
+
+    /// <summary>workspace.reset_sidebar: forgets the reported agent state, unless a prompt is showing,
+    /// which stays until it is answered (macOS resetSidebarContext). Screen detection reads it again.</summary>
+    internal void ResetReportedState()
+    {
+        if (EffectiveStatus?.State == "blocked" || (ProgramStatus is null && HookStatus is null)) return;
+        ProgramStatus = HookStatus = null;
+        ProgramStatusChangedAt = DateTimeOffset.Now;
+        StatusChanged();
+        if (RoutesFromHooks) MoveRouteView(null, null, false);
+    }
+
+    // ---- The routes' view (docs/program-status.md, Authority): only trusted reporters move it. Windows
+    // has no signed program reports, so that is the hooks; it names its writer, the hook session.
+
+    internal string? RouteState { get; private set; }
+    internal string? RouteWriter { get; private set; }
+    internal DateTimeOffset RouteStateAt { get; private set; }
+    /// <summary>A hook has reported here, so routes follow the hooks, not the badge.</summary>
+    internal bool RoutesFromHooks { get; private set; }
+    /// <summary>The agent stopped for input (blocked, needs_input) and its writer has not reported working since.</summary>
+    internal bool StoppedForInput { get; private set; }
+    private string? _stopWriter;
+    private string? _badgeRouteState;
+
+    /// <summary>An agent state transition for event routes: the state (null for a clear), the one
+    /// before, its source, and what the routes' safety rules need to know about the report.</summary>
+    internal sealed record RouteTransition(string? State, string? Previous, string? Source, bool Trusted, bool SessionNamed, bool First);
+
+    /// <summary>Raised on the UI thread for each transition routes see.</summary>
+    internal event Action<TerminalView, RouteTransition>? RouteStateChanged;
+
+    private void MoveRouteView(string? state, string? sessionId, bool resumed)
+    {
+        if (resumed && (!StoppedForInput || _stopWriter is null || _stopWriter != sessionId)) return;
+        var previous = RouteState;
+        RoutesFromHooks = true;
+        if (state == "blocked")
+        {
+            StoppedForInput = true;
+            _stopWriter = sessionId;
+        }
+        else if (state == "working" && StoppedForInput && _stopWriter is not null && _stopWriter == sessionId) StoppedForInput = false;
+        if (state is null)
+        {
+            StoppedForInput = false;
+            _stopWriter = null;
+            RouteWriter = null;
+        }
+        else if (sessionId is not null) RouteWriter = sessionId;
+        RouteState = state;
+        RouteStateAt = DateTimeOffset.Now;
+        if (state != previous)
+            RouteStateChanged?.Invoke(this, new RouteTransition(state, previous, "hooks", Trusted: true, SessionNamed: sessionId is not null, First: previous is null));
+    }
+
+    /// <summary>Without hooks, routes see the badge's transitions, untrusted: only notify routes act on them.</summary>
+    private void BadgeRouteTransition(string? state, string? source)
+    {
+        if (RoutesFromHooks || state == _badgeRouteState) return;
+        var previous = _badgeRouteState;
+        _badgeRouteState = state;
+        RouteStateChanged?.Invoke(this, new RouteTransition(state, previous, source, Trusted: false, SessionNamed: source == "program", First: previous is null));
+    }
+
+    internal void ReportDetectedState(string? state, string? app)
+    {
+        if (DetectedStatus?.State == state && DetectedStatus?.App == app) return;
+        DetectedStatus = state is null ? null : new ProgramStatusRecord(state, null, null, app, null, null);
+        ProgramStatusChangedAt = DateTimeOffset.Now;
+        StatusChanged();
+    }
+
+    /// <summary>Drops the scrollback above the screen (macOS Clear Scrollback).</summary>
+    public void ClearScrollback()
+    {
+        if (_session is not null) NativeTerminal.ClearScrollback(_session);
+    }
+
+    /// <summary>Grows or shrinks this terminal's font by one point, or resets it with 0, as Ghostty's
+    /// increase/decrease/reset_font_size do for one surface.</summary>
+    public void AdjustFontSize(int step) => SetFontSize(step == 0 ? _appearance.FontSize : _fontSize + step);
+
+    /// <summary>The font size when it differs from the theme's, for session restore; null otherwise.</summary>
+    internal float? FontSizeOverride => _fontSize != _appearance.FontSize ? _fontSize : null;
+
+    /// <summary>The last <paramref name="lines"/> lines of output, for session restore.</summary>
+    internal string OutputText(int lines) => _session is null ? string.Empty : NativeTerminal.Text(_session, (uint)lines);
+
+    /// <summary>Saved output not shown yet because this terminal has not started (its tab was never
+    /// selected since launch); kept so the next save does not lose it.</summary>
+    internal string? PendingRestoreText => _restoreText;
+
+    internal void SetFontSize(float requested, bool force = false)
+    {
+        var size = Math.Clamp(requested, 6f, 72f);
+        if (size == _fontSize && !force) return;
+        _fontSize = size;
+        foreach (var format in new[] { _normalFormat, _boldFormat, _italicFormat, _boldItalicFormat }) format.Dispose();
+        _normalFormat = CreateTextFormat(bold: false, italic: false);
+        _boldFormat = CreateTextFormat(bold: true, italic: false);
+        _italicFormat = CreateTextFormat(bold: false, italic: true);
+        _boldItalicFormat = CreateTextFormat(bold: true, italic: true);
+        _input.FontSize = size;
+        _metricsScale = 0;
+        ResizeBackend();
+        _canvas.Invalidate();
+    }
+
     public void Copy()
     {
         if (_session is null || !NativeTerminal.TryCopySelection(_session, out var text) || string.IsNullOrEmpty(text))
             return;
+        SetClipboardText(text);
+    }
+
+    private static void SetClipboardText(string text)
+    {
         var package = new DataPackage { RequestedOperation = DataPackageOperation.Copy };
         package.SetText(text);
         Clipboard.SetContent(package);
@@ -203,6 +568,17 @@ public sealed class TerminalView : UserControl, IDisposable
         return await dialog.ShowAsync() == ContentDialogResult.Primary;
     }
 
+    /// <summary>The terminal host runs this shell, so quitting Programa does not end it.</summary>
+    internal bool Hosted => _session is { IsInvalid: false } session && NativeTerminal.IsHosted(session);
+
+    /// <summary>The tab is gone for good: the shell ends, also when the host runs it. Dispose alone
+    /// (a quit, a window closing with the app) leaves a hosted shell running.</summary>
+    internal void Close()
+    {
+        if (_session is { IsInvalid: false } session) NativeTerminal.Kill(session);
+        Dispose();
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
@@ -221,24 +597,61 @@ public sealed class TerminalView : UserControl, IDisposable
 
     internal string AutomationValue => _automationValue;
 
-    private void StartSession()
+    private void StartSession(bool focus = true)
     {
         if (_disposed) return;
         RetireCurrentSession();
+        InCopyMode = false;
+        _copyBadge.Visibility = Visibility.Collapsed;
         _paintedGeneration = 0;
         _exitRaised = false;
         _programStatusGeneration = 0;
+        _cwdGeneration = 0;
         if (ProgramStatus is not null)
         {
             ProgramStatus = null;
-            ProgramStatusChanged?.Invoke(SurfaceId);
+            StatusChanged();
         }
         lock (_snapshotGate) _snapshot = null;
         _automationValue = string.Empty;
         _spawnFailure.Visibility = Visibility.Collapsed;
 
-        var config = JsonSerializer.SerializeToUtf8Bytes(new { cols = 80, rows = 24, cell_width = (ushort)CellWidth, cell_height = (ushort)CellHeight });
+        // The variables the macOS app exports, so the CLI and agent hooks find their terminal.
+        var environment = new Dictionary<string, string>
+        {
+            ["PROGRAMA_SURFACE_ID"] = SurfaceId,
+            ["PROGRAMA_PANEL_ID"] = SurfaceId,
+            ["PROGRAMA_WORKSPACE_ID"] = WorkspaceId,
+            ["PROGRAMA_TAB_ID"] = WorkspaceId,
+            ["PROGRAMA_SHELL_INTEGRATION"] = "1",
+            ["PROGRAMA_SOCKET_PATH"] = ControlServer.PipePath,
+            ["PROGRAMA_SOCKET"] = ControlServer.PipePath,
+        };
+        // The bundled `programa` CLI is on PATH inside Programa terminals, as on macOS.
+        var cliDirectory = McpConfig.BinDirectory;
+        if (File.Exists(Path.Combine(cliDirectory, "programa.exe")))
+        {
+            environment["PATH"] = cliDirectory + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH");
+            environment["PROGRAMA_BUNDLED_CLI_PATH"] = Path.Combine(cliDirectory, "programa.exe");
+            if (McpConfig.FilePath is { } mcp) environment["PROGRAMA_MCP_CONFIG"] = mcp;
+            if (McpConfig.HooksPath is { } hooks) environment["PROGRAMA_CLAUDE_SETTINGS"] = hooks;
+        }
+        // The default browser, resolved each time a terminal starts, as on macOS; unset when unknown.
+        if (Browsers.Default() is { } browser)
+        {
+            environment["PROGRAMA_DEFAULT_BROWSER"] = browser.Key;
+            environment["PROGRAMA_DEFAULT_BROWSER_BUNDLE_ID"] = browser.ProgId;
+        }
+        // A layout's per-terminal variables (docs/programa-json.md, surfaces[].env).
+        if (_extraEnvironment is not null) foreach (var (key, value) in _extraEnvironment) environment[key] = value;
+        var directory = Cwd ?? _initialDirectory;
+        // The shell runs in the terminal host and outlives the app; one still running there from
+        // before this launch is reattached as it is, so its start command does not run again.
+        var host = TerminalHost.Current is { } connection ? new { pipe = connection.Pipe, token = connection.Token, id = SurfaceId } : null;
+        if (TerminalHost.LiveAtLaunch.Remove(SurfaceId)) _initialCommand = null;
+        var config = JsonSerializer.SerializeToUtf8Bytes(new { cols = 80, rows = 24, cell_width = (ushort)MathF.Ceiling(_cellWidth), cell_height = (ushort)MathF.Ceiling(_cellHeight), colors = _appearance.CoreColors, restore_text = _restoreText, shell_integration = true, working_directory = directory is not null && Directory.Exists(directory) ? directory : null, env = environment, host });
         var session = NativeTerminal.Create(config, out var error);
+        _restoreText = null;
         if (session is null || session.IsInvalid)
         {
             _spawnFailureDetail.Text = string.IsNullOrWhiteSpace(error) ? Localizer.Get("TerminalSpawnFailed") : error;
@@ -246,12 +659,23 @@ public sealed class TerminalView : UserControl, IDisposable
             return;
         }
         _session = session;
+        // PowerShell discards input typed before its first prompt, so the initial command waits for
+        // the prompt's OSC 7 (see Refresh); a shell without the integration gets it after 5 seconds.
+        if (_initialCommand is { Length: > 0 })
+            DispatcherQueue.TryEnqueue(async () => { await Task.Delay(5000); WriteInitialCommand(session); });
         var handle = NativeTerminal.EventHandle(session);
         if (handle != nint.Zero)
             _event = new EventWaitHandle(false, EventResetMode.ManualReset) { SafeWaitHandle = new SafeWaitHandle(handle, ownsHandle: false) };
         ResizeBackend();
         Refresh(session);
-        FocusTerminal();
+        if (focus) FocusTerminal();
+    }
+
+    private void WriteInitialCommand(NativeTerminal.SafeSessionHandle session)
+    {
+        if (_disposed || !ReferenceEquals(_session, session) || _initialCommand is not { Length: > 0 } command) return;
+        _initialCommand = null;
+        NativeTerminal.Write(session, Encoding.UTF8.GetBytes(command.TrimEnd('\r', '\n') + "\r"));
     }
 
     private void Refresh(NativeTerminal.SafeSessionHandle session)
@@ -263,6 +687,23 @@ public sealed class TerminalView : UserControl, IDisposable
         {
             _exitRaised = true;
             Exited?.Invoke(SurfaceId);
+        }
+        // OSC 52 (agents' "copy" commands). Checked before the visibility early-outs like exit.
+        var clipboard = NativeTerminal.TakeClipboard(session);
+        if (clipboard.Length > 0) SetClipboardText(clipboard);
+        // OSC 777/9 desktop notifications, from hidden tabs too.
+        foreach (var notification in NativeTerminal.TakeNotifications(session))
+            NotificationRequested?.Invoke(SurfaceId, notification.Title, notification.Body);
+        var cwdGeneration = NativeTerminal.CwdGeneration(session);
+        if (cwdGeneration != _cwdGeneration)
+        {
+            _cwdGeneration = cwdGeneration;
+            if (NativeTerminal.Cwd(session) is { Length: > 0 } cwd)
+            {
+                Cwd = cwd;
+                CwdChanged?.Invoke(SurfaceId);
+            }
+            WriteInitialCommand(session);
         }
         var statusGeneration = NativeTerminal.ProgramStatusGeneration(session);
         if (statusGeneration != _programStatusGeneration) RefreshProgramStatus(session, statusGeneration);
@@ -315,38 +756,65 @@ public sealed class TerminalView : UserControl, IDisposable
         }
     }
 
+    /// <summary>The grid, the cell size in DIPs and the display scale, as pane.list reports them; null before the first frame.</summary>
+    internal (int Columns, int Rows, double CellWidth, double CellHeight, double Scale)? GridMetrics
+    {
+        get
+        {
+            TerminalSnapshot? snapshot;
+            lock (_snapshotGate) snapshot = _snapshot;
+            return snapshot is null ? null : (snapshot.Columns, snapshot.Rows, _cellWidth, _cellHeight, _canvas.Dpi / 96.0);
+        }
+    }
+
     private void ResizeBackend()
     {
         if (_session is null || _canvas.ActualWidth <= 0 || _canvas.ActualHeight <= 0) return;
-        var cols = (ushort)Math.Clamp((int)(_canvas.ActualWidth / CellWidth), 2, ushort.MaxValue);
-        var rows = (ushort)Math.Clamp((int)(_canvas.ActualHeight / CellHeight), 2, ushort.MaxValue);
         var dpiScale = _canvas.Dpi / 96f;
-        var cellWidth = (ushort)Math.Clamp((int)Math.Round(CellWidth * dpiScale), 1, ushort.MaxValue);
-        var cellHeight = (ushort)Math.Clamp((int)Math.Round(CellHeight * dpiScale), 1, ushort.MaxValue);
+        UpdateCellMetrics(dpiScale);
+        var cols = (ushort)Math.Clamp((int)((_canvas.ActualWidth - 2 * Padding) / _cellWidth), 2, ushort.MaxValue);
+        var rows = (ushort)Math.Clamp((int)((_canvas.ActualHeight - 2 * Padding) / _cellHeight), 2, ushort.MaxValue);
+        var cellWidth = (ushort)Math.Clamp((int)Math.Round(_cellWidth * dpiScale), 1, ushort.MaxValue);
+        var cellHeight = (ushort)Math.Clamp((int)Math.Round(_cellHeight * dpiScale), 1, ushort.MaxValue);
         NativeTerminal.Resize(_session, cols, rows, cellWidth, cellHeight);
         TerminalSnapshot? snapshot;
         lock (_snapshotGate) snapshot = _snapshot;
         if (snapshot is not null) UpdateInputProxyLayout(snapshot.Cursor, _composing);
     }
 
-    private static CanvasTextFormat CreateTextFormat(bool bold, bool italic) => new()
+    /// <summary>Measures the cell from the font, like Ghostty: the advance of a monospace glyph by
+    /// the line height, rounded to whole device pixels so cells tile without seams.</summary>
+    private void UpdateCellMetrics(float scale)
     {
-        FontFamily = "Cascadia Mono, Consolas",
-        FontSize = FontSize,
+        if (scale == _metricsScale) return;
+        _metricsScale = scale;
+        const string Sample = "MMMMMMMMMM";
+        using var layout = new CanvasTextLayout(CanvasDevice.GetSharedDevice(), Sample, _normalFormat, float.MaxValue, float.MaxValue);
+        var advance = (float)layout.LayoutBounds.Width / Sample.Length;
+        _cellWidth = MathF.Max(1, MathF.Round(advance * scale)) / scale;
+        _cellHeight = MathF.Max(1, MathF.Round((float)layout.LayoutBounds.Height * scale)) / scale;
+    }
+
+    private CanvasTextFormat CreateTextFormat(bool bold, bool italic) => new()
+    {
+        FontFamily = _appearance.CanvasFontFamily(bold, italic),
+        FontSize = _fontSize,
         FontWeight = bold ? FontWeights.Bold : FontWeights.Normal,
         FontStyle = italic ? Windows.UI.Text.FontStyle.Italic : Windows.UI.Text.FontStyle.Normal,
         Options = CanvasDrawTextOptions.EnableColorFont,
+        WordWrapping = CanvasWordWrapping.NoWrap,
     };
+
+    /// <summary>Default text and background colors: the theme's, or the system's in high contrast.</summary>
+    private (Color Foreground, Color Background) DefaultColors() => _accessibilitySettings.HighContrast
+        ? (_uiSettings.GetColorValue(UIColorType.Foreground), _uiSettings.GetColorValue(UIColorType.Background))
+        : (_appearance.Foreground, _appearance.Background);
 
     private void ShowCompositionProxy()
     {
         TerminalSnapshot? snapshot;
         lock (_snapshotGate) snapshot = _snapshot;
-        var dark = ActualTheme != ElementTheme.Light;
-        var foreground = _accessibilitySettings.HighContrast
-            ? _uiSettings.GetColorValue(UIColorType.Foreground)
-            : dark ? Color.FromArgb(255, 220, 220, 220) : Color.FromArgb(255, 28, 28, 30);
-        _input.Foreground = new SolidColorBrush(foreground);
+        _input.Foreground = new SolidColorBrush(DefaultColors().Foreground);
         _input.Opacity = 1;
         UpdateInputProxyLayout(snapshot?.Cursor ?? new TerminalCursor(0, 0, true), composing: true);
     }
@@ -363,11 +831,11 @@ public sealed class TerminalView : UserControl, IDisposable
     {
         var viewportWidth = Math.Max(1, _canvas.ActualWidth);
         var viewportHeight = Math.Max(1, _canvas.ActualHeight);
-        var minimumWidth = Math.Min(CellWidth, viewportWidth);
-        var height = composing ? Math.Min(CellHeight, viewportHeight) : 1;
+        var minimumWidth = Math.Min(_cellWidth, viewportWidth);
+        var height = composing ? Math.Min(_cellHeight, viewportHeight) : 1;
         var maximumX = composing ? viewportWidth - minimumWidth : viewportWidth - 1;
-        var x = Math.Clamp(cursor.Column * CellWidth, 0, maximumX);
-        var y = Math.Clamp(cursor.Row * CellHeight, 0, viewportHeight - height);
+        var x = Math.Clamp(Padding + cursor.Column * _cellWidth, 0, maximumX);
+        var y = Math.Clamp(Padding + cursor.Row * _cellHeight, 0, viewportHeight - height);
 
         _input.Margin = new Thickness(x, y, 0, 0);
         _input.Width = composing ? Math.Max(1, Math.Min(320, viewportWidth - x)) : 1;
@@ -383,9 +851,10 @@ public sealed class TerminalView : UserControl, IDisposable
             var status = JsonSerializer.Deserialize<ProgramStatusSnapshot>(json, TerminalJson.Options);
             if (status is null) return;
             _programStatusGeneration = status.Generation;
+            ProgramStatusChangedAt = DateTimeOffset.Now;
             if (status.Root == ProgramStatus) return;
             ProgramStatus = status.Root;
-            ProgramStatusChanged?.Invoke(SurfaceId);
+            StatusChanged();
         }
         catch (JsonException error)
         {
@@ -470,32 +939,51 @@ public sealed class TerminalView : UserControl, IDisposable
     {
         TerminalSnapshot? snapshot;
         lock (_snapshotGate) snapshot = _snapshot;
-        var dark = sender.ActualTheme != ElementTheme.Light;
-        var defaultBackground = _accessibilitySettings.HighContrast ? _uiSettings.GetColorValue(UIColorType.Background) : dark ? Color.FromArgb(255, 20, 20, 24) : Color.FromArgb(255, 250, 250, 250);
-        var defaultForeground = _accessibilitySettings.HighContrast ? _uiSettings.GetColorValue(UIColorType.Foreground) : dark ? Color.FromArgb(255, 220, 220, 220) : Color.FromArgb(255, 28, 28, 30);
+        var (defaultForeground, defaultBackground) = DefaultColors();
+        var highContrast = _accessibilitySettings.HighContrast;
+        // Ghostty: unset selection and cursor colors invert the default foreground and background.
+        var selectionBackground = (highContrast ? null : _appearance.SelectionBackground) ?? defaultForeground;
+        var selectionForeground = (highContrast ? null : _appearance.SelectionForeground) ?? defaultBackground;
+        var cursorColor = (highContrast ? null : _appearance.Cursor) ?? defaultForeground;
+        var cursorText = (highContrast ? null : _appearance.CursorText) ?? defaultBackground;
         args.DrawingSession.Clear(defaultBackground);
         if (snapshot is null) return;
 
+        var cursor = snapshot.Cursor;
+        // A focused block cursor is drawn as the cell's colors; every other cursor is drawn on top.
+        var blockCursor = cursor.Visible && _focused && cursor.Shape == "block";
         foreach (var cell in snapshot.Cells)
         {
-            var x = cell.Column * CellWidth;
-            var y = cell.Row * CellHeight;
-            if (cell.ExplicitBackground)
-                args.DrawingSession.FillRectangle(x, y, CellWidth * Math.Max(cell.Width, 1), CellHeight, cell.Background.ToColor());
-            if (cell.Selected)
-                args.DrawingSession.FillRectangle(x, y, CellWidth * Math.Max(cell.Width, 1), CellHeight, Color.FromArgb(180, 48, 105, 152));
+            var x = Padding + cell.Column * _cellWidth;
+            var y = Padding + cell.Row * _cellHeight;
+            var width = _cellWidth * Math.Max(cell.Width, 1);
+            var foreground = cell.ExplicitForeground ? cell.Foreground.ToColor() : defaultForeground;
+            Color? background = cell.ExplicitBackground ? cell.Background.ToColor() : null;
+            if (cell.Selected) (background, foreground) = (selectionBackground, selectionForeground);
+            if (blockCursor && cell.Row == cursor.Row && cell.Column == cursor.Column) (background, foreground) = (cursorColor, cursorText);
+            if (background is { } fill) args.DrawingSession.FillRectangle(x, y, width, _cellHeight, fill);
             if (cell.Width == 0 || string.IsNullOrEmpty(cell.Text)) continue;
+            // Ghostty's default faint-opacity is 0.5.
+            if (cell.Dim) foreground = Color.FromArgb((byte)(foreground.A / 2), foreground.R, foreground.G, foreground.B);
             var format = cell.Bold
                 ? cell.Italic ? _boldItalicFormat : _boldFormat
                 : cell.Italic ? _italicFormat : _normalFormat;
-            args.DrawingSession.DrawText(cell.Text, new Vector2(x, y), cell.ExplicitForeground ? cell.Foreground.ToColor() : defaultForeground, format);
-            if (cell.Underline || cell.Undercurl)
-                args.DrawingSession.DrawLine(x, y + CellHeight - 2, x + CellWidth * Math.Max(cell.Width, 1), y + CellHeight - 2, cell.Foreground.ToColor(), 1);
+            args.DrawingSession.DrawText(cell.Text, new Vector2(x, y), foreground, format);
+            if (cell.Underline || cell.Undercurl || InHoverLink(cell))
+                args.DrawingSession.DrawLine(x, y + _cellHeight - 2, x + width, y + _cellHeight - 2, foreground, 1);
             if (cell.Strikethrough)
-                args.DrawingSession.DrawLine(x, y + CellHeight / 2, x + CellWidth * Math.Max(cell.Width, 1), y + CellHeight / 2, cell.Foreground.ToColor(), 1);
+                args.DrawingSession.DrawLine(x, y + _cellHeight / 2, x + width, y + _cellHeight / 2, foreground, 1);
         }
-        if (snapshot.Cursor.Visible)
-            args.DrawingSession.DrawRectangle(snapshot.Cursor.Column * CellWidth, snapshot.Cursor.Row * CellHeight, CellWidth, CellHeight, Color.FromArgb(255, 120, 190, 255), 1);
+        if (!cursor.Visible || blockCursor) return;
+        const float Thickness = 2f;
+        var cursorX = Padding + cursor.Column * _cellWidth;
+        var cursorY = Padding + cursor.Row * _cellHeight;
+        if (!_focused)
+            args.DrawingSession.DrawRectangle(cursorX, cursorY, _cellWidth, _cellHeight, cursorColor, 1);
+        else if (cursor.Shape == "beam")
+            args.DrawingSession.FillRectangle(cursorX, cursorY, Thickness, _cellHeight, cursorColor);
+        else
+            args.DrawingSession.FillRectangle(cursorX, cursorY + _cellHeight - Thickness, _cellWidth, Thickness, cursorColor);
     }
 
     private void InputChanged(object sender, TextChangedEventArgs args)
@@ -524,7 +1012,19 @@ public sealed class TerminalView : UserControl, IDisposable
     private void CommitInput()
     {
         if (_session is null || string.IsNullOrEmpty(_input.Text)) return;
-        NativeTerminal.Write(_session, Encoding.UTF8.GetBytes(_input.Text));
+        if (InCopyMode)
+        {
+            // Typed keys are copy mode commands; none reaches the shell.
+            var keys = _input.Text;
+            _resettingInput = true;
+            _input.Text = string.Empty;
+            _resettingInput = false;
+            TypeInCopyMode(keys);
+            return;
+        }
+        var typed = Encoding.UTF8.GetBytes(_input.Text);
+        NoteKeyBytes(typed);
+        NativeTerminal.Write(_session, typed);
         _resettingInput = true;
         _input.Text = string.Empty;
         _resettingInput = false;
@@ -536,8 +1036,16 @@ public sealed class TerminalView : UserControl, IDisposable
         var ctrl = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(CoreVirtualKeyStates.Down);
         var alt = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Menu).HasFlag(CoreVirtualKeyStates.Down);
         var shift = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift).HasFlag(CoreVirtualKeyStates.Down);
-        var bytes = EncodeKey(args.Key, ctrl, alt, shift, NativeTerminal.ApplicationCursor(_session));
+        var mode = NativeTerminal.Mode(_session);
+        var bytes = EncodeKey(args.Key, ctrl, alt, shift, (mode & NativeTerminal.ModeAppCursor) != 0, (mode & NativeTerminal.ModeKittyDisambiguate) != 0);
+        if (InCopyMode)
+        {
+            // Printable keys (AltGr ones too) come through the text box; every other key is copy mode's.
+            if (CopyModeKeyDown(args.Key, ctrl, alt) || bytes is not null) args.Handled = true;
+            return;
+        }
         if (bytes is null) return;
+        NoteKeyBytes(bytes);
         NativeTerminal.Write(_session, bytes);
         args.Handled = true;
     }
@@ -546,18 +1054,22 @@ public sealed class TerminalView : UserControl, IDisposable
     /// Maps a non-text key to xterm bytes. Printable characters without Ctrl or Alt arrive through the
     /// text box instead. Ctrl+Alt is AltGr on many layouts and is left to the text box as well.
     /// </summary>
-    internal static byte[]? EncodeKey(VirtualKey key, bool ctrl, bool alt, bool shift, bool appCursor)
+    internal static byte[]? EncodeKey(VirtualKey key, bool ctrl, bool alt, bool shift, bool appCursor, bool kitty = false)
     {
         var modifier = 1 + (shift ? 1 : 0) + (alt ? 2 : 0) + (ctrl ? 4 : 0);
         var modified = modifier > 1;
         static byte[] Ascii(string text) => Encoding.ASCII.GetBytes(text);
+        // Kitty keyboard flag 1 (disambiguate): keys whose legacy bytes are ambiguous are sent as
+        // CSI code;modifier u. This is how Shift+Enter reaches agents as a newline, not a submit.
+        static byte[] CsiU(int code, int modifier) => Ascii(modifier > 1 ? $"\x1b[{code};{modifier}u" : $"\x1b[{code}u");
 
         switch (key)
         {
-            case VirtualKey.Enter: return [13];
-            case VirtualKey.Back: return alt ? [27, 127] : [127];
+            case VirtualKey.Enter: return kitty && modified ? CsiU(13, modifier) : [13];
+            case VirtualKey.Back: return kitty && modified ? CsiU(127, modifier) : alt ? [27, 127] : [127];
+            case VirtualKey.Tab when kitty && modified: return CsiU(9, modifier);
             case VirtualKey.Tab when !ctrl && !alt: return shift ? [27, 91, 90] : [9];
-            case VirtualKey.Escape: return [27];
+            case VirtualKey.Escape: return kitty ? CsiU(27, modifier) : [27];
         }
 
         var cursor = key switch { VirtualKey.Up => 'A', VirtualKey.Down => 'B', VirtualKey.Right => 'C', VirtualKey.Left => 'D', VirtualKey.Home => 'H', VirtualKey.End => 'F', _ => '\0' };
@@ -580,6 +1092,18 @@ public sealed class TerminalView : UserControl, IDisposable
         if (tilde != 0) return Ascii(modified ? $"\x1b[{tilde};{modifier}~" : $"\x1b[{tilde}~");
 
         if (!ctrl && !alt || ctrl && alt) return null;
+        if (kitty)
+        {
+            int? code = key switch
+            {
+                >= VirtualKey.A and <= VirtualKey.Z => 'a' + (int)key - (int)VirtualKey.A,
+                >= VirtualKey.Number0 and <= VirtualKey.Number9 => '0' + (int)key - (int)VirtualKey.Number0,
+                VirtualKey.Space => ' ',
+                _ when IsPunctuationKey(key) => KeyboardLayout.UnshiftedCharacter(key),
+                _ => null,
+            };
+            return code is { } value ? CsiU(value, modifier) : null;
+        }
         int character;
         if (key is >= VirtualKey.A and <= VirtualKey.Z)
             character = ctrl ? (int)key - (int)VirtualKey.A + 1 : (shift ? 'A' : 'a') + (int)key - (int)VirtualKey.A;
@@ -603,18 +1127,41 @@ public sealed class TerminalView : UserControl, IDisposable
         return code is >= 186 and <= 192 or >= 219 and <= 222 or 106 or 107 or 109 or 110 or 111;
     }
 
+    private static uint MouseModifiers(VirtualKeyModifiers modifiers) =>
+        (modifiers.HasFlag(VirtualKeyModifiers.Shift) ? NativeTerminal.MouseModShift : 0)
+        | (modifiers.HasFlag(VirtualKeyModifiers.Menu) ? NativeTerminal.MouseModAlt : 0)
+        | (modifiers.HasFlag(VirtualKeyModifiers.Control) ? NativeTerminal.MouseModCtrl : 0);
+
     private void PointerPressed(object sender, PointerRoutedEventArgs args)
     {
         if (_session is null) return;
         var point = args.GetCurrentPoint(_canvas);
-        if (!point.Properties.IsLeftButtonPressed) return;
+        var properties = point.Properties;
+        uint? button = properties.IsLeftButtonPressed ? 0u : properties.IsMiddleButtonPressed ? 1u : properties.IsRightButtonPressed ? 2u : null;
+        if (button is null) return;
+        var (col, row) = CellAt(point.Position);
+        if (button == 0 && OpenLinkOnClick(args, col, row)) return;
+        // Shift bypasses mouse reporting so text stays selectable in mouse-driven TUIs, as in Ghostty.
+        if (!args.KeyModifiers.HasFlag(VirtualKeyModifiers.Shift))
+        {
+            if (NativeTerminal.Mouse(_session, button.Value, NativeTerminal.MousePress, col, row, MouseModifiers(args.KeyModifiers)))
+            {
+                _mouseButton = button;
+                _lastMouseCell = (col, row);
+                _suppressContextMenu = button == 2;
+                _canvas.CapturePointer(args.Pointer);
+                FocusTerminal();
+                args.Handled = true;
+                return;
+            }
+        }
+        if (button != 0) return;
         var now = DateTimeOffset.UtcNow;
-        var nearby = Math.Abs(point.Position.X - _lastClickPoint.X) < CellWidth && Math.Abs(point.Position.Y - _lastClickPoint.Y) < CellHeight;
+        var nearby = Math.Abs(point.Position.X - _lastClickPoint.X) < _cellWidth && Math.Abs(point.Position.Y - _lastClickPoint.Y) < _cellHeight;
         _clickCount = nearby && now - _lastClick < TimeSpan.FromMilliseconds(500) ? Math.Min(_clickCount + 1, 3u) : 1;
         _lastClick = now;
         _lastClickPoint = point.Position;
         var mode = _clickCount == 2 ? 2u : _clickCount >= 3 ? 3u : 0u;
-        var (col, row) = CellAt(point.Position);
         NativeTerminal.SelectionBegin(_session, col, row, mode);
         _selecting = true;
         _canvas.CapturePointer(args.Pointer);
@@ -624,13 +1171,33 @@ public sealed class TerminalView : UserControl, IDisposable
 
     private void PointerMoved(object sender, PointerRoutedEventArgs args)
     {
-        if (!_selecting || _session is null) return;
+        if (_session is null) return;
         var (col, row) = CellAt(args.GetCurrentPoint(_canvas).Position);
-        NativeTerminal.SelectionUpdate(_session, col, row);
+        if (_selecting)
+        {
+            NativeTerminal.SelectionUpdate(_session, col, row);
+            return;
+        }
+        UpdateHoverLink(args, col, row);
+        // Report only cell changes; button 3 is plain motion, which only any-event tracking takes.
+        if ((col, row) == _lastMouseCell) return;
+        _lastMouseCell = (col, row);
+        NativeTerminal.Mouse(_session, _mouseButton ?? 3, NativeTerminal.MouseMotion, col, row, MouseModifiers(args.KeyModifiers));
     }
 
     private void PointerReleased(object sender, PointerRoutedEventArgs args)
     {
+        if (_mouseButton is { } button)
+        {
+            _mouseButton = null;
+            if (_session is not null)
+            {
+                var (col, row) = CellAt(args.GetCurrentPoint(_canvas).Position);
+                NativeTerminal.Mouse(_session, button, NativeTerminal.MouseRelease, col, row, MouseModifiers(args.KeyModifiers));
+            }
+            _canvas.ReleasePointerCapture(args.Pointer);
+            return;
+        }
         if (!_selecting) return;
         _selecting = false;
         if (_session is not null) NativeTerminal.SelectionEnd(_session);
@@ -640,9 +1207,16 @@ public sealed class TerminalView : UserControl, IDisposable
     private void PointerWheelChanged(object sender, PointerRoutedEventArgs args)
     {
         if (_session is null) return;
-        var delta = args.GetCurrentPoint(_canvas).Properties.MouseWheelDelta;
-        NativeTerminal.Scroll(_session, Math.Sign(delta) * 3);
+        var point = args.GetCurrentPoint(_canvas);
+        if (point.Properties.IsHorizontalMouseWheel) return;
         args.Handled = true;
+        // 120 units is one notch, three lines (the Windows default).
+        _wheelRemainder += point.Properties.MouseWheelDelta * 3;
+        var lines = _wheelRemainder / 120;
+        _wheelRemainder %= 120;
+        if (lines == 0) return;
+        var (col, row) = CellAt(point.Position);
+        NativeTerminal.Wheel(_session, lines, col, row, MouseModifiers(args.KeyModifiers));
     }
 
     private MenuFlyout BuildContextMenu()
@@ -657,7 +1231,8 @@ public sealed class TerminalView : UserControl, IDisposable
         return menu;
     }
 
-    private static (nuint Col, nuint Row) CellAt(Point point) => ((nuint)Math.Max(0, (int)(point.X / CellWidth)), (nuint)Math.Max(0, (int)(point.Y / CellHeight)));
+    private (nuint Col, nuint Row) CellAt(Point point) =>
+        ((nuint)Math.Max(0, (int)((point.X - Padding) / _cellWidth)), (nuint)Math.Max(0, (int)((point.Y - Padding) / _cellHeight)));
 
     private static string BuildAccessibleText(TerminalSnapshot snapshot)
     {
@@ -693,6 +1268,9 @@ internal static class NativeTerminal
 
     [DllImport(Dll, EntryPoint = "programa_terminal_create")] private static extern SafeSessionHandle CreateNative(byte[] config, nuint length, out Buffer error);
     [DllImport(Dll, EntryPoint = "programa_terminal_free")] private static extern void Free(nint session);
+    [DllImport(Dll, EntryPoint = "programa_terminal_kill")] internal static extern int Kill(SafeSessionHandle session);
+    [DllImport(Dll, EntryPoint = "programa_terminal_is_hosted")]
+    [return: MarshalAs(UnmanagedType.I1)] internal static extern bool IsHosted(SafeSessionHandle session);
     [DllImport(Dll, EntryPoint = "programa_terminal_buffer_free")] private static extern void FreeBuffer(nint data, nuint length);
     [DllImport(Dll, EntryPoint = "programa_terminal_write")] private static extern int WriteNative(SafeSessionHandle session, byte[] data, nuint length);
     [DllImport(Dll, EntryPoint = "programa_terminal_resize")] internal static extern int Resize(SafeSessionHandle session, ushort cols, ushort rows, ushort cellWidth, ushort cellHeight);
@@ -701,8 +1279,40 @@ internal static class NativeTerminal
     [DllImport(Dll, EntryPoint = "programa_terminal_generation")] internal static extern ulong Generation(SafeSessionHandle session);
     [DllImport(Dll, EntryPoint = "programa_terminal_program_status_generation")] internal static extern ulong ProgramStatusGeneration(SafeSessionHandle session);
     [DllImport(Dll, EntryPoint = "programa_terminal_program_status_json")] private static extern int ProgramStatusJson(SafeSessionHandle session, out Buffer buffer);
-    [DllImport(Dll, EntryPoint = "programa_terminal_application_cursor")]
-    [return: MarshalAs(UnmanagedType.I1)] internal static extern bool ApplicationCursor(SafeSessionHandle session);
+    internal const uint ModeAppCursor = 1, ModeKittyDisambiguate = 8;
+    internal const uint MousePress = 0, MouseRelease = 1, MouseMotion = 2;
+    internal const uint MouseModShift = 1, MouseModAlt = 2, MouseModCtrl = 4;
+    [DllImport(Dll, EntryPoint = "programa_terminal_mode")] internal static extern uint Mode(SafeSessionHandle session);
+    [DllImport(Dll, EntryPoint = "programa_terminal_mouse")]
+    [return: MarshalAs(UnmanagedType.I1)] internal static extern bool Mouse(SafeSessionHandle session, uint button, uint action, nuint col, nuint row, uint mods);
+    [DllImport(Dll, EntryPoint = "programa_terminal_set_colors")] private static extern int SetColorsNative(SafeSessionHandle session, byte[] colors, nuint length);
+    internal static int SetColors(SafeSessionHandle session, byte[] colors) => SetColorsNative(session, colors, (nuint)colors.Length);
+    [DllImport(Dll, EntryPoint = "programa_terminal_focus")] internal static extern int Focus(SafeSessionHandle session, [MarshalAs(UnmanagedType.I1)] bool focused);
+    [DllImport(Dll, EntryPoint = "programa_terminal_wheel")] internal static extern int Wheel(SafeSessionHandle session, int lines, nuint col, nuint row, uint mods);
+    [DllImport(Dll, EntryPoint = "programa_terminal_take_clipboard")] private static extern int TakeClipboardNative(SafeSessionHandle session, out Buffer buffer);
+    internal static string TakeClipboard(SafeSessionHandle session) => TakeClipboardNative(session, out var buffer) == 0 ? ReadAndFree(buffer) : string.Empty;
+    [DllImport(Dll, EntryPoint = "programa_terminal_find")]
+    [return: MarshalAs(UnmanagedType.I1)] private static extern bool FindNative(SafeSessionHandle session, byte[] text, nuint length, [MarshalAs(UnmanagedType.I1)] bool forward);
+    internal static bool Find(SafeSessionHandle session, byte[] text, bool forward) => FindNative(session, text, (nuint)text.Length, forward);
+    [DllImport(Dll, EntryPoint = "programa_terminal_text")] private static extern int TextNative(SafeSessionHandle session, uint maxLines, out Buffer buffer);
+    internal static string Text(SafeSessionHandle session, uint maxLines) => TextNative(session, maxLines, out var buffer) == 0 ? ReadAndFree(buffer) : string.Empty;
+    [DllImport(Dll, EntryPoint = "programa_terminal_shell_pid")] internal static extern uint ShellPid(SafeSessionHandle session);
+    [DllImport(Dll, EntryPoint = "programa_terminal_cwd_generation")] internal static extern ulong CwdGeneration(SafeSessionHandle session);
+    [DllImport(Dll, EntryPoint = "programa_terminal_cwd")] private static extern int CwdNative(SafeSessionHandle session, out Buffer buffer);
+    internal static string Cwd(SafeSessionHandle session) => CwdNative(session, out var buffer) == 0 ? ReadAndFree(buffer) : string.Empty;
+    [DllImport(Dll, EntryPoint = "programa_terminal_link_at")] private static extern int LinkAtNative(SafeSessionHandle session, nuint column, nuint row, out Buffer buffer);
+    internal static string LinkAt(SafeSessionHandle session, nuint column, nuint row) => LinkAtNative(session, column, row, out var buffer) == 0 ? ReadAndFree(buffer) : string.Empty;
+    [DllImport(Dll, EntryPoint = "programa_terminal_selection_clear")] internal static extern int ClearSelection(SafeSessionHandle session);
+    [DllImport(Dll, EntryPoint = "programa_terminal_copy_mode")] internal static extern int CopyMode(SafeSessionHandle session, uint command, uint count);
+    [DllImport(Dll, EntryPoint = "programa_terminal_clear_scrollback")] internal static extern int ClearScrollback(SafeSessionHandle session);
+    [DllImport(Dll, EntryPoint = "programa_terminal_take_notifications")] private static extern int TakeNotificationsNative(SafeSessionHandle session, out Buffer buffer);
+    internal static TerminalNotification[] TakeNotifications(SafeSessionHandle session)
+    {
+        var json = TakeNotificationsNative(session, out var buffer) == 0 ? ReadAndFree(buffer) : string.Empty;
+        if (json.Length == 0) return [];
+        try { return JsonSerializer.Deserialize<TerminalNotification[]>(json, TerminalJson.Options) ?? []; }
+        catch (JsonException) { return []; }
+    }
     [DllImport(Dll, EntryPoint = "programa_terminal_event_handle")] internal static extern nint EventHandle(SafeSessionHandle session);
     [DllImport(Dll, EntryPoint = "programa_terminal_acknowledge_generation")] internal static extern int Acknowledge(SafeSessionHandle session, ulong generation);
     [DllImport(Dll, EntryPoint = "programa_terminal_selection_begin")] internal static extern int SelectionBegin(SafeSessionHandle session, nuint col, nuint row, uint mode);
@@ -756,9 +1366,10 @@ internal static class TerminalJson
 }
 
 internal sealed record TerminalSnapshot(ulong Generation, int Columns, int Rows, int DisplayOffset, TerminalCursor Cursor, TerminalSelection? Selection, List<TerminalCell> Cells, bool Terminated, string? Title = null);
-internal sealed record TerminalCursor(int Column, int Row, bool Visible);
+internal sealed record TerminalCursor(int Column, int Row, bool Visible, string Shape = "block");
 internal sealed record TerminalSelection(int StartColumn, int StartRow, int EndColumn, int EndRow, bool Block);
-internal sealed record TerminalCell(int Column, int Row, string Text, int Width, TerminalColor Foreground, bool ExplicitForeground, TerminalColor Background, bool ExplicitBackground, bool Selected, bool Bold, bool Italic, bool Underline, bool Undercurl, bool Strikethrough);
+internal sealed record TerminalCell(int Column, int Row, string Text, int Width, TerminalColor Foreground, bool ExplicitForeground, TerminalColor Background, bool ExplicitBackground, bool Selected, bool Bold, bool Italic, bool Underline, bool Undercurl, bool Strikethrough, bool Dim = false);
+internal sealed record TerminalNotification(string Title, string Body);
 internal sealed record ProgramStatusSnapshot(ulong Generation, ProgramStatusRecord? Root);
 internal sealed record ProgramStatusRecord(string State, string? Kind, int? Progress, string? App, string? Title, string? Msg);
 internal sealed record TerminalColor(byte R, byte G, byte B, byte A) { internal Color ToColor() => Color.FromArgb(A, R, G, B); }

@@ -234,7 +234,9 @@ pub fn new(config: &Options, window_size: WindowSize) -> Result<Pty> {
         }
     }
 
+    let conin: Box<dyn std::io::Write + Send> = Box::new(conin);
     let conin = UnblockedWriter::new(conin, PIPE_CAPACITY);
+    let conout: Box<dyn std::io::Read + Send> = Box::new(conout);
     let conout = UnblockedReader::new(conout, PIPE_CAPACITY);
 
     let child_watcher = ChildExitWatcher::new(proc_info.hProcess)?;

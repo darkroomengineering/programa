@@ -367,7 +367,7 @@
       "properties": {
         "shortcuts": {
           "title": "shortcuts",
-          "description": "Windows keyboard bindings keyed by action. A binding is modifiers and one key joined by hyphens, for example ctrl-shift-t. Modifiers are ctrl, alt and shift; the key is one letter or digit, comma or insert. ctrl-c, ctrl-d and ctrl-w are reserved for the terminal, and no two actions can share a binding.",
+          "description": "Windows keyboard bindings keyed by action. A binding is modifiers and one key joined by hyphens, for example ctrl-shift-t. Modifiers are ctrl, alt and shift; the key is one letter or digit, comma, insert, pageup, pagedown, tab, enter, left, right, up, down, equals or minus. ctrl-c, ctrl-d and ctrl-w are reserved for the terminal, and no two actions can share a binding.",
           "type": "object",
           "additionalProperties": false,
           "properties": {
@@ -438,6 +438,138 @@
           "paste_alternate": {
             "type": "string",
             "default": "shift-insert"
+          },
+          "new_workspace": {
+            "type": "string",
+            "default": "ctrl-shift-n"
+          },
+          "close_workspace": {
+            "type": "string",
+            "default": "ctrl-alt-shift-w"
+          },
+          "rename_workspace": {
+            "type": "string",
+            "default": "ctrl-shift-r"
+          },
+          "next_workspace": {
+            "type": "string",
+            "default": "ctrl-pagedown"
+          },
+          "previous_workspace": {
+            "type": "string",
+            "default": "ctrl-pageup"
+          },
+          "toggle_sidebar": {
+            "type": "string",
+            "default": "ctrl-shift-b"
+          },
+          "jump_to_unread": {
+            "type": "string",
+            "default": "ctrl-shift-u"
+          },
+          "show_notifications": {
+            "type": "string",
+            "default": "ctrl-shift-i"
+          },
+          "command_palette": {
+            "type": "string",
+            "default": "ctrl-shift-p"
+          },
+          "next_tab": {
+            "type": "string",
+            "default": "ctrl-tab"
+          },
+          "previous_tab": {
+            "type": "string",
+            "default": "ctrl-shift-tab"
+          },
+          "reopen_tab": {
+            "type": "string",
+            "default": "ctrl-alt-shift-t"
+          },
+          "new_claude_workspace": {
+            "type": "string",
+            "default": "ctrl-alt-shift-c"
+          },
+          "new_window": {
+            "type": "string",
+            "default": "ctrl-alt-shift-n"
+          },
+          "toggle_zoom": {
+            "type": "string",
+            "default": "ctrl-shift-enter"
+          },
+          "focus_left": {
+            "type": "string",
+            "default": "ctrl-alt-left"
+          },
+          "focus_right": {
+            "type": "string",
+            "default": "ctrl-alt-right"
+          },
+          "focus_up": {
+            "type": "string",
+            "default": "ctrl-alt-up"
+          },
+          "focus_down": {
+            "type": "string",
+            "default": "ctrl-alt-down"
+          },
+          "find": {
+            "type": "string",
+            "default": "ctrl-shift-f"
+          },
+          "clear_scrollback": {
+            "type": "string",
+            "default": "ctrl-shift-k"
+          },
+          "font_bigger": {
+            "type": "string",
+            "default": "ctrl-equals"
+          },
+          "font_smaller": {
+            "type": "string",
+            "default": "ctrl-minus"
+          },
+          "font_reset": {
+            "type": "string",
+            "default": "ctrl-0"
+          },
+          "select_workspace_1": {
+            "type": "string",
+            "default": "ctrl-1"
+          },
+          "select_workspace_2": {
+            "type": "string",
+            "default": "ctrl-2"
+          },
+          "select_workspace_3": {
+            "type": "string",
+            "default": "ctrl-3"
+          },
+          "select_workspace_4": {
+            "type": "string",
+            "default": "ctrl-4"
+          },
+          "select_workspace_5": {
+            "type": "string",
+            "default": "ctrl-5"
+          },
+          "select_workspace_6": {
+            "type": "string",
+            "default": "ctrl-6"
+          },
+          "select_workspace_7": {
+            "type": "string",
+            "default": "ctrl-7"
+          },
+          "select_workspace_8": {
+            "type": "string",
+            "default": "ctrl-8"
+          },
+          "select_workspace_9": {
+            "type": "string",
+            "default": "ctrl-9"
           }
           }
         }

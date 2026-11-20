@@ -5,7 +5,6 @@ namespace Programa;
 public partial class App : Application
 {
     private readonly bool _smoke;
-    private Window? _window;
 
     public App(bool smoke = false)
     {
@@ -14,11 +13,8 @@ public partial class App : Application
         UnhandledException += OnUnhandledException;
     }
 
-    protected override void OnLaunched(LaunchActivatedEventArgs args)
-    {
-        _window = new MainWindow(_smoke);
-        _window.Activate();
-    }
+    /// <summary>Opens every window of the last session, or one fresh window.</summary>
+    protected override void OnLaunched(LaunchActivatedEventArgs args) => WindowRegistry.Launch(_smoke);
 
     private static void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs args)
     {

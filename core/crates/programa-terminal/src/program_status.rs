@@ -28,6 +28,96 @@ pub(crate) const CAPACITY: usize = 256;
 
 const REPORT_PREFIX: &[u8] = b"7501;";
 const PROMPT_PREFIX: &[u8] = b"133;A";
+/// Desktop notifications: rxvt's `OSC 777;notify;title;body` (Claude Code's Ghostty channel) and
+/// iTerm2's `OSC 9;body`, as Ghostty accepts them.
+const NOTIFY_PREFIX: &[u8] = b"777;notify;";
+const GROWL_PREFIX: &[u8] = b"9;";
+/// Working directory: `OSC 7;file://host/path` (Ghostty, macOS shells, Programa's PowerShell
+/// integration) and ConEmu's `OSC 9;9;path`, which Windows Terminal profiles commonly emit.
+const CWD_PREFIX: &[u8] = b"7;";
+const SCANNED_PREFIXES: [&[u8]; 5] = [
+    REPORT_PREFIX,
+    PROMPT_PREFIX,
+    NOTIFY_PREFIX,
+    GROWL_PREFIX,
+    CWD_PREFIX,
+];
+
+/// The working directory an OSC 7 or OSC 9;9 report names, as a native path.
+fn parse_cwd(payload: &[u8]) -> Option<String> {
+    let path = if let Some(url) = payload.strip_prefix(CWD_PREFIX) {
+        // file://host/path: drop the scheme and the host, keep the path.
+        let rest = url.strip_prefix(b"file://")?;
+        let slash = rest.iter().position(|&b| b == b'/')?;
+        percent_decode(&rest[slash..])?
+    } else if let Some(path) = payload.strip_prefix(b"9;9;") {
+        String::from_utf8(path.to_vec()).ok()?
+    } else {
+        return None;
+    };
+    let path = path.trim().trim_matches('"');
+    // "/C:/Users/me" is a Windows drive path; "/home/me" stays as it is.
+    let bytes = path.as_bytes();
+    let native = if bytes.len() >= 3 && bytes[0] == b'/' && bytes[2] == b':' {
+        path[1..].replace('/', "\\")
+    } else {
+        path.to_owned()
+    };
+    (!native.is_empty() && !native.chars().any(char::is_control)).then_some(native)
+}
+
+fn percent_decode(bytes: &[u8]) -> Option<String> {
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            let hex = std::str::from_utf8(bytes.get(index + 1..index + 3)?).ok()?;
+            out.push(u8::from_str_radix(hex, 16).ok()?);
+            index += 3;
+        } else {
+            out.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8(out).ok()
+}
+const MAX_NOTIFICATION_CHARS: usize = 256;
+
+/// A desktop notification a program asked for.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct Notification {
+    pub title: String,
+    pub body: String,
+}
+
+/// `OSC 777;notify;title;body` or `OSC 9;body`. ConEmu's numeric `OSC 9;N;...` forms
+/// (progress, sleep, message box) are not notifications, as in Ghostty.
+fn parse_notification(payload: &[u8]) -> Option<Notification> {
+    let clean = |bytes: &[u8]| -> String {
+        String::from_utf8_lossy(bytes)
+            .chars()
+            .filter(|c| !c.is_control())
+            .take(MAX_NOTIFICATION_CHARS)
+            .collect::<String>()
+            .trim()
+            .to_owned()
+    };
+    let (title, body) = if let Some(rest) = payload.strip_prefix(NOTIFY_PREFIX) {
+        match rest.iter().position(|&b| b == b';') {
+            Some(split) => (clean(&rest[..split]), clean(&rest[split + 1..])),
+            None => (clean(rest), String::new()),
+        }
+    } else if let Some(rest) = payload.strip_prefix(GROWL_PREFIX) {
+        let digits = rest.iter().take_while(|b| b.is_ascii_digit()).count();
+        if digits > 0 && rest.get(digits).is_none_or(|&b| b == b';') {
+            return None;
+        }
+        (String::new(), clean(rest))
+    } else {
+        return None;
+    };
+    (!title.is_empty() || !body.is_empty()).then_some(Notification { title, body })
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -442,7 +532,9 @@ impl Default for Scanner {
 }
 
 impl Scanner {
-    pub(crate) fn feed(&mut self, bytes: &[u8], mut on_sequence: impl FnMut(Sequence<'_>)) {
+    /// Calls `on_sequence` with each sequence and the offset in `bytes` just past its last byte
+    /// there (for `ESC \`, past the ESC).
+    pub(crate) fn feed(&mut self, bytes: &[u8], mut on_sequence: impl FnMut(Sequence<'_>, usize)) {
         let mut index = 0;
         while index < bytes.len() {
             match self.state {
@@ -462,7 +554,7 @@ impl Scanner {
                             ScanState::Osc
                         }
                         b'c' => {
-                            on_sequence(Sequence::Reset);
+                            on_sequence(Sequence::Reset, index);
                             ScanState::Ground
                         }
                         0x1b => ScanState::Escape,
@@ -474,11 +566,11 @@ impl Scanner {
                     index += 1;
                     match byte {
                         0x07 => {
-                            on_sequence(Sequence::Osc(&self.payload, Terminator::Bel));
+                            on_sequence(Sequence::Osc(&self.payload, Terminator::Bel), index);
                             self.state = ScanState::Ground;
                         }
                         0x1b => {
-                            on_sequence(Sequence::Osc(&self.payload, Terminator::St));
+                            on_sequence(Sequence::Osc(&self.payload, Terminator::St), index);
                             self.state = ScanState::Escape;
                         }
                         0x18 | 0x1a => self.state = ScanState::Ground,
@@ -489,9 +581,12 @@ impl Scanner {
                                 continue;
                             }
                             self.payload.push(byte);
-                            let head = &self.payload[..self.payload.len().min(REPORT_PREFIX.len())];
-                            if !REPORT_PREFIX.starts_with(head) && !PROMPT_PREFIX.starts_with(head)
-                            {
+                            let payload = &self.payload;
+                            let wanted = SCANNED_PREFIXES.iter().any(|prefix| {
+                                let length = payload.len().min(prefix.len());
+                                prefix[..length] == payload[..length]
+                            });
+                            if !wanted {
                                 self.state = ScanState::OscIgnore;
                             }
                         }
@@ -525,6 +620,12 @@ pub(crate) struct FeedResult {
     pub changed: bool,
     /// Query replies to write back to the PTY, in order.
     pub reply: Vec<u8>,
+    /// Desktop notifications the program asked for, in order.
+    pub notifications: Vec<Notification>,
+    /// The last working directory the shell reported in this chunk.
+    pub cwd: Option<String>,
+    /// Where each shell prompt mark (OSC 133;A) ends in this chunk, in order.
+    pub prompts: Vec<usize>,
 }
 
 /// The scanner and the store for one terminal.
@@ -538,7 +639,7 @@ impl ProgramStatus {
     pub(crate) fn feed(&mut self, bytes: &[u8]) -> FeedResult {
         let mut result = FeedResult::default();
         let store = &mut self.store;
-        self.scanner.feed(bytes, |sequence| match sequence {
+        self.scanner.feed(bytes, |sequence, end| match sequence {
             Sequence::Reset => result.changed |= store.reset_all(),
             Sequence::Osc(payload, terminator) => {
                 if let Some(body) = payload.strip_prefix(REPORT_PREFIX) {
@@ -554,6 +655,11 @@ impl ProgramStatus {
                     }
                 } else if is_prompt(payload) {
                     result.changed |= store.drop_transient();
+                    result.prompts.push(end);
+                } else if let Some(cwd) = parse_cwd(payload) {
+                    result.cwd = Some(cwd);
+                } else if let Some(notification) = parse_notification(payload) {
+                    result.notifications.push(notification);
                 }
             }
         });
@@ -967,7 +1073,7 @@ mod tests {
         let mut scanner = Scanner::default();
         let mut found = Vec::new();
         for chunk in chunks {
-            scanner.feed(chunk, |sequence| match sequence {
+            scanner.feed(chunk, |sequence, _| match sequence {
                 Sequence::Osc(payload, terminator) => {
                     found.push((payload.to_vec(), Some(terminator)))
                 }
@@ -996,6 +1102,50 @@ mod tests {
             expected
         );
         assert_eq!(scan(&[b"\x1b", b"]7501;state=working\x1b\\"]), expected);
+    }
+
+    #[test]
+    fn feed_reports_the_working_directory() {
+        let mut status = ProgramStatus::default();
+        let cwd = |status: &mut ProgramStatus, bytes: &[u8]| status.feed(bytes).cwd;
+        assert_eq!(
+            cwd(&mut status, b"\x1b]7;file:///C:/Users/me/My%20Project\x07"),
+            Some(r"C:\Users\me\My Project".into())
+        );
+        assert_eq!(
+            cwd(&mut status, b"\x1b]7;file://box/home/me\x1b\\"),
+            Some("/home/me".into())
+        );
+        assert_eq!(
+            cwd(&mut status, b"\x1b]9;9;\"C:\\Work\"\x07"),
+            Some(r"C:\Work".into())
+        );
+        // Not a cwd, and not mistaken for a notification either.
+        let other = status.feed(b"\x1b]7;kitty-shell-cwd://x/y\x07\x1b]9;9;\x07");
+        assert_eq!((other.cwd, other.notifications.len()), (None, 0));
+    }
+
+    #[test]
+    fn feed_collects_desktop_notifications() {
+        let mut status = ProgramStatus::default();
+        let result = status.feed(
+            b"\x1b]777;notify;Claude Code;Needs your permission; to run ls\x07\
+              \x1b]9;Build finished\x1b\\\
+              \x1b]9;4;3;\x07\x1b]9;1;500\x07\x1b]9;4\x07\x1b]777;preexec\x07",
+        );
+        let note = |title: &str, body: &str| Notification {
+            title: title.into(),
+            body: body.into(),
+        };
+        // The body keeps its own semicolons; ConEmu's numeric OSC 9 forms are skipped.
+        assert_eq!(
+            result.notifications,
+            [
+                note("Claude Code", "Needs your permission; to run ls"),
+                note("", "Build finished"),
+            ]
+        );
+        assert!(!result.changed);
     }
 
     #[test]

@@ -22,7 +22,7 @@ and is not part of the Cargo workspace.
 
 Create returns an opaque handle, or null with UTF-8 text in error (when error
 is nonnull) if the config is invalid, the PTY cannot start, or construction
-panics. Free stops the shell, is safe on null, and must be called exactly once
+panics. Free stops the shell (only detaches from a hosted one, see host), is safe on null, and must be called exactly once
 per handle. A handle may be used from any thread, but the caller must not free
 it while another thread is inside a call on it.
 
@@ -58,14 +58,76 @@ are ignored.
       "cols": 80,
       "rows": 24,
       "cell_width": 8,
-      "cell_height": 16
+      "cell_height": 16,
+      "shell_integration": true,
+      "restore_text": "saved output
+from the last run",
+      "colors": {
+        "palette": {"0": [29, 31, 33], "1": [204, 102, 102]},
+        "foreground": [255, 255, 255],
+        "background": [40, 44, 52],
+        "cursor": [255, 255, 255]
+      }
     }
 
-Defaults: shell is COMSPEC (Windows) or SHELL (elsewhere), working_directory is
-the user's home, cols and rows are 80 and 24, cell size is 8 by 16 pixels, and
-TERM is set to xterm-256color unless env supplies it. Sizes below 2 columns or
+restore_text is output saved by session restore; it is written into the new
+terminal before the shell starts and then moved into scrollback (an erase of
+the main screen), so the shell starts on an empty screen with the saved lines
+above it. Control characters are dropped and at most 1 MiB of the end is kept.
+
+shell_integration starts the default PowerShell with Programa's integration, passed
+with `-NoExit -EncodedCommand` so it runs after the profile and is not blocked by the
+script execution policy: at each prompt it reports the working directory (OSC 7),
+the prompt marks (OSC 133;A and B) and a title naming the directory. It has no
+effect on an explicit shell or explicit args.
+
+host runs the shell in the terminal host (`programa-host.exe`, `src/host.rs`) instead
+of this process, so it survives the app quitting or crashing:
+
+    "host": {"pipe": "\\\\.\\pipe\\programa-host-...", "token": "...", "id": "surface-..."}
+
+The session reattaches to the host's session of that id when it is still running there
+(the host replays up to 4 MiB of its past output, which is parsed without answering
+queries or raising notifications again, and the shell is resized to this terminal) and
+otherwise starts it there; restore_text applies only to a new session. Without a
+reachable host the shell runs in this process as before. Free then only detaches: the
+shell keeps running.
+
+    int32_t programa_terminal_kill(session);
+
+Ends a hosted shell (its tab was closed); a session running in this process is
+unaffected and still ends at free.
+
+    bool programa_terminal_is_hosted(session);
+
+True when the terminal host runs the shell, false when it runs in this process (no host
+config, or the host could not be reached).
+
+colors is the frontend's resolved theme as RGB triples; every field is
+optional and replaces Ghostty's default (foreground #FFFFFF, background
+#282C34, Ghostty's 256-color palette, cursor = foreground). Cells resolve
+default and palette colors through it, color queries are answered from it, and
+colors a program sets itself with OSC 4/10/11 take precedence in cells.
+
+    int32_t programa_terminal_set_colors(session, const uint8_t *colors_json,
+                                         size_t len);
+
+Replaces the colors with a new colors object (same shape), for a theme change
+while the session runs, and advances the generation. INVALID_ARGUMENT for bad
+JSON.
+
+Defaults: on Windows, shell is the first of pwsh.exe and powershell.exe found on
+PATH (with args `-NoLogo` when none are given), else COMSPEC; elsewhere it is
+SHELL. working_directory is the user's home, cols and rows are 80 and 24, and
+cell size is 8 by 16 pixels. Unless env supplies them, TERM is xterm-256color,
+COLORTERM is truecolor and TERM_PROGRAM is ghostty, matching the macOS app so
+agents enable truecolor and kitty keyboard input. Sizes below 2 columns or
 rows are raised to 2; at most 4096 columns, 4096 rows, and 1,048,576 cells are
 accepted.
+
+The emulator answers OSC 4/10/11/12 color queries from its built-in palette
+and supports the kitty keyboard protocol flag stack (`CSI > u`, `CSI < u`,
+`CSI ? u`); see `programa_terminal_mode` for how the frontend encodes keys.
 
 ## Input
 
@@ -88,10 +150,103 @@ line break or another C0 control byte (tab excepted) or DEL, so pasting it
 could run commands at once. The Windows app asks before pasting such text.
 False for a null session or invalid data.
 
-    bool programa_terminal_application_cursor(session);
+    uint32_t programa_terminal_mode(session);
 
-True while the program has enabled application cursor keys (DECCKM), so the
-caller sends ESC O A instead of ESC [ A for the arrow keys.
+Bits for the input modes the program has enabled, 0 for a null session:
+
+    APP_CURSOR = 1          DECCKM: send ESC O A instead of ESC [ A for arrows
+    MOUSE_REPORTING = 2     the program tracks the mouse (1000/1002/1003)
+    FOCUS_EVENTS = 4        send ESC [ I / ESC [ O on focus gain and loss
+    KITTY_DISAMBIGUATE = 8  kitty keyboard flag 1: modified Enter, Tab,
+                            Backspace, Escape and Ctrl/Alt+key use CSI u
+    ALT_SCREEN = 16         the alternate screen is active
+
+ConPTY passes these modes through when the program asks for them, and passes
+the resulting VT input to programs that read it raw (Node, Bun).
+
+    bool programa_terminal_mouse(session, uint32_t button, uint32_t action,
+                                 size_t col, size_t row, uint32_t mods);
+
+Reports a mouse event to the program in the encoding it asked for (SGR, UTF-8
+or X10). button is 0 left, 1 middle, 2 right, or 3 for motion with no button;
+action is 0 press, 1 release, 2 motion; mods is a bit set of shift 1, alt 2,
+ctrl 4; col and row are 0-based viewport cells. Returns true when the event
+was sent, false when the program is not tracking that event, in which case the
+frontend handles it itself (selection).
+
+    int32_t programa_terminal_focus(session, bool focused);
+
+Sends ESC [ I or ESC [ O when the program enabled focus events (ConPTY always
+does), without moving a scrolled-back view.
+
+    int32_t programa_terminal_wheel(session, int32_t lines, size_t col,
+                                    size_t row, uint32_t mods);
+
+One wheel gesture of lines steps (positive is up). It becomes wheel reports
+when the program tracks the mouse, arrow keys when an alternate-screen program
+allows alternate scroll, and a scrollback move otherwise.
+
+    bool programa_terminal_find(session, const uint8_t *text, size_t len, bool forward);
+
+Selects the next match of the UTF-8 text, matched literally and case-insensitively
+unless it contains an uppercase letter, and scrolls it into view. With a
+selection, the search continues after it (forward) or before it; without one it
+starts from the bottom of the screen going back, or from the top of scrollback
+going forward. Returns true when a match was found; false for no match, empty
+text, invalid UTF-8 or a null session.
+
+    int32_t programa_terminal_clear_scrollback(session);
+
+Drops the scrollback above the screen; the screen itself is unchanged.
+
+    int32_t programa_terminal_text(session, uint32_t max_lines,
+                                   ProgramaTerminalBuffer *out);
+
+Writes the last max_lines lines of output, counted back from the last line with
+text (so blank rows under the prompt do not count), scrollback included, as plain UTF-8
+text: soft-wrapped lines are joined, trailing blanks are trimmed, and lines are
+separated by `
+`. Session restore saves it and passes it back as restore_text.
+
+    uint32_t programa_terminal_shell_pid(session);
+
+The shell's process id, or 0 when unknown (null session, non-Windows). The
+Windows app checks it for child processes before closing, to warn that
+something is still running.
+
+    uint64_t programa_terminal_cwd_generation(session);
+    int32_t programa_terminal_cwd(session, ProgramaTerminalBuffer *out);
+
+The working directory the shell last reported with `OSC 7 ; file://host/path` or
+`OSC 9 ; 9 ; path`, as a native path (`C:\Work`), or an empty buffer before the
+first report. The generation moves on every report, also when the directory is
+unchanged, so a client can refresh what depends on it (the git branch) at each
+prompt.
+
+    int32_t programa_terminal_link_at(session, size_t column, size_t row, ProgramaTerminalBuffer *out);
+
+The `OSC 8` hyperlink URI of the visible cell at (`column`, `row`), or an empty
+buffer when it has none or the position is off screen. The Windows app opens it
+on Ctrl+click; plain URLs in the text are found by the app itself.
+
+    int32_t programa_terminal_take_notifications(session, ProgramaTerminalBuffer *out);
+
+Writes the desktop notifications programs asked for since the last call, oldest
+first, and clears them, or an empty buffer when there are none:
+
+    [{"title": "Claude Code", "body": "Claude needs your permission"}]
+
+Sources are `OSC 777 ; notify ; title ; body` (Claude Code's Ghostty channel)
+and `OSC 9 ; body`; ConEmu's numeric `OSC 9 ; N ; ...` forms, such as progress,
+are not notifications. Control characters are removed and each field keeps at
+most 256 characters. At most 64 wait; older ones are dropped. A new
+notification advances the generation.
+
+    int32_t programa_terminal_take_clipboard(session, ProgramaTerminalBuffer *out);
+
+Writes the text the program last stored with OSC 52 and clears it, or an empty
+buffer when there is none. Storing advances the generation, so a client checks
+on each wake. Clipboard reads (OSC 52 with `?`) are not answered.
 
 ## View
 
@@ -119,7 +274,7 @@ Snapshot writes one JSON object describing the visible viewport:
       "columns": 80,
       "rows": 24,
       "display_offset": 0,
-      "cursor": {"column": 0, "row": 0, "visible": true},
+      "cursor": {"column": 0, "row": 0, "visible": true, "shape": "block"},
       "selection": {"start_column": 0, "start_row": 0,
                     "end_column": 4, "end_row": 0, "block": false},
       "cells": [{
@@ -129,7 +284,8 @@ Snapshot writes one JSON object describing the visible viewport:
         "background": {"r": 20, "g": 20, "b": 24, "a": 255},
         "explicit_background": false,
         "selected": false, "bold": false, "italic": false,
-        "underline": false, "undercurl": false, "strikethrough": false
+        "underline": false, "undercurl": false, "strikethrough": false,
+        "dim": false
       }],
       "terminated": false,
       "title": "vim"
@@ -137,8 +293,11 @@ Snapshot writes one JSON object describing the visible viewport:
 
 cells has one entry per grid cell, row by row. width is 1, 2 for a wide
 character, or 0 for the spacer that follows it; text is empty for blank cells.
-selection is null when nothing is selected. The cursor is hidden while the view
-is scrolled into scrollback. terminated is true once the shell has exited. title is the window title the
+selection is null when nothing is selected. dim marks faint (SGR 2) text. The
+cursor's shape is `block`, `underline` or `beam` as the program set it
+(DECSCUSR). The cursor is hidden while the view
+is scrolled into scrollback; in copy mode it is the copy-mode cursor instead, a block shown
+wherever it is in view. terminated is true once the shell has exited. title is the window title the
 program set (OSC 0/2), or null when none is set.
 
 Generation increases on every screen, title, selection, size, lifecycle, or
@@ -188,12 +347,34 @@ the program; show them as untrusted text.
                                               uint32_t mode);
     int32_t programa_terminal_selection_update(session, size_t col, size_t row);
     int32_t programa_terminal_selection_end(session);
+    int32_t programa_terminal_selection_clear(session);
     int32_t programa_terminal_copy_selection(session, ProgramaTerminalBuffer *out);
 
 Coordinates are viewport cells and are clamped to the grid. Begin replaces any
 selection; update extends it; end is accepted and leaves the selection in
-place. Copy writes the selected text (empty when none) using
+place. Clear removes it. Copy writes the selected text (empty when none) using
 terminal semantics: soft-wrapped lines are joined and trailing blanks trimmed.
+
+## Copy mode
+
+    int32_t programa_terminal_copy_mode(session, uint32_t command, uint32_t count);
+
+Keyboard copy mode, on alacritty's vi mode: a cursor of its own that moves through
+the screen and scrollback, and a selection that follows it. Commands: 0 leaves (and
+clears the selection), 1 enters at the terminal cursor, 2 starts a selection at the
+cursor, 3 clears it, 4 selects `count` whole lines from the cursor's line, 5 moves the
+cursor to the selection's start and keeps the selection (a find's match), 10 to 16 move
+the cursor up, down, left, right, to the line's start, its end and its first text, 20 to
+23 scroll a page up, a page down, half a page up and half a page down keeping the
+cursor's screen row, 24 goes to the top of scrollback and 25 back to the prompt line,
+26 and 27 go to the start of the shell prompt above or below the cursor's line (a row
+where the shell sent OSC 133;A; the mark stays with the row through scrolling, reflow
+and scrollback, a clear drops it, and the alternate screen has none), or the
+furthest one there is when fewer than `count` are left, scrolling it into view (the
+cursor stays when there is none). Moves, scrolls and prompt jumps repeat `count` times
+(1 to 9999). Commands other than 0 and 1 fail with
+INVALID_ARGUMENT outside copy mode. A find in copy mode scrolls before it selects, so the
+match stays as found.
 
 ## Lifecycle and errors
 

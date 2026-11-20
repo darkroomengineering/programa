@@ -719,6 +719,17 @@ fn validate_command_sessions(
             .collect(),
         DomainCommand::SelectWorkspace { .. }
         | DomainCommand::CloseWorkspace { .. }
+        | DomainCommand::RenameWorkspace { .. }
+        | DomainCommand::SetWorkspacePinned { .. }
+        | DomainCommand::SetWorkspaceColor { .. }
+        | DomainCommand::SetWorkspaceDescription { .. }
+        | DomainCommand::MoveWorkspace { .. }
+        | DomainCommand::AdoptWorkspace { .. }
+        | DomainCommand::AdoptSurface { .. }
+        | DomainCommand::SetWorkspaceParent { .. }
+        | DomainCommand::SetWorkspaceCollapsed { .. }
+        | DomainCommand::RenameSurface { .. }
+        | DomainCommand::SetSurfacePinned { .. }
         | DomainCommand::SelectSurface { .. }
         | DomainCommand::CloseSurface { .. }
         | DomainCommand::ReorderSurface { .. }

@@ -161,10 +161,18 @@ where
                 writer.write_all(&buf[..unprocessed]).unwrap();
             }
 
-            self.event_proxy.pty_output(&buf[..unprocessed]);
+            state.prompts.clear();
+            self.event_proxy.pty_output(&buf[..unprocessed], &mut state.prompts);
 
-            // Parse the incoming bytes.
-            state.parser.advance(&mut **terminal, &buf[..unprocessed]);
+            // Parse the incoming bytes, stopping after each prompt mark to note its row.
+            let mut parsed = 0;
+            for &end in &state.prompts {
+                let end = end.clamp(parsed, unprocessed);
+                state.parser.advance(&mut **terminal, &buf[parsed..end]);
+                terminal.mark_prompt();
+                parsed = end;
+            }
+            state.parser.advance(&mut **terminal, &buf[parsed..unprocessed]);
 
             processed += unprocessed;
             unprocessed = 0;
@@ -443,6 +451,8 @@ pub struct State {
     write_list: VecDeque<Cow<'static, [u8]>>,
     writing: Option<Writing>,
     parser: ansi::Processor,
+    /// Offsets of the prompt marks in the chunk being parsed (`EventListener::pty_output`).
+    prompts: Vec<usize>,
 }
 
 impl State {
@@ -538,6 +548,7 @@ mod tests {
     use crate::term::Config;
 
     struct BytesThenError {
+        bytes: &'static [u8],
         step: u8,
         error_reached: Sender<()>,
     }
@@ -547,8 +558,8 @@ mod tests {
             match self.step {
                 0 => {
                     self.step = 1;
-                    buffer[0] = b'X';
-                    Ok(1)
+                    buffer[..self.bytes.len()].copy_from_slice(self.bytes);
+                    Ok(self.bytes.len())
                 },
                 _ => {
                     let _ = self.error_reached.send(());
@@ -612,7 +623,7 @@ mod tests {
     fn parses_buffered_bytes_before_returning_a_terminal_read_error() {
         let (error_reached, wait_for_error) = mpsc::channel();
         let pty = ClosingPty {
-            reader: BytesThenError { step: 0, error_reached },
+            reader: BytesThenError { bytes: b"X", step: 0, error_reached },
             writer: io::sink(),
         };
         let terminal = Arc::new(FairMutex::new(Term::new(
@@ -641,5 +652,35 @@ mod tests {
         });
 
         assert_eq!(terminal.lock().grid()[Line(0)][Column(0)].c, 'X');
+    }
+
+    /// Takes every BEL for a prompt mark.
+    struct BelPrompts;
+
+    impl EventListener for BelPrompts {
+        fn pty_output(&self, bytes: &[u8], prompts: &mut Vec<usize>) {
+            prompts.extend((0..bytes.len()).filter(|&i| bytes[i] == 0x07).map(|i| i + 1));
+        }
+    }
+
+    #[test]
+    fn marks_the_cursor_row_at_each_prompt_mark() {
+        let (error_reached, _) = mpsc::channel();
+        let pty = ClosingPty {
+            reader: BytesThenError { bytes: b"\x07a\r\nb\r\n\x07c", step: 0, error_reached },
+            writer: io::sink(),
+        };
+        let terminal = Arc::new(FairMutex::new(Term::new(
+            Config::default(),
+            &TermSize::new(8, 3),
+            BelPrompts,
+        )));
+        let mut event_loop = EventLoop::new(terminal.clone(), BelPrompts, pty, true, false)
+            .expect("create event loop");
+        let _ = event_loop.pty_read::<io::Sink>(&mut State::default(), &mut [0; 16], None);
+
+        let terminal = terminal.lock();
+        let marked: Vec<bool> = (0..3).map(|line| terminal.grid()[Line(line)].prompt).collect();
+        assert_eq!(marked, [true, false, true]);
     }
 }

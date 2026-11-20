@@ -710,6 +710,15 @@ impl<T> Term<T> {
         &self.mode
     }
 
+    /// Programa: a shell prompt starts on the cursor's row (OSC 133;A). The alternate screen has
+    /// no prompts.
+    pub fn mark_prompt(&mut self) {
+        if !self.mode.contains(TermMode::ALT_SCREEN) {
+            let line = self.grid.cursor.point.line;
+            self.grid[line].prompt = true;
+        }
+    }
+
     /// Swap primary and alternate screen buffer.
     pub fn swap_alt(&mut self) {
         if !self.mode.contains(TermMode::ALT_SCREEN) {

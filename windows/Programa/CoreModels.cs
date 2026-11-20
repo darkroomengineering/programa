@@ -12,7 +12,13 @@ public sealed record WorkspaceSnapshot(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("selected_pane_id")] string SelectedPaneId,
     [property: JsonPropertyName("panes")] IReadOnlyList<PaneSnapshot> Panes,
-    [property: JsonPropertyName("layout")] LayoutSnapshot Layout)
+    [property: JsonPropertyName("layout")] LayoutSnapshot Layout,
+    [property: JsonPropertyName("title")] string? Title = null,
+    [property: JsonPropertyName("pinned")] bool Pinned = false,
+    [property: JsonPropertyName("color")] string? Color = null,
+    [property: JsonPropertyName("description")] string? Description = null,
+    [property: JsonPropertyName("parent_id")] string? ParentId = null,
+    [property: JsonPropertyName("collapsed")] bool Collapsed = false)
 {
     public PaneSnapshot? SelectedPane => Panes.FirstOrDefault(pane => pane.Id == SelectedPaneId);
 }
@@ -27,7 +33,8 @@ public sealed record PaneSnapshot(
 
 public sealed record SurfaceSnapshot(
     [property: JsonPropertyName("id")] string Id,
-    [property: JsonPropertyName("is_pinned")] bool IsPinned);
+    [property: JsonPropertyName("is_pinned")] bool IsPinned,
+    [property: JsonPropertyName("title")] string? Title = null);
 
 public sealed record LayoutSnapshot
 {
