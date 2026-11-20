@@ -31,19 +31,23 @@ internal static class WindowRegistry
     /// <summary>Opens the saved windows (or one fresh window) at launch.</summary>
     internal static void Launch(bool smoke)
     {
+        if (smoke)
+        {
+            OpenWindow(smoke: true);
+            return;
+        }
         _dispatcher = DispatcherQueue.GetForCurrentThread();
         McpConfig.Write();
         // Before any terminal starts: they run in the host and reattach to what it kept running.
-        // A smoke run leaves nothing behind.
-        if (!smoke) TerminalHost.Start();
+        TerminalHost.Start();
         Notifications.ToastClicked += surfaceId => _dispatcher.TryEnqueue(() => JumpTo(surfaceId));
         Notifications.RegisterToasts();
         // Before anything can overwrite it, the session goes into the history (snapshot.list); an
         // unreadable one falls back to the newest archive that restores, as on macOS.
-        if (!smoke) SessionHistory.Rotate();
+        SessionHistory.Rotate();
         var hadSession = File.Exists(SessionStore.DefaultPath);
-        var saved = SessionStore.Load() ?? (hadSession && !smoke ? SessionHistory.NewestRestorable() : null);
-        OpenWindow(smoke, saved);
+        var saved = SessionStore.Load() ?? (hadSession ? SessionHistory.NewestRestorable() : null);
+        OpenWindow(restore: saved);
         foreach (var other in saved?.OtherWindows ?? []) OpenWindow(false, other);
         TerminalHost.Retain(Open.SelectMany(window => window.SurfaceIds()));
         Current = Open.FirstOrDefault();
@@ -303,7 +307,7 @@ internal static class WindowRegistry
         Open.Remove(window);
         NoteWorkspaces();
         if (Current == window) Current = Open.LastOrDefault();
-        if (_quitting) return;
+        if (_quitting || _dispatcher is null) return;
         if (state is not null) RecentlyClosed.Add((state, DateTimeOffset.Now));
         if (Open.Count > 0)
         {

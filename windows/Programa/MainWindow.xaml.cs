@@ -1000,7 +1000,7 @@ public sealed partial class MainWindow : Window
 
     private void OnClosed(object sender, WindowEventArgs args)
     {
-        WindowRegistry.Closed(this, CaptureSession());
+        WindowRegistry.Closed(this, _smoke ? null : CaptureSession());
         _notifications.Changed -= RefreshUnreadIndicators;
         _sidebarClock.Stop();
         foreach (var closed in _closedTerminals) closed.Terminal.Close();

@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.Principal;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Velopack;
@@ -46,7 +47,7 @@ public static class Program
             return;
         }
 
-        var smoke = args.Contains("--smoke", StringComparer.Ordinal);
+        var smoke = BuildIdentity.IsSmoke;
 
         AppDomain.CurrentDomain.UnhandledException += (_, eventArgs) =>
         {
@@ -72,6 +73,16 @@ public static class Program
 
         try
         {
+            // A second UI would restore the same session IDs and prune the first one's live shells.
+            using var identity = WindowsIdentity.GetCurrent();
+            var user = identity.User ?? throw new InvalidOperationException("Could not identify the current Windows user.");
+            using var instance = new Mutex(false, $"Darkroom.Programa{BuildIdentity.DevSuffix}.{user}",
+                new NamedWaitHandleOptions { CurrentSessionOnly = false }, out var firstInstance);
+            if (!firstInstance)
+            {
+                LaunchLog.Write("launch skipped: this Programa instance is already running");
+                return;
+            }
             LaunchLog.Write($"launch: starting (smoke={smoke}, conpty={(conptyLoaded ? "bundled" : "inbox")})");
             ComWrappersSupport.InitializeComWrappers();
             Application.Start(_1 =>
@@ -115,10 +126,12 @@ public static class BuildIdentity
 
     private static string Get(string key) => Metadata.TryGetValue(key, out var value) ? value : "unknown";
 
+    internal static bool IsSmoke { get; } = Environment.GetCommandLineArgs().Contains("--smoke", StringComparer.Ordinal);
+
     /// <summary>What a development build adds to the names of its pipe and files: "-dev", or "-dev-<tag>"
     /// with PROGRAMA_DEV_TAG (letters, digits and hyphens), so tagged dev builds run side by side as
     /// macOS reload.sh --tag builds do. Empty for an installed build.</summary>
-    public static string DevSuffix { get; } = DevSuffixFor(Value, Environment.GetEnvironmentVariable("PROGRAMA_DEV_TAG"));
+    public static string DevSuffix { get; } = IsSmoke ? "-smoke" : DevSuffixFor(Value, Environment.GetEnvironmentVariable("PROGRAMA_DEV_TAG"));
 
     internal static string DevSuffixFor(string identity, string? tag) =>
         !identity.Contains("0.0.0-dev", StringComparison.Ordinal) ? string.Empty
