@@ -98,6 +98,7 @@ public sealed partial class TerminalView : UserControl, IDisposable
         _italicFormat = CreateTextFormat(bold: false, italic: true);
         _boldItalicFormat = CreateTextFormat(bold: true, italic: true);
         BuildFindBar();
+        BuildCopyBadge();
 
         _canvas.ClearColor = Colors.Transparent;
         _canvas.Draw += DrawTerminal;
@@ -600,6 +601,8 @@ public sealed partial class TerminalView : UserControl, IDisposable
     {
         if (_disposed) return;
         RetireCurrentSession();
+        InCopyMode = false;
+        _copyBadge.Visibility = Visibility.Collapsed;
         _paintedGeneration = 0;
         _exitRaised = false;
         _programStatusGeneration = 0;
@@ -1009,6 +1012,16 @@ public sealed partial class TerminalView : UserControl, IDisposable
     private void CommitInput()
     {
         if (_session is null || string.IsNullOrEmpty(_input.Text)) return;
+        if (InCopyMode)
+        {
+            // Typed keys are copy mode commands; none reaches the shell.
+            var keys = _input.Text;
+            _resettingInput = true;
+            _input.Text = string.Empty;
+            _resettingInput = false;
+            TypeInCopyMode(keys);
+            return;
+        }
         var typed = Encoding.UTF8.GetBytes(_input.Text);
         NoteKeyBytes(typed);
         NativeTerminal.Write(_session, typed);
@@ -1025,6 +1038,12 @@ public sealed partial class TerminalView : UserControl, IDisposable
         var shift = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift).HasFlag(CoreVirtualKeyStates.Down);
         var mode = NativeTerminal.Mode(_session);
         var bytes = EncodeKey(args.Key, ctrl, alt, shift, (mode & NativeTerminal.ModeAppCursor) != 0, (mode & NativeTerminal.ModeKittyDisambiguate) != 0);
+        if (InCopyMode)
+        {
+            // Printable keys (AltGr ones too) come through the text box; every other key is copy mode's.
+            if (CopyModeKeyDown(args.Key, ctrl, alt) || bytes is not null) args.Handled = true;
+            return;
+        }
         if (bytes is null) return;
         NoteKeyBytes(bytes);
         NativeTerminal.Write(_session, bytes);
@@ -1284,6 +1303,7 @@ internal static class NativeTerminal
     [DllImport(Dll, EntryPoint = "programa_terminal_link_at")] private static extern int LinkAtNative(SafeSessionHandle session, nuint column, nuint row, out Buffer buffer);
     internal static string LinkAt(SafeSessionHandle session, nuint column, nuint row) => LinkAtNative(session, column, row, out var buffer) == 0 ? ReadAndFree(buffer) : string.Empty;
     [DllImport(Dll, EntryPoint = "programa_terminal_selection_clear")] internal static extern int ClearSelection(SafeSessionHandle session);
+    [DllImport(Dll, EntryPoint = "programa_terminal_copy_mode")] internal static extern int CopyMode(SafeSessionHandle session, uint command, uint count);
     [DllImport(Dll, EntryPoint = "programa_terminal_clear_scrollback")] internal static extern int ClearScrollback(SafeSessionHandle session);
     [DllImport(Dll, EntryPoint = "programa_terminal_take_notifications")] private static extern int TakeNotificationsNative(SafeSessionHandle session, out Buffer buffer);
     internal static TerminalNotification[] TakeNotifications(SafeSessionHandle session)

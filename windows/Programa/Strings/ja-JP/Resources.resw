@@ -135,4 +135,6 @@
   <data name="Shortcut_close_window" xml:space="preserve"><value>ウインドウを閉じる</value></data>
   <data name="Shortcut_quit" xml:space="preserve"><value>Programaを終了</value></data>
   <data name="GoToWorkspacePlaceholder" xml:space="preserve"><value>ワークスペースに移動</value></data>
+  <data name="Shortcut_toggle_terminal_copy_mode" xml:space="preserve"><value>ターミナルのコピーモードを切り替え</value></data>
+  <data name="CopyModeIndicator" xml:space="preserve"><value>vim</value></data>
 </root>

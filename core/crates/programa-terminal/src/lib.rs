@@ -817,26 +817,42 @@ fn snapshot(session: &ProgramaTerminalSession) -> Snapshot {
             });
         }
     }
-    let cursor_point = grid.cursor.point;
     Snapshot {
         generation: session.state.generation.load(Ordering::Acquire),
         columns: grid.columns(),
         rows: grid.screen_lines(),
         display_offset: offset,
-        cursor: CursorSnapshot {
-            column: cursor_point.column.0,
-            row: cursor_point.line.0.max(0) as usize,
-            visible: cursor_is_visible(offset, term.mode()),
-            shape: match term.cursor_style().shape {
-                CursorShape::Underline => "underline",
-                CursorShape::Beam => "beam",
-                _ => "block",
-            },
-        },
+        cursor: cursor_snapshot(&term),
         selection,
         cells,
         terminated: session.state.terminated.load(Ordering::Acquire),
         title: lock(&session.state.title).clone(),
+    }
+}
+
+/// The terminal's cursor, or in copy mode the copy-mode cursor, as a block wherever it is in view.
+fn cursor_snapshot<T>(term: &Term<T>) -> CursorSnapshot {
+    let offset = term.grid().display_offset();
+    if term.mode().contains(TermMode::VI) {
+        let point = term.vi_mode_cursor.point;
+        let row = point.line.0 + offset as i32;
+        return CursorSnapshot {
+            column: point.column.0,
+            row: row.max(0) as usize,
+            visible: (0..term.screen_lines() as i32).contains(&row),
+            shape: "block",
+        };
+    }
+    let cursor_point = term.grid().cursor.point;
+    CursorSnapshot {
+        column: cursor_point.column.0,
+        row: cursor_point.line.0.max(0) as usize,
+        visible: cursor_is_visible(offset, term.mode()),
+        shape: match term.cursor_style().shape {
+            CursorShape::Underline => "underline",
+            CursorShape::Beam => "beam",
+            _ => "block",
+        },
     }
 }
 
@@ -1536,8 +1552,10 @@ fn find<T: EventListener>(term: &mut Term<T>, text: &str, forward: bool) -> bool
     };
     let mut selection = Selection::new(SelectionType::Simple, *found.start(), Side::Left);
     selection.update(*found.end(), Side::Right);
-    term.selection = Some(selection);
+    // Scroll first: in copy mode a scroll stretches the selection to the copy-mode cursor.
+    term.selection = None;
     term.scroll_to_point(*found.start());
+    term.selection = Some(selection);
     true
 }
 
@@ -1786,6 +1804,118 @@ pub unsafe extern "C" fn programa_terminal_selection_update(
     })
 }
 
+/// Keyboard copy mode (macOS `TerminalCopyMode.swift`), on alacritty's vi mode: a cursor of its own
+/// that the snapshot reports, and a selection that follows it. `command`: 0 leave, 1 enter, 2 start
+/// a selection at the cursor, 3 clear it, 4 select `count` whole lines from the cursor's, 5 put the
+/// cursor on the selection's start and keep it (a find's match), 10-16 move the cursor (up, down,
+/// left, right, line start, line end, first text of the line), 20-25 scroll and keep the cursor on
+/// its screen row (page up, page down, half page up, half page down), or go to the top of
+/// scrollback or back to the prompt. Moves and scrolls repeat `count` times.
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_copy_mode(
+    value: *mut ProgramaTerminalSession,
+    command: u32,
+    count: u32,
+) -> i32 {
+    ffi_status(|| {
+        let value = session(value)?;
+        copy_mode(
+            &mut value.term.lock(),
+            command,
+            count.clamp(1, 9_999) as i32,
+        )?;
+        value.state.changed();
+        Ok(())
+    })
+}
+
+fn copy_mode<T: EventListener>(term: &mut Term<T>, command: u32, count: i32) -> Result<(), i32> {
+    use alacritty_terminal::vi_mode::ViMotion;
+    let active = term.mode().contains(TermMode::VI);
+    if command > 1 && !active {
+        return Err(STATUS_INVALID_ARGUMENT);
+    }
+    let clamp = |term: &Term<T>, line: i32| {
+        Line(line.clamp(term.topmost_line().0, term.bottommost_line().0))
+    };
+    match command {
+        0 | 1 => {
+            term.selection = None;
+            if active != (command == 1) {
+                term.toggle_vi_mode();
+            }
+        }
+        2 => {
+            let mut selection =
+                Selection::new(SelectionType::Simple, term.vi_mode_cursor.point, Side::Left);
+            selection.include_all();
+            term.selection = Some(selection);
+        }
+        3 => term.selection = None,
+        4 => {
+            let line = term.vi_mode_cursor.point.line;
+            let mut selection = Selection::new(
+                SelectionType::Lines,
+                Point::new(line, Column(0)),
+                Side::Left,
+            );
+            selection.update(
+                Point::new(clamp(term, line.0 + count - 1), Column(0)),
+                Side::Right,
+            );
+            term.selection = Some(selection);
+        }
+        5 => {
+            // Out of the way while the cursor moves, or the move would stretch it to the cursor.
+            let selection = term.selection.take();
+            if let Some(range) = selection
+                .as_ref()
+                .and_then(|selection| selection.to_range(term))
+            {
+                term.vi_goto_point(range.start);
+            }
+            term.selection = selection;
+        }
+        10..=16 => {
+            let motion = [
+                ViMotion::Up,
+                ViMotion::Down,
+                ViMotion::Left,
+                ViMotion::Right,
+                ViMotion::First,
+                ViMotion::Last,
+                ViMotion::FirstOccupied,
+            ][(command - 10) as usize];
+            for _ in 0..count {
+                term.vi_motion(motion);
+            }
+        }
+        20..=23 => {
+            let page = term.screen_lines() as i32;
+            let lines = [page, -page, page / 2, -(page / 2)][(command - 20) as usize] * count;
+            let point = term.vi_mode_cursor.point;
+            let before = term.grid().display_offset() as i32;
+            term.scroll_display(Scroll::Delta(lines));
+            let moved = term.grid().display_offset() as i32 - before;
+            // The cursor keeps its screen row; with the view already at that end, it goes the whole way.
+            let target = clamp(term, point.line.0 - if moved == 0 { lines } else { moved });
+            term.vi_goto_point(Point::new(target, point.column));
+        }
+        24 => {
+            term.scroll_display(Scroll::Top);
+            let top = term.topmost_line();
+            term.vi_goto_point(Point::new(top, Column(0)));
+        }
+        25 => {
+            term.scroll_display(Scroll::Bottom);
+            let line = term.grid().cursor.point.line;
+            term.vi_goto_point(Point::new(line, Column(0)));
+        }
+        _ => return Err(STATUS_INVALID_ARGUMENT),
+    }
+    Ok(())
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn programa_terminal_selection_end(
     value: *mut ProgramaTerminalSession,
@@ -1977,6 +2107,76 @@ mod tests {
         assert_eq!(link_at(&term, 0, 0), None);
         assert_eq!(link_at(&term, 9, 0), None);
         assert_eq!(link_at(&term, 500, 0), None);
+    }
+
+    #[test]
+    fn copy_mode_moves_its_own_cursor_and_selects_from_it() {
+        let (mut term, _) = term_with_state();
+        // Five lines on an 8x3 screen, two in scrollback; the cursor ends after "e5".
+        feed(&mut term, b"a1\r\nb2 xy\r\nc3\r\nd4\r\ne5");
+        assert_eq!(copy_mode(&mut term, 10, 1), Err(STATUS_INVALID_ARGUMENT));
+        copy_mode(&mut term, 1, 1).unwrap();
+        assert_eq!(
+            (cursor_snapshot(&term).row, cursor_snapshot(&term).column),
+            (2, 2)
+        );
+
+        // Yank two lines from the cursor's: "c3" and "d4".
+        copy_mode(&mut term, 10, 2).unwrap();
+        copy_mode(&mut term, 4, 2).unwrap();
+        assert_eq!(term.selection_to_string().unwrap(), "c3\nd4\n");
+
+        // A visual selection follows the cursor; up past the screen scrolls into scrollback.
+        copy_mode(&mut term, 3, 1).unwrap();
+        copy_mode(&mut term, 14, 1).unwrap();
+        copy_mode(&mut term, 2, 1).unwrap();
+        copy_mode(&mut term, 10, 1).unwrap();
+        copy_mode(&mut term, 15, 1).unwrap();
+        assert_eq!(term.selection_to_string().unwrap(), "y\nc");
+        copy_mode(&mut term, 14, 1).unwrap();
+        assert_eq!(term.selection_to_string().unwrap(), "b2 xy\nc");
+        assert_eq!(term.grid().display_offset(), 1);
+
+        // The top of scrollback, then back to the prompt line.
+        copy_mode(&mut term, 24, 1).unwrap();
+        assert_eq!(
+            (
+                term.vi_mode_cursor.point.line.0,
+                term.grid().display_offset()
+            ),
+            (-2, 2)
+        );
+        copy_mode(&mut term, 25, 1).unwrap();
+        assert_eq!(
+            (cursor_snapshot(&term).row, term.grid().display_offset()),
+            (2, 0)
+        );
+
+        // A page down from the top keeps the cursor's screen row; leaving clears the selection.
+        copy_mode(&mut term, 24, 1).unwrap();
+        copy_mode(&mut term, 21, 1).unwrap();
+        assert_eq!(
+            (cursor_snapshot(&term).row, term.vi_mode_cursor.point.line.0),
+            (0, 0)
+        );
+        // After a find, the cursor goes to the match, which stays selected.
+        assert!(find(&mut term, "xy", false));
+        copy_mode(&mut term, 5, 1).unwrap();
+        assert_eq!(
+            (
+                term.vi_mode_cursor.point.line.0,
+                term.vi_mode_cursor.point.column.0
+            ),
+            (-1, 3)
+        );
+        assert_eq!(term.selection_to_string().unwrap(), "xy");
+        copy_mode(&mut term, 0, 1).unwrap();
+        assert!(term.selection.is_none() && !term.mode().contains(TermMode::VI));
+        // The view stays where copy mode left it, so the shell's cursor is out of sight.
+        assert_eq!(
+            (cursor_snapshot(&term).visible, term.grid().display_offset()),
+            (false, 1)
+        );
     }
 
     #[test]

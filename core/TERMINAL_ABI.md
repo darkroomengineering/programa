@@ -296,7 +296,8 @@ character, or 0 for the spacer that follows it; text is empty for blank cells.
 selection is null when nothing is selected. dim marks faint (SGR 2) text. The
 cursor's shape is `block`, `underline` or `beam` as the program set it
 (DECSCUSR). The cursor is hidden while the view
-is scrolled into scrollback. terminated is true once the shell has exited. title is the window title the
+is scrolled into scrollback; in copy mode it is the copy-mode cursor instead, a block shown
+wherever it is in view. terminated is true once the shell has exited. title is the window title the
 program set (OSC 0/2), or null when none is set.
 
 Generation increases on every screen, title, selection, size, lifecycle, or
@@ -353,6 +354,22 @@ Coordinates are viewport cells and are clamped to the grid. Begin replaces any
 selection; update extends it; end is accepted and leaves the selection in
 place. Clear removes it. Copy writes the selected text (empty when none) using
 terminal semantics: soft-wrapped lines are joined and trailing blanks trimmed.
+
+## Copy mode
+
+    int32_t programa_terminal_copy_mode(session, uint32_t command, uint32_t count);
+
+Keyboard copy mode, on alacritty's vi mode: a cursor of its own that moves through
+the screen and scrollback, and a selection that follows it. Commands: 0 leaves (and
+clears the selection), 1 enters at the terminal cursor, 2 starts a selection at the
+cursor, 3 clears it, 4 selects `count` whole lines from the cursor's line, 5 moves the
+cursor to the selection's start and keeps the selection (a find's match), 10 to 16 move
+the cursor up, down, left, right, to the line's start, its end and its first text, 20 to
+23 scroll a page up, a page down, half a page up and half a page down keeping the
+cursor's screen row, 24 goes to the top of scrollback and 25 back to the prompt line.
+Moves and scrolls repeat `count` times (1 to 9999). Commands other than 0 and 1 fail with
+INVALID_ARGUMENT outside copy mode. A find in copy mode scrolls before it selects, so the
+match stays as found.
 
 ## Lifecycle and errors
 

@@ -72,6 +72,7 @@ public sealed class ShortcutSettings
         ["send_feedback"] = "ctrl-shift-f1",
         ["close_window"] = "ctrl-shift-f4",
         ["quit"] = "ctrl-shift-q",
+        ["toggle_terminal_copy_mode"] = "ctrl-shift-m",
     };
 
     private static readonly HashSet<string> Reserved = ["ctrl-c", "ctrl-d", "ctrl-w"];

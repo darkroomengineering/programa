@@ -186,3 +186,4 @@ A binding is modifiers and one key joined by hyphens, for example `ctrl-shift-t`
 | `send_feedback` | `ctrl-shift-f1` |
 | `close_window` | `ctrl-shift-f4` |
 | `quit` | `ctrl-shift-q` |
+| `toggle_terminal_copy_mode` | `ctrl-shift-m` |

@@ -79,6 +79,7 @@ public sealed partial class MainWindow
         ["send_feedback"] = () => OpenFeedback(),
         ["close_window"] = () => _ = CloseWindowAsync(),
         ["quit"] = () => _ = QuitAsync(),
+        ["toggle_terminal_copy_mode"] = () => ActiveTerminal()?.ToggleCopyMode(),
     };
 
     /// <summary>Open Folder (macOS ⌘O): a new workspace in the folder you pick.</summary>
@@ -390,6 +391,12 @@ public sealed partial class MainWindow
                 run();
                 return new { action };
             default: // debug.type
+                // Without a palette, a terminal in copy mode takes the keys (Escape and control characters included).
+                if (_palette is null && ActiveTerminal() is { InCopyMode: true } copying)
+                {
+                    copying.TypeInCopyMode(Text(p, "text") ?? string.Empty);
+                    return new { };
+                }
                 var palette = _palette ?? throw new ControlException("not_found", "No command palette is open.");
                 var parts = (Text(p, "text") ?? string.Empty).Split('\n');
                 for (var index = 0; index < parts.Length; index++)

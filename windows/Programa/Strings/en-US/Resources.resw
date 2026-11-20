@@ -135,4 +135,6 @@
   <data name="Shortcut_close_window" xml:space="preserve"><value>Close window</value></data>
   <data name="Shortcut_quit" xml:space="preserve"><value>Quit Programa</value></data>
   <data name="GoToWorkspacePlaceholder" xml:space="preserve"><value>Go to a workspace</value></data>
+  <data name="Shortcut_toggle_terminal_copy_mode" xml:space="preserve"><value>Toggle terminal copy mode</value></data>
+  <data name="CopyModeIndicator" xml:space="preserve"><value>vim</value></data>
 </root>

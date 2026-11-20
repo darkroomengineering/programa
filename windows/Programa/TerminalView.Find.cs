@@ -68,6 +68,7 @@ public sealed partial class TerminalView
     public void ShowFind()
     {
         _findBar.Visibility = Visibility.Visible;
+        PlaceCopyBadge();
         _findBox.Focus(FocusState.Programmatic);
         _findBox.SelectAll();
     }
@@ -95,6 +96,9 @@ public sealed partial class TerminalView
     private void HideFind()
     {
         _findBar.Visibility = Visibility.Collapsed;
+        PlaceCopyBadge();
+        // Copy mode picks up at the match.
+        CopyModeToMatch();
         _findStatus.Text = string.Empty;
         FocusTerminal();
     }
