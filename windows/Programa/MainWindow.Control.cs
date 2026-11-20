@@ -67,7 +67,7 @@ public sealed partial class MainWindow
         "workspace.select" => Run(() => Apply(new { command = "select_workspace", workspace_id = Required(p, "workspace_id") })),
         "workspace.close" => Run(() => Apply(new { command = "close_workspace", workspace_id = WorkspaceTarget(p).Id })),
         "workspace.rename" => Run(() => Apply(new { command = "rename_workspace", workspace_id = WorkspaceTarget(p).Id, title = Required(p, "title") })),
-        "surface.list" => new { surfaces = DescribeWorkspaces().Where(workspace => Text(p, "workspace_id") is not { } id || workspace.Id == id).SelectMany(workspace => workspace.Surfaces) },
+        "surface.list" => SurfaceListFromControl(p),
         "surface.current" => SurfaceTarget(default) is var (workspace, pane, surface) ? new { surface_id = surface, pane_id = pane.Id, workspace_id = workspace.Id } : null,
         "surface.create" => CreateSurfaceFromControl(p),
         "surface.split" => SplitFromControl(p),
@@ -141,7 +141,7 @@ public sealed partial class MainWindow
         ? _snapshot.Workspaces.FirstOrDefault(workspace => workspace.Id == id) ?? throw NotFound("workspace", id)
         : SelectedWorkspace() ?? throw NotFound("workspace");
 
-    /// <summary>The named surface, or the focused one when none is named.</summary>
+    /// <summary>The named surface, or the focused one of the named (else the selected) workspace.</summary>
     private (WorkspaceSnapshot Workspace, PaneSnapshot Pane, string SurfaceId) SurfaceTarget(JsonElement p)
     {
         if (Text(p, "surface_id") is { } id)
@@ -151,7 +151,7 @@ public sealed partial class MainWindow
                     if (pane.Surfaces.Any(surface => surface.Id == id)) return (workspace, pane, id);
             throw NotFound("surface", id);
         }
-        var selected = SelectedWorkspace() ?? throw NotFound("workspace");
+        var selected = WorkspaceTarget(p);
         var selectedPane = selected.SelectedPane ?? throw NotFound("pane");
         return (selected, selectedPane, selectedPane.SelectedSurfaceId);
     }
@@ -160,6 +160,24 @@ public sealed partial class MainWindow
     {
         var (workspace, pane, surface) = SurfaceTarget(p);
         return new { surface_id = surface, pane_id = pane.Id, workspace_id = workspace.Id, app = "programa", platform = "windows", version = BuildIdentity.Value };
+    }
+
+    /// <summary>`surface.list`, as on macOS: one workspace's surfaces (the named workspace, the one
+    /// holding surface_id, else the selected one) with their type and which one has focus.</summary>
+    private object SurfaceListFromControl(JsonElement p)
+    {
+        var workspace = Text(p, "surface_id") is null ? WorkspaceTarget(p) : SurfaceTarget(p).Workspace;
+        return new
+        {
+            workspace_id = workspace.Id,
+            window_id = WindowId,
+            surfaces = DescribeWorkspaces().Single(item => item.Id == workspace.Id).Surfaces.Select((surface, index) => new
+            {
+                id = surface.Id, index, type = SurfaceType(surface.Id), title = surface.Title, focused = surface.Selected,
+                pane_id = surface.PaneId, workspace_id = surface.WorkspaceId, cwd = surface.Cwd, selected = surface.Selected,
+                selected_in_pane = workspace.Panes.FirstOrDefault(pane => pane.Id == surface.PaneId)?.SelectedSurfaceId == surface.Id,
+            }),
+        };
     }
 
     private sealed record DescribedSurface(string Id, string PaneId, string WorkspaceId, string Title, string? Cwd, bool Selected);

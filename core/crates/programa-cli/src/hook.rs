@@ -323,6 +323,68 @@ pub fn codex_request_lines(event: &str, input: &str, env: Env) -> Vec<HookReques
     }
 }
 
+/// `programa opencode-hook <event> [--cwd DIR] [--session ID] [--workspace ID] [--surface ID]`, run
+/// by Programa's OpenCode plugin: the macOS OpenCode reports, with provider `opencode`. The plugin
+/// reports `notification` only for a permission prompt, so it is always one.
+pub fn opencode_request_lines(args: &[String], env: Env) -> Vec<HookRequest> {
+    let flag = |name: &str| {
+        args.iter()
+            .position(|arg| arg == name)
+            .and_then(|index| args.get(index + 1))
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+    };
+    let from_env = |key: &str| env(key).filter(|id| !id.is_empty());
+    // As on macOS, nothing is reported outside a Programa terminal.
+    if from_env("PROGRAMA_SURFACE_ID").is_none() {
+        return Vec::new();
+    }
+    let (Some(surface), Some(workspace)) = (
+        flag("--surface").or_else(|| from_env("PROGRAMA_SURFACE_ID")),
+        flag("--workspace").or_else(|| from_env("PROGRAMA_WORKSPACE_ID")),
+    ) else {
+        return Vec::new();
+    };
+    let mut target = json_map(json!({ "workspace_id": workspace, "surface_id": surface }));
+    put(&mut target, "session_id", flag("--session").as_deref());
+    let line = |method: &str, mut params: Map<String, Value>, extra: Value| {
+        params.extend(json_map(extra));
+        (
+            json!({ "id": 1, "method": method, "params": params }).to_string(),
+            None,
+        )
+    };
+    let session_event = |event_type: &str| {
+        line(
+            "agent.event",
+            target.clone(),
+            json!({ "event_type": event_type, "provider": "opencode" }),
+        )
+    };
+    let state = |state: &str| {
+        line(
+            "surface.report_agent_state",
+            target.clone(),
+            json!({ "state": state, "source": "hooks", "provider": "opencode" }),
+        )
+    };
+    match args.first().map(|event| event.to_lowercase()).as_deref() {
+        Some("session-start") => vec![session_event("session.started"), state("idle")],
+        Some("prompt-submit") => vec![state("working")],
+        Some("stop") => vec![state("idle")],
+        Some("session-end") => vec![session_event("session.exited"), state("clear")],
+        Some("notification" | "notify") => vec![line(
+            "agent.needs_input",
+            target.clone(),
+            json!({
+                "provider": "opencode", "title": "OpenCode", "subtitle": "Permission",
+                "body": "OpenCode needs your attention", "kind": "permission",
+            }),
+        )],
+        _ => Vec::new(),
+    }
+}
+
 fn json_map(value: Value) -> Map<String, Value> {
     value.as_object().cloned().unwrap_or_default()
 }
@@ -632,6 +694,35 @@ mod tests {
             "clear"
         );
         assert!(codex_request_lines("stop", "{}", &|_: &str| None).is_empty());
+    }
+
+    #[test]
+    fn opencode_reports_its_session_turns_and_permission_prompts() {
+        let requests = |args: &[&str]| -> Vec<Value> {
+            let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+            opencode_request_lines(&args, &env)
+                .into_iter()
+                .map(|(line, _)| serde_json::from_str(&line).unwrap())
+                .collect()
+        };
+        let start = requests(&["session-start", "--cwd", "C:\\repo", "--session", "ses_1"]);
+        assert_eq!(start[0]["method"], "agent.event");
+        assert_eq!(start[0]["params"]["event_type"], "session.started");
+        assert_eq!(start[0]["params"]["provider"], "opencode");
+        assert_eq!(start[0]["params"]["session_id"], "ses_1");
+        assert_eq!(start[1]["params"]["state"], "idle");
+        assert_eq!(
+            requests(&["prompt-submit"])[0]["params"]["state"],
+            "working"
+        );
+        let asked = &requests(&["NOTIFICATION", "--session", "ses_1"])[0];
+        assert_eq!(asked["method"], "agent.needs_input");
+        assert_eq!(asked["params"]["kind"], "permission");
+        assert_eq!(asked["params"]["body"], "OpenCode needs your attention");
+        assert_eq!(requests(&["session-end"])[1]["params"]["state"], "clear");
+        assert!(requests(&["unknown"]).is_empty());
+        let outside = ["stop".to_owned()];
+        assert!(opencode_request_lines(&outside, &|_: &str| None).is_empty());
     }
 
     #[test]

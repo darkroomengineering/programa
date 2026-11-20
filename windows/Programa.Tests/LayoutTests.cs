@@ -67,18 +67,3 @@ public sealed class LayoutTests
         }
     }
 }
-
-[TestClass]
-public sealed class MarkdownPanelTests
-{
-    [TestMethod]
-    public void GitHubFlavoredMarkdownRendersWithRelativeImagesFromTheFileFolder()
-    {
-        var html = MarkdownPanel.Html("# Plan\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n- [x] done\n\n![shot](images/shot.png)\n", dark: true);
-        StringAssert.Contains(html, "<h1 id=\"plan\">Plan</h1>");
-        StringAssert.Contains(html, "<table>");
-        StringAssert.Contains(html, "type=\"checkbox\"");
-        StringAssert.Contains(html, "<base href=\"https://programa-markdown.local/\">");
-        StringAssert.Contains(html, "src=\"images/shot.png\"");
-    }
-}

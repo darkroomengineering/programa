@@ -16,20 +16,39 @@ public sealed partial class MainWindow
         if (AgentSessions.LatestClaude(cwd) is { } session) terminal.LastAgentSession = session;
     }
 
-    /// <summary>`agent.event`, from `programa claude-hook`: session.started records the exact session
-    /// Claude runs in the terminal; session.exited keeps it for resume. Other events are accepted and
-    /// ignored (the status comes from OSC 7501).</summary>
+    /// <summary>`agent.event`, from the agent hooks and `programa agent-event`: session.started records
+    /// the exact session Claude runs in the terminal; session.exited keeps it for resume. Every event
+    /// reports its state, as macOS does, and the result names it.</summary>
     private object AgentEventFromControl(JsonElement p)
     {
+        var eventType = Text(p, "event_type")?.Trim().ToLowerInvariant() ?? "";
+        if (!AgentEventStates.TryGetValue(eventType, out var state))
+            throw new ControlException("invalid_params", "Invalid event_type — use: " + string.Join(", ", AgentEventStates.Keys));
         var (workspace, _, surfaceId) = SurfaceTarget(p);
         var terminal = TerminalFor(workspace.Id, surfaceId);
-        if (Text(p, "event_type") == "session.started" && Text(p, "session_id") is { } id && AgentSessions.IsSessionId(id))
+        if (eventType == "session.started" && Text(p, "session_id") is { } id && AgentSessions.IsSessionId(id))
         {
             terminal.LastAgentSession = new AgentSession(Text(p, "provider") ?? "claude", id, terminal.Cwd);
             terminal.AgentSessionFromHook = true;
         }
-        return new { };
+        // The state the event means (docs/plans/agent-events.md); session.exited clears it. The hooks'
+        // provider "claude" is the badge's "claude-code", which their state reports name.
+        var provider = Text(p, "provider") is "claude" ? "claude-code" : Text(p, "provider");
+        terminal.ReportHookState(state, provider, Text(p, "session_id"), false, false);
+        return state is null
+            ? new { workspace_id = workspace.Id, surface_id = surfaceId, event_type = eventType }
+            : new { workspace_id = workspace.Id, surface_id = surfaceId, event_type = eventType, state, source = "hooks" };
     }
+
+    /// <summary>Each agent event's state, as macOS's AgentEventNormalizer.</summary>
+    internal static readonly IReadOnlyDictionary<string, string?> AgentEventStates = new Dictionary<string, string?>(StringComparer.Ordinal)
+    {
+        ["session.started"] = "idle", ["session.exited"] = null,
+        ["turn.started"] = "working", ["turn.completed"] = "idle", ["turn.aborted"] = "idle",
+        ["request.opened"] = "blocked", ["request.resolved"] = "working",
+        ["user-input.requested"] = "blocked", ["user-input.resolved"] = "working",
+        ["item.started"] = "working", ["item.completed"] = "working",
+    };
 
     /// <summary>Whether the terminal's shell runs anything (an agent, a build) instead of sitting at its prompt.</summary>
     private static bool IsBusy(TerminalView terminal) =>

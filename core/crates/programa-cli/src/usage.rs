@@ -21,7 +21,7 @@ use crate::Env;
 const MAX_AGE_SECONDS: f64 = 7.0 * 24.0 * 3600.0;
 const MAX_ENDED: usize = 50;
 
-fn home(env: Env) -> PathBuf {
+pub(crate) fn home(env: Env) -> PathBuf {
     env("USERPROFILE")
         .or_else(|| env("HOME"))
         .map(PathBuf::from)
