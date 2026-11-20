@@ -34,10 +34,12 @@ public sealed partial class MainWindow
         {
             if (entry.Recipe)
             {
-                if (!await ConfirmConfigAsync(entry, ProgramaConfig.Display(resolved!, truncated))) return;
-                if (ActiveTerminal() is not { } terminal) return;
-                if (ProgramaConfig.Insertable(resolved!) is { } prompt) terminal.SendText(prompt);
-                else await ShowErrorAsync(Localizer.Get("ConfigInvalidRecipeTitle"), Localizer.Get("ConfigInvalidRecipeMessage"));
+                if (ProgramaConfig.Insertable(resolved!) is not { } prompt)
+                {
+                    await ShowErrorAsync(Localizer.Get("ConfigInvalidRecipeTitle"), Localizer.Get("ConfigInvalidRecipeMessage"));
+                    return;
+                }
+                if (await ConfirmConfigAsync(entry, prompt)) ActiveTerminal()?.SendText(prompt);
                 return;
             }
             if (ProgramaConfig.CommandTexts(entry, resolved).Any(ProgramaConfig.HasControlCharacters))
@@ -45,7 +47,7 @@ public sealed partial class MainWindow
                 await ShowErrorAsync(Localizer.Get("ConfigInvalidCommandTitle"), Localizer.Get("ConfigInvalidCommandMessage"));
                 return;
             }
-            if (!await ConfirmConfigAsync(entry, ProgramaConfig.Describe(entry, resolved, Localizer.Get("ConfigWorkspaceSummary"), truncated))) return;
+            if (!await ConfirmConfigAsync(entry, ProgramaConfig.Describe(entry, resolved, Localizer.Get("ConfigWorkspaceSummary")))) return;
             if (entry.Workspace is { } workspace) await OpenConfigWorkspaceAsync(entry, workspace, baseDirectory);
             else ActiveTerminal()?.SendText(ProgramaConfig.ForExecution(resolved!) + "\n");
         }

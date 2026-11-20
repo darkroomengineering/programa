@@ -351,30 +351,32 @@ internal static class ProgramaConfig
     internal static string? Insertable(string prompt) =>
         prompt.Any(character => character < 0x20 || character is >= (char)0x7F and <= (char)0x9F or (char)0x2028 or (char)0x2029) ? null : Strip(prompt);
 
-    /// <summary>One value as the dialog shows it: line breaks as ⏎, at most 200 characters with a visible marker.</summary>
+    /// <summary>A short label for a parameter dialog.</summary>
     internal static string Display(string text, string truncated)
     {
-        var collapsed = Regex.Replace(Clean(text), "\r\n|\r|\n", " ⏎ ").Trim();
+        var collapsed = InlineDetail(text);
         return collapsed.Length <= 200 ? collapsed : collapsed[..200] + truncated;
     }
 
+    private static string InlineDetail(string text) => Regex.Replace(Clean(text), "\r\n|\r|\n", " ⏎ ").Trim();
+
     /// <summary>Everything a command would do, for its confirmation: the substituted command, or the
     /// workspace with every surface that runs a command, changes directory or sets variables.</summary>
-    internal static string Describe(ConfigEntry entry, string? resolved, string workspaceFormat, string truncated)
+    internal static string Describe(ConfigEntry entry, string? resolved, string workspaceFormat)
     {
-        if ((resolved ?? entry.Text) is { } command) return Display(command, truncated);
-        if (entry.Workspace is not { } workspace) return Display(entry.Name, truncated);
-        var lines = new List<string> { string.Format(workspaceFormat, Display(workspace.Name ?? entry.Name, truncated)) };
-        if (workspace.Cwd is { Length: > 0 } cwd) lines.Add("  cwd=" + Display(cwd, truncated));
+        if ((resolved ?? entry.Text) is { } command) return ForExecution(command);
+        if (entry.Workspace is not { } workspace) return InlineDetail(entry.Name);
+        var lines = new List<string> { string.Format(workspaceFormat, InlineDetail(workspace.Name ?? entry.Name)) };
+        if (workspace.Cwd is { Length: > 0 } cwd) lines.Add("  cwd=" + InlineDetail(cwd));
         var surfaces = Surfaces(workspace.Layout).Select(surface =>
         {
             var parts = new List<string>();
-            if (surface.Command is { Length: > 0 } run) parts.Add(Display(run, truncated));
-            if (surface.Cwd is { Length: > 0 } directory) parts.Add("cwd=" + Display(directory, truncated));
+            if (surface.Command is { Length: > 0 } run) parts.Add(InlineDetail(run));
+            if (surface.Cwd is { Length: > 0 } directory) parts.Add("cwd=" + InlineDetail(directory));
             if (surface.Env is { Count: > 0 } env)
-                parts.Add("env: " + string.Join(' ', env.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => $"{Display(pair.Key, truncated)}={Display(pair.Value, truncated)}")));
+                parts.Add("env: " + string.Join(' ', env.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => $"{InlineDetail(pair.Key)}={InlineDetail(pair.Value)}")));
             if (parts.Count == 0) return null;
-            return (surface.Name is { Length: > 0 } name ? Display(name, truncated) + ": " : string.Empty) + string.Join("  ", parts);
+            return (surface.Name is { Length: > 0 } name ? InlineDetail(name) + ": " : string.Empty) + string.Join("  ", parts);
         }).OfType<string>().ToList();
         if (surfaces.Count > 0) lines.AddRange(["", .. surfaces.Select(line => "  " + line)]);
         return string.Join('\n', lines);

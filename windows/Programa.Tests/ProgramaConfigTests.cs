@@ -130,12 +130,24 @@ public sealed class ProgramaConfigTests
               {"pane":{"surfaces":[{"type":"terminal","name":"server","command":"npm run dev"}]}},
               {"pane":{"surfaces":[{"type":"terminal","env":{"ZDOTDIR":"evil","A":"1"}},{"type":"terminal"}]}}]}}}]}
             """, "x").Single();
-        Assert.AreEqual("Open workspace \"Dev\"\n  cwd=app\n\n  server: npm run dev\n  env: A=1 ZDOTDIR=evil", ProgramaConfig.Describe(entry, null, "Open workspace \"{0}\"", "…"));
+        Assert.AreEqual("Open workspace \"Dev\"\n  cwd=app\n\n  server: npm run dev\n  env: A=1 ZDOTDIR=evil", ProgramaConfig.Describe(entry, null, "Open workspace \"{0}\""));
 
         var spoof = "rm -rf ~" + (char)0x202E + "txt.";
         Assert.AreEqual("echo a ⏎ rm -rf ~txt.", ProgramaConfig.Display("echo a\n" + spoof, "…"));
         Assert.AreEqual(new string('x', 200) + "…", ProgramaConfig.Display(new string('x', 500), "…"));
-        Assert.AreEqual(500, ProgramaConfig.ForExecution(new string('x', 500)).Length, "what runs is never shortened");
+    }
+
+    [TestMethod]
+    public void ConfirmationShowsTheEntireSubstitutedCommand()
+    {
+        var entry = ProgramaConfig.Parse("""
+            {"commands":[{"name":"Check","command":"  echo {{message}}\necho finished  "}]}
+            """, "x").Single();
+        var message = new string('x', 500);
+        var resolved = ProgramaConfig.Substitute(entry.Text!, new Dictionary<string, string> { ["message"] = message });
+        var preview = ProgramaConfig.Describe(entry, resolved, "Open workspace {0}");
+        Assert.AreEqual($"echo {message}\necho finished", preview);
+        Assert.AreEqual(ProgramaConfig.ForExecution(resolved), preview);
     }
 
     [TestMethod]
