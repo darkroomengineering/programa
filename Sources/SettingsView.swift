@@ -1168,7 +1168,8 @@ private struct TerminalThemePopUp: NSViewRepresentable {
         context.coordinator.view = self
         button.isEnabled = isEnabled
         button.setAccessibilityLabel(label)
-        guard previous?.selection != selection || previous?.themeNames != themeNames else { return }
+        let displayedSelection = button.selectedItem?.representedObject as? String
+        guard displayedSelection != selection || previous?.themeNames != themeNames else { return }
         button.removeAllItems()
         context.coordinator.addItem(selection, to: button)
     }
