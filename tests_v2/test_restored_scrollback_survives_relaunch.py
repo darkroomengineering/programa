@@ -250,10 +250,16 @@ def main():
         def visit_workspace(workspace):
             workspace_id = workspace["id"]
             rpc(control, "workspace.select", {"workspace_id": workspace_id})
-            surfaces = rpc(control, "surface.list", {"workspace_id": workspace_id})["surfaces"]
-            require(len(surfaces) == 1, f"Expected one terminal in workspace {workspace_id}")
-            eventually("selected terminal prompt or retained output",
-                       lambda: restored_scrollback(surfaces[0]["id"]))
+
+            def attached_terminal():
+                surfaces = rpc(control, "surface.health", {"workspace_id": workspace_id})["surfaces"]
+                require(len(surfaces) == 1 and surfaces[0]["type"] == "terminal",
+                        f"Expected one terminal in workspace {workspace_id}")
+                terminal = surfaces[0]
+                return terminal["id"] if terminal["in_window"] is True else None
+
+            surface_id = eventually(f"terminal attached in {workspace_id}", attached_terminal)
+            eventually(f"prompt or retained output in {workspace_id}", lambda: restored_scrollback(surface_id))
 
         try:
             launch()
