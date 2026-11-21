@@ -475,6 +475,31 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
         add(screenshot)
     }
 
+    func testTerminalThemeMenuSelectsAndClearsBundledTheme() {
+        let app = XCUIApplication()
+        configureSocketControlledLaunch(app, showSettingsWindow: true)
+        launchAndActivate(app)
+        focusSettingsWindow(app: app)
+
+        let appearanceTab = app.toolbars.descendants(matching: .any).matching(identifier: "Appearance").firstMatch
+        XCTAssertTrue(appearanceTab.waitForExistence(timeout: 8), "Expected the Appearance toolbar tab")
+        appearanceTab.click()
+
+        let popup = app.windows["Appearance"].popUpButtons["TerminalLightThemePicker"]
+        XCTAssertTrue(popup.waitForExistence(timeout: 8), "Expected the accessible light theme popup")
+        popup.click()
+        let theme = app.menuItems["Catppuccin Latte"]
+        XCTAssertTrue(theme.waitForExistence(timeout: 5), "Expected the bundled theme in the opened menu")
+        theme.click()
+        XCTAssertTrue(sidebarHelpPollUntil(timeout: 5) { popup.value as? String == "Catppuccin Latte" })
+
+        popup.click()
+        let defaultTheme = app.menuItems["Use Ghostty Configuration"]
+        XCTAssertTrue(defaultTheme.waitForExistence(timeout: 5), "Expected the default theme in the reopened menu")
+        defaultTheme.click()
+        XCTAssertTrue(sidebarHelpPollUntil(timeout: 5) { popup.value as? String == "Use Ghostty Configuration" })
+    }
+
     func testMinimalModeToggleKeepsSettingsWindowFocused() throws {
         let app = XCUIApplication()
         let diagnosticsPath = "/tmp/programa-ui-test-settings-focus-\(UUID().uuidString).json"
