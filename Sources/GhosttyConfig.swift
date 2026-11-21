@@ -542,8 +542,8 @@ struct GhosttyConfig {
         return paths
     }
 
-    /// Enumerates the theme directories derived from the same path resolver used to load a
-    /// selected theme. This keeps Settings discovery aligned with actual Ghostty resolution.
+    /// Uses the same directory precedence as theme loading, with a build-generated index for
+    /// the themes copied into the app bundle.
     static func availableThemeNames(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         bundleResourceURL: URL? = Bundle.main.resourceURL,
@@ -561,26 +561,33 @@ struct GhosttyConfig {
         var seenDirectories: Set<String> = []
         var seenThemeNames: Set<String> = []
         var themeNames: [String] = []
+        let bundledThemes = bundleResourceURL?.appendingPathComponent("ghostty/themes").standardizedFileURL.path
 
         for directory in directories {
             let standardizedDirectory = directory.standardizedFileURL
-            guard seenDirectories.insert(standardizedDirectory.path).inserted,
-                  let entries = try? fileManager.contentsOfDirectory(
+            guard seenDirectories.insert(standardizedDirectory.path).inserted else { continue }
+
+            let names: [String]
+            if standardizedDirectory.path == bundledThemes,
+               let indexURL = bundleResourceURL?.appendingPathComponent("ghostty/theme-index.json"),
+               let data = try? Data(contentsOf: indexURL),
+               let bundledNames = try? JSONDecoder().decode([String].self, from: data) {
+                names = bundledNames
+            } else {
+                guard let entries = try? fileManager.contentsOfDirectory(
                     at: standardizedDirectory,
                     includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey],
                     options: [.skipsHiddenFiles]
-                  ) else {
-                continue
+                ) else { continue }
+                names = entries.compactMap { entry in
+                    let values = try? entry.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
+                    guard values?.isDirectory != true,
+                          values?.isRegularFile == true || values?.isRegularFile == nil else { return nil }
+                    return entry.lastPathComponent
+                }
             }
 
-            for entry in entries {
-                let values = try? entry.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
-                guard values?.isDirectory != true,
-                      values?.isRegularFile == true || values?.isRegularFile == nil else {
-                    continue
-                }
-
-                let name = entry.lastPathComponent
+            for name in names {
                 let foldedName = name.folding(
                     options: [.caseInsensitive, .diacriticInsensitive],
                     locale: .current

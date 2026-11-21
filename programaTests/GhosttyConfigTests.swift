@@ -244,6 +244,40 @@ final class GhosttyConfigTests: XCTestCase {
         XCTAssertEqual(names, ["Cloud Light", "Midnight Dark"])
     }
 
+    func testAvailableThemeNamesMergesBundledIndexAndLiveThemes() throws {
+        let files = FileManager.default
+        let root = files.temporaryDirectory.appendingPathComponent("programa-theme-index-\(UUID().uuidString)")
+        let bundle = root.appendingPathComponent("bundle")
+        let ghostty = bundle.appendingPathComponent("ghostty")
+        let bundledThemes = ghostty.appendingPathComponent("themes")
+        let external = root.appendingPathComponent("external")
+        let externalThemes = external.appendingPathComponent("themes")
+        try files.createDirectory(at: bundledThemes, withIntermediateDirectories: true)
+        defer { try? files.removeItem(at: root) }
+        try files.createDirectory(at: externalThemes, withIntermediateDirectories: true)
+
+        for name in ["Bundled Theme", "Cloud Light", "Unindexed Theme"] {
+            try Data().write(to: bundledThemes.appendingPathComponent(name))
+        }
+        for name in ["CLOUD LIGHT", "External Theme"] {
+            try Data().write(to: externalThemes.appendingPathComponent(name))
+        }
+        let index = ghostty.appendingPathComponent("theme-index.json")
+        try JSONEncoder().encode(["Cloud Light", "Bundled Theme"]).write(to: index)
+
+        func availableNames() -> [String] {
+            GhosttyConfig.availableThemeNames(
+                environment: ["GHOSTTY_RESOURCES_DIR": external.path],
+                bundleResourceURL: bundle,
+                fileManager: files
+            )
+        }
+
+        XCTAssertEqual(availableNames(), ["Bundled Theme", "CLOUD LIGHT", "External Theme"])
+        try Data("invalid index".utf8).write(to: index)
+        XCTAssertEqual(availableNames(), ["Bundled Theme", "CLOUD LIGHT", "External Theme", "Unindexed Theme"])
+    }
+
     func testLoadThemeResolvesPairedThemeValueByColorScheme() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("programa-ghostty-theme-pair-\(UUID().uuidString)")
