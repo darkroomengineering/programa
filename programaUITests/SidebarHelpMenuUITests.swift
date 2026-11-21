@@ -453,6 +453,24 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
         )
     }
 
+    func testThemePickerShowsAllAppearanceOptions() {
+        let app = XCUIApplication()
+        configureSocketControlledLaunch(app, showSettingsWindow: true)
+        launchAndActivate(app)
+        focusSettingsWindow(app: app)
+
+        let settings = app.windows.containing(.button, identifier: "Dark").firstMatch
+        XCTAssertTrue(settings.waitForExistence(timeout: 8), "Expected the Settings appearance picker")
+        for name in ["System", "Light", "Dark"] {
+            XCTAssertTrue(settings.buttons[name].isHittable, "Expected the \(name) appearance button")
+        }
+
+        let screenshot = XCTAttachment(screenshot: settings.screenshot())
+        screenshot.name = "Settings appearance picker"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testMinimalModeToggleKeepsSettingsWindowFocused() throws {
         let app = XCUIApplication()
         let diagnosticsPath = "/tmp/programa-ui-test-settings-focus-\(UUID().uuidString).json"
