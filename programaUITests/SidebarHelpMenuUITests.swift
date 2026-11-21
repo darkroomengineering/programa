@@ -475,9 +475,19 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
         add(screenshot)
     }
 
-    func testTerminalThemeMenuSelectsAndClearsBundledTheme() {
+    func testTerminalThemeMenuSelectsAndClearsBundledTheme() throws {
+        let files = FileManager.default
+        let home = files.temporaryDirectory.appendingPathComponent("programa-theme-ui-\(UUID().uuidString)")
+        try files.createDirectory(at: home, withIntermediateDirectories: true)
+        let config = home.appendingPathComponent("Library/Application Support/com.darkroom.programa/config.ghostty")
         let app = XCUIApplication()
+        defer {
+            app.terminate()
+            try? files.removeItem(at: home)
+        }
         configureSocketControlledLaunch(app, showSettingsWindow: true)
+        app.launchEnvironment["HOME"] = home.path
+        app.launchEnvironment["CFFIXED_USER_HOME"] = home.path
         launchAndActivate(app)
         focusSettingsWindow(app: app)
 
@@ -492,12 +502,19 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
         XCTAssertTrue(theme.waitForExistence(timeout: 5), "Expected the bundled theme in the opened menu")
         theme.click()
         XCTAssertTrue(sidebarHelpPollUntil(timeout: 5) { popup.value as? String == "Catppuccin Latte" })
+        XCTAssertTrue(sidebarHelpPollUntil(timeout: 5) {
+            (try? String(contentsOf: config, encoding: .utf8))?.contains("light:Catppuccin Latte") == true
+        }, "Expected the selected theme in the isolated Ghostty config")
 
         popup.click()
         let defaultTheme = app.menuItems["Use Ghostty Configuration"]
         XCTAssertTrue(defaultTheme.waitForExistence(timeout: 5), "Expected the default theme in the reopened menu")
         defaultTheme.click()
         XCTAssertTrue(sidebarHelpPollUntil(timeout: 5) { popup.value as? String == "Use Ghostty Configuration" })
+        XCTAssertTrue(sidebarHelpPollUntil(timeout: 5) {
+            !files.fileExists(atPath: config.path)
+                || (try? String(contentsOf: config, encoding: .utf8))?.contains("light:Catppuccin Latte") == false
+        }, "Expected the light-theme override to be cleared")
     }
 
     func testMinimalModeToggleKeepsSettingsWindowFocused() throws {
