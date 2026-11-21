@@ -76,4 +76,15 @@ The Copy Ghostty Resources phase indexes the bundled theme filenames after apply
 
 Programa currently ships native platform interfaces. Windows uses the Rust shared core and macOS uses Swift and GhosttyKit. Track the shared-core language and shared renderer-generation requirements as open adoption items against Nulla's platform rules.
 
+Setup Assistant populates its terminal theme menus when the native pop-up opens. In separate settled first-launch allocation captures, live malloc allocations with `SetupAssistantController` in their stacks totaled 29.3 MB with the eager menus and 2.6 MB with the native pop-ups. Stacks containing both `SetupAssistantController` and `ForEach` accounted for 15.2 MB and 0.3 MB, respectively. These totals overlap and describe allocation attribution under stack logging. Use the paired footprint fixture to measure process memory. The [hosted picker test](https://github.com/darkroomengineering/programa/actions/runs/44851945806) verifies that choosing and resetting a theme persists the expected configuration.
+
+The [paired first-launch comparison](https://github.com/darkroomengineering/programa/actions/runs/44854170787/job/136693421229) used five alternating Debug runs per build on one hosted macOS 26 runner, with the same virtual display and allocation tracing disabled. All ten runs passed the PTY and scrollback assertions. The retained SwiftUI heap was the largest cost identified in the allocation captures. These samples measure memory footprint. The fixture's display resolution and Debug build limit the comparison to this workload.
+
+| Physical footprint, median (range) | Baseline `a8ffc2df` | Native pop-ups `baca77a4` |
+| --- | ---: | ---: |
+| Restored | 69.5 MiB (68.3–71.1) | 69.1 MiB (68.5–70.0) |
+| After visiting ten workspaces | 193.3 MiB (190.3–199.8) | 100.5 MiB (99.1–114.3) |
+| After 60 seconds without input | 184.3 MiB (183.6–187.3) | 95.2 MiB (94.1–97.8) |
+| Process peak | 208.5 MiB (202.3–214.6) | 117.4 MiB (111.7–122.1) |
+
 Keep the fixture, commands, immutable build revisions, raw traces, behavior results, and budget verdict with the change. Existing CI thresholds retain their current scope. Device-floor references, native journey budgets, and release approval require human sign-off under Nulla. Record those approvals against the applicable reference, budget revision, and release artifact.
