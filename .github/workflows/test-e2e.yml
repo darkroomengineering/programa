@@ -19,6 +19,13 @@ on:
         required: false
         default: false
         type: boolean
+      video_fps:
+        description: Requested capture rate when recording video
+        default: '10'
+        type: choice
+        options:
+          - '10'
+          - '60'
       runner:
         description: "Runner OS"
         required: false
@@ -176,6 +183,7 @@ jobs:
           TEST_FILTER: ${{ inputs.test_filter }}
           TEST_TIMEOUT: ${{ inputs.test_timeout || '120' }}
           RECORD_VIDEO: ${{ inputs.record_video }}
+          VIDEO_FPS: ${{ inputs.video_fps || '10' }}
         run: |
           set -euo pipefail
           SOURCE_PACKAGES_DIR="$PWD/.ci-source-packages"
@@ -210,7 +218,7 @@ jobs:
             SCREEN_INDEX="${SCREEN_INDEX:-0}"
             echo "Using screen device index: $SCREEN_INDEX"
 
-            ffmpeg -f avfoundation -framerate 10 -capture_cursor 1 \
+            ffmpeg -f avfoundation -framerate "$VIDEO_FPS" -capture_cursor 1 \
               -i "${SCREEN_INDEX}:none" \
               -c:v libx264 -preset ultrafast -pix_fmt yuv420p \
               /tmp/test-recording-raw.mp4 </dev/null >/tmp/ffmpeg.log 2>&1 &
