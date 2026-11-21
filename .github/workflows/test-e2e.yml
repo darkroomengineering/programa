@@ -248,6 +248,15 @@ jobs:
 
           echo "$OUTPUT"
 
+          if [ "$EXIT_CODE" -eq 0 ] &&
+             ! xcrun xcresulttool get test-results summary --path "$RESULT_BUNDLE_PATH" |
+               jq -e '(.totalTestCount // 0) > (.skippedTests // 0)' >/dev/null; then
+            MESSAGE="No XCTest cases ran for filter: $TEST_FILTER"
+            echo "::error::$MESSAGE"
+            OUTPUT="$OUTPUT"$'\n'"$MESSAGE"
+            EXIT_CODE=1
+          fi
+
           # Save summary for the issue
           SUMMARY=$(echo "$OUTPUT" | grep -E "(Test Suite|Executed|FAIL|PASS)" | tail -20)
           {
