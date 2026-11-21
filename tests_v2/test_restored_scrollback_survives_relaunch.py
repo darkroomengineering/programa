@@ -125,9 +125,25 @@ def main():
             window_probe_source = root / "window-probe.swift"
             window_probe = root / "window-probe"
             window_probe_source.write_text('''
-import CoreGraphics
+import AppKit
 import Foundation
 
+guard let screen = NSScreen.screens.first(where: {
+    $0.frame.width == 3840 && $0.frame.height == 2160 && $0.backingScaleFactor == 1
+}), let displayID = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32 else {
+    FileHandle.standardError.write(Data("Expected a 3840x2160 display at 1x\\n".utf8))
+    exit(EXIT_FAILURE)
+}
+if CommandLine.arguments.count == 1 {
+    func rect(_ value: CGRect) -> [String: CGFloat] {
+        ["x": value.minX, "y": value.minY, "width": value.width, "height": value.height]
+    }
+    let display: [String: Any] = ["displayID": displayID, "frame": rect(screen.frame),
+                                  "visibleFrame": rect(screen.visibleFrame)]
+    let data = try JSONSerialization.data(withJSONObject: display)
+    FileHandle.standardOutput.write(data)
+    exit(EXIT_SUCCESS)
+}
 let pid = Int(CommandLine.arguments[1])!
 let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
     as? [[String: Any]] ?? []
@@ -135,8 +151,8 @@ for window in windows where window[kCGWindowOwnerPID as String] as? Int == pid {
     guard window[kCGWindowLayer as String] as? Int == 0,
           let bounds = window[kCGWindowBounds as String] as? NSDictionary,
           let frame = CGRect(dictionaryRepresentation: bounds) else { continue }
-    if frame.width == 3200 && frame.height == 1800 {
-        print("Verified on-screen window: \\(frame)")
+    if frame.width == 3200 && frame.height == 1800 && CGDisplayBounds(displayID).contains(frame) {
+        print("Verified on-screen window: \\(frame) on display \\(displayID)")
         exit(EXIT_SUCCESS)
     }
 }
@@ -347,9 +363,10 @@ exit(EXIT_FAILURE)
                 snapshot = json.loads(primary.read_text())
                 require(len(snapshot["windows"]) == 1, "Expected one saved window in the renderer fixture")
                 window = snapshot["windows"][0]
+                window["display"] = json.loads(subprocess.check_output([str(window_probe)], timeout=5))
                 display = window["display"]["visibleFrame"]
                 require(display["width"] >= 3200 and display["height"] >= 1800,
-                        f"Fixture window was saved on a display smaller than 3200x1800: {display}")
+                        f"The 4K display's visible frame is too small: {display}")
                 window["frame"] = dict(x=display["x"], y=display["y"], width=3200, height=1800)
                 primary.write_text(json.dumps(snapshot))
 
