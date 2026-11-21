@@ -1051,49 +1051,23 @@ struct TerminalThemeAndFontRows: View {
     let pickerColumnWidth: CGFloat
 
     var body: some View {
-        SettingsPickerRow(
-            String(localized: "settings.terminalTheme.light", defaultValue: "Light Theme"),
-            subtitle: model.isManagedBySettingsFile
-                ? String(localized: "settings.terminalTheme.managedByFile", defaultValue: "Managed in settings.json")
-                : String(localized: "settings.terminalTheme.light.subtitle", defaultValue: "Used when Programa has a light appearance."),
-            controlWidth: pickerColumnWidth,
-            selection: Binding(get: { model.lightTheme }, set: { model.selectLightTheme($0) }),
-            accessibilityId: "TerminalLightThemePicker"
-        ) {
-            Text(
-                String(
-                    localized: "settings.terminalTheme.useGhosttyConfiguration",
-                    defaultValue: "Use Ghostty Configuration"
-                )
-            ).tag("")
-            ForEach(model.themeNames, id: \.self) { themeName in
-                Text(themeName).tag(themeName)
-            }
-        }
-        .disabled(model.isManagedBySettingsFile)
+        themeRow(
+            title: String(localized: "settings.terminalTheme.light", defaultValue: "Light Theme"),
+            subtitle: String(localized: "settings.terminalTheme.light.subtitle", defaultValue: "Used when Programa has a light appearance."),
+            selection: model.lightTheme,
+            accessibilityID: "TerminalLightThemePicker",
+            onSelect: model.selectLightTheme
+        )
 
         SettingsCardDivider()
 
-        SettingsPickerRow(
-            String(localized: "settings.terminalTheme.dark", defaultValue: "Dark Theme"),
-            subtitle: model.isManagedBySettingsFile
-                ? String(localized: "settings.terminalTheme.managedByFile", defaultValue: "Managed in settings.json")
-                : String(localized: "settings.terminalTheme.dark.subtitle", defaultValue: "Used when Programa has a dark appearance."),
-            controlWidth: pickerColumnWidth,
-            selection: Binding(get: { model.darkTheme }, set: { model.selectDarkTheme($0) }),
-            accessibilityId: "TerminalDarkThemePicker"
-        ) {
-            Text(
-                String(
-                    localized: "settings.terminalTheme.useGhosttyConfiguration",
-                    defaultValue: "Use Ghostty Configuration"
-                )
-            ).tag("")
-            ForEach(model.themeNames, id: \.self) { themeName in
-                Text(themeName).tag(themeName)
-            }
-        }
-        .disabled(model.isManagedBySettingsFile)
+        themeRow(
+            title: String(localized: "settings.terminalTheme.dark", defaultValue: "Dark Theme"),
+            subtitle: String(localized: "settings.terminalTheme.dark.subtitle", defaultValue: "Used when Programa has a dark appearance."),
+            selection: model.darkTheme,
+            accessibilityID: "TerminalDarkThemePicker",
+            onSelect: model.selectDarkTheme
+        )
 
         SettingsCardDivider()
 
@@ -1138,6 +1112,102 @@ struct TerminalThemeAndFontRows: View {
         if let errorMessage = model.errorMessage {
             SettingsCardDivider()
             SettingsCardNote(errorMessage)
+        }
+    }
+
+    private func themeRow(
+        title: String,
+        subtitle: String,
+        selection: String,
+        accessibilityID: String,
+        onSelect: @escaping (String) -> Void
+    ) -> some View {
+        SettingsCardRow(
+            title,
+            subtitle: model.isManagedBySettingsFile
+                ? String(localized: "settings.terminalTheme.managedByFile", defaultValue: "Managed in settings.json")
+                : subtitle,
+            controlWidth: pickerColumnWidth
+        ) {
+            TerminalThemePopUp(
+                themeNames: model.themeNames,
+                selection: selection,
+                label: title,
+                accessibilityID: accessibilityID,
+                onSelect: onSelect
+            )
+            .disabled(model.isManagedBySettingsFile)
+        }
+    }
+}
+
+private struct TerminalThemePopUp: NSViewRepresentable {
+    let themeNames: [String]
+    let selection: String
+    let label: String
+    let accessibilityID: String
+    let onSelect: (String) -> Void
+    @Environment(\.isEnabled) private var isEnabled
+
+    private var defaultTitle: String {
+        String(localized: "settings.terminalTheme.useGhosttyConfiguration", defaultValue: "Use Ghostty Configuration")
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSPopUpButton {
+        let button = NSPopUpButton(frame: .zero, pullsDown: false)
+        button.menu?.delegate = context.coordinator
+        button.setAccessibilityIdentifier(accessibilityID)
+        context.coordinator.button = button
+        return button
+    }
+
+    func updateNSView(_ button: NSPopUpButton, context: Context) {
+        let previous = context.coordinator.view
+        context.coordinator.view = self
+        button.isEnabled = isEnabled
+        button.setAccessibilityLabel(label)
+        let displayedSelection = button.selectedItem?.representedObject as? String
+        guard displayedSelection != selection || previous?.themeNames != themeNames else { return }
+        button.removeAllItems()
+        context.coordinator.addItem(selection, to: button)
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, NSMenuDelegate {
+        weak var button: NSPopUpButton?
+        var view: TerminalThemePopUp?
+
+        func menuNeedsUpdate(_ menu: NSMenu) {
+            guard let view, let button, menu.numberOfItems == 1 else { return }
+            button.removeAllItems()
+            addItem("", to: button)
+            for name in view.themeNames {
+                addItem(name, to: button)
+            }
+            if !view.selection.isEmpty, !view.themeNames.contains(view.selection) {
+                addItem(view.selection, to: button)
+            }
+            button.select(button.itemArray.first { $0.representedObject as? String == view.selection })
+        }
+
+        func addItem(_ name: String, to button: NSPopUpButton) {
+            guard let view else { return }
+            let item = NSMenuItem(
+                title: name.isEmpty ? view.defaultTitle : name,
+                action: #selector(selectTheme(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = name
+            button.menu?.addItem(item)
+        }
+
+        @objc func selectTheme(_ item: NSMenuItem) {
+            guard let name = item.representedObject as? String else { return }
+            button?.select(item)
+            view?.onSelect(name)
         }
     }
 }

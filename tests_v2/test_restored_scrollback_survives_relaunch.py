@@ -148,6 +148,8 @@ def main():
             launch_arguments = ["-socketControlMode", "full", "-sessionPersistScrollback", "YES"]
             if args.returning_user:
                 launch_arguments += ["-programaWelcomeShown", "YES"]
+            elif profile_memory:
+                launch_arguments += ["-programaWelcomeShown", "NO"]
             log = (root / f"app-{time.time_ns()}.log").open("wb")
             try:
                 app_environment = environment | {"MallocStackLogging": "1"} if record_allocations else environment

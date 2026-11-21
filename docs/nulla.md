@@ -51,6 +51,8 @@ The [size-sorted allocation capture](https://github.com/darkroomengineering/prog
 
 Pass `-f renderer_returning_user=true` with either profiling option to start the isolated profile with Setup Assistant already seen. Use the same onboarding state for both sides of a comparison.
 
+For a same-runner comparison, dispatch `gh workflow run ci.yml --ref <candidate-branch> -f renderer_memory=true -f renderer_baseline_run=<successful-main-ci-run-id>`. Choose a baseline whose app artifact is still available. CI retains that artifact for one day. The socket integration job validates the baseline run, downloads its app artifact, and runs five alternating baseline and candidate pairs. Both builds use the same explicit onboarding preference and fresh profiles. Keep allocation tracing off for the paired footprint run.
+
 The [returning-user spot check](https://github.com/darkroomengineering/programa/actions/runs/44838209615/job/136643294686) measured 69 MB at restore, 102 MB after visiting ten workspaces, and 92 MB after 60 seconds without input. The settled sample reported 57 MB of dirty MALLOC_SMALL and 4416 KB of dirty IOSurface. The fixture exercised socket-driven workspace selection and terminal readiness. Painted frames and shortcut-driven cycling require a desktop capture. The first-launch and returning-user runs differ in onboarding state and build revision, so their footprint figures are descriptive.
 
 The separate stack-logged returning-user run attributed 19.5 MB at restore and 19.0 MB after settling to live malloc allocations with AttributeGraph in their stacks. Neither report contained theme thumbnail or Setup Assistant malloc stacks. Ghostty surface creation appeared in 2.7 MB at restore and 13.6 MB after settling. Those stacks identify allocation sites. Determining which allocations can be released requires tracing their owners while the PTYs and scrollback remain live.
@@ -73,5 +75,16 @@ The [hosted Appearance test](https://github.com/darkroomengineering/programa/act
 The Copy Ghostty Resources phase indexes the bundled theme filenames after applying Programa's theme overlays. Settings loads that index for the bundled directory and preserves native discovery for external directories and bundles with a missing or invalid index. The loader still resolves precedence, case and diacritic deduplication, and locale-aware sorting at runtime. On a warm local filesystem with 465 bundled themes, ten alternating reads measured a median of 2.928 ms (2.602–3.476 ms) for enumeration and resource metadata, and 0.239 ms (0.198–0.292 ms) for reading and decoding the same names from an index. This isolates bundled catalog loading before runtime merge and sort.
 
 Programa currently ships native platform interfaces. Windows uses the Rust shared core and macOS uses Swift and GhosttyKit. Track the shared-core language and shared renderer-generation requirements as open adoption items against Nulla's platform rules.
+
+Setup Assistant populates its terminal theme menus when the native pop-up opens. In separate settled first-launch allocation captures, live malloc allocations with `SetupAssistantController` in their stacks totaled 29.3 MB with the eager menus and 2.6 MB with the native pop-ups. Stacks containing both `SetupAssistantController` and `ForEach` accounted for 15.2 MB and 0.3 MB, respectively. These totals overlap and describe allocation attribution under stack logging. Use the paired footprint fixture to measure process memory. The [hosted picker test](https://github.com/darkroomengineering/programa/actions/runs/44851945806) verifies that choosing and resetting a theme persists the expected configuration.
+
+The [paired first-launch comparison](https://github.com/darkroomengineering/programa/actions/runs/44854170787/job/136693421229) used five alternating Debug runs per build on one hosted macOS 26 runner, with the same virtual display and allocation tracing disabled. All ten runs passed the PTY and scrollback assertions. The retained SwiftUI heap was the largest cost identified in the allocation captures. These samples measure memory footprint. The fixture's display resolution and Debug build limit the comparison to this workload.
+
+| Physical footprint, median (range) | Baseline `a8ffc2df` | Native pop-ups `baca77a4` |
+| --- | ---: | ---: |
+| Restored | 69.5 MiB (68.3–71.1) | 69.1 MiB (68.5–70.0) |
+| After visiting ten workspaces | 193.3 MiB (190.3–199.8) | 100.5 MiB (99.1–114.3) |
+| After 60 seconds without input | 184.3 MiB (183.6–187.3) | 95.2 MiB (94.1–97.8) |
+| Process peak | 208.5 MiB (202.3–214.6) | 117.4 MiB (111.7–122.1) |
 
 Keep the fixture, commands, immutable build revisions, raw traces, behavior results, and budget verdict with the change. Existing CI thresholds retain their current scope. Device-floor references, native journey budgets, and release approval require human sign-off under Nulla. Record those approvals against the applicable reference, budget revision, and release artifact.
