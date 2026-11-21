@@ -56,6 +56,10 @@ on:
         description: Trace live allocations before and after visiting ten restored workspaces.
         type: boolean
         default: false
+      renderer_large_display:
+        description: Profile a 3200x1800 terminal window on a 4K virtual display.
+        type: boolean
+        default: false
       renderer_returning_user:
         description: Use a profile that has already seen Setup Assistant for memory captures.
         type: boolean
@@ -809,11 +813,15 @@ jobs:
           tar -xzf app-build.tar.gz -C "$PROGRAMA_DERIVED_DATA_DIR"
 
       - name: Create virtual display
+        env:
+          LARGE_DISPLAY: ${{ github.event_name == 'workflow_dispatch' && inputs.renderer_large_display && (inputs.renderer_memory || inputs.renderer_allocations) }}
         run: |
           set -euo pipefail
           clang -framework Foundation -framework CoreGraphics \
             -o /tmp/create-virtual-display scripts/create-virtual-display.m
-          /tmp/create-virtual-display &
+          set --
+          if [[ "$LARGE_DISPLAY" == true ]]; then set -- --modes 3840x2160; fi
+          /tmp/create-virtual-display "$@" &
           VDISPLAY_PID=$!
           echo "VDISPLAY_PID=$VDISPLAY_PID" >> "$GITHUB_ENV"
           sleep 3
@@ -858,12 +866,14 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.renderer_memory
         env:
           RETURNING_USER: ${{ inputs.renderer_returning_user }}
+          LARGE_DISPLAY: ${{ inputs.renderer_large_display }}
           BASELINE_RUN: ${{ inputs.renderer_baseline_run }}
         run: |
           set -euo pipefail
           APP="$(./scripts/locate-built-app.sh --configuration Debug --primary 'Programa DEV' --derived-data-root "$PROGRAMA_DERIVED_DATA_DIR")"
           set -- --renderer-memory
           if [[ "$RETURNING_USER" == true ]]; then set -- "$@" --returning-user; fi
+          if [[ "$LARGE_DISPLAY" == true ]]; then set -- "$@" --large-display; fi
           if [[ -z "$BASELINE_RUN" ]]; then
             python3 tests_v2/test_restored_scrollback_survives_relaunch.py --app "$APP" "$@"
             exit
@@ -882,11 +892,13 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.renderer_allocations
         env:
           RETURNING_USER: ${{ inputs.renderer_returning_user }}
+          LARGE_DISPLAY: ${{ inputs.renderer_large_display }}
         run: |
           set -euo pipefail
           APP="$(./scripts/locate-built-app.sh --configuration Debug --primary 'Programa DEV' --derived-data-root "$PROGRAMA_DERIVED_DATA_DIR")"
           set -- --app "$APP" --allocations "$RUNNER_TEMP/renderer-allocations"
           if [[ "$RETURNING_USER" == true ]]; then set -- "$@" --returning-user; fi
+          if [[ "$LARGE_DISPLAY" == true ]]; then set -- "$@" --large-display; fi
           python3 tests_v2/test_restored_scrollback_survives_relaunch.py "$@"
 
       - name: Upload workspace allocation reports

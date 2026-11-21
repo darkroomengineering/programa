@@ -91,8 +91,11 @@ def main():
     profiling.add_argument("--renderer-memory", action="store_true")
     profiling.add_argument("--allocations", type=Path)
     parser.add_argument("--returning-user", action="store_true")
+    parser.add_argument("--large-display", action="store_true")
     args = parser.parse_args()
     profile_memory = args.renderer_memory or args.allocations is not None
+    if args.large_display and not profile_memory:
+        parser.error("--large-display requires a memory or allocation profile")
     app = args.app.resolve()
     require(os.environ.get("CI") == "true", "This lifecycle test runs only in CI")
     info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
@@ -118,6 +121,28 @@ def main():
         policy = support / f"session-{bundle}.scrollback-policy.json"
         child_script = root / "child.py"
         child_script.write_text(CHILD)
+        if args.large_display:
+            window_probe_source = root / "window-probe.swift"
+            window_probe = root / "window-probe"
+            window_probe_source.write_text('''
+import CoreGraphics
+import Foundation
+
+let pid = Int(CommandLine.arguments[1])!
+let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+    as? [[String: Any]] ?? []
+for window in windows where window[kCGWindowOwnerPID as String] as? Int == pid {
+    guard window[kCGWindowLayer as String] as? Int == 0,
+          let bounds = window[kCGWindowBounds as String] as? NSDictionary,
+          let frame = CGRect(dictionaryRepresentation: bounds) else { continue }
+    if frame.width == 3200 && frame.height == 1800 {
+        print("Verified on-screen window: \\(frame)")
+        exit(EXIT_SUCCESS)
+    }
+}
+exit(EXIT_FAILURE)
+''')
+            subprocess.run(["swiftc", str(window_probe_source), "-o", str(window_probe)], check=True, timeout=60)
         environment = {key: value for key, value in os.environ.items()
                        if not key.startswith(("PROGRAMA_UI_TEST", "XCTest", "XCInject"))
                        and key not in ("PROGRAMA_SOCKET", "PROGRAMA_SOCKET_PATH", "PROGRAMA_SOCKET_PASSWORD",
@@ -318,6 +343,16 @@ def main():
             kill_app()
             eventually("child survives first app crash", lambda: alive_after(before))
 
+            if args.large_display:
+                snapshot = json.loads(primary.read_text())
+                require(len(snapshot["windows"]) == 1, "Expected one saved window in the renderer fixture")
+                window = snapshot["windows"][0]
+                display = window["display"]["visibleFrame"]
+                require(display["width"] >= 3200 and display["height"] >= 1800,
+                        f"Fixture window was saved on a display smaller than 3200x1800: {display}")
+                window["frame"] = dict(x=display["x"], y=display["y"], width=3200, height=1800)
+                primary.write_text(json.dumps(snapshot))
+
             launch(record_allocations=args.allocations is not None)
             if profile_memory:
                 def complete_fixture():
@@ -325,6 +360,9 @@ def main():
                     return rows if len(rows) == 10 else None
 
                 restored_workspaces = eventually("ten restored workspaces", complete_fixture)
+                if args.large_display:
+                    eventually("on-screen 3200x1800 renderer window", lambda: subprocess.run(
+                        [str(window_probe), str(current.pid)], timeout=5).returncode == 0)
                 if args.renderer_memory:
                     capture_memory("restored before visiting")
                 else:
