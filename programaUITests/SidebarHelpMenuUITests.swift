@@ -459,8 +459,12 @@ final class CommandPaletteAllSurfacesUITests: XCTestCase {
         launchAndActivate(app)
         focusSettingsWindow(app: app)
 
-        let settings = app.windows.containing(.button, identifier: "Dark").firstMatch
-        XCTAssertTrue(settings.waitForExistence(timeout: 8), "Expected the Settings appearance picker")
+        let appearanceTab = app.toolbars.descendants(matching: .any).matching(identifier: "Appearance").firstMatch
+        XCTAssertTrue(appearanceTab.waitForExistence(timeout: 8), "Expected the Appearance toolbar tab")
+        appearanceTab.click()
+
+        let settings = app.windows.matching(identifier: "Appearance").firstMatch
+        XCTAssertTrue(settings.buttons["Dark"].waitForExistence(timeout: 8), "Expected the Settings appearance picker")
         for name in ["System", "Light", "Dark"] {
             XCTAssertTrue(settings.buttons[name].isHittable, "Expected the \(name) appearance button")
         }
