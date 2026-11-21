@@ -48,6 +48,10 @@ on:
         description: Capture native renderer memory during a ten-workspace restore and churn.
         type: boolean
         default: false
+      renderer_baseline_run:
+        description: Successful main CI run ID for five alternating footprint comparisons.
+        type: string
+        default: ""
       renderer_allocations:
         description: Trace live allocations before and after visiting ten restored workspaces.
         type: boolean
@@ -780,12 +784,16 @@ jobs:
     # OS version it was built for.
     runs-on: macos-26
     timeout-minutes: 40
+    permissions:
+      actions: read
+      contents: read
     env:
       PROGRAMA_DERIVED_DATA_DIR: ${{ github.workspace }}/.ci-derived-data-socket-integration
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          persist-credentials: false
           submodules: recursive
 
       - name: Download build artifact
@@ -826,16 +834,49 @@ jobs:
           APP="$(./scripts/locate-built-app.sh --configuration Debug --primary 'Programa DEV' --derived-data-root "$PROGRAMA_DERIVED_DATA_DIR")"
           python3 tests_v2/test_restored_scrollback_survives_relaunch.py --app "$APP"
 
+      - name: Verify the renderer baseline run
+        if: github.event_name == 'workflow_dispatch' && inputs.renderer_memory && inputs.renderer_baseline_run != ''
+        env:
+          BASELINE_RUN: ${{ inputs.renderer_baseline_run }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$BASELINE_RUN" =~ ^[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BASELINE_RUN" |
+            jq -e '.path == ".github/workflows/ci.yml" and .head_branch == "main" and .event == "push" and .conclusion == "success"'
+
+      - name: Download the renderer baseline build
+        if: github.event_name == 'workflow_dispatch' && inputs.renderer_memory && inputs.renderer_baseline_run != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: programa-app-build
+          path: ${{ runner.temp }}/renderer-baseline
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.renderer_baseline_run }}
+
       - name: Profile renderer memory after restoring ten workspaces
         if: github.event_name == 'workflow_dispatch' && inputs.renderer_memory
         env:
           RETURNING_USER: ${{ inputs.renderer_returning_user }}
+          BASELINE_RUN: ${{ inputs.renderer_baseline_run }}
         run: |
           set -euo pipefail
           APP="$(./scripts/locate-built-app.sh --configuration Debug --primary 'Programa DEV' --derived-data-root "$PROGRAMA_DERIVED_DATA_DIR")"
-          set -- --app "$APP" --renderer-memory
+          set -- --renderer-memory
           if [[ "$RETURNING_USER" == true ]]; then set -- "$@" --returning-user; fi
-          python3 tests_v2/test_restored_scrollback_survives_relaunch.py "$@"
+          if [[ -z "$BASELINE_RUN" ]]; then
+            python3 tests_v2/test_restored_scrollback_survives_relaunch.py --app "$APP" "$@"
+            exit
+          fi
+          BASELINE_DIR="$RUNNER_TEMP/renderer-baseline"
+          tar -xzf "$BASELINE_DIR/app-build.tar.gz" -C "$BASELINE_DIR"
+          BASELINE_APP="$(./scripts/locate-built-app.sh --configuration Debug --primary 'Programa DEV' --derived-data-root "$BASELINE_DIR")"
+          for pair in 1 2 3 4 5; do
+            echo "=== Baseline run $BASELINE_RUN, pair $pair ==="
+            python3 tests_v2/test_restored_scrollback_survives_relaunch.py --app "$BASELINE_APP" "$@"
+            echo "=== Candidate commit $GITHUB_SHA, pair $pair ==="
+            python3 tests_v2/test_restored_scrollback_survives_relaunch.py --app "$APP" "$@"
+          done
 
       - name: Attribute allocations before and after workspace churn
         if: github.event_name == 'workflow_dispatch' && inputs.renderer_allocations
