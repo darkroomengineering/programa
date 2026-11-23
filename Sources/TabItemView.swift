@@ -1118,6 +1118,15 @@ struct TabItemView: View, Equatable {
         }
 
         if !isMulti {
+            menu.addItem(SidebarMenuItem(
+                title: String(localized: "contextMenu.copyWorkspaceLink", defaultValue: "Copy Workspace Link")
+            ) { [self] in
+                let item = AppReference.workspacePasteboardItem(
+                    id: tab.referenceID, name: sidebarDisplayTitle(indicator: agentIndicator)
+                )
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.writeObjects([item])
+            })
             let editDescriptionItem = SidebarMenuItem(
                 title: String(localized: "contextMenu.editWorkspaceDescription", defaultValue: "Edit Workspace Description…")
             ) { [self] in beginWorkspaceDescriptionEditFromContextMenu() }

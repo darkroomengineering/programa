@@ -924,6 +924,43 @@ final class AppDelegateWindowContextRoutingTests: XCTestCase {
         XCTAssertTrue(managerB.tabs.contains(where: { $0.id == createdWorkspaceId }))
     }
 
+    func testWorkspaceLinkBeforeStartupSelectsWorkspaceWhenWindowRegisters() throws {
+        let app = AppDelegate()
+        let manager = TabManager()
+        let target = manager.addWorkspace(select: false)
+        let url = try XCTUnwrap(URL(string: AppReference.workspace.string(for: target.referenceID)))
+        app.application(.shared, open: [url])
+        XCTAssertNotEqual(manager.selectedTabId, target.id)
+
+        let id = UUID()
+        let window = makeMainWindow(id: id)
+        defer { window.orderOut(nil) }
+        app.registerMainWindow(window, windowId: id, tabManager: manager, sidebarState: SidebarState(),
+                               sidebarSelectionState: SidebarSelectionState())
+        XCTAssertEqual(manager.selectedTabId, target.id)
+        XCTAssertEqual(manager.tabs.count, 2)
+    }
+
+    func testWorkspaceLinkFocusesOwningWindowAndPreservesBothWorkspaces() throws {
+        let app = AppDelegate()
+        let firstID = UUID(), secondID = UUID()
+        let firstWindow = makeMainWindow(id: firstID), secondWindow = makeMainWindow(id: secondID)
+        defer { firstWindow.orderOut(nil); secondWindow.orderOut(nil) }
+        let first = TabManager(), second = TabManager()
+        app.registerMainWindow(firstWindow, windowId: firstID, tabManager: first, sidebarState: SidebarState(),
+                               sidebarSelectionState: SidebarSelectionState())
+        app.registerMainWindow(secondWindow, windowId: secondID, tabManager: second, sidebarState: SidebarState(),
+                               sidebarSelectionState: SidebarSelectionState())
+        let target = second.addWorkspace(select: false)
+        XCTAssertTrue(app.focusMainWindow(windowId: firstID))
+        let url = try XCTUnwrap(URL(string: AppReference.workspace.string(for: target.referenceID)))
+        app.application(.shared, open: [url])
+        XCTAssertEqual(second.selectedTabId, target.id)
+        XCTAssertTrue(app.tabManager === second)
+        XCTAssertEqual(first.tabs.count, 1)
+        XCTAssertEqual(second.tabs.count, 2)
+    }
+
     func testApplicationOpenURLsAddsWorkspaceForDroppedFolderURL() throws {
         _ = NSApplication.shared
         let app = AppDelegate()

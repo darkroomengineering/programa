@@ -270,6 +270,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         case complete
     }
     private var startupSessionState: StartupSessionState = .unprepared
+    private var pendingWorkspaceReference: UUID?
     var didAttemptStartupSessionRestore: Bool {
         switch startupSessionState {
         case .unprepared, .preparing, .prepared: return false
@@ -362,15 +363,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
 
     func application(_ application: NSApplication, open urls: [URL]) {
         let directories = externalOpenDirectories(from: urls)
-        guard !directories.isEmpty else { return }
-
-        prepareForExplicitOpenIntentAtStartup()
+        if !directories.isEmpty { prepareForExplicitOpenIntentAtStartup() }
         for directory in directories {
             openWorkspaceForExternalDirectory(
                 workingDirectory: directory,
                 debugSource: "application.openURLs"
             )
         }
+        if let reference = urls.compactMap({ AppReference.workspace.id(from: $0.absoluteString) }).last {
+            pendingWorkspaceReference = reference
+        }
+        openPendingWorkspaceReference()
+    }
+
+    private func openPendingWorkspaceReference() {
+        guard let reference = pendingWorkspaceReference else { return }
+        switch startupSessionState {
+        case .complete, .explicitOpenAwaitingPreparation, .skippedExplicitly: break
+        default: return
+        }
+        pendingWorkspaceReference = nil
+        for context in mainWindowContexts.values {
+            if let workspace = context.tabManager.tabs.first(where: { $0.referenceID == reference }) {
+                context.tabManager.selectWorkspace(workspace)
+                _ = focusMainWindow(windowId: context.windowId)
+                return
+            }
+        }
+        let alert = NSAlert()
+        alert.messageText = String(localized: "workspaceLink.missing", defaultValue: "Workspace unavailable")
+        alert.informativeText = String(localized: "workspaceLink.missing.detail", defaultValue: "This workspace is no longer open in this copy of Programa.")
+        presentReferenceAlert(alert)
+    }
+
+    func openBrowseeChatFromClipboard() {
+        let text = NSPasteboard.general.string(forType: .string) ?? ""
+        guard let url = AppReference.chatURL(fromClipboard: text) else {
+            let alert = NSAlert()
+            alert.messageText = String(localized: "browseeChatLink.invalid", defaultValue: "Copy a chat link or chat ID from Browsee first.")
+            presentReferenceAlert(alert)
+            return
+        }
+        guard let browsee = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.darkroom.browsee") else {
+            let alert = NSAlert()
+            alert.messageText = String(localized: "browseeChatLink.appMissing", defaultValue: "Install Browsee to open this chat.")
+            presentReferenceAlert(alert)
+            return
+        }
+        NSWorkspace.shared.open([url], withApplicationAt: browsee, configuration: .init()) { _, error in
+            if let error {
+                DispatchQueue.main.async { NSApp.presentError(error) }
+            }
+        }
+    }
+
+    private func presentReferenceAlert(_ alert: NSAlert) {
+        if let window = NSApp.keyWindow { alert.beginSheetModal(for: window) }
+        else { alert.runModal() }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -887,6 +936,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUser
         startupSessionState = .complete
         saveSessionSnapshot(includeScrollback: false)
         reconcileOrphanedEscrowedSessions()
+        openPendingWorkspaceReference()
     }
 
     /// Reattaches escrowed sessions that the snapshot restore did not produce a panel

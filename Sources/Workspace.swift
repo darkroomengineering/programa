@@ -9,6 +9,7 @@ import Combine
 @MainActor
 final class Workspace: Identifiable, ObservableObject {
     let id: UUID
+    lazy var referenceID = id
     @Published var title: String
     @Published var customTitle: String?
     @Published var customDescription: String?
