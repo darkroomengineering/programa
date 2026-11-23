@@ -492,6 +492,9 @@ internal static class WindowRegistry
             case "debug.command_palette.toggle" or "debug.command_palette.results" or "debug.type" or "debug.shortcut.simulate" when BuildIdentity.Value.Contains("0.0.0-dev", StringComparison.Ordinal):
                 var paletteWindow = method == "debug.type" ? Open.FirstOrDefault(window => window.PaletteOpen) ?? Current! : Text(p, "window_id") is null ? Current! : RequiredWindow(p);
                 return Task.FromResult<object?>(paletteWindow.PaletteDebug(method, p));
+            case "debug.sidebar.menu" or "debug.sidebar.hints" when BuildIdentity.Value.Contains("0.0.0-dev", StringComparison.Ordinal):
+                var sidebarWindow = Text(p, "workspace_id") is { } sidebarWorkspace ? OwnerOfWorkspace(sidebarWorkspace) ?? throw NotFound("workspace", sidebarWorkspace) : Current!;
+                return Task.FromResult<object?>(sidebarWindow.SidebarDebug(method, p));
             case "agent.task.start" or "agent.task.update" or "agent.task.finish" or "agent.task.finish_session" or "agent.task.list":
                 return Task.FromResult<object?>(Helpers.FromControl(method, p, id => OwnerOfWorkspace(id) is not null,
                     (workspace, surface) => OwnerOfWorkspace(workspace)?.WorkspaceHasSurface(workspace, surface) == true, DateTimeOffset.UtcNow));

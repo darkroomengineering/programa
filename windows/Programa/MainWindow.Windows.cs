@@ -274,20 +274,26 @@ public sealed partial class MainWindow
         terminal.RouteStateChanged -= OnRouteTransition;
     }
 
-    /// <summary>The sidebar's Move to Window menu: every other window, then a new one.</summary>
-    private MenuFlyoutSubItem MoveToWindowMenu(string workspaceId)
+    /// <summary>The sidebar's Move to Window menu, as on macOS: a new window, then every window (this
+    /// one disabled). Several workspaces go together, into one new window.</summary>
+    private MenuFlyoutSubItem MoveToWindowMenu(List<string> workspaceIds)
     {
-        var menu = new MenuFlyoutSubItem { Text = Localizer.Get("MoveToWindow") };
-        var others = WindowRegistry.Windows.Where(window => window != this).ToList();
-        foreach (var window in others)
+        var menu = new MenuFlyoutSubItem { Text = Localizer.Get(workspaceIds.Count > 1 ? "MoveWorkspacesToWindow" : "MoveToWindow") };
+        void Move(MainWindow? target)
         {
-            var target = window;
-            var index = WindowRegistry.Windows.ToList().IndexOf(window) + 1;
-            var title = window.SelectedWorkspaceTitle;
-            menu.Items.Add(MenuItem(title is null ? string.Format(Localizer.Get("WindowNumber"), index) : string.Format(Localizer.Get("WindowNumberTitled"), index, title), () => WindowRegistry.MoveWorkspace(workspaceId, target)));
+            foreach (var id in workspaceIds) target = WindowRegistry.MoveWorkspace(id, target);
         }
-        if (others.Count > 0) menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(MenuItem(Localizer.Get("NewWindow"), () => WindowRegistry.MoveWorkspace(workspaceId, null)));
+        menu.Items.Add(MenuItem(Localizer.Get("NewWindow"), () => Move(null)));
+        var windows = WindowRegistry.Windows.ToList();
+        if (windows.Count > 1) menu.Items.Add(new MenuFlyoutSeparator());
+        for (var index = 0; windows.Count > 1 && index < windows.Count; index++)
+        {
+            var target = windows[index];
+            var title = target.SelectedWorkspaceTitle;
+            var item = MenuItem(title is null ? string.Format(Localizer.Get("WindowNumber"), index + 1) : string.Format(Localizer.Get("WindowNumberTitled"), index + 1, title), () => Move(target));
+            item.IsEnabled = target != this;
+            menu.Items.Add(item);
+        }
         return menu;
     }
 

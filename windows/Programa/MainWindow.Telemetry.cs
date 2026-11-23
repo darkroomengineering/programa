@@ -146,12 +146,14 @@ public sealed partial class MainWindow
                 if (ports.Any(port => port is < 1 or > 65535)) throw new ControlException("invalid_params", "Invalid port — must be 1-65535");
                 ports = [.. ports.Distinct().Order()];
                 if (Target(optional: false) is { } surface) _reportedPorts[surface] = ports;
+                RefreshSidebarPorts();
                 return new { workspace_id = workspaceId, surface_id = requested, ports };
             }
             case "surface.clear_ports":
                 if (requested is not null) _reportedPorts.Remove(requested);
                 else if (workspace is not null)
                     foreach (var surface in workspace.Panes.SelectMany(pane => pane.Surfaces)) _reportedPorts.Remove(surface.Id);
+                RefreshSidebarPorts();
                 return new { workspace_id = workspaceId, surface_id = requested };
             case "surface.ports_kick":
             {

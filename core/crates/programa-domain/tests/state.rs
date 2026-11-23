@@ -95,6 +95,7 @@ fn reorder_clamps_pinned_and_unpinned_surfaces_at_boundary() {
                 description: None,
                 parent_id: None,
                 collapsed: false,
+                worktree_repo: None,
                 id: "workspace-a".into(),
                 selected_pane_id: "pane-a".into(),
                 panes: vec![Pane {
@@ -495,6 +496,7 @@ fn seed_validates_snapshot_and_uses_local_monotonic_revision() {
             description: None,
             parent_id: None,
             collapsed: false,
+            worktree_repo: None,
             id: "workspace-a".into(),
             selected_pane_id: "pane-a".into(),
             panes: vec![Pane {
@@ -787,6 +789,35 @@ fn worktree_children_follow_their_parent_and_open_its_folder() {
     .unwrap();
     let repo = &core.snapshot().workspaces[1];
     assert!(!repo.collapsed);
+
+    // A child made a worktree folder leaves its parent; a folder that stops being one lets its
+    // children go.
+    let folder = |id: &str, repo: Option<&str>| Command::SetWorkspaceWorktreeFolder {
+        workspace_id: format!("workspace-{id}"),
+        repo: repo.map(str::to_owned),
+    };
+    core.dispatch(folder("wt2", Some(r"C:\src\repo"))).unwrap();
+    assert_eq!(order(&core), "other,repo,wt1,wt2");
+    let wt2 = &core.snapshot().workspaces[3];
+    assert_eq!(wt2.parent_id, None);
+    assert_eq!(wt2.worktree_repo.as_deref(), Some(r"C:\src\repo"));
+    core.dispatch(folder("repo", Some(r"C:\src\repo"))).unwrap();
+    core.dispatch(folder("repo", None)).unwrap();
+    assert!(core
+        .snapshot()
+        .workspaces
+        .iter()
+        .all(|w| w.parent_id.is_none()));
+    assert_eq!(core.snapshot().workspaces[1].worktree_repo, None);
+    // A parent that was never made a folder lets its children go too.
+    core.dispatch(nest("wt1", Some("repo"))).unwrap();
+    core.dispatch(folder("repo", None)).unwrap();
+    assert!(core
+        .snapshot()
+        .workspaces
+        .iter()
+        .all(|w| w.parent_id.is_none()));
+    core.dispatch(nest("wt1", Some("repo"))).unwrap();
 
     // Closing the parent leaves its children top level.
     core.dispatch(Command::CloseWorkspace {
