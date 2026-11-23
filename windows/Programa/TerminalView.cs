@@ -43,6 +43,8 @@ public sealed partial class TerminalView : UserControl, IDisposable
     private CanvasTextFormat _italicFormat;
     private CanvasTextFormat _boldItalicFormat;
     private TerminalAppearance _appearance;
+    /// <summary>1 once this launch started a shell: Ghostty's initial-command is used up.</summary>
+    private static int _shellStarted;
     /// <summary>Cell size in DIPs, measured from the font and snapped to whole device pixels.</summary>
     private float _cellWidth = 8f;
     private float _cellHeight = 18f;
@@ -653,8 +655,12 @@ public sealed partial class TerminalView : UserControl, IDisposable
         // The shell runs in the terminal host and outlives the app; one still running there from
         // before this launch is reattached as it is, so its start command does not run again.
         var host = TerminalHost.Current is { } connection ? new { pipe = connection.Pipe, token = connection.Token, id = SurfaceId } : null;
-        if (TerminalHost.LiveAtLaunch.Remove(SurfaceId)) _initialCommand = null;
-        var config = JsonSerializer.SerializeToUtf8Bytes(new { cols = 80, rows = 24, cell_width = (ushort)MathF.Ceiling(_cellWidth), cell_height = (ushort)MathF.Ceiling(_cellHeight), colors = _appearance.CoreColors, restore_text = _restoreText, shell_integration = true, working_directory = directory is not null && Directory.Exists(directory) ? directory : null, env = environment, host });
+        var reattach = TerminalHost.LiveAtLaunch.Remove(SurfaceId);
+        if (reattach) _initialCommand = null;
+        // Ghostty's command picks the program; initial-command replaces it for the first terminal
+        // this launch starts, as Ghostty does on macOS.
+        var command = reattach ? null : (Interlocked.Exchange(ref _shellStarted, 1) == 0 ? _appearance.InitialCommand : null) ?? _appearance.Command;
+        var config = JsonSerializer.SerializeToUtf8Bytes(new { cols = 80, rows = 24, cell_width = (ushort)MathF.Ceiling(_cellWidth), cell_height = (ushort)MathF.Ceiling(_cellHeight), colors = _appearance.CoreColors, restore_text = _restoreText, shell_integration = true, command, working_directory = directory is not null && Directory.Exists(directory) ? directory : null, env = environment, host });
         var session = NativeTerminal.Create(config, out var error);
         _restoreText = null;
         if (session is null || session.IsInvalid)
@@ -663,6 +669,8 @@ public sealed partial class TerminalView : UserControl, IDisposable
             _spawnFailure.Visibility = Visibility.Visible;
             return;
         }
+        // The command could not be used and the default shell started; error says why.
+        if (!string.IsNullOrEmpty(error)) LaunchLog.Write(error);
         _session = session;
         // PowerShell discards input typed before its first prompt, so the initial command waits for
         // the prompt's OSC 7 (see Refresh); a shell without the integration gets it after 5 seconds.

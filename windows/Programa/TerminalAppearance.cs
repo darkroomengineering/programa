@@ -28,6 +28,11 @@ internal sealed class TerminalAppearance
     internal Color? SelectionForeground { get; private set; }
     internal Dictionary<int, Color> Palette { get; } = [];
 
+    /// <summary>Ghostty's <c>command</c> and <c>initial-command</c> as written, the program new
+    /// terminals start (programa_terminal.dll resolves it, TERMINAL_ABI.md); null for the default.</summary>
+    internal string? Command { get; private set; }
+    internal string? InitialCommand { get; private set; }
+
     private string? _theme;
     private bool _fontFamilySet;
 
@@ -113,9 +118,15 @@ internal sealed class TerminalAppearance
             var separator = line.IndexOf('=');
             if (separator < 0) continue;
             var key = line[..separator].Trim();
-            var value = line[(separator + 1)..].Trim().Trim('"');
+            var text = line[(separator + 1)..].Trim();
+            var value = text.Trim('"');
+            // As in Ghostty, only quotes around the whole value go, so a quoted program path keeps
+            // its quotes; an empty value restores the default.
+            var command = text.Length >= 2 && text[0] == '"' && text[^1] == '"' ? text[1..^1] : text;
             switch (key)
             {
+                case "command": Command = command.Length > 0 ? command : null; break;
+                case "initial-command": InitialCommand = command.Length > 0 ? command : null; break;
                 // Repeated font-family lines form a fallback list; the first is the primary font.
                 case "font-family" when !_fontFamilySet && value.Length > 0:
                     FontFamily = value;
