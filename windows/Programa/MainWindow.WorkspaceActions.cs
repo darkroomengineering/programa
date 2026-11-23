@@ -24,7 +24,7 @@ public sealed partial class MainWindow
     private static readonly string[] WorkspaceActions =
     [
         "pin", "unpin", "rename", "clear_name", "set_description", "clear_description", "move_up", "move_down", "move_top",
-        "close_others", "close_above", "close_below", "mark_read", "set_color", "clear_color",
+        "close_others", "close_above", "close_below", "mark_read", "mark_unread", "set_color", "clear_color",
     ];
 
     /// <summary>The row menu, built as it opens, in the macOS order (TabItemView.buildWorkspaceContextMenu).
@@ -78,6 +78,7 @@ public sealed partial class MainWindow
             enabled: workspaces.Count > 1 && targets.Count != workspaces.Count));
         menu.Items.Add(RowMenuItem(Localizer.Get("CloseWorkspacesBelow"), () => _ = CloseWorkspacesAsync([.. workspaces.Skip(index + 1).Select(item => item.Id)]), enabled: index < workspaces.Count - 1));
         menu.Items.Add(RowMenuItem(Localizer.Get("CloseWorkspacesAbove"), () => _ = CloseWorkspacesAsync([.. workspaces.Take(index).Select(item => item.Id)]), enabled: index != 0));
+        foreach (var item in WorkspaceNotificationMenuItems(id)) menu.Items.Add(item);
     }
 
     /// <summary>A menu item showing its current shortcut, as macOS menu items do.</summary>
@@ -300,6 +301,7 @@ public sealed partial class MainWindow
                 _notifications.MarkRead(workspaces[index].Panes.SelectMany(pane => pane.Surfaces).Select(surface => surface.Id).ToHashSet());
                 RefreshUnreadIndicators();
                 break;
+            case "mark_unread": _notifications.MarkUnread(workspaceId); break;
             default: throw new ControlException("invalid_params", $"action '{action}' is not one of {string.Join(", ", WorkspaceActions)}.");
         }
     }

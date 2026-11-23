@@ -278,7 +278,7 @@ public sealed partial class MainWindow
                     }
         }
         var keywords = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (label, hint, words, run) in workspacesOnly ? [] : ConfigPaletteEntries().ToList())
+        foreach (var (label, hint, words, run) in workspacesOnly ? [] : ConfigPaletteEntries().Concat(HelpPaletteEntries()).ToList())
         {
             entries.Add((label, hint, run));
             keywords[label] = words;

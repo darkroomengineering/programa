@@ -44,7 +44,7 @@ public sealed partial class MainWindow
 
     /// <summary>Opens a footer panel above its button. Every projection rebuilds the footer, and a flyout
     /// anchored on a button that leaves the tree closes, so it hangs on the window root at the button's place.</summary>
-    private void ShowFooterFlyout(Flyout flyout, FrameworkElement button)
+    private void ShowFooterFlyout(Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase flyout, FrameworkElement button)
     {
         var at = button.TransformToVisual(Root).TransformPoint(new Windows.Foundation.Point(0, 0));
         _footerFlyoutOpen = true;
@@ -52,11 +52,12 @@ public sealed partial class MainWindow
         flyout.ShowAt(Root, new Microsoft.UI.Xaml.Controls.Primitives.FlyoutShowOptions { Position = at, Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.TopEdgeAlignedLeft });
     }
 
-    /// <summary>Settings, Storage, Ports and (unless turned off) Provider Usage at the foot of the sidebar.</summary>
+    /// <summary>Settings, Help, Storage, Ports and (unless turned off) Provider Usage at the foot of the sidebar.</summary>
     private FrameworkElement SidebarFooter()
     {
         var footer = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(4, 0, 4, 6) };
         footer.Children.Add(IconButton("", "Settings", "open_settings", () => _ = ShowSettingsAsync()));
+        footer.Children.Add(HelpButton());
         footer.Children.Add(StorageButton());
         footer.Children.Add(PortsButton());
         if (_showProviderUsage) footer.Children.Add(UsageButton());

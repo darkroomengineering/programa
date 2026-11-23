@@ -62,6 +62,7 @@ public sealed partial class MainWindow
         menu.Items.Add(new MenuFlyoutSeparator());
         if (workspace.Panes.Count > 1) Add(_zoomedPanes.ContainsKey(workspaceId) ? "ExitZoom" : "ZoomPane", () => TogglePaneZoom(paneId));
         Add(surface.IsPinned ? "UnpinTab" : "PinTab", () => Apply(new { command = "set_surface_pinned", workspace_id = workspaceId, pane_id = paneId, surface_id = surfaceId, pinned = !surface.IsPinned }));
+        menu.Items.Add(TabReadMenuItem(surfaceId));
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(TabColorMenu(workspaceId, paneId, surface));
     }

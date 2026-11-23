@@ -205,4 +205,44 @@
   <data name="DesktopNotificationsOn" xml:space="preserve"><value>Windows shows Programa's notifications.</value></data>
   <data name="DesktopNotificationsOff" xml:space="preserve"><value>Windows does not show Programa's notifications. Turn them on in Windows Settings.</value></data>
   <data name="OpenWindowsNotificationSettings" xml:space="preserve"><value>Open Windows notification settings</value></data>
+  <!-- INC-1653: notification read state, Help menu, About, updates -->
+  <data name="MarkAllRead" xml:space="preserve"><value>Mark All Read</value></data>
+  <data name="ClearNotification" xml:space="preserve"><value>Clear notification</value></data>
+  <data name="MarkAsRead" xml:space="preserve"><value>Mark as Read</value></data>
+  <data name="MarkAsUnread" xml:space="preserve"><value>Mark as Unread</value></data>
+  <data name="NotificationRead" xml:space="preserve"><value>Read</value></data>
+  <data name="NotificationUnread" xml:space="preserve"><value>Unread</value></data>
+  <data name="MarkTabRead" xml:space="preserve"><value>Mark Tab as Read</value></data>
+  <data name="MarkTabUnread" xml:space="preserve"><value>Mark Tab as Unread</value></data>
+  <data name="MarkWorkspaceRead" xml:space="preserve"><value>Mark Workspace as Read</value></data>
+  <data name="MarkWorkspaceUnread" xml:space="preserve"><value>Mark Workspace as Unread</value></data>
+  <data name="ClearLatestNotification" xml:space="preserve"><value>Clear Latest Notification</value></data>
+  <data name="BlockedAgentsOne" xml:space="preserve"><value>1 agent blocked</value></data>
+  <data name="BlockedAgentsOther" xml:space="preserve"><value>{0} agents blocked</value></data>
+  <data name="BlockedAgentsTooltip" xml:space="preserve"><value>Click to jump to a blocked agent</value></data>
+  <data name="JumpToBlockedAgent" xml:space="preserve"><value>Jump to Blocked Agent</value></data>
+  <data name="Help" xml:space="preserve"><value>Help</value></data>
+  <data name="HelpWelcome" xml:space="preserve"><value>Welcome to Programa!</value></data>
+  <data name="HelpSendFeedback" xml:space="preserve"><value>Send Feedback</value></data>
+  <data name="HelpDocs" xml:space="preserve"><value>Docs</value></data>
+  <data name="HelpChangelog" xml:space="preserve"><value>Changelog</value></data>
+  <data name="HelpGitHub" xml:space="preserve"><value>GitHub</value></data>
+  <data name="HelpGitHubIssues" xml:space="preserve"><value>GitHub Issues</value></data>
+  <data name="HelpTwitter" xml:space="preserve"><value>X (Twitter)</value></data>
+  <data name="HelpWebsite" xml:space="preserve"><value>Darkroom</value></data>
+  <data name="CheckForUpdates" xml:space="preserve"><value>Check for Updates</value></data>
+  <data name="AboutPrograma" xml:space="preserve"><value>About Programa</value></data>
+  <data name="GhosttySettings" xml:space="preserve"><value>Ghostty Settings…</value></data>
+  <data name="InstallCodexIntegration" xml:space="preserve"><value>Install Codex Integration…</value></data>
+  <data name="Integrations" xml:space="preserve"><value>Integrations</value></data>
+  <data name="ShowWelcome" xml:space="preserve"><value>Show Welcome Screen</value></data>
+  <data name="AboutAppName" xml:space="preserve"><value>Programa</value></data>
+  <data name="AboutDescription" xml:space="preserve"><value>A Ghostty-based terminal with vertical tabs and a notification panel for Windows.</value></data>
+  <data name="AboutVersion" xml:space="preserve"><value>Version</value></data>
+  <data name="AboutBuild" xml:space="preserve"><value>Build</value></data>
+  <data name="AboutCommit" xml:space="preserve"><value>Commit</value></data>
+  <data name="AboutLicenses" xml:space="preserve"><value>Licenses</value></data>
+  <data name="AboutLicensesTitle" xml:space="preserve"><value>Third-Party Licenses</value></data>
+  <data name="AboutLicensesNotFound" xml:space="preserve"><value>Licenses file not found.</value></data>
+  <data name="AboutIncubatorCredit" xml:space="preserve"><value>A sidequest by Darkroom Engineering Incubator</value></data>
 </root>

@@ -66,6 +66,55 @@ internal sealed class NotificationCenter
         return changed;
     }
 
+    internal bool HasReadIn(string workspaceId) => _items.Any(item => item.IsRead && item.WorkspaceId == workspaceId);
+
+    internal bool HasAnyIn(string workspaceId) => _items.Any(item => item.WorkspaceId == workspaceId);
+
+    internal void MarkAllRead()
+    {
+        var unread = _items.Where(item => !item.IsRead).ToList();
+        unread.ForEach(item => item.IsRead = true);
+        if (unread.Count > 0) Changed?.Invoke();
+    }
+
+    /// <summary>Marks one notification read or unread. One marked unread moves to the top of the
+    /// list, as on macOS, so it is easy to find again.</summary>
+    internal void SetRead(long id, bool read)
+    {
+        if (_items.FirstOrDefault(item => item.Id == id) is not { } item || item.IsRead == read) return;
+        item.IsRead = read;
+        if (!read) BumpToNewest([item]);
+        Changed?.Invoke();
+    }
+
+    /// <summary>Marks a workspace's read notifications unread and moves them to the top (macOS markUnread(forTabId:)).</summary>
+    internal void MarkUnread(string workspaceId)
+    {
+        var read = _items.Where(item => item.IsRead && item.WorkspaceId == workspaceId).ToList();
+        if (read.Count == 0) return;
+        read.ForEach(item => item.IsRead = false);
+        BumpToNewest(read);
+        Changed?.Invoke();
+    }
+
+    private void BumpToNewest(List<AppNotification> changed)
+    {
+        var ids = changed.Select(item => item.Id).ToHashSet();
+        _items.RemoveAll(item => ids.Contains(item.Id));
+        _items.AddRange(changed);
+    }
+
+    internal void Remove(long id)
+    {
+        if (_items.RemoveAll(item => item.Id == id) > 0) Changed?.Invoke();
+    }
+
+    /// <summary>Removes a workspace's newest notification (Clear Latest Notification).</summary>
+    internal void ClearLatest(string workspaceId)
+    {
+        if (_items.LastOrDefault(item => item.WorkspaceId == workspaceId) is { } latest) Remove(latest.Id);
+    }
+
     /// <summary>Removes one workspace's notifications (notification.clear with a workspace).</summary>
     internal void Clear(string workspaceId)
     {
