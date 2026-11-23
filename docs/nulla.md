@@ -68,7 +68,7 @@ For a hosted Debug spot check, dispatch the CI workflow with `gh workflow run ci
 3. Return to an early workspace after reclamation. Verify prompt echo, retained scrollback, focus, and the first correct frame. Check that background output is available on return and that visible splits still render during resize. Keep a display capture or frame trace along with the existing behavior checks.
 4. Compare at least five alternating runs per build. Report medians and ranges and name the traced limiter. Review memory alongside startup and workspace-switch latency so that a lower buffer count earns its place in the app. Record inconclusive results when the distributions overlap.
 
-## Build-time work and release evidence
+## Build-time work
 
 The [v2 socket contract](../contracts/v2/methods.json) already supplies build-known method data to generated Swift. Run `scripts/check-v2-contract.sh` when it changes. Apply the same approach to static inputs when a journey trace shows repeated runtime work. Renderer visibility, PTY data, display geometry, and user configuration depend on runtime inputs. Prefer the existing AppKit and Ghostty visibility and draw paths on macOS and WinUI and ConPTY on Windows.
 
