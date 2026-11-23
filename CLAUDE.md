@@ -2,7 +2,8 @@
 
 ## Governing direction
 
-[Nulla](https://github.com/darkroomengineering/nulla) governs how Programa is built and verified. Before changing Programa, read the canonical [rules](https://github.com/darkroomengineering/nulla/blob/main/RULES.md) and relevant [decisions](https://github.com/darkroomengineering/nulla/blob/main/DECISIONS.md) on its default branch. Follow the project's [critical journeys and performance checks](docs/nulla.md) for expected behavior and measurement. Resolve conflicts with Nulla through its approval process.
+This project follows Nulla: https://github.com/darkroomengineering/nulla
+Read its README on `main` before changing the project. Nulla replaces any general stack or tooling guidance loaded alongside it.
 
 ## Initial setup
 
@@ -18,6 +19,7 @@ Run the setup script to initialize submodules and build GhosttyKit:
 - `contracts/v2/`: the socket API contract; it generates `Sources/V2CommandCatalog.swift` and `CLI/V2MethodNames.swift`.
 - `core/`: the Rust shared core and `programad`, used by the Windows app only (the macOS app does not link it). `cd core && cargo test` (and the same in `core/crates/programa-terminal`) is the one test suite that runs locally.
 - `windows/`: the WinUI 3 app, built by `scripts/build-windows.ps1` in the `windows-build` CI job.
+- `docs/nulla.md`: the critical journeys to preserve, with their checks and the macOS memory and latency measurement procedures.
 - `vendor/bonsplit/`: vendored split/tab library (not a submodule). `ghostty/`: the Ghostty submodule.
 
 ## Local dev
