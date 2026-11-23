@@ -26,7 +26,7 @@ public sealed partial class MainWindow
             workspaceId = Id("workspace");
             paneId = Id("pane");
             surfaceId = Id("surface");
-            _snapshot = Dispatch(new { command = "create_workspace", workspace_id = workspaceId, pane_id = paneId, surface_id = surfaceId, session_id = Id("session") });
+            _snapshot = Dispatch(new { command = "create_workspace", workspace_id = workspaceId, pane_id = paneId, surface_id = surfaceId, session_id = Id("session"), placement = WorkspacePlacement });
         }
         else
         {

@@ -470,7 +470,7 @@ public sealed partial class MainWindow : Window
     }
 
     private void NewWorkspace() =>
-        Apply(new { command = "create_workspace", workspace_id = Id("workspace"), pane_id = Id("pane"), surface_id = Id("surface"), session_id = Id("session") });
+        Apply(new { command = "create_workspace", workspace_id = Id("workspace"), pane_id = Id("pane"), surface_id = Id("surface"), session_id = Id("session"), placement = WorkspacePlacement });
 
     /// <summary>A new workspace in the focused terminal's directory running Claude Code (macOS ⌘⇧C).</summary>
     private void NewClaudeWorkspace()

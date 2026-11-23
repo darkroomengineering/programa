@@ -8,6 +8,7 @@ fn create_workspace() -> Command {
         pane_id: "pane-a".into(),
         surface_id: "surface-a".into(),
         session_id: "session-a".into(),
+        placement: Default::default(),
     }
 }
 
@@ -383,6 +384,58 @@ fn move_surface_same_pane_reorders_and_selects_moved_surface() {
 }
 
 #[test]
+fn new_workspaces_go_where_the_placement_says_after_pinned_ones_and_past_worktree_children() {
+    use programa_domain::WorkspacePlacement::{AfterCurrent, End, Top};
+    let mut core = Core::default();
+    let mut add = |core: &mut Core, name: &str, placement| {
+        core.dispatch(Command::CreateWorkspace {
+            workspace_id: format!("w-{name}"),
+            pane_id: format!("p-{name}"),
+            surface_id: format!("s-{name}"),
+            session_id: format!("session-{name}"),
+            placement,
+        })
+        .unwrap();
+    };
+    let order = |core: &Core| {
+        core.snapshot()
+            .workspaces
+            .iter()
+            .map(|w| w.id.trim_start_matches("w-").to_owned())
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    add(&mut core, "a", End);
+    add(&mut core, "b", End);
+    add(&mut core, "c", End);
+    core.dispatch(Command::SetWorkspacePinned {
+        workspace_id: "w-a".into(),
+        pinned: true,
+    })
+    .unwrap();
+    core.dispatch(Command::SetWorkspaceParent {
+        workspace_id: "w-c".into(),
+        parent_id: Some("w-b".into()),
+    })
+    .unwrap();
+    core.dispatch(Command::SelectWorkspace {
+        workspace_id: "w-b".into(),
+    })
+    .unwrap();
+    // After b's worktree child, not between them; the new one is selected.
+    add(&mut core, "d", AfterCurrent);
+    assert_eq!(order(&core), "a b c d");
+    add(&mut core, "e", Top);
+    assert_eq!(order(&core), "a e b c d");
+    core.dispatch(Command::SelectWorkspace {
+        workspace_id: "w-a".into(),
+    })
+    .unwrap();
+    add(&mut core, "f", AfterCurrent);
+    assert_eq!(order(&core), "a f e b c d");
+}
+
+#[test]
 fn move_surface_rejects_target_pane_in_another_workspace_without_mutation() {
     let mut core = Core::default();
     core.dispatch(create_workspace()).unwrap();
@@ -391,6 +444,7 @@ fn move_surface_rejects_target_pane_in_another_workspace_without_mutation() {
         pane_id: "pane-b".into(),
         surface_id: "surface-b".into(),
         session_id: "session-b".into(),
+        placement: Default::default(),
     })
     .unwrap();
     let before = core.snapshot().clone();
@@ -533,6 +587,7 @@ fn pinned_workspaces_stay_on_top_and_moves_keep_their_group() {
             pane_id: format!("pane-{name}"),
             surface_id: format!("surface-{name}"),
             session_id: format!("session-{name}"),
+            placement: Default::default(),
         })
         .unwrap();
     }
@@ -611,6 +666,7 @@ fn an_adopted_workspace_keeps_its_ids_and_is_selected() {
             pane_id: "pane-b".into(),
             surface_id: "surface-b".into(),
             session_id: "session-b".into(),
+            placement: Default::default(),
         })
         .unwrap();
     target
@@ -677,6 +733,7 @@ fn worktree_children_follow_their_parent_and_open_its_folder() {
             pane_id: format!("pane-{name}"),
             surface_id: format!("surface-{name}"),
             session_id: format!("session-{name}"),
+            placement: Default::default(),
         })
         .unwrap();
     }

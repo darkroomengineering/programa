@@ -281,11 +281,21 @@ public sealed partial class MainWindow
             if (ActiveTerminal() is { LastAgentSession: not null } resumable && !IsBusy(resumable)) entries.Add((Localizer.Get("ResumeAgentSession"), string.Empty, () => ResumeAgentFromPalette(resumable)));
             entries.Add((Localizer.Get("MoveTabToNewWindow"), string.Empty, () => WindowRegistry.MoveSurfaceToNewWindow(current.Id, pane.Id, surfaceId)));
         }
+        var allSurfaces = workspacesOnly && AppSettings.Load().CommandPaletteSearchesAllSurfaces;
         foreach (var workspace in _snapshot.Workspaces)
         {
             var id = workspace.Id;
             var name = _sidebarRows.GetValueOrDefault(id)?.Title.Text ?? workspace.Title ?? id;
             entries.Add((workspacesOnly ? name : string.Format(Localizer.Get("GoToWorkspace"), name), string.Empty, () => Apply(new { command = "select_workspace", workspace_id = id })));
+            // app.commandPaletteSearchesAllSurfaces: the switcher also matches every tab, as macOS's Cmd+P.
+            if (allSurfaces)
+                foreach (var tabPane in workspace.Panes)
+                    foreach (var surface in tabPane.Surfaces)
+                    {
+                        var (paneId, surfaceId) = (tabPane.Id, surface.Id);
+                        var tab = SurfaceTitle(surfaceId) ?? _tabItems.GetValueOrDefault(surfaceId)?.Header as string ?? surfaceId;
+                        entries.Add(($"{tab} — {name}", string.Empty, () => Apply(new { command = "select_surface", workspace_id = id, pane_id = paneId, surface_id = surfaceId })));
+                    }
         }
         var keywords = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var (label, hint, words, run) in workspacesOnly ? [] : ConfigPaletteEntries().ToList())
@@ -294,6 +304,7 @@ public sealed partial class MainWindow
             keywords[label] = words;
         }
         if (!workspacesOnly) entries.AddRange(LayoutPaletteEntries());
+        if (!workspacesOnly) entries.Add((Localizer.Get("OpenSettingsJson"), string.Empty, OpenSettingsFile));
 
         var query = new TextBox { PlaceholderText = Localizer.Get(workspacesOnly ? "GoToWorkspacePlaceholder" : "CommandPalettePlaceholder"), MinWidth = 480 };
         AutomationProperties.SetName(query, Localizer.Get(workspacesOnly ? "Shortcut_go_to_workspace" : "Shortcut_command_palette"));

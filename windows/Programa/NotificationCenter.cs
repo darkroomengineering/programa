@@ -76,6 +76,16 @@ internal sealed class NotificationCenter
         if (_toastsRegistered) _ = AppNotificationManager.Default.RemoveAllAsync();
     }
 
+    /// <summary>Whether Windows shows this app's toasts (Settings > System > Notifications).</summary>
+    internal static bool DesktopNotificationsEnabled
+    {
+        get
+        {
+            try { return AppNotificationManager.Default.Setting == AppNotificationSetting.Enabled; }
+            catch (Exception error) when (error is System.Runtime.InteropServices.COMException or InvalidOperationException) { return false; }
+        }
+    }
+
     /// <summary>Registers for toasts once; an unpackaged app that cannot register keeps working without them.</summary>
     internal void RegisterToasts()
     {

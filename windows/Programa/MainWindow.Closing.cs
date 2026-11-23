@@ -3,8 +3,9 @@ using Microsoft.UI.Xaml.Controls;
 namespace Programa;
 
 /// <summary>Asks before ending running programs, as on macOS: closing the window (which quits on
-/// Windows) or closing the last workspace asks when a shell still runs something. Closing other tabs
-/// and workspaces, a shell exiting, and control commands close without asking.</summary>
+/// Windows) or a workspace asks when a shell still runs something, a pinned workspace always asks, and
+/// closing a workspace's last tab asks (app.confirmCloseLastPane). Closing other tabs, a shell exiting,
+/// and control commands close without asking.</summary>
 public sealed partial class MainWindow
 {
     private bool _closeConfirmed;
@@ -70,30 +71,37 @@ public sealed partial class MainWindow
         finally { _dialogOpen = false; }
     }
 
-    /// <summary>The terminals that would end if this workspace closed, when it is the last one.</summary>
-    private async Task<bool> MayCloseLastWorkspaceAsync(WorkspaceSnapshot workspace)
+    /// <summary>Whether a workspace may close, asked as macOS asks (TabManager.closeWorkspaceWithConfirmation):
+    /// a pinned workspace always, one whose shells run something, and, when what closes is its last tab,
+    /// an idle one too unless app.confirmCloseLastPane is off. The last workspace closes the window.</summary>
+    private async Task<bool> MayCloseWorkspaceAsync(WorkspaceSnapshot workspace, bool fromLastTab = false)
     {
-        if (_snapshot.Workspaces.Count > 1) return true;
+        var last = _snapshot.Workspaces.Count <= 1;
         var terminals = workspace.Panes.SelectMany(pane => pane.Surfaces).Select(surface => _terminals.GetValueOrDefault(surface.Id)).OfType<TerminalView>();
         var running = RunningPrograms(terminals);
-        if (running.Count == 0) return true;
-        if (!await ConfirmEndingAsync(Localizer.Get("CloseLastWorkspaceTitle"), Localizer.Get("CloseLastWorkspaceMessage"), Localizer.Get("Close"), running)) return false;
-        _closeConfirmed = true;
+        var (title, message) =
+            workspace.Pinned ? ("ClosePinnedWorkspaceTitle", "ClosePinnedWorkspaceMessage")
+            : running.Count > 0 ? (last ? ("CloseLastWorkspaceTitle", "CloseLastWorkspaceMessage") : ("CloseWorkspaceTitle", "CloseWorkspaceMessage"))
+            : fromLastTab && AppSettings.Load().ConfirmCloseLastPane ? (last ? ("CloseWindowTitle", "CloseLastTabWindowMessage") : ("CloseWorkspaceTitle", "CloseLastTabMessage"))
+            : (null, null);
+        if (title is null || message is null) return true;
+        if (!await ConfirmEndingAsync(Localizer.Get(title), Localizer.Get(message), Localizer.Get("Close"), running)) return false;
+        if (last) _closeConfirmed = true;
         return true;
     }
 
     private async void CloseWorkspace(string workspaceId)
     {
         if (_snapshot.Workspaces.FirstOrDefault(item => item.Id == workspaceId) is not { } workspace) return;
-        if (await MayCloseLastWorkspaceAsync(workspace)) Apply(new { command = "close_workspace", workspace_id = workspaceId });
+        if (await MayCloseWorkspaceAsync(workspace)) Apply(new { command = "close_workspace", workspace_id = workspaceId });
     }
 
-    /// <summary>Closes a tab; when it is the app's only tab, closing it is closing the last workspace.</summary>
+    /// <summary>Closes a tab; closing a workspace's last tab closes the workspace, and asks first.</summary>
     private async void CloseSurface(string workspaceId, string paneId, string surfaceId)
     {
         if (_snapshot.Workspaces.FirstOrDefault(item => item.Id == workspaceId) is not { } workspace) return;
         var onlyTab = workspace.Panes.Count == 1 && workspace.Panes[0].Surfaces.Count == 1;
-        if (onlyTab && !await MayCloseLastWorkspaceAsync(workspace)) return;
+        if (onlyTab && !await MayCloseWorkspaceAsync(workspace, fromLastTab: true)) return;
         Apply(new { command = "close_surface", workspace_id = workspaceId, pane_id = paneId, surface_id = surfaceId });
     }
 }

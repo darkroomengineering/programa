@@ -48,23 +48,17 @@ public sealed partial class MainWindow
     }
 
     /// <summary>Splits a new pane holding <paramref name="panel"/> beside the target surface, keeping the
-    /// selection where it was unless <paramref name="focus"/>. Windows splits only right or down, so
-    /// left and up open right and down.</summary>
+    /// selection where it was unless <paramref name="focus"/>; left and up put it first.</summary>
     private (string SurfaceId, string PaneId, string WorkspaceId) SplitPanel(JsonElement p, IPanel panel, bool focus)
     {
         var (workspace, pane, _) = SplitSource(p);
-        var direction = (Text(p, "direction") ?? "right") switch
-        {
-            "right" or "left" => "vertical",
-            "down" or "up" => "horizontal",
-            var other => throw new ControlException("invalid_params", $"direction '{other}' is not right, down, left or up."),
-        };
+        var (direction, insertFirst) = SplitPlacement(Text(p, "direction") ?? "right");
         var previous = SelectedWorkspace();
         var previousPane = previous?.SelectedPane;
         var newPane = Id("pane");
         var surfaceId = Id("surface");
         _panels[surfaceId] = panel;
-        _snapshot = Dispatch(new { command = "split_pane", workspace_id = workspace.Id, pane_id = pane.Id, split_id = Id("split"), new_pane_id = newPane, new_surface_id = surfaceId, session_id = Id("session"), direction, ratio = 0.5 });
+        _snapshot = Dispatch(new { command = "split_pane", workspace_id = workspace.Id, pane_id = pane.Id, split_id = Id("split"), new_pane_id = newPane, new_surface_id = surfaceId, session_id = Id("session"), direction, ratio = 0.5, insert_first = insertFirst });
         if (focus) _snapshot = Dispatch(new { command = "select_workspace", workspace_id = workspace.Id });
         else if (previous is not null && previousPane is not null)
             _snapshot = Dispatch(new { command = "select_surface", workspace_id = previous.Id, pane_id = previousPane.Id, surface_id = previousPane.SelectedSurfaceId });

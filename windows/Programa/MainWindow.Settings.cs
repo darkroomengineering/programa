@@ -6,7 +6,7 @@ using Microsoft.UI.Xaml.Controls;
 namespace Programa;
 
 /// <summary>Settings, as the macOS Settings window: General, Terminal, Sidebar, Notifications, Worktrees, Storage,
-/// Custom Commands and Keyboard Shortcuts, saved to the shared settings.json (only the values changed here are written)
+/// Custom Commands, Automation and Keyboard Shortcuts, saved to the shared settings.json (only the values changed here are written)
 /// and applied to every window at once.</summary>
 public sealed partial class MainWindow
 {
@@ -21,6 +21,22 @@ public sealed partial class MainWindow
 
         var appearance = new ComboBox { Header = Localizer.Get("SettingsAppearance"), ItemsSource = new[] { Localizer.Get("AppearanceSystem"), Localizer.Get("AppearanceLight"), Localizer.Get("AppearanceDark") }, SelectedIndex = Array.IndexOf(appearanceValues, app.Appearance), MinWidth = 240 };
         var warn = new ToggleSwitch { Header = Localizer.Get("WarnBeforeQuit"), IsOn = app.WarnBeforeQuit };
+        var placementValues = new[] { "top", "afterCurrent", "end" };
+        var placement = new ComboBox { Header = Localizer.Get("NewWorkspacePlacement"), ItemsSource = new[] { Localizer.Get("PlacementTop"), Localizer.Get("PlacementAfterCurrent"), Localizer.Get("PlacementEnd") }, SelectedIndex = Array.IndexOf(placementValues, app.NewWorkspacePlacement), MinWidth = 240 };
+        var confirmLastTab = Switch("ConfirmCloseLastPane", app.ConfirmCloseLastPane);
+        var paletteAll = Switch("CommandPaletteSearchesAllSurfaces", app.CommandPaletteSearchesAllSurfaces);
+        var openFile = new Button { Content = Localizer.Get("SettingsFileOpen") };
+        openFile.Click += (_, _) => OpenSettingsFile();
+        var settingsFile = new StackPanel
+        {
+            Spacing = 4,
+            Children = { new TextBlock { Text = Localizer.Get("SettingsFile") }, new TextBlock { Text = ShortcutSettings.SettingsPath, Opacity = 0.7, IsTextSelectionEnabled = true, TextWrapping = TextWrapping.Wrap }, openFile },
+        };
+        var claudeIntegration = Switch("ClaudeCodeIntegration", app.ClaudeCodeIntegration);
+        var claudeTeams = Switch("ClaudeTeamsByDefault", app.ClaudeTeamsByDefault);
+        var holdText = Switch("HoldAgentTextWhileTyping", app.HoldAgentTextWhileTyping);
+        var protectPrompts = Switch("ProtectApprovalPrompts", app.ProtectApprovalPrompts);
+        var newTerminalsNote = new TextBlock { Text = Localizer.Get("AppliesToNewTerminals"), TextWrapping = TextWrapping.Wrap, Opacity = 0.7 };
 
         var themes = ThemeNames();
         var themeLight = EditableBox(Localizer.Get("TerminalThemeLight"), themes, app.ThemeLight);
@@ -30,6 +46,11 @@ public sealed partial class MainWindow
         var fontSize = new NumberBox { Header = Localizer.Get("TerminalFontSize"), Minimum = 6, Maximum = 72, Value = app.FontSize ?? effectiveSize, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline, HorizontalAlignment = HorizontalAlignment.Left };
 
         var sound = new ToggleSwitch { Header = Localizer.Get("NotificationSound"), IsOn = !app.Silent };
+        // Desktop notifications, as the macOS row: whether Windows shows them, and where to change it.
+        var notificationState = new TextBlock { Text = Localizer.Get(NotificationCenter.DesktopNotificationsEnabled ? "DesktopNotificationsOn" : "DesktopNotificationsOff"), TextWrapping = TextWrapping.Wrap };
+        var notificationSettings = new HyperlinkButton { Content = Localizer.Get("OpenWindowsNotificationSettings"), Padding = new Thickness(0) };
+        notificationSettings.Click += (_, _) => _ = Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:notifications"));
+        var notifications = new StackPanel { Spacing = 4, Children = { new TextBlock { Text = Localizer.Get("DesktopNotifications") }, notificationState, notificationSettings } };
 
         var worktreeFolder = new TextBox { Header = Localizer.Get("WorktreeDirectory"), Text = worktrees.Directory };
         var autoRemove = new ToggleSwitch { Header = Localizer.Get("WorktreeAutoRemove"), IsOn = worktrees.AutoRemoveMerged };
@@ -59,21 +80,30 @@ public sealed partial class MainWindow
             shortcutPanel.Children.Add(editor);
         }
 
-        var bar = new SelectorBar();
+        // Sections down the left, as the macOS Settings sidebar: a row of tabs does not fit them all.
+        var bar = new ListView { SelectionMode = ListViewSelectionMode.Single, Width = 190 };
         var page = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch };
-        bar.Items.Add(Section("SettingsGeneral", appearance, warn));
+        bar.Items.Add(Section("SettingsGeneral", appearance, warn, placement, confirmLastTab, paletteAll, settingsFile));
         bar.Items.Add(Section("Terminal", themeLight, themeDark, fontFamily, fontSize));
         bar.Items.Add(Section("SettingsSidebar", showUsage, showUsageNote));
-        bar.Items.Add(Section("Notifications", sound));
+        bar.Items.Add(Section("Notifications", sound, notifications));
         bar.Items.Add(Section("SettingsWorktrees", worktreeFolder, autoRemove, autoRemoveHours));
         bar.Items.Add(Section("StorageTitle", lowDisk, autoCleanCaches));
         bar.Items.Add(Section("SettingsCustomCommands", trustedDirectories, trustNote));
+        bar.Items.Add(Section("SettingsAutomation", claudeIntegration, claudeTeams, holdText, protectPrompts, newTerminalsNote));
         bar.Items.Add(Section("SettingsShortcuts", shortcutPanel));
-        bar.SelectionChanged += (sender, _) => page.Content = sender.SelectedItem?.Tag;
-        var first = target == "keyboardShortcuts" ? bar.Items[^1] : bar.Items[0];
+        bar.SelectionChanged += (_, _) => page.Content = (bar.SelectedItem as ListViewItem)?.Tag;
+        var first = (ListViewItem)(target == "keyboardShortcuts" ? bar.Items[^1] : bar.Items[0]);
         bar.SelectedItem = first;
         page.Content = first.Tag;
-        var content = new StackPanel { Spacing = 8, MinWidth = 560, Children = { bar, page } };
+        var sections = new Grid { ColumnSpacing = 12, ColumnDefinitions = { new() { Width = GridLength.Auto }, new() { Width = new GridLength(1, GridUnitType.Star) } } };
+        Grid.SetColumn(page, 1);
+        sections.Children.Add(bar);
+        sections.Children.Add(page);
+        var content = new StackPanel { Spacing = 8, MinWidth = 680, Children = { sections } };
+        // As the macOS banner: what in settings.json is not applied.
+        if (SettingsFileProblems() is { Length: > 0 } problems)
+            content.Children.Insert(0, new InfoBar { Severity = InfoBarSeverity.Warning, Title = Localizer.Get("SettingsFileProblems"), Message = problems, IsOpen = true, IsClosable = false });
         var dialog = new ContentDialog { XamlRoot = Root.XamlRoot, RequestedTheme = Root.ActualTheme, Title = Localizer.Get("Settings"), Content = content, PrimaryButtonText = Localizer.Get("Save"), CloseButtonText = Localizer.Get("Cancel"), DefaultButton = ContentDialogButton.Primary };
         dialog.Resources["ContentDialogMaxWidth"] = 720.0;
         ContentDialogResult result;
@@ -89,6 +119,14 @@ public sealed partial class MainWindow
             var chosenAppearance = appearanceValues[Math.Max(0, appearance.SelectedIndex)];
             if (chosenAppearance != app.Appearance) changes.Add(("app", "appearance", chosenAppearance));
             if (warn.IsOn != app.WarnBeforeQuit) changes.Add(("app", "warnBeforeQuit", warn.IsOn));
+            var chosenPlacement = placementValues[Math.Max(0, placement.SelectedIndex)];
+            if (chosenPlacement != app.NewWorkspacePlacement) changes.Add(("app", "newWorkspacePlacement", chosenPlacement));
+            if (confirmLastTab.IsOn != app.ConfirmCloseLastPane) changes.Add(("app", "confirmCloseLastPane", confirmLastTab.IsOn));
+            if (paletteAll.IsOn != app.CommandPaletteSearchesAllSurfaces) changes.Add(("app", "commandPaletteSearchesAllSurfaces", paletteAll.IsOn));
+            if (claudeIntegration.IsOn != app.ClaudeCodeIntegration) changes.Add(("automation", "claudeCodeIntegration", claudeIntegration.IsOn));
+            if (claudeTeams.IsOn != app.ClaudeTeamsByDefault) changes.Add(("automation", "claudeTeamsByDefault", claudeTeams.IsOn));
+            if (holdText.IsOn != app.HoldAgentTextWhileTyping) changes.Add(("automation", "holdAgentTextWhileTyping", holdText.IsOn));
+            if (protectPrompts.IsOn != app.ProtectApprovalPrompts) changes.Add(("automation", "protectApprovalPrompts", protectPrompts.IsOn));
             var (light, dark) = (Value(themeLight), Value(themeDark));
             var themeChanged = light != app.ThemeLight || dark != app.ThemeDark;
             if (themeChanged)
@@ -153,12 +191,53 @@ public sealed partial class MainWindow
         };
     }
 
-    /// <summary>A section tab; its page is kept in Tag.</summary>
-    private static SelectorBarItem Section(string titleKey, params UIElement[] controls)
+    /// <summary>A switch whose on and off text say what each means, as the macOS subtitles.</summary>
+    private static ToggleSwitch Switch(string key, bool on) => new()
+    {
+        Header = Localizer.Get(key),
+        IsOn = on,
+        OnContent = new TextBlock { Text = Localizer.Get(key + "On"), TextWrapping = TextWrapping.Wrap, MaxWidth = 440 },
+        OffContent = new TextBlock { Text = Localizer.Get(key + "Off"), TextWrapping = TextWrapping.Wrap, MaxWidth = 440 },
+    };
+
+    /// <summary>settings.json in the default editor (Notepad when .json has none), created empty when missing.</summary>
+    private static void OpenSettingsFile()
+    {
+        var path = ShortcutSettings.SettingsPath;
+        try
+        {
+            if (!File.Exists(path))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllText(path, "{\n}\n");
+            }
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true })?.Dispose(); }
+            catch (System.ComponentModel.Win32Exception) { System.Diagnostics.Process.Start("notepad.exe", $"\"{path}\"")?.Dispose(); }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        {
+            LaunchLog.Write($"settings: could not open {path}: {error.Message}");
+        }
+    }
+
+    /// <summary>The first problems `programa config check` would report, one per line, or null.</summary>
+    private static string? SettingsFileProblems()
+    {
+        try
+        {
+            if (!File.Exists(ShortcutSettings.SettingsPath)) return null;
+            var problems = SettingsCheck.Problems(File.ReadAllBytes(ShortcutSettings.SettingsPath));
+            return problems.Count == 0 ? null : string.Join("\n", problems.Take(3).Select(problem => problem.Format(Path.GetFileName(ShortcutSettings.SettingsPath))));
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return null; }
+    }
+
+    /// <summary>A section in the list; its page is kept in Tag.</summary>
+    private static ListViewItem Section(string titleKey, params UIElement[] controls)
     {
         var panel = new StackPanel { Spacing = 16, Padding = new Thickness(4, 8, 16, 8) };
         foreach (var control in controls) panel.Children.Add(control);
-        return new SelectorBarItem { Text = Localizer.Get(titleKey), Tag = new ScrollViewer { Content = panel, Height = 420 } };
+        return new ListViewItem { Content = Localizer.Get(titleKey), Tag = new ScrollViewer { Content = panel, Height = 420 } };
     }
 
     /// <summary>A combo box that also takes a typed value; empty means "from the Ghostty config".

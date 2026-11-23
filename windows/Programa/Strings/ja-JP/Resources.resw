@@ -145,4 +145,42 @@
   <data name="ExternalOpenTitle" xml:space="preserve"><value>{0} で開きますか？</value></data>
   <data name="ExternalOpenDefaultApp" xml:space="preserve"><value>既定のアプリ</value></data>
   <data name="ExternalOpenOpen" xml:space="preserve"><value>開く</value></data>
+  <data name="ClosePinnedWorkspaceTitle" xml:space="preserve"><value>ピン留めされたワークスペースを閉じますか？</value></data>
+  <data name="ClosePinnedWorkspaceMessage" xml:space="preserve"><value>このワークスペースはピン留めされています。閉じるとワークスペースとすべてのパネルが閉じられます。</value></data>
+  <data name="CloseWorkspaceTitle" xml:space="preserve"><value>ワークスペースを閉じますか？</value></data>
+  <data name="CloseWorkspaceMessage" xml:space="preserve"><value>{0} がまだ実行中です ({1} 個のターミナル)。ワークスペースを閉じると停止します。</value></data>
+  <data name="CloseLastTabMessage" xml:space="preserve"><value>これはこのワークスペースの最後のタブです。閉じるとワークスペースも閉じられます。</value></data>
+  <data name="CloseLastTabWindowMessage" xml:space="preserve"><value>これはこのウインドウの最後のタブです。閉じるとウインドウも閉じられます。</value></data>
+  <data name="NewWorkspacePlacement" xml:space="preserve"><value>新規ワークスペースの配置</value></data>
+  <data name="PlacementTop" xml:space="preserve"><value>先頭</value></data>
+  <data name="PlacementAfterCurrent" xml:space="preserve"><value>現在の後</value></data>
+  <data name="PlacementEnd" xml:space="preserve"><value>末尾</value></data>
+  <data name="ConfirmCloseLastPane" xml:space="preserve"><value>最後のタブを閉じる前に確認</value></data>
+  <data name="ConfirmCloseLastPaneOn" xml:space="preserve"><value>最後のタブを閉じてワークスペースやウインドウが閉じる前に確認します。</value></data>
+  <data name="ConfirmCloseLastPaneOff" xml:space="preserve"><value>実行中のものがなければ、最後のタブを閉じると確認なしでワークスペースが閉じます。</value></data>
+  <data name="CommandPaletteSearchesAllSurfaces" xml:space="preserve"><value>コマンドパレットですべてのサーフェスを検索</value></data>
+  <data name="CommandPaletteSearchesAllSurfacesOn" xml:space="preserve"><value>ワークスペースに移動で、すべてのワークスペースのタブにも一致します。</value></data>
+  <data name="CommandPaletteSearchesAllSurfacesOff" xml:space="preserve"><value>ワークスペースに移動はワークスペースの行のみに一致します。</value></data>
+  <data name="SettingsFile" xml:space="preserve"><value>設定ファイル</value></data>
+  <data name="SettingsFileOpen" xml:space="preserve"><value>開く</value></data>
+  <data name="OpenSettingsJson" xml:space="preserve"><value>settings.jsonを開く</value></data>
+  <data name="SettingsFileProblems" xml:space="preserve"><value>settings.json の一部が適用されていません</value></data>
+  <data name="SettingsAutomation" xml:space="preserve"><value>自動化</value></data>
+  <data name="ClaudeCodeIntegration" xml:space="preserve"><value>Claude Code連携</value></data>
+  <data name="ClaudeCodeIntegrationOn" xml:space="preserve"><value>サイドバーにClaudeセッションの状態と通知が表示されます。</value></data>
+  <data name="ClaudeCodeIntegrationOff" xml:space="preserve"><value>Claude CodeはProgramaとの連携なしで動作します。</value></data>
+  <data name="ClaudeTeamsByDefault" xml:space="preserve"><value>Claude エージェントチーム</value></data>
+  <data name="ClaudeTeamsByDefaultOn" xml:space="preserve"><value>claude はエージェントチームを有効にして起動し、チームメイトは同じペインで動作します。</value></data>
+  <data name="ClaudeTeamsByDefaultOff" xml:space="preserve"><value>エージェントチームは programa claude-teams でのみ起動します。</value></data>
+  <data name="HoldAgentTextWhileTyping" xml:space="preserve"><value>未送信の入力を保護</value></data>
+  <data name="HoldAgentTextWhileTypingOn" xml:space="preserve"><value>入力した内容を送信するか消去するまで、エージェントのテキストは送られません。</value></data>
+  <data name="HoldAgentTextWhileTypingOff" xml:space="preserve"><value>エージェントのテキストが入力中の内容の途中に入ることがあります。</value></data>
+  <data name="ProtectApprovalPrompts" xml:space="preserve"><value>承認プロンプトを保護</value></data>
+  <data name="ProtectApprovalPromptsOn" xml:space="preserve"><value>エージェントやスクリプトが代わりに承認プロンプトに応答することはできません。</value></data>
+  <data name="ProtectApprovalPromptsOff" xml:space="preserve"><value>スクリプトがエージェントの承認プロンプトに応答できます。</value></data>
+  <data name="AppliesToNewTerminals" xml:space="preserve"><value>Claude Code連携と Claude エージェントチームは新しいターミナルに適用されます。</value></data>
+  <data name="DesktopNotifications" xml:space="preserve"><value>デスクトップ通知</value></data>
+  <data name="DesktopNotificationsOn" xml:space="preserve"><value>Windows は Programa の通知を表示します。</value></data>
+  <data name="DesktopNotificationsOff" xml:space="preserve"><value>Windows は Programa の通知を表示しません。Windows の設定でオンにしてください。</value></data>
+  <data name="OpenWindowsNotificationSettings" xml:space="preserve"><value>Windows の通知設定を開く</value></data>
 </root>

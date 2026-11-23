@@ -629,13 +629,18 @@ public sealed partial class TerminalView : UserControl, IDisposable
         };
         // The bundled `programa` CLI is on PATH inside Programa terminals, as on macOS.
         var cliDirectory = McpConfig.BinDirectory;
+        var settings = AppSettings.Load();
         if (File.Exists(Path.Combine(cliDirectory, "programa.exe")))
         {
             environment["PATH"] = cliDirectory + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH");
             environment["PROGRAMA_BUNDLED_CLI_PATH"] = Path.Combine(cliDirectory, "programa.exe");
-            if (McpConfig.FilePath is { } mcp) environment["PROGRAMA_MCP_CONFIG"] = mcp;
-            if (McpConfig.HooksPath is { } hooks) environment["PROGRAMA_CLAUDE_SETTINGS"] = hooks;
+            // automation.claudeCodeIntegration: without these the PowerShell integration defines no `claude` wrapper.
+            if (settings.ClaudeCodeIntegration && McpConfig.FilePath is { } mcp) environment["PROGRAMA_MCP_CONFIG"] = mcp;
+            if (settings.ClaudeCodeIntegration && McpConfig.HooksPath is { } hooks) environment["PROGRAMA_CLAUDE_SETTINGS"] = hooks;
         }
+        // automation.claudeTeamsByDefault, unless the app's own environment sets it (0 included).
+        if (settings.ClaudeTeamsByDefault && Environment.GetEnvironmentVariable("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS") is null)
+            environment["CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"] = "1";
         // The default browser, resolved each time a terminal starts, as on macOS; unset when unknown.
         if (Browsers.Default() is { } browser)
         {

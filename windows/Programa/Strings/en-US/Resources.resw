@@ -145,4 +145,42 @@
   <data name="ExternalOpenTitle" xml:space="preserve"><value>Open in {0}?</value></data>
   <data name="ExternalOpenDefaultApp" xml:space="preserve"><value>the default app</value></data>
   <data name="ExternalOpenOpen" xml:space="preserve"><value>Open</value></data>
+  <data name="ClosePinnedWorkspaceTitle" xml:space="preserve"><value>Close pinned workspace?</value></data>
+  <data name="ClosePinnedWorkspaceMessage" xml:space="preserve"><value>This workspace is pinned. Closing it will close the workspace and all of its panels.</value></data>
+  <data name="CloseWorkspaceTitle" xml:space="preserve"><value>Close workspace?</value></data>
+  <data name="CloseWorkspaceMessage" xml:space="preserve"><value>{0} is still running ({1} terminals). Closing the workspace ends it.</value></data>
+  <data name="CloseLastTabMessage" xml:space="preserve"><value>This is the last tab in this workspace. Closing it will close the workspace.</value></data>
+  <data name="CloseLastTabWindowMessage" xml:space="preserve"><value>This is the last tab in this window. Closing it will close the window.</value></data>
+  <data name="NewWorkspacePlacement" xml:space="preserve"><value>New Workspace Placement</value></data>
+  <data name="PlacementTop" xml:space="preserve"><value>Top</value></data>
+  <data name="PlacementAfterCurrent" xml:space="preserve"><value>After current</value></data>
+  <data name="PlacementEnd" xml:space="preserve"><value>End</value></data>
+  <data name="ConfirmCloseLastPane" xml:space="preserve"><value>Confirm Closing Last Tab</value></data>
+  <data name="ConfirmCloseLastPaneOn" xml:space="preserve"><value>Ask before closing the last tab closes its workspace or window.</value></data>
+  <data name="ConfirmCloseLastPaneOff" xml:space="preserve"><value>Closing the last tab closes its workspace without asking, unless something is running.</value></data>
+  <data name="CommandPaletteSearchesAllSurfaces" xml:space="preserve"><value>Command Palette Searches All Surfaces</value></data>
+  <data name="CommandPaletteSearchesAllSurfacesOn" xml:space="preserve"><value>Go to workspace also matches every workspace's tabs.</value></data>
+  <data name="CommandPaletteSearchesAllSurfacesOff" xml:space="preserve"><value>Go to workspace matches workspace rows only.</value></data>
+  <data name="SettingsFile" xml:space="preserve"><value>Settings File</value></data>
+  <data name="SettingsFileOpen" xml:space="preserve"><value>Open</value></data>
+  <data name="OpenSettingsJson" xml:space="preserve"><value>Open settings.json</value></data>
+  <data name="SettingsFileProblems" xml:space="preserve"><value>Parts of settings.json are not applied</value></data>
+  <data name="SettingsAutomation" xml:space="preserve"><value>Automation</value></data>
+  <data name="ClaudeCodeIntegration" xml:space="preserve"><value>Claude Code Integration</value></data>
+  <data name="ClaudeCodeIntegrationOn" xml:space="preserve"><value>Sidebar shows Claude session status and notifications.</value></data>
+  <data name="ClaudeCodeIntegrationOff" xml:space="preserve"><value>Claude Code runs without Programa integration.</value></data>
+  <data name="ClaudeTeamsByDefault" xml:space="preserve"><value>Claude Agent Teams</value></data>
+  <data name="ClaudeTeamsByDefaultOn" xml:space="preserve"><value>claude starts with agent teams on; its teammates run in the same pane.</value></data>
+  <data name="ClaudeTeamsByDefaultOff" xml:space="preserve"><value>Agent teams start only with programa claude-teams.</value></data>
+  <data name="HoldAgentTextWhileTyping" xml:space="preserve"><value>Protect Unsent Typing</value></data>
+  <data name="HoldAgentTextWhileTypingOn" xml:space="preserve"><value>Agents can't send text to a pane while you have unsent typing there.</value></data>
+  <data name="HoldAgentTextWhileTypingOff" xml:space="preserve"><value>Agent text can land in the middle of what you are typing.</value></data>
+  <data name="ProtectApprovalPrompts" xml:space="preserve"><value>Protect Approval Prompts</value></data>
+  <data name="ProtectApprovalPromptsOn" xml:space="preserve"><value>Agents and scripts can't answer an approval prompt for you.</value></data>
+  <data name="ProtectApprovalPromptsOff" xml:space="preserve"><value>Scripts can answer an agent's approval prompt.</value></data>
+  <data name="AppliesToNewTerminals" xml:space="preserve"><value>Claude Code Integration and Claude Agent Teams apply to new terminals.</value></data>
+  <data name="DesktopNotifications" xml:space="preserve"><value>Desktop Notifications</value></data>
+  <data name="DesktopNotificationsOn" xml:space="preserve"><value>Windows shows Programa's notifications.</value></data>
+  <data name="DesktopNotificationsOff" xml:space="preserve"><value>Windows does not show Programa's notifications. Turn them on in Windows Settings.</value></data>
+  <data name="OpenWindowsNotificationSettings" xml:space="preserve"><value>Open Windows notification settings</value></data>
 </root>

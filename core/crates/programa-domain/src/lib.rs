@@ -88,6 +88,17 @@ pub enum LayoutNode {
     },
 }
 
+/// Where a new workspace goes in the list, as macOS's `app.newWorkspacePlacement`; pinned
+/// workspaces stay first either way.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspacePlacement {
+    Top,
+    AfterCurrent,
+    #[default]
+    End,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SplitDirection {
@@ -106,6 +117,8 @@ pub enum Command {
         pane_id: String,
         surface_id: String,
         session_id: String,
+        #[serde(default)]
+        placement: WorkspacePlacement,
     },
     SelectWorkspace {
         workspace_id: String,
@@ -297,30 +310,35 @@ impl Snapshot {
                 pane_id,
                 surface_id,
                 session_id,
+                placement,
             } => {
                 validate_new_ids(self, [&workspace_id, &pane_id, &surface_id])?;
                 validate_id("session_id", &session_id)?;
-                self.workspaces.push(Workspace {
-                    id: workspace_id.clone(),
-                    title: None,
-                    pinned: false,
-                    color: None,
-                    description: None,
-                    parent_id: None,
-                    collapsed: false,
-                    selected_pane_id: pane_id.clone(),
-                    panes: vec![Pane {
-                        id: pane_id.clone(),
-                        selected_surface_id: surface_id.clone(),
-                        surfaces: vec![Surface {
-                            id: surface_id,
-                            session_id,
-                            is_pinned: false,
-                            title: None,
+                let index = new_workspace_index(self, placement);
+                self.workspaces.insert(
+                    index,
+                    Workspace {
+                        id: workspace_id.clone(),
+                        title: None,
+                        pinned: false,
+                        color: None,
+                        description: None,
+                        parent_id: None,
+                        collapsed: false,
+                        selected_pane_id: pane_id.clone(),
+                        panes: vec![Pane {
+                            id: pane_id.clone(),
+                            selected_surface_id: surface_id.clone(),
+                            surfaces: vec![Surface {
+                                id: surface_id,
+                                session_id,
+                                is_pinned: false,
+                                title: None,
+                            }],
                         }],
-                    }],
-                    layout: LayoutNode::Pane { pane_id },
-                });
+                        layout: LayoutNode::Pane { pane_id },
+                    },
+                );
                 self.selected_workspace_id = Some(workspace_id);
                 Ok(true)
             }
@@ -1193,6 +1211,38 @@ fn clamped_insert_index(pane: &Pane, moved: &Surface, requested: usize) -> usize
 
 fn not_found(kind: &str, id: &str) -> DomainError {
     DomainError::new("not_found", format!("{kind} '{id}' was not found"))
+}
+
+/// The new workspace's index, as macOS's `WorkspacePlacementSettings.insertionIndex`: top goes after
+/// the pinned workspaces, after-current after the selected one (after the pinned ones when it is
+/// pinned), and past the worktree children kept right after their parent.
+fn new_workspace_index(snapshot: &Snapshot, placement: WorkspacePlacement) -> usize {
+    let workspaces = &snapshot.workspaces;
+    let pinned = workspaces.iter().take_while(|w| w.pinned).count();
+    let selected = snapshot
+        .selected_workspace_id
+        .as_deref()
+        .and_then(|id| workspaces.iter().position(|w| w.id == id));
+    match (placement, selected) {
+        (WorkspacePlacement::Top, _) => pinned,
+        (WorkspacePlacement::AfterCurrent, Some(index)) if workspaces[index].pinned => pinned,
+        (WorkspacePlacement::AfterCurrent, Some(index)) => {
+            let root = workspaces[index]
+                .parent_id
+                .as_deref()
+                .unwrap_or(&workspaces[index].id);
+            let start = workspaces
+                .iter()
+                .position(|w| w.id == root)
+                .unwrap_or(index);
+            let children = workspaces[start + 1..]
+                .iter()
+                .take_while(|w| w.parent_id.as_deref() == Some(root))
+                .count();
+            start + 1 + children
+        }
+        _ => workspaces.len(),
+    }
 }
 
 /// Swaps the new split's children, so the new pane comes first and keeps the same share.

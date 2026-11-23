@@ -45,11 +45,14 @@ public sealed partial class MainWindow
         return (workspace, surface, TerminalFor(workspace.Id, surface));
     }
 
+    /// <summary>automation.protectApprovalPrompts and automation.holdAgentTextWhileTyping, on unless turned off.</summary>
     private static void RefuseWrite(JsonElement p, TerminalView terminal, string surfaceId)
     {
-        if (!Flag(p, "answer_prompt") && terminal.AgentState.State == "blocked")
+        // ponytail: reads settings.json per write; cache it if writes ever get hot.
+        var settings = AppSettings.Load();
+        if (settings.ProtectApprovalPrompts && !Flag(p, "answer_prompt") && terminal.AgentState.State == "blocked")
             throw new ControlException("agent_awaiting_approval", $"{surfaceId} is waiting on an approval prompt; nothing was sent", new { surface_id = surfaceId });
-        if (!Flag(p, "force") && terminal.HasDraft)
+        if (settings.HoldAgentTextWhileTyping && !Flag(p, "force") && terminal.HasDraft)
             throw new ControlException("draft_in_progress", $"{surfaceId} has unsent typed input; nothing was sent", new { surface_id = surfaceId });
     }
 

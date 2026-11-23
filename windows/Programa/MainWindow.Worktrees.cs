@@ -74,7 +74,7 @@ public sealed partial class MainWindow
         else if (workspaceId is null)
         {
             workspaceId = Id("workspace");
-            var create = new { command = "create_workspace", workspace_id = workspaceId, pane_id = Id("pane"), surface_id = Id("surface"), session_id = Id("session") };
+            var create = new { command = "create_workspace", workspace_id = workspaceId, pane_id = Id("pane"), surface_id = Id("surface"), session_id = Id("session"), placement = WorkspacePlacement };
             if (focus)
             {
                 _nextTerminalDirectory = entry.Path;
