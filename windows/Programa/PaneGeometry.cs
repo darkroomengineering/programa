@@ -38,6 +38,22 @@ internal static class PaneGeometry
         return frames;
     }
 
+    /// <summary>The pane next to <paramref name="paneId"/> on a side (dx -1 left, 1 right; dy -1 up,
+    /// 1 down), as bonsplit's adjacentPane: the most overlap across that side, then the nearest; or null.</summary>
+    internal static string? Adjacent(LayoutSnapshot root, string paneId, int dx, int dy)
+    {
+        var frames = Frames(root, new Frame(0, 0, 1000, 1000));
+        if (!frames.TryGetValue(paneId, out var from)) return null;
+        static double Overlap(double a1, double a2, double b1, double b2) => Math.Max(0, Math.Min(a2, b2) - Math.Max(a1, b1));
+        // How far a pane lies past this one's edge on that side; negative is not on that side.
+        double Gap(Frame b) => dx < 0 ? from.X - (b.X + b.Width) : dx > 0 ? b.X - (from.X + from.Width)
+            : dy < 0 ? from.Y - (b.Y + b.Height) : b.Y - (from.Y + from.Height);
+        double Across(Frame b) => dx != 0 ? Overlap(from.Y, from.Y + from.Height, b.Y, b.Y + b.Height) : Overlap(from.X, from.X + from.Width, b.X, b.X + b.Width);
+        return frames.Where(entry => entry.Key != paneId && Gap(entry.Value) >= -0.001)
+            .OrderByDescending(entry => Math.Round(Across(entry.Value), 3)).ThenBy(entry => Gap(entry.Value))
+            .Select(entry => entry.Key).FirstOrDefault();
+    }
+
     /// <summary>A split's two sides, as the window lays them out: star-sized around the divider.</summary>
     private static (Frame First, Frame Second) Sides(LayoutSnapshot split, Frame frame)
     {

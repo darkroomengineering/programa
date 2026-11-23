@@ -75,6 +75,9 @@ pub struct Surface {
     /// A name the user gave the tab; frontends show the program's title when it is absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /// The tab's tint, `#RRGGBB`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -199,6 +202,13 @@ pub enum Command {
         pane_id: String,
         surface_id: String,
         pinned: bool,
+    },
+    /// `#RRGGBB`; null or blank removes the tab's color.
+    SetSurfaceColor {
+        workspace_id: String,
+        pane_id: String,
+        surface_id: String,
+        color: Option<String>,
     },
     CreateSurface {
         workspace_id: String,
@@ -345,6 +355,7 @@ impl Snapshot {
                                 session_id,
                                 is_pinned: false,
                                 title: None,
+                                color: None,
                             }],
                         }],
                         layout: LayoutNode::Pane { pane_id },
@@ -468,18 +479,7 @@ impl Snapshot {
                 workspace_id,
                 color,
             } => {
-                let color = color
-                    .map(|color| color.trim().to_ascii_uppercase())
-                    .filter(|color| !color.is_empty());
-                if let Some(color) = &color {
-                    let hex = color.strip_prefix('#').unwrap_or_default();
-                    if hex.len() != 6 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
-                        return Err(DomainError::new(
-                            "invalid_color",
-                            format!("{color} is not a #RRGGBB color"),
-                        ));
-                    }
-                }
+                let color = normalized_color(color)?;
                 let workspace = workspace_mut(self, &workspace_id)?;
                 if workspace.color == color {
                     return Ok(false);
@@ -591,6 +591,22 @@ impl Snapshot {
                 pane.surfaces.insert(pinned_count, surface);
                 Ok(true)
             }
+            Command::SetSurfaceColor {
+                workspace_id,
+                pane_id,
+                surface_id,
+                color,
+            } => {
+                let color = normalized_color(color)?;
+                let pane = pane_mut(workspace_mut(self, &workspace_id)?, &pane_id)?;
+                let index = surface_index(pane, &surface_id)?;
+                let surface = &mut pane.surfaces[index];
+                if surface.color == color {
+                    return Ok(false);
+                }
+                surface.color = color;
+                Ok(true)
+            }
             Command::CreateSurface {
                 workspace_id,
                 pane_id,
@@ -606,6 +622,7 @@ impl Snapshot {
                     session_id,
                     is_pinned: false,
                     title: None,
+                    color: None,
                 });
                 pane.selected_surface_id = surface_id;
                 workspace.selected_pane_id = pane_id;
@@ -779,6 +796,7 @@ impl Snapshot {
                         session_id,
                         is_pinned: false,
                         title: None,
+                        color: None,
                     }],
                 });
                 workspace.selected_pane_id = new_pane_id;
@@ -1243,6 +1261,23 @@ fn clamped_insert_index(pane: &Pane, moved: &Surface, requested: usize) -> usize
     } else {
         requested.max(pinned_count)
     }
+}
+
+/// `#RRGGBB` in upper case, or None for a null or blank color.
+fn normalized_color(color: Option<String>) -> Result<Option<String>, DomainError> {
+    let color = color
+        .map(|color| color.trim().to_ascii_uppercase())
+        .filter(|color| !color.is_empty());
+    if let Some(color) = &color {
+        let hex = color.strip_prefix('#').unwrap_or_default();
+        if hex.len() != 6 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err(DomainError::new(
+                "invalid_color",
+                format!("{color} is not a #RRGGBB color"),
+            ));
+        }
+    }
+    Ok(color)
 }
 
 fn not_found(kind: &str, id: &str) -> DomainError {

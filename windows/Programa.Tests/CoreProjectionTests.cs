@@ -21,6 +21,27 @@ public sealed class CoreProjectionTests
     }
 
     [TestMethod]
+    public void ATabColorReachesTheSnapshotAndClears()
+    {
+        using var core = new CoreClient();
+        core.Dispatch(new { command = "create_workspace", workspace_id = "w", pane_id = "p", surface_id = "s1", session_id = "session-1" });
+        var colored = core.Dispatch(new { command = "set_surface_color", workspace_id = "w", pane_id = "p", surface_id = "s1", color = MainWindow.NormalizedHex("1565c0") });
+        Assert.AreEqual("#1565C0", colored.Workspaces[0].Panes[0].Surfaces[0].Color);
+        Assert.IsTrue(core.SnapshotJson().Contains("\"color\":\"#1565C0\"", StringComparison.Ordinal), "the session file keeps the core's JSON");
+        var cleared = core.Dispatch(new { command = "set_surface_color", workspace_id = "w", pane_id = "p", surface_id = "s1", color = (string?)null });
+        Assert.IsNull(cleared.Workspaces[0].Panes[0].Surfaces[0].Color);
+    }
+
+    [TestMethod]
+    public void TypedTabColorsNormalizeLikeMacOS()
+    {
+        Assert.AreEqual("#1565C0", MainWindow.NormalizedHex(" #1565c0 "));
+        Assert.AreEqual("#ABCDEF", MainWindow.NormalizedHex("abcdef"));
+        foreach (var bad in new[] { "", "#", "##123456", "#12345", "#1234567", "blue", "#12345G" })
+            Assert.IsNull(MainWindow.NormalizedHex(bad), bad);
+    }
+
+    [TestMethod]
     public void RecursiveLayoutDeserializesFromCoreSnapshot()
     {
         const string json = """

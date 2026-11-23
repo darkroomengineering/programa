@@ -107,18 +107,21 @@ fn reorder_clamps_pinned_and_unpinned_surfaces_at_boundary() {
                             session_id: "session-pinned".into(),
                             is_pinned: true,
                             title: None,
+                            color: None,
                         },
                         Surface {
                             id: "surface-a".into(),
                             session_id: "session-a".into(),
                             is_pinned: false,
                             title: None,
+                            color: None,
                         },
                         Surface {
                             id: "surface-tail".into(),
                             session_id: "session-tail".into(),
                             is_pinned: false,
                             title: None,
+                            color: None,
                         },
                     ],
                 }],
@@ -507,6 +510,7 @@ fn seed_validates_snapshot_and_uses_local_monotonic_revision() {
                     session_id: "mac-uuid".into(),
                     is_pinned: true,
                     title: None,
+                    color: None,
                 }],
             }],
             layout: LayoutNode::Pane {
@@ -656,6 +660,43 @@ fn workspace_color_and_description_validate_and_clear() {
 }
 
 #[test]
+fn surface_color_validates_clears_and_survives_a_snapshot_round_trip() {
+    let mut core = Core::default();
+    core.dispatch(create_workspace()).unwrap();
+    let color = |value: Option<&str>| Command::SetSurfaceColor {
+        workspace_id: "workspace-a".into(),
+        pane_id: "pane-a".into(),
+        surface_id: "surface-a".into(),
+        color: value.map(Into::into),
+    };
+    let tab_color = |core: &Core| {
+        core.snapshot().workspaces[0].panes[0].surfaces[0]
+            .color
+            .clone()
+    };
+    core.dispatch(color(Some(" #1565c0 "))).unwrap();
+    assert_eq!(tab_color(&core).as_deref(), Some("#1565C0"));
+    assert_eq!(
+        core.dispatch(color(Some("#12345"))).unwrap_err().code(),
+        "invalid_color"
+    );
+
+    // Saved sessions replay the snapshot JSON, and one written before tabs had colors still loads.
+    let json = serde_json::to_string(core.snapshot()).unwrap();
+    assert!(json.contains("\"color\":\"#1565C0\""));
+    let restored: Snapshot = serde_json::from_str(&json).unwrap();
+    assert_eq!(&restored, core.snapshot());
+    let old: Snapshot = serde_json::from_str(&json.replace(",\"color\":\"#1565C0\"", "")).unwrap();
+    assert_eq!(old.workspaces[0].panes[0].surfaces[0].color, None);
+
+    core.dispatch(color(None)).unwrap();
+    assert_eq!(tab_color(&core), None);
+    assert!(!serde_json::to_string(core.snapshot())
+        .unwrap()
+        .contains("color"));
+}
+
+#[test]
 fn an_adopted_workspace_keeps_its_ids_and_is_selected() {
     let mut source = Core::default();
     source.dispatch(create_workspace()).unwrap();
@@ -701,6 +742,7 @@ fn an_adopted_surface_joins_the_pane_where_it_was_dropped_and_is_selected() {
         session_id: format!("session-{id}"),
         is_pinned: false,
         title: Some("server".into()),
+        color: None,
     };
     core.dispatch(Command::AdoptSurface {
         workspace_id: workspace.id.clone(),

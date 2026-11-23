@@ -731,6 +731,7 @@ fn validate_command_sessions(
         | DomainCommand::SetWorkspaceWorktreeFolder { .. }
         | DomainCommand::RenameSurface { .. }
         | DomainCommand::SetSurfacePinned { .. }
+        | DomainCommand::SetSurfaceColor { .. }
         | DomainCommand::SelectSurface { .. }
         | DomainCommand::CloseSurface { .. }
         | DomainCommand::ReorderSurface { .. }

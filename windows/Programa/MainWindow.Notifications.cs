@@ -115,17 +115,17 @@ public sealed partial class MainWindow
 
     private bool HasUnread(string surfaceId) => _notifications.HasUnreadFor(surfaceId) || _manualUnread.Contains(surfaceId);
 
-    /// <summary>The tab's title, after a pin when it is pinned, with a dot while it is unread.</summary>
-    private object TabHeader(TerminalView terminal)
+    private object TabHeader(TerminalView terminal) => TabHeader(TabTitle(terminal), IsPinnedSurface(terminal.SurfaceId), HasUnread(terminal.SurfaceId));
+
+    /// <summary>The tab's title, with a dot while it is unread and, when it is pinned, a pin where
+    /// the close button would be (macOS).</summary>
+    private static object TabHeader(string title, bool pinned, bool unread)
     {
-        var title = TabTitle(terminal);
-        var pinned = IsPinnedSurface(terminal.SurfaceId);
-        var unread = HasUnread(terminal.SurfaceId);
         if (!pinned && !unread) return title;
         var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        if (pinned) header.Children.Add(new FontIcon { Glyph = char.ConvertFromUtf32(0xE718), FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
         header.Children.Add(new TextBlock { Text = title });
         if (unread) header.Children.Add(new InfoBadge { Width = 8, Height = 8, VerticalAlignment = VerticalAlignment.Center });
+        if (pinned) header.Children.Add(new FontIcon { Glyph = char.ConvertFromUtf32(0xE718), FontSize = 11, Margin = new Thickness(4, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
         return header;
     }
 

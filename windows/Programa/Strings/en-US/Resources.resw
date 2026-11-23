@@ -117,6 +117,27 @@
   <data name="SidebarShowLessDetails" xml:space="preserve"><value>Show less details</value></data>
   <data name="PinTab" xml:space="preserve"><value>Pin Tab</value></data>
   <data name="UnpinTab" xml:space="preserve"><value>Unpin Tab</value></data>
+  <data name="RemoveCustomTabName" xml:space="preserve"><value>Remove Custom Tab Name</value></data>
+  <data name="CloseTabsToLeft" xml:space="preserve"><value>Close Tabs to Left</value></data>
+  <data name="CloseTabsToRight" xml:space="preserve"><value>Close Tabs to Right</value></data>
+  <data name="MoveTab" xml:space="preserve"><value>Move Tab…</value></data>
+  <data name="MoveToLeftPane" xml:space="preserve"><value>Move to Left Pane</value></data>
+  <data name="MoveToRightPane" xml:space="preserve"><value>Move to Right Pane</value></data>
+  <data name="NewTerminalTabToRight" xml:space="preserve"><value>New Terminal Tab to Right</value></data>
+  <data name="TabColor" xml:space="preserve"><value>Tab Color</value></data>
+  <data name="ChooseCustomColor" xml:space="preserve"><value>Choose Custom Color…</value></data>
+  <data name="MoveTabTitle" xml:space="preserve"><value>Move Tab</value></data>
+  <data name="MoveTabMessage" xml:space="preserve"><value>Choose a destination for this tab.</value></data>
+  <data name="MoveTabNewWorkspace" xml:space="preserve"><value>New Workspace in Current Window</value></data>
+  <data name="Move" xml:space="preserve"><value>Move</value></data>
+  <data name="MoveTabFailedTitle" xml:space="preserve"><value>Move Failed</value></data>
+  <data name="MoveTabFailedMessage" xml:space="preserve"><value>Programa could not move this tab to the selected destination.</value></data>
+  <data name="CustomTabColorTitle" xml:space="preserve"><value>Custom Tab Color</value></data>
+  <data name="CustomColorMessage" xml:space="preserve"><value>Enter a hex color in the format #RRGGBB.</value></data>
+  <data name="Apply" xml:space="preserve"><value>Apply</value></data>
+  <data name="InvalidColorTitle" xml:space="preserve"><value>Invalid Color</value></data>
+  <data name="InvalidColorMessage" xml:space="preserve"><value>"{0}" is not a valid hex color. Use #RRGGBB.</value></data>
+  <data name="TerminalReset" xml:space="preserve"><value>Reset Terminal</value></data>
   <data name="HelperNumbered" xml:space="preserve"><value>Helper {0}</value></data>
   <data name="NotificationDefaultTitle" xml:space="preserve"><value>Notification</value></data>
   <data name="Shortcut_rename_tab" xml:space="preserve"><value>Rename tab</value></data>

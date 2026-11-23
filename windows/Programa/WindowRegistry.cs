@@ -495,6 +495,9 @@ internal static class WindowRegistry
             case "debug.sidebar.menu" or "debug.sidebar.hints" when BuildIdentity.Value.Contains("0.0.0-dev", StringComparison.Ordinal):
                 var sidebarWindow = Text(p, "workspace_id") is { } sidebarWorkspace ? OwnerOfWorkspace(sidebarWorkspace) ?? throw NotFound("workspace", sidebarWorkspace) : Current!;
                 return Task.FromResult<object?>(sidebarWindow.SidebarDebug(method, p));
+            case "debug.menu.open" when BuildIdentity.Value.Contains("0.0.0-dev", StringComparison.Ordinal):
+                var menuWindow = Text(p, "surface_id") is { } menuSurface ? OwnerOfSurface(menuSurface) ?? throw NotFound("surface", menuSurface) : Current!;
+                return Task.FromResult<object?>(menuWindow.PaletteDebug(method, p));
             case "agent.task.start" or "agent.task.update" or "agent.task.finish" or "agent.task.finish_session" or "agent.task.list":
                 return Task.FromResult<object?>(Helpers.FromControl(method, p, id => OwnerOfWorkspace(id) is not null,
                     (workspace, surface) => OwnerOfWorkspace(workspace)?.WorkspaceHasSurface(workspace, surface) == true, DateTimeOffset.UtcNow));

@@ -248,8 +248,8 @@ public sealed partial class MainWindow : Window
     private static Brush ThemeBrush(string key) => (Brush)Application.Current.Resources[key];
 
     /// <summary>The agent's logo scaled to <paramref name="size"/>, or null for agents without one.</summary>
-    private static FrameworkElement? AgentLogo(string? app, double size) =>
-        app == "claude-code" ? new Image { Source = ClaudeLogo(), Width = size, Height = size } : null;
+    private FrameworkElement? AgentLogo(string? app, double size) =>
+        AgentLogoSource(app) is { } logo ? new Image { Source = logo, Width = size, Height = size } : null;
 
     /// <summary>A shell reported its directory (each prompt): refresh the branch and the sidebar.</summary>
     private void OnTerminalCwdChanged(string surfaceId)
@@ -403,6 +403,7 @@ public sealed partial class MainWindow : Window
             if (PanelFor(surface.Id) is { } panel)
             {
                 var panelItem = PanelTab(workspaceId, pane.Id, surface.Id, panel);
+                StyleTab(panelItem, surface);
                 tabs.TabItems.Add(panelItem);
                 if (surface.Id == pane.SelectedSurfaceId)
                 {
@@ -416,9 +417,9 @@ public sealed partial class MainWindow : Window
             {
                 Header = TabHeader(terminal),
                 IconSource = TabIcon(terminal),
-                IsClosable = true,
                 Tag = new SurfaceTag(workspaceId, pane.Id, surface.Id),
             };
+            StyleTab(item, surface);
             AutomationProperties.SetName(item, string.IsNullOrEmpty(terminal.Title) ? $"{Localizer.Get("Terminal")} {surfaceIndex + 1}" : terminal.Title);
             ApplyProgramStatusLabel(item, terminal);
             item.ContextFlyout = TabMenu(workspaceId, pane.Id, surface.Id);
@@ -476,28 +477,16 @@ public sealed partial class MainWindow : Window
 
     /// <summary>The agent's logo when the program status names a known agent, as on macOS;
     /// otherwise the status symbol. The status stays in the tooltip and the sidebar pill.</summary>
-    private static IconSource TabIcon(TerminalView terminal)
+    private IconSource TabIcon(TerminalView terminal)
     {
         // A plain terminal shows a terminal symbol, as on macOS.
         if (terminal.EffectiveStatus is not { } status) return new FontIconSource { Glyph = "" };
-        return status.App == "claude-code"
-            ? new ImageIconSource { ImageSource = ClaudeLogo() }
+        // Logos are shared SVG images. Not a PathIconSource or Path: those hand one Geometry to every
+        // element they create, and WinUI fails with "The parameter is incorrect" once a rebuilt tab
+        // strip puts that Geometry in a second element.
+        return AgentLogoSource(status.App) is { } logo
+            ? new ImageIconSource { ImageSource = logo }
             : new SymbolIconSource { Symbol = ProgramStatusSymbol(status) };
-    }
-
-    private static SvgImageSource? _claudeLogo;
-
-    /// <summary>The Claude Code logo as one shared SVG image. Not a PathIconSource or Path: those
-    /// hand one Geometry to every element they create, and WinUI fails with "The parameter is
-    /// incorrect" once a rebuilt tab strip puts that Geometry in a second element.</summary>
-    private static SvgImageSource ClaudeLogo()
-    {
-        if (_claudeLogo is not null) return _claudeLogo;
-        // Rasterized larger than shown so it stays sharp at 200% scaling.
-        _claudeLogo = new SvgImageSource { RasterizePixelWidth = 48, RasterizePixelHeight = 48 };
-        var svg = $"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path fill-rule=\"evenodd\" fill=\"{AgentIndicator.ClaudeLogoColor}\" d=\"{AgentIndicator.ClaudeLogoPath}\"/></svg>";
-        _ = _claudeLogo.SetSourceAsync(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(svg)).AsRandomAccessStream());
-        return _claudeLogo;
     }
 
     private static Symbol ProgramStatusSymbol(ProgramStatusRecord? status) => status?.State switch

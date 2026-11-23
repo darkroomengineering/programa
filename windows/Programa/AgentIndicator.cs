@@ -11,10 +11,31 @@ internal sealed record AgentIndicator(string State, string LabelKey, string Glyp
     /// <summary>A working or needs-input agent with no report for this long reads "(stale)".</summary>
     internal static readonly TimeSpan StaleAfter = TimeSpan.FromMinutes(10);
 
-    /// <summary>Claude Code's logo (Lobe Icons claudecode-color, MIT; the macOS AgentIconClaudeCode
-    /// asset) as 24x24 path data, and its color.</summary>
-    internal const string ClaudeLogoPath = "M20.998 10.949H24v3.102h-3v3.028h-1.487V20H18v-2.921h-1.487V20H15v-2.921H9V20H7.488v-2.921H6V20H4.487v-2.921H3V14.05H0V10.95h3V5h17.998v5.949zM6 10.949h1.488V8.102H6v2.847zm10.51 0H18V8.102h-1.49v2.847z";
-    internal const string ClaudeLogoColor = "#D97757";
+    /// <summary>The logo asset of an agent, as macOS TerminalTabAgentIconResolver: screen-manifest
+    /// ids, hook provider names and the agents' short names. Aider has none (Lobe Icons has no mark).</summary>
+    internal static string? LogoAsset(string? agent) => agent?.Trim().ToLowerInvariant() switch
+    {
+        "claude-code" or "claude" => "AgentIconClaudeCode",
+        "codex" => "AgentIconCodex",
+        "copilot-cli" or "copilot" or "github-copilot" => "AgentIconCopilot",
+        "cursor-agent" or "cursor" => "AgentIconCursor",
+        "gemini-cli" or "gemini" => "AgentIconGeminiCLI",
+        "opencode" => "AgentIconOpenCode",
+        _ => null,
+    };
+
+    /// <summary>A logo's SVG: the macOS Assets.xcassets/AgentIcons file (Lobe Icons, MIT; see its
+    /// ATTRIBUTIONS.md), embedded in the app, in its dark variant when there is one and <paramref name="dark"/>.</summary>
+    internal static byte[] LogoSvg(string asset, bool dark)
+    {
+        var assembly = typeof(AgentIndicator).Assembly;
+        using var stream = (dark ? assembly.GetManifestResourceStream($"AgentIcons.{asset}-dark.svg") : null)
+            ?? assembly.GetManifestResourceStream($"AgentIcons.{asset}.svg")
+            ?? throw new InvalidOperationException($"{asset} is not embedded");
+        using var bytes = new MemoryStream();
+        stream.CopyTo(bytes);
+        return bytes.ToArray();
+    }
 
     internal static AgentIndicator? From(IEnumerable<(ProgramStatusRecord Status, DateTimeOffset At)> reports, DateTimeOffset now)
     {
