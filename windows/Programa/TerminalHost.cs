@@ -20,6 +20,15 @@ internal static class TerminalHost
     /// <summary>The host this app's terminals run in, or null when none could be started.</summary>
     internal static Connection? Current { get; private set; }
 
+    /// <summary>The host's pid, an ancestor of every terminal for automation.socketControlMode's
+    /// Programa-terminals-only check; 0 without a host.</summary>
+    internal static uint ProcessId { get; private set; }
+
+    private static uint _lastServerPid;
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern bool GetNamedPipeServerProcessId(Microsoft.Win32.SafeHandles.SafePipeHandle pipe, out uint serverProcessId);
+
     /// <summary>Sessions that were running when this app started: their terminals reattach.</summary>
     internal static HashSet<string> LiveAtLaunch { get; private set; } = new(StringComparer.Ordinal);
 
@@ -33,7 +42,7 @@ internal static class TerminalHost
         {
             if (Read() is { } saved && List(saved) is { } live)
             {
-                (Current, LiveAtLaunch) = (saved, live);
+                (Current, LiveAtLaunch, ProcessId) = (saved, live, _lastServerPid);
                 LaunchLog.Write($"terminal host: reconnected, {live.Count} sessions running");
                 return;
             }
@@ -47,7 +56,7 @@ internal static class TerminalHost
             var start = new ProcessStartInfo(exe) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(exe)! };
             start.Environment["PROGRAMA_HOST_PIPE"] = connection.Pipe;
             start.Environment["PROGRAMA_HOST_TOKEN"] = connection.Token;
-            using (Process.Start(start)) { }
+            using (var host = Process.Start(start)) ProcessId = (uint)(host?.Id ?? 0);
             for (var attempt = 0; attempt < 60; attempt++)
             {
                 if (List(connection) is not null)
@@ -107,6 +116,7 @@ internal static class TerminalHost
             using var pipe = new NamedPipeClientStream(".", connection.Pipe[localPrefix.Length..], PipeDirection.InOut,
                 PipeOptions.None, TokenImpersonationLevel.Identification);
             pipe.Connect(500);
+            _lastServerPid = GetNamedPipeServerProcessId(pipe.SafePipeHandle, out var server) ? server : 0;
             var request = Encoding.UTF8.GetBytes(body.ToJsonString() + "\n");
             pipe.Write(request);
             var line = new List<byte>();

@@ -73,4 +73,65 @@ public sealed class ControlServerTests
         StringAssert.StartsWith(ControlServer.PipePath, @"\\.\pipe\programa-");
         StringAssert.EndsWith(ControlServer.PipePath, Environment.UserName);
     }
+
+    [TestMethod]
+    public void EachSocketModeAdmitsWhoMacOSAdmits()
+    {
+        Assert.AreEqual(ControlServer.Access.Off, ControlServer.Decide("off", true));
+        Assert.AreEqual(ControlServer.Access.Allowed, ControlServer.Decide("programaOnly", true));
+        Assert.AreEqual(ControlServer.Access.Denied, ControlServer.Decide("programaOnly", false));
+        Assert.AreEqual(ControlServer.Access.Allowed, ControlServer.Decide("automation", false));
+        Assert.AreEqual(ControlServer.Access.Allowed, ControlServer.Decide("password", true));
+        Assert.AreEqual(ControlServer.Access.NeedsLogin, ControlServer.Decide("password", false));
+    }
+
+    [TestMethod]
+    public void AncestryMustReachTheAppOrHostWithoutAReusedPid()
+    {
+        // 30 (cli) <- 20 (claude) <- 10 (shell) <- 1000 (terminal host, started at 5)
+        var table = new Dictionary<uint, (uint Parent, long Started, string Name)>
+        {
+            [30] = (20, 300, "programa.exe"), [20] = (10, 200, "claude.exe"), [10] = (1000, 100, "pwsh.exe"), [1000] = (1, 5, "programa-host.exe"),
+            // 40's parent pid 50 now belongs to a process that started after it.
+            [40] = (50, 150, "script.exe"), [50] = (1000, 400, "late.exe"),
+            [60] = (70, 10, "outside.exe"), [70] = (1, 1, "explorer.exe"),
+        };
+        (uint, long, string)? Describe(uint pid) => table.TryGetValue(pid, out var row) ? row : null;
+        var host = new Dictionary<uint, long> { [1000] = 5 };
+        Assert.IsTrue(ControlServer.DescendsFrom(30, host, Describe));
+        Assert.IsFalse(ControlServer.DescendsFrom(40, host, Describe));
+        Assert.IsFalse(ControlServer.DescendsFrom(60, host, Describe));
+        Assert.IsFalse(ControlServer.DescendsFrom(30, new Dictionary<uint, long> { [1000] = 6 }, Describe), "the host's pid was reused");
+        Assert.IsFalse(ControlServer.DescendsFrom(99, host, Describe));
+    }
+
+    [TestMethod]
+    public async Task RefusedConnectionsGetAV2ErrorAndPasswordModeNeedsALogin()
+    {
+        var now = new DateTime(2026, 11, 23, 12, 0, 0, DateTimeKind.Utc);
+        using var server = new ControlServer((_, _) => Task.FromResult<object?>(new { pong = true })) { Password = () => "s3cret", Now = () => now };
+        Task<string> Send(ControlServer.Connection connection, string method, string parameters = "{}") =>
+            server.HandleLineAsync($$"""{"id":1,"method":"{{method}}","params":{{parameters}}}""", connection);
+        ControlServer.Connection Connect(ControlServer.Access access) => new(_ => Task.CompletedTask) { Access = access };
+
+        StringAssert.Contains(await Send(Connect(ControlServer.Access.Off), "system.ping"), "\"code\":\"unavailable\"");
+        StringAssert.Contains(await Send(Connect(ControlServer.Access.Denied), "system.ping"), "\"code\":\"access_denied\"");
+
+        var client = Connect(ControlServer.Access.NeedsLogin);
+        StringAssert.Contains(await Send(client, "system.ping"), "\"code\":\"auth_required\"");
+        StringAssert.Contains(await Send(client, "auth.login"), "\"code\":\"invalid_params\"");
+        StringAssert.Contains(await Send(client, "auth.login", """{"password":"nope"}"""), "\"code\":\"auth_failed\"");
+        Assert.AreEqual(1, client.Failures);
+        Assert.AreEqual("""{"id":1,"ok":true,"result":{"authenticated":true}}""", await Send(client, "auth.login", """{"password":"s3cret"}"""));
+        Assert.AreEqual("""{"id":1,"ok":true,"result":{"pong":true}}""", await Send(client, "system.ping"));
+
+        // Five free failures across connections, then a lockout even for the right password.
+        for (var attempt = 0; attempt < 6; attempt++) await Send(Connect(ControlServer.Access.NeedsLogin), "auth.login", """{"password":"nope"}""");
+        StringAssert.Contains(await Send(Connect(ControlServer.Access.NeedsLogin), "auth.login", """{"password":"s3cret"}"""), "Too many failed attempts");
+        now = now.AddSeconds(2);
+        StringAssert.Contains(await Send(Connect(ControlServer.Access.NeedsLogin), "auth.login", """{"password":"s3cret"}"""), "\"authenticated\":true");
+
+        using var unset = new ControlServer((_, _) => Task.FromResult<object?>(null)) { Password = () => null };
+        StringAssert.Contains(await unset.HandleLineAsync("""{"id":1,"method":"auth.login","params":{"password":"x"}}""", Connect(ControlServer.Access.NeedsLogin)), "\"code\":\"auth_unconfigured\"");
+    }
 }

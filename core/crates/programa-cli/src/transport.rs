@@ -21,8 +21,28 @@ pub const ENDPOINT_KIND: &str = "socket";
 /// Connects to `path`, writes `request_line` plus a newline, and returns the
 /// first line the server sends back (without its line terminator).
 pub fn round_trip(path: &str, request_line: &str) -> Result<String, TransportError> {
-    let stream = connect(path).map_err(|_| TransportError::NotRunning)?;
+    let mut stream = connect(path).map_err(|_| TransportError::NotRunning)?;
+    login(&mut stream, socket_password().as_deref()).map_err(TransportError::Io)?;
     exchange(stream, request_line).map_err(TransportError::Io)
+}
+
+/// `PROGRAMA_SOCKET_PASSWORD`, for a Programa in password mode, without a trailing line break.
+fn socket_password() -> Option<String> {
+    std::env::var("PROGRAMA_SOCKET_PASSWORD")
+        .ok()
+        .map(|password| password.trim_end_matches(['\r', '\n']).to_owned())
+        .filter(|password| !password.is_empty())
+}
+
+/// Sends `auth.login` first when a password is set. Its answer is not checked: a refused
+/// login leaves the request that follows to fail with the server's `auth_required`.
+fn login<S: Read + Write>(stream: &mut S, password: Option<&str>) -> io::Result<()> {
+    let Some(password) = password else {
+        return Ok(());
+    };
+    let line =
+        serde_json::json!({"id": 0, "method": "auth.login", "params": {"password": password}});
+    exchange(stream, &line.to_string()).map(|_| ())
 }
 
 /// Sends one request and hands every line the server sends after it to `on_line`
@@ -36,6 +56,7 @@ pub fn stream(
     mut on_line: impl FnMut(&str) -> bool,
 ) -> Result<(), TransportError> {
     let mut stream = connect(path).map_err(|_| TransportError::NotRunning)?;
+    login(&mut stream, socket_password().as_deref()).map_err(TransportError::Io)?;
     stream
         .write_all(format!("{request_line}\n").as_bytes())
         .and_then(|()| stream.flush())
@@ -163,6 +184,29 @@ mod tests {
         let response = exchange(stream, r#"{"id":1,"method":"system.ping"}"#).unwrap();
         assert_eq!(response, r#"{"id":1,"ok":true,"result":{}}"#);
         assert_eq!(written, b"{\"id\":1,\"method\":\"system.ping\"}\n");
+    }
+
+    #[test]
+    fn a_password_logs_in_before_the_request() {
+        let mut written = Vec::new();
+        let mut stream = Duplex {
+            input: Cursor::new(
+                b"{\"id\":0,\"ok\":true,\"result\":{\"authenticated\":true}}\n".to_vec(),
+            ),
+            output: &mut written,
+        };
+        login(&mut stream, Some("s3cret")).unwrap();
+        let sent: serde_json::Value = serde_json::from_slice(&written).unwrap();
+        assert_eq!(sent["method"], "auth.login");
+        assert_eq!(sent["params"]["password"], "s3cret");
+
+        let mut untouched = Vec::new();
+        let mut stream = Duplex {
+            input: Cursor::new(Vec::new()),
+            output: &mut untouched,
+        };
+        login(&mut stream, None).unwrap();
+        assert!(untouched.is_empty());
     }
 
     #[test]

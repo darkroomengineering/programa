@@ -11,9 +11,32 @@ public sealed partial class MainWindow
     /// from Claude's store only when no hook reported it (Claude started without the `claude` function).</summary>
     private void NoteAgentSession(TerminalView terminal)
     {
+        // app.reapLeftoverAgentProcesses: what runs under the shell now is a Claude Code session.
+        // Header changes come often (spinner titles), so settings.json is read only for a shell not watched yet.
+        if (terminal.EffectiveStatus is { App: "claude-code" } && terminal.ShellPid is not 0 and var shell)
+        {
+            if (!LeftoverReaper.Watching(shell) && AppSettings.Load().ReapLeftoverAgentProcesses) LeftoverReaper.Watch(shell);
+            LeftoverReaper.MarkAgents(shell);
+        }
         if (terminal.EffectiveStatus is not { App: "claude-code", State: not "working" } || terminal.Cwd is not { } cwd) return;
         if (terminal.AgentSessionFromHook) return;
         if (AgentSessions.LatestClaude(cwd) is { } session) terminal.LastAgentSession = session;
+    }
+
+    /// <summary>Puts each new terminal's shell in a reaper job every 3 seconds while app.reapLeftoverAgentProcesses
+    /// is on, so what a Claude session starts is recorded from its first process.</summary>
+    private void StartLeftoverReaper()
+    {
+        var timer = DispatcherQueue.CreateTimer();
+        timer.Interval = TimeSpan.FromSeconds(3);
+        timer.Tick += (_, _) =>
+        {
+            var unwatched = _terminals.Values.Select(terminal => terminal.ShellPid).Where(pid => pid != 0 && !LeftoverReaper.Watching(pid)).ToList();
+            if (unwatched.Count == 0 || !AppSettings.Load().ReapLeftoverAgentProcesses) return;
+            foreach (var pid in unwatched) LeftoverReaper.Watch(pid);
+        };
+        timer.Start();
+        Closed += (_, _) => timer.Stop();
     }
 
     /// <summary>`agent.event`, from the agent hooks and `programa agent-event`: session.started records

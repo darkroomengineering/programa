@@ -64,6 +64,49 @@ internal sealed class ControlServer : IDisposable
         }
     }
 
+    /// <summary>How a connection may use the pipe (automation.socketControlMode), decided when it connects.</summary>
+    internal enum Access { Allowed, NeedsLogin, Denied, Off }
+
+    /// <summary>automation.socketControlMode for a client, as on macOS, except that password mode also lets
+    /// Programa terminals in without a login (the macOS CLI reads the saved password itself, so terminals
+    /// never notice the mode there either). Every mode admits only the current user: the pipe's ACL.</summary>
+    internal static Access Decide(string mode, bool fromProgramaTerminal) => mode switch
+    {
+        "off" => Access.Off,
+        "automation" => Access.Allowed,
+        "password" => fromProgramaTerminal ? Access.Allowed : Access.NeedsLogin,
+        _ => fromProgramaTerminal ? Access.Allowed : Access.Denied,
+    };
+
+    /// <summary>Whether <paramref name="pid"/> runs inside Programa: this app or the terminal host (whose shells
+    /// are every terminal) is among its ancestors. Each root must still be the process it was (same start
+    /// time), and each parent must have started before its child, so a reused pid breaks the chain.</summary>
+    internal static bool DescendsFrom(uint pid, IReadOnlyDictionary<uint, long> roots, Func<uint, (uint Parent, long Started, string Name)?> describe)
+    {
+        long? childStarted = null;
+        for (var depth = 0; depth < 64 && pid > 4; depth++)
+        {
+            if (describe(pid) is not { } process || (childStarted is { } started && process.Started > started)) return false;
+            if (roots.TryGetValue(pid, out var rootStarted)) return rootStarted == process.Started;
+            (pid, childStarted) = (process.Parent, process.Started);
+        }
+        return false;
+    }
+
+    private static Access AccessFor(NamedPipeServerStream pipe)
+    {
+        var settings = AppSettings.Load();
+        if (settings.SocketControlMode is "off" or "automation") return Decide(settings.SocketControlMode, false);
+        var roots = new Dictionary<uint, long>();
+        foreach (var root in new[] { (uint)Environment.ProcessId, TerminalHost.ProcessId })
+            if (root != 0 && LeftoverReaper.Describe(root) is { } process) roots[root] = process.Started;
+        var fromTerminal = GetNamedPipeClientProcessId(pipe.SafePipeHandle, out var client) && DescendsFrom(client, roots, LeftoverReaper.Describe);
+        return Decide(settings.SocketControlMode, fromTerminal);
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetNamedPipeClientProcessId(Microsoft.Win32.SafeHandles.SafePipeHandle pipe, out uint clientProcessId);
+
     private async Task ServeAsync(NamedPipeServerStream pipe)
     {
         await using (pipe)
@@ -78,13 +121,16 @@ internal sealed class ControlServer : IDisposable
                 try { await writer.WriteLineAsync(text); }
                 finally { gate.Release(); }
             }
-            var connection = new Connection(Write);
+            // ponytail: the mode is read once per connection; a subscription keeps its access until it reconnects.
+            var connection = new Connection(Write) { Access = AccessFor(pipe) };
             try
             {
                 while (await reader.ReadLineAsync(_stop.Token) is { } line)
                 {
                     if (line.Length == 0) continue;
                     await Write(await HandleLineAsync(line, connection));
+                    // A refused client is told once, as macOS closes it; five wrong passwords close it too.
+                    if (connection.Access is Access.Denied or Access.Off || connection.Failures >= MaxLoginFailures) break;
                     // A new subscription starts pushing only after its answer.
                     connection.Subscription?.Start();
                 }
@@ -107,6 +153,63 @@ internal sealed class ControlServer : IDisposable
     {
         internal Func<string, Task> Write { get; } = write;
         internal Subscription? Subscription { get; set; }
+        internal Access Access { get; set; } = Access.Allowed;
+        /// <summary>Failed auth.login attempts on this connection.</summary>
+        internal int Failures { get; set; }
+    }
+
+    private const int MaxLoginFailures = 5;
+
+    /// <summary>automation.socketPassword, read at each login.</summary>
+    internal Func<string?> Password { get; init; } = () => AppSettings.Load().SocketPassword;
+
+    /// <summary>The time source for the login lockout.</summary>
+    internal Func<DateTime> Now { get; init; } = () => DateTime.UtcNow;
+
+    private readonly object _loginGate = new();
+    private int _consecutiveFailures;
+    private DateTime _lockedUntil;
+
+    /// <summary>The access gate for one request: null lets it through, else the answer that refuses it.</summary>
+    private string? Refusal(object? id, string method, JsonElement p, Connection? connection)
+    {
+        switch (connection?.Access)
+        {
+            case Access.Off: return Failure(id, "unavailable", "Socket control is off (Settings > Automation > Socket Control Mode).");
+            case Access.Denied: return Failure(id, "access_denied", "Access denied: only processes started inside Programa terminals can connect (Settings > Automation > Socket Control Mode).");
+            case Access.NeedsLogin when method == "auth.login": return Login(id, p, connection);
+            case Access.NeedsLogin: return Failure(id, "auth_required", "Authentication required. Call auth.login first.");
+            default: return null;
+        }
+    }
+
+    /// <summary>auth.login in password mode, as on macOS: five free failures across connections, then a lockout
+    /// that starts at a second and doubles up to a minute; a success resets it.</summary>
+    private string Login(object? id, JsonElement p, Connection connection)
+    {
+        var given = p.TryGetProperty("password", out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+        if (string.IsNullOrEmpty(given)) return Failure(id, "invalid_params", "auth.login requires params.password");
+        if (Password() is not { } expected) return Failure(id, "auth_unconfigured", "Password mode is enabled but no socket password is configured in Settings.");
+        lock (_loginGate)
+        {
+            var now = Now();
+            if (now < _lockedUntil)
+            {
+                connection.Failures++;
+                return Failure(id, "auth_failed", "Too many failed attempts; try again later.");
+            }
+            static byte[] Hash(string text) => System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(text));
+            if (System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(Hash(given), Hash(expected)))
+            {
+                _consecutiveFailures = 0;
+                connection.Access = Access.Allowed;
+                return JsonSerializer.Serialize(new { id, ok = true, result = new { authenticated = true } }, Json);
+            }
+            connection.Failures++;
+            if (++_consecutiveFailures > MaxLoginFailures)
+                _lockedUntil = now + TimeSpan.FromSeconds(Math.Min(60, Math.Pow(2, Math.Min(_consecutiveFailures - MaxLoginFailures - 1, 16))));
+            return Failure(id, "auth_failed", "Invalid password.");
+        }
     }
 
     internal Task<string> HandleLineAsync(string line) => HandleLineAsync(line, null);
@@ -125,12 +228,13 @@ internal sealed class ControlServer : IDisposable
             var parameters = root.TryGetProperty("params", out var given) && given.ValueKind == JsonValueKind.Object
                 ? given.Clone()
                 : JsonDocument.Parse("{}").RootElement.Clone();
+            if (Refusal(id, method, parameters, connection) is { } refused) return refused;
             var result = method switch
             {
                 "subscribe" => Subscribe(parameters, connection),
                 "unsubscribe" => Unsubscribe(connection),
                 "notification.claim_banners" => ClaimBanners(parameters, connection),
-                // No password mode on Windows: the pipe only lets this user in.
+                // Allowed already (a Programa terminal, automation mode, or logged in).
                 "auth.login" => new { authenticated = true, required = false },
                 "app.browsers" => Browsers.Report(),
                 _ => await _handler(method, parameters),

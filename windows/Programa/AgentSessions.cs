@@ -32,6 +32,25 @@ internal static class AgentSessions
     /// <summary>Only letters, digits, dashes and underscores (Codex ids), so an id can be typed into a shell as is.</summary>
     internal static bool IsSessionId(string id) => id.Length is > 0 and <= 128 && Regex.IsMatch(id, "^[A-Za-z0-9_-]+$");
 
+    /// <summary>app.autoResumeAgents, as macOS's autoResumeInput: the line a restored terminal whose shell
+    /// did not survive types to start the agent it was running at quit again, or null. A Claude session
+    /// whose transcript is gone is not resumed.</summary>
+    internal static string? AutoResumeCommand(SessionTerminal? saved, bool enabled) =>
+        enabled && saved is { AgentRunning: true, Agent: { } session } && (session.Provider != "claude" || ClaudeTranscriptExists(session.Id))
+            ? ResumeCommand(session, saved.Cwd)
+            : null;
+
+    /// <summary>Whether a project folder holds the session's transcript; true when the store cannot be read, as on macOS.</summary>
+    internal static bool ClaudeTranscriptExists(string id)
+    {
+        try
+        {
+            return !Directory.Exists(ClaudeProjects) ||
+                Directory.EnumerateDirectories(ClaudeProjects).Any(project => new FileInfo(Path.Combine(project, id + ".jsonl")) is { Exists: true, Length: > 0 });
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return true; }
+    }
+
     /// <summary>The PowerShell line that resumes the session, entering its directory first when the
     /// terminal is elsewhere and that directory still exists.</summary>
     internal static string ResumeCommand(AgentSession session, string? currentDirectory)

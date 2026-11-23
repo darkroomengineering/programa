@@ -64,6 +64,7 @@ public sealed partial class MainWindow : Window
         StartPortScan();
         StartPullRequestPolling();
         StartAgentDetection();
+        StartLeftoverReaper();
         InitializeCloseConfirmation();
         // Elapsed times and "(stale)" advance once a minute, as on macOS.
         _sidebarClock = DispatcherQueue.CreateTimer();
@@ -643,9 +644,13 @@ public sealed partial class MainWindow : Window
         var saved = TakeRestoredTerminal(surfaceId);
         // A layout leaves a spec per surface; other creations leave the next terminal's directory and command.
         _pendingTerminals.Remove(surfaceId, out var spec);
+        var settings = saved is null ? null : AppSettings.Load();
         var terminal = spec is not null
             ? new TerminalView(surfaceId, workspaceId, spec.Cwd, null, spec.Command, spec.Env)
-            : new TerminalView(surfaceId, workspaceId, saved?.Cwd ?? _nextTerminalDirectory, saved?.Text, _nextTerminalCommand);
+            // app.autoResumeAgents: the agent it ran at quit starts again, unless its shell reattaches (TerminalView drops the command then).
+            // app.saveScrollbackOnQuit off: no saved output is shown, even from a session saved while it was on.
+            : new TerminalView(surfaceId, workspaceId, saved?.Cwd ?? _nextTerminalDirectory, settings?.SaveScrollbackOnQuit == true ? saved?.Text : null,
+                _nextTerminalCommand ?? AgentSessions.AutoResumeCommand(saved, settings?.AutoResumeAgents == true));
         if (saved?.FontSize is { } fontSize) terminal.SetFontSize(fontSize);
         terminal.LastAgentSession = saved?.Agent;
         _nextTerminalDirectory = null;

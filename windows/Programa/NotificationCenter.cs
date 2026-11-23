@@ -114,7 +114,7 @@ internal sealed class NotificationCenter
         {
             var builder = new AppNotificationBuilder().AddText(title);
             if (body.Length > 0) builder.AddText(body);
-            if (AppSettings.Load().Silent) builder.MuteAudio();
+            ApplySound(builder);
             AppNotificationManager.Default.Show(builder.BuildNotification());
         }
         catch (Exception error)
@@ -135,7 +135,7 @@ internal sealed class NotificationCenter
         try
         {
             var builder = new AppNotificationBuilder().AddArgument("destination", "storage").AddText(Localizer.Get("StorageWarningTitle")).AddText(body);
-            if (AppSettings.Load().Silent) builder.MuteAudio();
+            ApplySound(builder);
             AppNotificationManager.Default.Show(builder.BuildNotification());
         }
         catch (Exception error)
@@ -151,7 +151,7 @@ internal sealed class NotificationCenter
         {
             var builder = new AppNotificationBuilder().AddArgument("surface", notification.SurfaceId).AddText(notification.Title);
             if (notification.Body.Length > 0) builder.AddText(notification.Body);
-            if (AppSettings.Load().Silent) builder.MuteAudio();
+            ApplySound(builder);
             AppNotificationManager.Default.Show(builder.BuildNotification());
         }
         catch (Exception error)
@@ -159,4 +159,21 @@ internal sealed class NotificationCenter
             LaunchLog.Write($"notifications: toast failed: {error.Message}");
         }
     }
+
+    /// <summary>notifications.sound on a toast: muted for none, else the Windows sound its name maps to.</summary>
+    private static void ApplySound(AppNotificationBuilder builder)
+    {
+        if (AppSettings.SoundEventFor(AppSettings.Load().Sound) is not { } sound) builder.MuteAudio();
+        else builder.SetAudioEvent(Enum.Parse<AppNotificationSoundEvent>(sound));
+    }
+
+    /// <summary>Settings' Play Sound: the sound a toast would play, from the Windows sound scheme; none plays nothing.</summary>
+    internal static void PlaySound(string? soundEvent)
+    {
+        const uint async = 0x1, noDefault = 0x2, alias = 0x10000;
+        if (soundEvent is not null) PlaySoundW($"Notification.{soundEvent}", 0, alias | async | noDefault);
+    }
+
+    [System.Runtime.InteropServices.DllImport("winmm.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern bool PlaySoundW(string sound, nint module, uint flags);
 }

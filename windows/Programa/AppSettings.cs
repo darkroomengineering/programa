@@ -29,17 +29,74 @@ internal sealed record AppSettings(string Appearance, bool WarnBeforeQuit, strin
     /// <summary>automation.protectApprovalPrompts: socket writes leave an approval prompt to you (agent_awaiting_approval).</summary>
     internal bool ProtectApprovalPrompts { get; init; } = true;
 
+    /// <summary>app.autoResumeAgents: a restored terminal whose shell did not survive starts the agent it ran at quit again.</summary>
+    internal bool AutoResumeAgents { get; init; } = true;
+    /// <summary>app.reapLeftoverAgentProcesses: a Claude Code session that exits takes what it started down with it.</summary>
+    internal bool ReapLeftoverAgentProcesses { get; init; } = true;
+    /// <summary>automation.socketControlMode, normalized: off, programaOnly, automation or password
+    /// (allowAll and the legacy aliases mean automation: the pipe never admits other users).</summary>
+    internal string SocketControlMode { get; init; } = "programaOnly";
+    /// <summary>automation.socketPassword, for password mode; null when unset or empty.</summary>
+    internal string? SocketPassword { get; init; }
+    /// <summary>app.saveScrollbackOnQuit: terminals' recent output is saved with the session and shown again on restore.</summary>
+    internal bool SaveScrollbackOnQuit { get; init; } = true;
+    /// <summary>automation.agentScreenDetection: agents without hooks get a status read off the screen.</summary>
+    internal bool AgentScreenDetection { get; init; } = true;
+    /// <summary>browser.externalAppOpenAllowlist: `app|scheme` entries that open without asking.</summary>
+    internal IReadOnlyList<string> ExternalAppOpenAllowlist { get; init; } = [];
+
     internal ElementTheme Theme => Appearance switch { "light" => ElementTheme.Light, "dark" => ElementTheme.Dark, _ => ElementTheme.Default };
 
-    /// <summary>"none" silences toasts; the macOS sound names (Glass, Ping…) play Windows' default sound.</summary>
+    /// <summary>"none" silences toasts.</summary>
     internal bool Silent => string.Equals(Sound, "none", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The Windows toast sounds the picker offers, each with the macOS name it writes to notifications.sound.</summary>
+    internal static readonly IReadOnlyList<(string Event, string Value)> WindowsSounds =
+        [("Default", "default"), ("IM", "Ping"), ("Mail", "Glass"), ("Reminder", "Hero"), ("SMS", "Pop")];
+
+    // Every macOS sound plays the Windows sound closest to it in character.
+    private static readonly Dictionary<string, string> SoundEvents = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["default"] = "Default",
+        ["Ping"] = "IM", ["Tink"] = "IM", ["Morse"] = "IM",
+        ["Glass"] = "Mail", ["Purr"] = "Mail", ["Bottle"] = "Mail",
+        ["Hero"] = "Reminder", ["Submarine"] = "Reminder", ["Blow"] = "Reminder", ["Funk"] = "Reminder",
+        ["Pop"] = "SMS", ["Frog"] = "SMS", ["Basso"] = "SMS", ["Sosumi"] = "SMS",
+    };
+
+    /// <summary>The toast sound (ms-winsoundevent:Notification.&lt;event&gt;) a notifications.sound value plays:
+    /// null for none, Default for a name macOS does not ship.</summary>
+    internal static string? SoundEventFor(string sound) =>
+        string.Equals(sound, "none", StringComparison.OrdinalIgnoreCase) ? null : SoundEvents.GetValueOrDefault(sound, "Default");
+
+    /// <summary>macOS's socketControlMode values and legacy aliases, as Windows applies them; null when unknown.</summary>
+    internal static string? NormalizeSocketMode(string? raw) => raw?.Trim().Replace("-", "").Replace("_", "").ToLowerInvariant() switch
+    {
+        "off" => "off",
+        "programaonly" => "programaOnly",
+        "password" => "password",
+        "automation" or "notifications" or "allowall" or "openaccess" or "fullopenaccess" or "full" => "automation",
+        _ => null,
+    };
 
     internal static AppSettings Load()
     {
         try
         {
-            if (!File.Exists(ShortcutSettings.SettingsPath)) return Defaults;
-            var root = JsonNode.Parse(File.ReadAllText(ShortcutSettings.SettingsPath), null, new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+            return File.Exists(ShortcutSettings.SettingsPath) ? Parse(File.ReadAllText(ShortcutSettings.SettingsPath)) : Defaults;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return Defaults;
+        }
+    }
+
+    /// <summary>settings.json's text as settings; a file that does not parse gives the defaults.</summary>
+    internal static AppSettings Parse(string json)
+    {
+        try
+        {
+            var root = JsonNode.Parse(json, null, new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
             var app = root?["app"] as JsonObject;
             return new AppSettings(
                 Text(app?["appearance"]) is { } appearance && appearance is "light" or "dark" or "system" ? appearance : Defaults.Appearance,
@@ -64,9 +121,19 @@ internal sealed record AppSettings(string Appearance, bool WarnBeforeQuit, strin
                 ClaudeTeamsByDefault = Flag(root?["automation"]?["claudeTeamsByDefault"], true),
                 HoldAgentTextWhileTyping = Flag(root?["automation"]?["holdAgentTextWhileTyping"], true),
                 ProtectApprovalPrompts = Flag(root?["automation"]?["protectApprovalPrompts"], true),
+                AutoResumeAgents = Flag(app?["autoResumeAgents"], true),
+                ReapLeftoverAgentProcesses = Flag(app?["reapLeftoverAgentProcesses"], true),
+                SaveScrollbackOnQuit = Flag(app?["saveScrollbackOnQuit"], true),
+                AgentScreenDetection = Flag(root?["automation"]?["agentScreenDetection"], true),
+                SocketControlMode = NormalizeSocketMode(Text(root?["automation"]?["socketControlMode"])) ?? "programaOnly",
+                SocketPassword = Text(root?["automation"]?["socketPassword"]),
+                // Only `app|scheme` entries count, as on macOS: a bare app would allow every scheme.
+                ExternalAppOpenAllowlist = root?["browser"]?["externalAppOpenAllowlist"] is JsonArray allowed
+                    ? allowed.Select(Text).OfType<string>().Where(entry => entry.IndexOf('|') is > 0 and var bar && bar < entry.Length - 1).ToList()
+                    : [],
             };
         }
-        catch (Exception error) when (error is JsonException or IOException or UnauthorizedAccessException or InvalidOperationException)
+        catch (Exception error) when (error is JsonException or InvalidOperationException)
         {
             return Defaults;
         }
