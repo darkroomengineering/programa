@@ -22,7 +22,8 @@ and is not part of the Cargo workspace.
 
 Create returns an opaque handle, or null with UTF-8 text in error (when error
 is nonnull) if the config is invalid, the PTY cannot start, or construction
-panics. Free stops the shell (only detaches from a hosted one, see host), is safe on null, and must be called exactly once
+panics. On success error stays empty, unless command could not be used (see command): the
+default shell started and error says why. Free stops the shell (only detaches from a hosted one, see host), is safe on null, and must be called exactly once
 per handle. A handle may be used from any thread, but the caller must not free
 it while another thread is inside a call on it.
 
@@ -53,6 +54,7 @@ are ignored.
     {
       "shell": "C:\\Windows\\System32\\cmd.exe",
       "args": ["/k"],
+      "command": "\"C:\\Program Files\\Git\\bin\\bash.exe\" --login -i",
       "working_directory": "C:\\Users\\me",
       "env": {"NAME": "value"},
       "cols": 80,
@@ -75,11 +77,25 @@ terminal before the shell starts and then moved into scrollback (an erase of
 the main screen), so the shell starts on an empty screen with the saved lines
 above it. Control characters are dropped and at most 1 MiB of the end is kept.
 
-shell_integration starts the default PowerShell with Programa's integration, passed
+shell_integration starts the default PowerShell, or a PowerShell command, with Programa's integration, passed
 with `-NoExit -EncodedCommand` so it runs after the profile and is not blocked by the
 script execution policy: at each prompt it reports the working directory (OSC 7),
 the prompt marks (OSC 133;A and B) and a title naming the directory. It has no
 effect on an explicit shell or explicit args.
+
+command is Ghostty's `command` line, used when shell is not set: a program (in double
+quotes when its path has spaces), then its arguments, passed on as written, since a
+Windows program parses its own command line. A program without a directory is looked
+up on env's PATH, else this process's, and `.exe` is added when it has no extension.
+Ghostty's `direct:` prefix is accepted; `shell:` runs the rest with `cmd.exe /S /C`.
+When the program is pwsh or powershell, shell_integration adds the integration unless
+the arguments already run something (`-Command`, `-File`, `-EncodedCommand` or an
+abbreviation): a bare PowerShell gets the default's args, otherwise
+`-NoExit -EncodedCommand` follow its own. The resolved program and args are what a
+terminal host receives as shell and args. A command that names no program, has an
+unclosed quote, or names a program that is not found starts the default shell instead,
+and create returns the session with the reason in error (``terminal: command `…` was
+not found; starting the default shell``).
 
 host runs the shell in the terminal host (`programa-host.exe`, `src/host.rs`) instead
 of this process, so it survives the app quitting or crashing:
@@ -116,7 +132,7 @@ Replaces the colors with a new colors object (same shape), for a theme change
 while the session runs, and advances the generation. INVALID_ARGUMENT for bad
 JSON.
 
-Defaults: on Windows, shell is the first of pwsh.exe and powershell.exe found on
+Defaults: without shell or command, on Windows the shell is the first of pwsh.exe and powershell.exe found on
 PATH (with args `-NoLogo` when none are given), else COMSPEC; elsewhere it is
 SHELL. working_directory is the user's home, cols and rows are 80 and 24, and
 cell size is 8 by 16 pixels. Unless env supplies them, TERM is xterm-256color,
