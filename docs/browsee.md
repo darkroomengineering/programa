@@ -47,7 +47,8 @@ browsee, not only Programa's agents.
 ## Sending links to browsee
 
 To return to a Programa workspace from Browsee, choose **Copy Workspace Link** in the
-workspace’s context menu. Paste the link into the Browsee chat composer and choose
+workspace’s context menu. Paste into the Browsee chat composer to include the workspace
+name and its link on separate lines. An unnamed workspace pastes as a link. Choose
 **Open Workspace in Programa**. The link keeps working when you restart Programa.
 
 To return to a Browsee conversation from Programa, choose **Copy Chat Link** or
