@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace Programa;
 
 /// <summary>What one terminal brings back on relaunch: its directory, recent output and font size.</summary>
-internal sealed record SessionTerminal(string? Cwd, string? Text, float? FontSize, AgentSession? Agent = null);
+internal sealed record SessionTerminal(string? Cwd, string? Text, float? FontSize, AgentSession? Agent = null, bool AgentRunning = false);
 
 /// <summary>The window's frame in physical pixels.</summary>
 internal sealed record SessionWindow(int X, int Y, int Width, int Height, bool Maximized);

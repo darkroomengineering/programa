@@ -98,6 +98,10 @@ public sealed class ShortcutSettings
         return _actions.GetValueOrDefault(Modifiers() + name);
     }
 
+    /// <summary>The binding a key press makes with the modifiers held now ("ctrl-shift-x"), or null for a key
+    /// no binding can use (a modifier alone).</summary>
+    internal static string? BindingFor(VirtualKey key) => KeyName(key) is { Length: > 0 } name ? Modifiers() + name : null;
+
     private static string Modifiers() =>
         (IsDown(VirtualKey.Control) ? "ctrl-" : "") + (IsDown(VirtualKey.Menu) ? "alt-" : "") + (IsDown(VirtualKey.Shift) ? "shift-" : "");
 
@@ -167,6 +171,53 @@ public sealed class ShortcutSettings
         var temporary = path + ".tmp";
         File.WriteAllBytes(temporary, bytes);
         File.Move(temporary, path, true);
+    }
+
+    /// <summary>Removes top-level <c>section.key</c> members from the shared settings file, keeping every
+    /// other byte (Reset All Settings). A missing file or key is left alone.</summary>
+    internal static void RemoveValues(IEnumerable<(string Section, string Key)> keys)
+    {
+        var path = SettingsPath;
+        if (!File.Exists(path)) return;
+        var bytes = File.ReadAllBytes(path);
+        try
+        {
+            foreach (var (section, key) in keys) bytes = RemoveValue(bytes, section, key);
+            JsonDocument.Parse(bytes.AsMemory(bytes.AsSpan().StartsWith((ReadOnlySpan<byte>)[0xEF, 0xBB, 0xBF]) ? 3 : 0), DocumentOptions).Dispose();
+        }
+        catch (JsonException error) { throw new InvalidDataException($"Invalid JSON in {path}", error); }
+        var temporary = path + ".tmp";
+        File.WriteAllBytes(temporary, bytes);
+        File.Move(temporary, path, true);
+    }
+
+    /// <summary>The file without <c>section.key</c>: the member and one comma beside it go (the comma after it,
+    /// or before it for the last member), so comments and the other members stay as they were.</summary>
+    internal static byte[] RemoveValue(byte[] original, string section, string key)
+    {
+        var bom = original.AsSpan().StartsWith((ReadOnlySpan<byte>)[0xEF, 0xBB, 0xBF]) ? 3 : 0;
+        if (string.IsNullOrWhiteSpace(Encoding.UTF8.GetString(original, bom, original.Length - bom))) return original;
+        if (ScanObject(original, bom, section).Found is not { Type: JsonTokenType.StartObject } found) return original;
+        var reader = new Utf8JsonReader(original.AsSpan(found.Start), ReaderOptions);
+        reader.Read();
+        var previousEnd = -1;
+        while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+        {
+            var nameStart = found.Start + (int)reader.TokenStartIndex;
+            var name = reader.GetString();
+            reader.Read();
+            reader.Skip();
+            var end = found.Start + (int)reader.BytesConsumed;
+            if (string.Equals(name, key, StringComparison.Ordinal))
+            {
+                var next = end;
+                while (next < original.Length && original[next] is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n') next++;
+                if (next < original.Length && original[next] == (byte)',') return Splice(original, nameStart, next + 1, "");
+                return Splice(original, previousEnd >= 0 ? previousEnd : nameStart, end, "");
+            }
+            previousEnd = end;
+        }
+        return original;
     }
 
     internal static byte[] PatchValue(byte[] original, string section, string key, string json)

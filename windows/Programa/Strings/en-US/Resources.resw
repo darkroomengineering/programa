@@ -201,6 +201,52 @@
   <data name="ProtectApprovalPromptsOn" xml:space="preserve"><value>Agents and scripts can't answer an approval prompt for you.</value></data>
   <data name="ProtectApprovalPromptsOff" xml:space="preserve"><value>Scripts can answer an agent's approval prompt.</value></data>
   <data name="AppliesToNewTerminals" xml:space="preserve"><value>Claude Code Integration and Claude Agent Teams apply to new terminals.</value></data>
+  <data name="AutoResumeAgents" xml:space="preserve"><value>Resume Agents on Restart</value></data>
+  <data name="AutoResumeAgentsOn" xml:space="preserve"><value>Claude Code, Codex and OpenCode sessions that were running at quit resume in their pane after a restart.</value></data>
+  <data name="AutoResumeAgentsOff" xml:space="preserve"><value>Restored panes start a plain shell. Use Resume Agent Session to resume manually.</value></data>
+  <data name="ReapLeftoverAgentProcesses" xml:space="preserve"><value>Stop Leftover Agent Processes</value></data>
+  <data name="ReapLeftoverAgentProcessesOn" xml:space="preserve"><value>When Claude Code exits, processes it started and left running are stopped. Processes started with nohup are kept.</value></data>
+  <data name="ReapLeftoverAgentProcessesOff" xml:space="preserve"><value>Processes Claude Code started keep running after it exits.</value></data>
+  <data name="SocketControlMode" xml:space="preserve"><value>Socket Control Mode</value></data>
+  <data name="SocketModeOff" xml:space="preserve"><value>Off</value></data>
+  <data name="SocketModeOffDescription" xml:space="preserve"><value>Disable the local control socket.</value></data>
+  <data name="SocketModeProgramaOnly" xml:space="preserve"><value>Programa processes only</value></data>
+  <data name="SocketModeProgramaOnlyDescription" xml:space="preserve"><value>Only processes started inside Programa terminals can send commands.</value></data>
+  <data name="SocketModeAutomation" xml:space="preserve"><value>Automation mode</value></data>
+  <data name="SocketModeAutomationDescription" xml:space="preserve"><value>Allow external local automation clients from this Windows user (no ancestry check).</value></data>
+  <data name="SocketModePassword" xml:space="preserve"><value>Password mode</value></data>
+  <data name="SocketModePasswordDescription" xml:space="preserve"><value>Programa terminals connect as usual; any other process from this Windows user can connect after authenticating with the socket password.</value></data>
+  <data name="SocketPassword" xml:space="preserve"><value>Socket Password</value></data>
+  <data name="SocketPasswordPlaceholder" xml:space="preserve"><value>Password</value></data>
+  <data name="SocketPasswordSet" xml:space="preserve"><value>Stored in settings.json. Type a new one to change it.</value></data>
+  <data name="SocketPasswordUnset" xml:space="preserve"><value>No password set. Clients outside Programa terminals are blocked until one is configured.</value></data>
+  <data name="SocketPasswordClear" xml:space="preserve"><value>Clear</value></data>
+  <data name="SocketPasswordCleared" xml:space="preserve"><value>Password cleared.</value></data>
+  <data name="NotificationSoundTitle" xml:space="preserve"><value>Notification Sound</value></data>
+  <data name="NotificationSoundSubtitle" xml:space="preserve"><value>Sound played when a notification arrives.</value></data>
+  <data name="NotificationSoundPreview" xml:space="preserve"><value>Play Sound</value></data>
+  <data name="SoundDefault" xml:space="preserve"><value>Default</value></data>
+  <data name="SoundIM" xml:space="preserve"><value>Instant Message</value></data>
+  <data name="SoundMail" xml:space="preserve"><value>Mail</value></data>
+  <data name="SoundReminder" xml:space="preserve"><value>Reminder</value></data>
+  <data name="SoundSMS" xml:space="preserve"><value>Text Message</value></data>
+  <data name="SoundNone" xml:space="preserve"><value>None</value></data>
+  <data name="ResetAllSettings" xml:space="preserve"><value>Reset All Settings</value></data>
+  <data name="ResetAllSettingsMessage" xml:space="preserve"><value>Every setting in this window goes back to its default: its key is removed from settings.json, which Programa on a Mac reading the same file also uses. Your keyboard shortcuts are reset too. Trusted folders, the socket password and the apps allowed to open links are kept.</value></data>
+  <data name="ResetAllSettingsConfirm" xml:space="preserve"><value>Reset</value></data>
+  <data name="ShortcutRecordHint" xml:space="preserve"><value>Click a shortcut, then press the new keys. Escape keeps the old one; Backspace removes it.</value></data>
+  <data name="ShortcutPress" xml:space="preserve"><value>Press shortcut…</value></data>
+  <data name="ShortcutNone" xml:space="preserve"><value>Not set</value></data>
+  <data name="ShortcutTakenBy" xml:space="preserve"><value>{0} is already used by {1}.</value></data>
+  <data name="ShortcutReserved" xml:space="preserve"><value>{0} can't be used: it stays with the terminal.</value></data>
+  <data name="ExternalOpenAlwaysAllow" xml:space="preserve"><value>Always allow for this app</value></data>
+  <data name="SaveScrollbackOnQuit" xml:space="preserve"><value>Save Scrollback on Quit</value></data>
+  <data name="SaveScrollbackOnQuitOn" xml:space="preserve"><value>Terminal scrollback is saved and restored on next launch.</value></data>
+  <data name="SaveScrollbackOnQuitOff" xml:space="preserve"><value>Terminal scrollback is not written to disk.</value></data>
+  <data name="AgentScreenDetection" xml:space="preserve"><value>Screen-Based Agent Detection</value></data>
+  <data name="AgentScreenDetectionOn" xml:space="preserve"><value>Infers working/blocked/idle status for agent CLIs without an installed integration by reading the terminal screen.</value></data>
+  <data name="AgentScreenDetectionOff" xml:space="preserve"><value>Agent status is only shown for CLIs with an installed integration.</value></data>
+  <data name="AgentScreenDetectionNote" xml:space="preserve"><value>Applies to agents such as Gemini CLI and GitHub Copilot CLI that have no installed hooks. A hooks-managed session (Claude Code, Codex, OpenCode) always takes priority over this.</value></data>
   <data name="DesktopNotifications" xml:space="preserve"><value>Desktop Notifications</value></data>
   <data name="DesktopNotificationsOn" xml:space="preserve"><value>Windows shows Programa's notifications.</value></data>
   <data name="DesktopNotificationsOff" xml:space="preserve"><value>Windows does not show Programa's notifications. Turn them on in Windows Settings.</value></data>

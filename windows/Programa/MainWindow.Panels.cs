@@ -127,26 +127,65 @@ public sealed partial class MainWindow
         _ = ConfirmOpenAsync(target);
     }
 
-    /// <summary>macOS ExternalOpenPolicy's prompt: "Open in the default app?" with the target.</summary>
+    /// <summary>browser.externalAppOpenAllowlist's entry for opening <paramref name="target"/> with the app that
+    /// handles its scheme, `handler|scheme` as macOS's `bundleId|scheme`, the handler being its ProgId (or its exe
+    /// when it has none). Null for a file, which always asks, as on macOS: the file is the risk, not the app.</summary>
+    internal static string? AllowlistEntry(Uri target, string? handler) =>
+        target.IsFile || string.IsNullOrEmpty(handler) || handler.Contains('|') ? null : $"{handler}|{target.Scheme.ToLowerInvariant()}";
+
+    /// <summary>The app a URL scheme opens in: the ProgId you chose for it, else the exe its own registration runs.</summary>
+    private static string? SchemeHandler(string scheme)
+    {
+        try
+        {
+            var choice = $@"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\{scheme}\";
+            if ((Microsoft.Win32.Registry.CurrentUser.OpenSubKey(choice + "UserChoiceLatest")?.GetValue("ProgId")
+                ?? Microsoft.Win32.Registry.CurrentUser.OpenSubKey(choice + "UserChoice")?.GetValue("ProgId")) is string { Length: > 0 } progId)
+                return progId;
+            var command = Microsoft.Win32.Registry.ClassesRoot.OpenSubKey($@"{scheme}\shell\open\command")?.GetValue(null) as string;
+            if (string.IsNullOrWhiteSpace(command)) return null;
+            var exe = command.TrimStart().StartsWith('"') ? command.TrimStart()[1..].Split('"')[0] : command.Trim().Split(' ')[0];
+            return Path.GetFileName(exe) is { Length: > 0 } name ? name : null;
+        }
+        catch (Exception error) when (error is System.Security.SecurityException or IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>macOS ExternalOpenPolicy's prompt: "Open in the default app?" with the target, and for a scheme
+    /// link "Always allow for this app", which browser.externalAppOpenAllowlist remembers.</summary>
     private async Task ConfirmOpenAsync(Uri target)
     {
         if (_dialogOpen || Root.XamlRoot is null) return;
         var shown = target.IsFile ? target.LocalPath : target.AbsoluteUri;
-        _dialogOpen = true;
-        try
+        var entry = AllowlistEntry(target, target.IsFile ? null : SchemeHandler(target.Scheme));
+        var allowlist = AppSettings.Load().ExternalAppOpenAllowlist;
+        if (entry is null || !allowlist.Contains(entry, StringComparer.OrdinalIgnoreCase))
         {
-            var dialog = new ContentDialog
+            var always = new CheckBox { Content = Localizer.Get("ExternalOpenAlwaysAllow"), Visibility = entry is null ? Visibility.Collapsed : Visibility.Visible };
+            _dialogOpen = true;
+            try
             {
-                XamlRoot = Root.XamlRoot,
-                Title = string.Format(Localizer.Get("ExternalOpenTitle"), Localizer.Get("ExternalOpenDefaultApp")),
-                Content = new TextBlock { Text = shown, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true },
-                PrimaryButtonText = Localizer.Get("ExternalOpenOpen"),
-                CloseButtonText = Localizer.Get("Cancel"),
-                DefaultButton = ContentDialogButton.Close,
-            };
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+                var dialog = new ContentDialog
+                {
+                    XamlRoot = Root.XamlRoot,
+                    Title = string.Format(Localizer.Get("ExternalOpenTitle"), Localizer.Get("ExternalOpenDefaultApp")),
+                    Content = new StackPanel { Spacing = 12, Children = { new TextBlock { Text = shown, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true }, always } },
+                    PrimaryButtonText = Localizer.Get("ExternalOpenOpen"),
+                    CloseButtonText = Localizer.Get("Cancel"),
+                    DefaultButton = ContentDialogButton.Close,
+                };
+                if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+            }
+            finally { _dialogOpen = false; }
+            // At most 200 remembered, as on macOS; entries that are not app|scheme are dropped on the way.
+            if (always.IsChecked == true && entry is not null && allowlist.Count < 200)
+            {
+                try { ShortcutSettings.SetValues([("browser", "externalAppOpenAllowlist", new System.Text.Json.Nodes.JsonArray([.. allowlist.Append(entry).Select(item => (System.Text.Json.Nodes.JsonNode?)item)]))]); }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException) { LaunchLog.Write($"external open: not remembered: {error.Message}"); }
+            }
         }
-        finally { _dialogOpen = false; }
         try
         {
             if (target.IsFile) Process.Start(new ProcessStartInfo(target.LocalPath) { UseShellExecute = true })?.Dispose();

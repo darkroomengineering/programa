@@ -201,6 +201,52 @@
   <data name="ProtectApprovalPromptsOn" xml:space="preserve"><value>エージェントやスクリプトが代わりに承認プロンプトに応答することはできません。</value></data>
   <data name="ProtectApprovalPromptsOff" xml:space="preserve"><value>スクリプトがエージェントの承認プロンプトに応答できます。</value></data>
   <data name="AppliesToNewTerminals" xml:space="preserve"><value>Claude Code連携と Claude エージェントチームは新しいターミナルに適用されます。</value></data>
+  <data name="AutoResumeAgents" xml:space="preserve"><value>再起動時にエージェントを再開</value></data>
+  <data name="AutoResumeAgentsOn" xml:space="preserve"><value>終了時に実行中だった Claude Code、Codex、OpenCode のセッションは、再起動後に各ペインで再開されます。</value></data>
+  <data name="AutoResumeAgentsOff" xml:space="preserve"><value>復元されたペインは通常のシェルで起動します。手動で再開するには「エージェントセッションを再開」を使用してください。</value></data>
+  <data name="ReapLeftoverAgentProcesses" xml:space="preserve"><value>残ったエージェントのプロセスを停止</value></data>
+  <data name="ReapLeftoverAgentProcessesOn" xml:space="preserve"><value>Claude Code の終了時に、起動したまま残っているプロセスを停止します。nohup で起動したプロセスは残ります。</value></data>
+  <data name="ReapLeftoverAgentProcessesOff" xml:space="preserve"><value>Claude Code が起動したプロセスは、終了後も実行され続けます。</value></data>
+  <data name="SocketControlMode" xml:space="preserve"><value>ソケット制御モード</value></data>
+  <data name="SocketModeOff" xml:space="preserve"><value>オフ</value></data>
+  <data name="SocketModeOffDescription" xml:space="preserve"><value>ローカルの制御ソケットを無効にします。</value></data>
+  <data name="SocketModeProgramaOnly" xml:space="preserve"><value>Programaのプロセスのみ</value></data>
+  <data name="SocketModeProgramaOnlyDescription" xml:space="preserve"><value>Programaのターミナル内から起動したプロセスのみがコマンドを送信できます。</value></data>
+  <data name="SocketModeAutomation" xml:space="preserve"><value>自動化モード</value></data>
+  <data name="SocketModeAutomationDescription" xml:space="preserve"><value>このWindowsユーザーからの外部ローカル自動化クライアントを許可します（親プロセスの確認なし）。</value></data>
+  <data name="SocketModePassword" xml:space="preserve"><value>パスワードモード</value></data>
+  <data name="SocketModePasswordDescription" xml:space="preserve"><value>Programaのターミナルは通常どおり接続できます。このWindowsユーザーのその他のプロセスは、ソケットパスワードで認証すると接続できます。</value></data>
+  <data name="SocketPassword" xml:space="preserve"><value>ソケットパスワード</value></data>
+  <data name="SocketPasswordPlaceholder" xml:space="preserve"><value>パスワード</value></data>
+  <data name="SocketPasswordSet" xml:space="preserve"><value>settings.jsonに保存されています。変更するには新しいパスワードを入力してください。</value></data>
+  <data name="SocketPasswordUnset" xml:space="preserve"><value>パスワードが設定されていません。設定するまで、Programaのターミナル外のクライアントはブロックされます。</value></data>
+  <data name="SocketPasswordClear" xml:space="preserve"><value>消去</value></data>
+  <data name="SocketPasswordCleared" xml:space="preserve"><value>パスワードを消去しました。</value></data>
+  <data name="NotificationSoundTitle" xml:space="preserve"><value>通知サウンド</value></data>
+  <data name="NotificationSoundSubtitle" xml:space="preserve"><value>通知が届いたときに再生されるサウンドです。</value></data>
+  <data name="NotificationSoundPreview" xml:space="preserve"><value>サウンドを再生</value></data>
+  <data name="SoundDefault" xml:space="preserve"><value>デフォルト</value></data>
+  <data name="SoundIM" xml:space="preserve"><value>インスタント メッセージ</value></data>
+  <data name="SoundMail" xml:space="preserve"><value>メール</value></data>
+  <data name="SoundReminder" xml:space="preserve"><value>リマインダー</value></data>
+  <data name="SoundSMS" xml:space="preserve"><value>テキスト メッセージ</value></data>
+  <data name="SoundNone" xml:space="preserve"><value>なし</value></data>
+  <data name="ResetAllSettings" xml:space="preserve"><value>すべての設定をリセット</value></data>
+  <data name="ResetAllSettingsMessage" xml:space="preserve"><value>このウィンドウのすべての設定がデフォルトに戻ります。各キーは settings.json から削除されます。同じファイルを読み込む Mac の Programa にも反映されます。キーボードショートカットもリセットされます。信頼済みフォルダー、ソケットパスワード、リンクを開くことを許可したアプリは保持されます。</value></data>
+  <data name="ResetAllSettingsConfirm" xml:space="preserve"><value>リセット</value></data>
+  <data name="ShortcutRecordHint" xml:space="preserve"><value>ショートカットをクリックして、新しいキーを押してください。Escキーで元のまま、Backspaceキーで削除します。</value></data>
+  <data name="ShortcutPress" xml:space="preserve"><value>ショートカットを押してください…</value></data>
+  <data name="ShortcutNone" xml:space="preserve"><value>未設定</value></data>
+  <data name="ShortcutTakenBy" xml:space="preserve"><value>{0} はすでに「{1}」で使われています。</value></data>
+  <data name="ShortcutReserved" xml:space="preserve"><value>{0} はターミナル用に予約されているため使えません。</value></data>
+  <data name="ExternalOpenAlwaysAllow" xml:space="preserve"><value>このアプリでは常に許可する</value></data>
+  <data name="SaveScrollbackOnQuit" xml:space="preserve"><value>終了時にスクロールバックを保存</value></data>
+  <data name="SaveScrollbackOnQuitOn" xml:space="preserve"><value>スクロールバックは保存され、次回起動時に復元されます。</value></data>
+  <data name="SaveScrollbackOnQuitOff" xml:space="preserve"><value>スクロールバックはディスクに書き込まれません。</value></data>
+  <data name="AgentScreenDetection" xml:space="preserve"><value>画面ベースのエージェント検出</value></data>
+  <data name="AgentScreenDetectionOn" xml:space="preserve"><value>連携機能が未導入のエージェント CLI について、ターミナル画面を読み取って作業中/ブロック中/待機中の状態を推測します。</value></data>
+  <data name="AgentScreenDetectionOff" xml:space="preserve"><value>エージェントの状態は、連携機能が導入済みの CLI でのみ表示されます。</value></data>
+  <data name="AgentScreenDetectionNote" xml:space="preserve"><value>フックが未導入のエージェント（Gemini CLI、GitHub Copilot CLI など）に適用されます。フックで管理されているセッション（Claude Code、Codex、OpenCode）は常にこちらより優先されます。</value></data>
   <data name="DesktopNotifications" xml:space="preserve"><value>デスクトップ通知</value></data>
   <data name="DesktopNotificationsOn" xml:space="preserve"><value>Windows は Programa の通知を表示します。</value></data>
   <data name="DesktopNotificationsOff" xml:space="preserve"><value>Windows は Programa の通知を表示しません。Windows の設定でオンにしてください。</value></data>
