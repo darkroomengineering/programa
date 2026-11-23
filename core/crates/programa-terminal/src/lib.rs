@@ -1695,6 +1695,20 @@ pub unsafe extern "C" fn programa_terminal_clear_scrollback(
 
 /// # Safety
 ///
+/// `value` is null or a live handle from `programa_terminal_create`.
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_reset(value: *mut ProgramaTerminalSession) -> i32 {
+    ffi_status(|| {
+        let value = session(value)?;
+        // RIS, what Ghostty's reset binding does.
+        alacritty_terminal::vte::ansi::Handler::reset_state(&mut *value.term.lock());
+        value.state.changed();
+        Ok(())
+    })
+}
+
+/// # Safety
+///
 /// `value` is null or a live handle from `programa_terminal_create`; `out` is null or writable.
 #[no_mangle]
 pub unsafe extern "C" fn programa_terminal_take_notifications(

@@ -481,6 +481,21 @@ public sealed partial class TerminalView : UserControl, IDisposable
         if (_session is not null) NativeTerminal.ClearScrollback(_session);
     }
 
+    /// <summary>Reset Terminal (macOS's terminal menu): a full reset of the screen, scrollback and the
+    /// modes a program left on; nothing is sent to the program.</summary>
+    public void ResetTerminal()
+    {
+        if (_session is null) return;
+        NativeTerminal.Reset(_session);
+        Refresh();
+    }
+
+    /// <summary>The terminal menu, as a right-click opens it (dev builds' debug.menu.open).</summary>
+    internal void ShowContextMenu() => _canvas.ContextFlyout.ShowAt(_canvas);
+
+    /// <summary>Whether text is selected (the terminal menu shows Copy only then, as on macOS).</summary>
+    internal bool HasSelection => _session is not null && NativeTerminal.TryCopySelection(_session, out var text) && text.Length > 0;
+
     /// <summary>Grows or shrinks this terminal's font by one point, or resets it with 0, as Ghostty's
     /// increase/decrease/reset_font_size do for one surface.</summary>
     public void AdjustFontSize(int step) => SetFontSize(step == 0 ? _appearance.FontSize : _fontSize + step);
@@ -1231,8 +1246,14 @@ public sealed partial class TerminalView : UserControl, IDisposable
         copy.Click += (_, _) => Copy();
         var paste = new MenuFlyoutItem { Text = Localizer.Get("TerminalPaste") };
         paste.Click += (_, _) => Paste();
+        var reset = new MenuFlyoutItem { Text = Localizer.Get("TerminalReset"), Icon = new FontIcon { Glyph = char.ConvertFromUtf32(0xE72C) } };
+        reset.Click += (_, _) => ResetTerminal();
         menu.Items.Add(copy);
         menu.Items.Add(paste);
+        menu.Items.Add(new MenuFlyoutSeparator());
+        menu.Items.Add(reset);
+        // As on macOS, Copy is there only while text is selected.
+        menu.Opening += (_, _) => copy.Visibility = HasSelection ? Visibility.Visible : Visibility.Collapsed;
         return menu;
     }
 
@@ -1310,6 +1331,7 @@ internal static class NativeTerminal
     [DllImport(Dll, EntryPoint = "programa_terminal_selection_clear")] internal static extern int ClearSelection(SafeSessionHandle session);
     [DllImport(Dll, EntryPoint = "programa_terminal_copy_mode")] internal static extern int CopyMode(SafeSessionHandle session, uint command, uint count);
     [DllImport(Dll, EntryPoint = "programa_terminal_clear_scrollback")] internal static extern int ClearScrollback(SafeSessionHandle session);
+    [DllImport(Dll, EntryPoint = "programa_terminal_reset")] internal static extern int Reset(SafeSessionHandle session);
     [DllImport(Dll, EntryPoint = "programa_terminal_take_notifications")] private static extern int TakeNotificationsNative(SafeSessionHandle session, out Buffer buffer);
     internal static TerminalNotification[] TakeNotifications(SafeSessionHandle session)
     {

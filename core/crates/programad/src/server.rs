@@ -730,6 +730,7 @@ fn validate_command_sessions(
         | DomainCommand::SetWorkspaceCollapsed { .. }
         | DomainCommand::RenameSurface { .. }
         | DomainCommand::SetSurfacePinned { .. }
+        | DomainCommand::SetSurfaceColor { .. }
         | DomainCommand::SelectSurface { .. }
         | DomainCommand::CloseSurface { .. }
         | DomainCommand::ReorderSurface { .. }

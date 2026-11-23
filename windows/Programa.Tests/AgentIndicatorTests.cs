@@ -35,6 +35,27 @@ public sealed class AgentIndicatorTests
     }
 
     [TestMethod]
+    public void EveryKnownAgentHasItsMacOSLogo()
+    {
+        foreach (var (agent, asset) in new[]
+        {
+            ("claude-code", "AgentIconClaudeCode"), ("Claude", "AgentIconClaudeCode"), ("codex", "AgentIconCodex"),
+            ("copilot-cli", "AgentIconCopilot"), ("github-copilot", "AgentIconCopilot"), ("cursor-agent", "AgentIconCursor"),
+            ("gemini-cli", "AgentIconGeminiCLI"), ("gemini", "AgentIconGeminiCLI"), (" opencode ", "AgentIconOpenCode"),
+        })
+        {
+            Assert.AreEqual(asset, AgentIndicator.LogoAsset(agent), agent);
+            Assert.IsTrue(System.Text.Encoding.UTF8.GetString(AgentIndicator.LogoSvg(asset, dark: false)).StartsWith("<svg", StringComparison.Ordinal), asset);
+        }
+        Assert.IsNull(AgentIndicator.LogoAsset("aider"));
+        Assert.IsNull(AgentIndicator.LogoAsset(null));
+        // The monochrome logos have a white file for dark mode; the colored ones are the same in both.
+        Assert.IsTrue(System.Text.Encoding.UTF8.GetString(AgentIndicator.LogoSvg("AgentIconCursor", dark: true)).Contains("#FFFFFF", StringComparison.Ordinal));
+        Assert.IsTrue(System.Text.Encoding.UTF8.GetString(AgentIndicator.LogoSvg("AgentIconCursor", dark: false)).Contains("#000000", StringComparison.Ordinal));
+        CollectionAssert.AreEqual(AgentIndicator.LogoSvg("AgentIconCodex", dark: false), AgentIndicator.LogoSvg("AgentIconCodex", dark: true));
+    }
+
+    [TestMethod]
     public void ElapsedUsesTheLargestWholeUnit()
     {
         Assert.IsNull(AgentIndicator.Elapsed(TimeSpan.FromSeconds(40)));

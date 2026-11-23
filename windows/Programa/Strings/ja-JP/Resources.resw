@@ -116,6 +116,27 @@
   <data name="SidebarShowLessDetails" xml:space="preserve"><value>詳細を折りたたむ</value></data>
   <data name="PinTab" xml:space="preserve"><value>タブをピン留め</value></data>
   <data name="UnpinTab" xml:space="preserve"><value>タブのピン留めを解除</value></data>
+  <data name="RemoveCustomTabName" xml:space="preserve"><value>カスタムタブ名を削除</value></data>
+  <data name="CloseTabsToLeft" xml:space="preserve"><value>左側のタブを閉じる</value></data>
+  <data name="CloseTabsToRight" xml:space="preserve"><value>右側のタブを閉じる</value></data>
+  <data name="MoveTab" xml:space="preserve"><value>タブを移動…</value></data>
+  <data name="MoveToLeftPane" xml:space="preserve"><value>左のペインへ移動</value></data>
+  <data name="MoveToRightPane" xml:space="preserve"><value>右のペインへ移動</value></data>
+  <data name="NewTerminalTabToRight" xml:space="preserve"><value>右に新規ターミナルタブを開く</value></data>
+  <data name="TabColor" xml:space="preserve"><value>タブの色</value></data>
+  <data name="ChooseCustomColor" xml:space="preserve"><value>カスタムカラーを選択…</value></data>
+  <data name="MoveTabTitle" xml:space="preserve"><value>タブを移動</value></data>
+  <data name="MoveTabMessage" xml:space="preserve"><value>このタブの移動先を選択してください。</value></data>
+  <data name="MoveTabNewWorkspace" xml:space="preserve"><value>現在のウインドウに新規ワークスペース</value></data>
+  <data name="Move" xml:space="preserve"><value>移動</value></data>
+  <data name="MoveTabFailedTitle" xml:space="preserve"><value>移動に失敗しました</value></data>
+  <data name="MoveTabFailedMessage" xml:space="preserve"><value>Programa はこのタブを選択した移動先に移動できませんでした。</value></data>
+  <data name="CustomTabColorTitle" xml:space="preserve"><value>タブのカスタムカラー</value></data>
+  <data name="CustomColorMessage" xml:space="preserve"><value>16進数カラーを #RRGGBB の形式で入力してください。</value></data>
+  <data name="Apply" xml:space="preserve"><value>適用</value></data>
+  <data name="InvalidColorTitle" xml:space="preserve"><value>無効なカラー</value></data>
+  <data name="InvalidColorMessage" xml:space="preserve"><value>「{0}」は有効な16進数カラーではありません。#RRGGBB の形式で入力してください。</value></data>
+  <data name="TerminalReset" xml:space="preserve"><value>ターミナルをリセット</value></data>
   <data name="HelperNumbered" xml:space="preserve"><value>ヘルパー {0}</value></data>
   <data name="NotificationDefaultTitle" xml:space="preserve"><value>通知</value></data>
   <data name="Shortcut_rename_tab" xml:space="preserve"><value>タブ名を変更</value></data>

@@ -35,9 +35,8 @@ public sealed partial class MainWindow
         var title = SurfaceTitle(surfaceId) ?? panel.Title;
         var item = new TabViewItem
         {
-            Header = title,
+            Header = TabHeader(title, IsPinnedSurface(surfaceId), unread: false),
             IconSource = new FontIconSource { Glyph = panel.Glyph },
-            IsClosable = true,
             Tag = new SurfaceTag(workspaceId, paneId, surfaceId),
             ContextFlyout = TabMenu(workspaceId, paneId, surfaceId),
         };

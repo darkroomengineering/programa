@@ -199,6 +199,13 @@ text, invalid UTF-8 or a null session.
 
 Drops the scrollback above the screen; the screen itself is unchanged.
 
+    int32_t programa_terminal_reset(session);
+
+Reset Terminal: a full reset, as if the program had sent RIS (`ESC c`). The screen,
+scrollback, selection and modes the program set (alternate screen, mouse
+reporting, keyboard protocols) are cleared and the cursor goes home; copy mode stays.
+Nothing is sent to the program, so a shell shows its prompt again after the next key.
+
     int32_t programa_terminal_text(session, uint32_t max_lines,
                                    ProgramaTerminalBuffer *out);
 

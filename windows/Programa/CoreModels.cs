@@ -34,7 +34,8 @@ public sealed record PaneSnapshot(
 public sealed record SurfaceSnapshot(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("is_pinned")] bool IsPinned,
-    [property: JsonPropertyName("title")] string? Title = null);
+    [property: JsonPropertyName("title")] string? Title = null,
+    [property: JsonPropertyName("color")] string? Color = null);
 
 public sealed record LayoutSnapshot
 {
