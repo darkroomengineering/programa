@@ -1,6 +1,6 @@
 # Programa behavior and performance
 
-Programa keeps terminal sessions usable while people type, switch workspaces, resize panes, and restore a previous layout. The journeys below describe the behavior to preserve on the platforms that support it. Use the [Nulla rules](https://github.com/darkroomengineering/nulla/blob/main/RULES.md) to decide where work runs and what evidence is needed. Adoption was checked against Nulla main at `529378a22c4e07ee443a98ea6360fa22aa67ca5b`.
+Programa keeps terminal sessions usable while people type, switch workspaces, resize panes, and restore a previous layout. The journeys below describe the behavior to preserve on the platforms that support it.
 
 | Journey | Expected behavior | Existing check and measurement |
 | --- | --- | --- |
@@ -10,7 +10,7 @@ Programa keeps terminal sessions usable while people type, switch workspaces, re
 | Restore after relaunch | On macOS, saved workspaces and layout come back with readable scrollback. A restored pane accepts input. | [Scrollback relaunch regression](../tests_v2/test_restored_scrollback_survives_relaunch.py) runs in socket CI. Use a saved ten-workspace fixture for launch latency and peak memory. |
 | Leave a prompt idle | A quiet focused prompt remains ready for input. Hidden renderers can release their buffers while preserving terminal state. | [Nightly idle CPU check](../tests_v2/test_idle_cpu.py) uses a 30-second CPU-time delta and an informational 8% runner threshold. [Renderer planner tests](../programaTests/RendererRealizationPlannerTests.swift) cover selection policy. Verify actual buffer release with the memory procedure below. |
 
-Run app tests in GitHub Actions or on the designated VM per [AGENTS.md](../AGENTS.md). Use the [Windows checklist](windows-testing.md) on a Windows desktop for interactive verification. Record unavailable checks, runner failures, and missing samples in the release evidence.
+Run app tests in GitHub Actions or on the designated VM per [AGENTS.md](../AGENTS.md). Use the [Windows checklist](windows-testing.md) on a Windows desktop for interactive verification. Say which checks did not run, which runners failed, and which samples are missing.
 
 ## First investigation on macOS
 
@@ -78,7 +78,7 @@ The [hosted Appearance test](https://github.com/darkroomengineering/programa/act
 
 The Copy Ghostty Resources phase indexes the bundled theme filenames after applying Programa's theme overlays. Settings loads that index for the bundled directory and preserves native discovery for external directories and bundles with a missing or invalid index. The loader still resolves precedence, case and diacritic deduplication, and locale-aware sorting at runtime. On a warm local filesystem with 465 bundled themes, ten alternating reads measured a median of 2.928 ms (2.602–3.476 ms) for enumeration and resource metadata, and 0.239 ms (0.198–0.292 ms) for reading and decoding the same names from an index. This isolates bundled catalog loading before runtime merge and sort.
 
-Programa currently ships native platform interfaces. Windows uses the Rust shared core and macOS uses Swift and GhosttyKit. Track the shared-core language and shared renderer-generation requirements as open adoption items against Nulla's platform rules.
+Programa ships a native app per platform: macOS uses Swift and GhosttyKit, and Windows uses WinUI with the Rust shared core.
 
 Setup Assistant populates its terminal theme menus when the native pop-up opens. In separate settled first-launch allocation captures, live malloc allocations with `SetupAssistantController` in their stacks totaled 29.3 MB with the eager menus and 2.6 MB with the native pop-ups. Stacks containing both `SetupAssistantController` and `ForEach` accounted for 15.2 MB and 0.3 MB, respectively. These totals overlap and describe allocation attribution under stack logging. Use the paired footprint fixture to measure process memory. The [hosted picker test](https://github.com/darkroomengineering/programa/actions/runs/44851945806) verifies that choosing and resetting a theme persists the expected configuration.
 
@@ -91,4 +91,4 @@ The [paired first-launch comparison](https://github.com/darkroomengineering/prog
 | After 60 seconds without input | 184.3 MiB (183.6–187.3) | 95.2 MiB (94.1–97.8) |
 | Process peak | 208.5 MiB (202.3–214.6) | 117.4 MiB (111.7–122.1) |
 
-Keep the fixture, commands, immutable build revisions, raw traces, behavior results, and budget verdict with the change. Existing CI thresholds retain their current scope. Device-floor references, native journey budgets, and release approval require human sign-off under Nulla. Record those approvals against the applicable reference, budget revision, and release artifact.
+Keep the fixture, commands, immutable build revisions, raw traces and behavior results with the change, and name the machine that produced each measurement. Existing CI thresholds keep their current scope. A human sets the journey budget numbers.
