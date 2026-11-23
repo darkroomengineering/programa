@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 
 #if canImport(Programa_DEV)
@@ -8,6 +9,18 @@ import XCTest
 
 @MainActor
 final class TabManagerSessionSnapshotTests: XCTestCase {
+    func testWorkspaceClipboardIncludesDisplayNameAndNativeURL() {
+        let id = UUID()
+        let link = AppReference.workspace.string(for: id)
+        for (name, expected) in [("Browsee", "Browsee\n" + link),
+                                 (" App\r\n \n release\u{2028} review ", "App release review\n" + link),
+                                 ("", link), (" \n\t ", link)] {
+            let item = AppReference.workspacePasteboardItem(id: id, name: name)
+            XCTAssertEqual(item.string(forType: .string), expected)
+            XCTAssertEqual(item.string(forType: .URL), link)
+        }
+    }
+
     func testWorkspaceReferencePersistsAcrossRestoresIncludingLegacySnapshots() throws {
         let manager = TabManager()
         var snapshot = manager.sessionSnapshot(includeScrollback: false)

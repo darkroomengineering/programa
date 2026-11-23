@@ -18,6 +18,18 @@ enum AppReference: String {
         rawValue + id.uuidString.lowercased()
     }
 
+    static func workspacePasteboardItem(id: UUID, name: String) -> NSPasteboardItem {
+        let link = workspace.string(for: id)
+        let title = name.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        let item = NSPasteboardItem()
+        item.setString(title.isEmpty ? link : title + "\n" + link, forType: .string)
+        item.setString(link, forType: .URL)
+        return item
+    }
+
     static func chatURL(fromClipboard text: String) -> URL? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let id = chat.id(from: trimmed) ?? chat.id(from: chat.rawValue + trimmed) else { return nil }
