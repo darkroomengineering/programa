@@ -18,7 +18,8 @@ public sealed record WorkspaceSnapshot(
     [property: JsonPropertyName("color")] string? Color = null,
     [property: JsonPropertyName("description")] string? Description = null,
     [property: JsonPropertyName("parent_id")] string? ParentId = null,
-    [property: JsonPropertyName("collapsed")] bool Collapsed = false)
+    [property: JsonPropertyName("collapsed")] bool Collapsed = false,
+    [property: JsonPropertyName("worktree_repo")] string? WorktreeRepo = null)
 {
     public PaneSnapshot? SelectedPane => Panes.FirstOrDefault(pane => pane.Id == SelectedPaneId);
 }

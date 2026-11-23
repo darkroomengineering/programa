@@ -29,7 +29,7 @@ public sealed partial class MainWindow : Window
     private bool _activationLogged;
     private readonly bool _smoke;
     private bool _sidebarVisible = true;
-    private double _sidebarWidth = 240;
+    private double _sidebarWidth = SidebarMinWidth;
     /// <summary>Sidebar row parts by workspace id, so title and status changes update in place.</summary>
     private readonly Dictionary<string, SidebarRow> _sidebarRows = new(StringComparer.Ordinal);
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _sidebarClock;
@@ -65,6 +65,7 @@ public sealed partial class MainWindow : Window
         StartPullRequestPolling();
         StartAgentDetection();
         InitializeCloseConfirmation();
+        InitializeShortcutHints();
         // Elapsed times and "(stale)" advance once a minute, as on macOS.
         _sidebarClock = DispatcherQueue.CreateTimer();
         _sidebarClock.Interval = TimeSpan.FromMinutes(1);
@@ -156,6 +157,8 @@ public sealed partial class MainWindow : Window
             content.Children.Add(BuildToolbar());
             var workspace = SelectedWorkspace();
             NoteSelectedWorkspace();
+            // The window title follows the selected workspace, as on macOS.
+            Title = workspace is null ? "Programa" : WorkspaceTitle(workspace);
             _layoutElement = null;
             if (workspace is not null)
             {
@@ -225,129 +228,6 @@ public sealed partial class MainWindow : Window
         return button;
     }
 
-    private FrameworkElement BuildSidebar()
-    {
-        _sidebarRows.Clear();
-        var list = new ListView { SelectionMode = ListViewSelectionMode.Single, Padding = new Thickness(4, 8, 4, 8) };
-        AutomationProperties.SetName(list, Localizer.Get("Workspaces"));
-        for (var index = 0; index < _snapshot.Workspaces.Count; index++)
-        {
-            var workspace = _snapshot.Workspaces[index];
-            // A collapsed parent hides its worktree workspaces (macOS sidebar folder rows).
-            if (IsHiddenChild(workspace)) continue;
-            var icon = new ContentControl { Width = 16, Height = 16, Margin = new Thickness(0, 2, 10, 0), VerticalAlignment = VerticalAlignment.Top, IsTabStop = false };
-            var title = new TextBlock { TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap };
-            var elapsed = new TextBlock { FontSize = 11, Opacity = 0.6, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-            // The unread notification count, as on macOS.
-            var unread = new InfoBadge { Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
-            var firstLine = new Grid();
-            firstLine.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            firstLine.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            firstLine.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            firstLine.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            firstLine.Children.Add(title);
-            firstLine.Children.Add(unread);
-            firstLine.Children.Add(elapsed);
-            Grid.SetColumn(unread, 2);
-            Grid.SetColumn(elapsed, 3);
-            // A pin after the title of a pinned workspace, as on macOS.
-            if (workspace.Pinned)
-            {
-                var pin = new FontIcon { Glyph = "", FontSize = 11, Opacity = 0.7, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-                firstLine.Children.Add(pin);
-                Grid.SetColumn(pin, 1);
-            }
-            // The agent pill: glyph and label tinted by state, on its own translucent backing (macOS agentStatusPill).
-            var pillIcon = new FontIcon { FontSize = 10 };
-            var pillLabel = new TextBlock { FontSize = 11 };
-            var pillContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-            pillContent.Children.Add(pillIcon);
-            pillContent.Children.Add(pillLabel);
-            var pill = new Border
-            {
-                Child = pillContent,
-                CornerRadius = new CornerRadius(8),
-                Padding = new Thickness(6, 1, 6, 2),
-                Margin = new Thickness(0, 3, 0, 0),
-                HorizontalAlignment = HorizontalAlignment.Left,
-                BorderThickness = new Thickness(1),
-                Background = ThemeBrush("LayerFillColorDefaultBrush"),
-                BorderBrush = ThemeBrush("CardStrokeColorDefaultBrush"),
-            };
-            var message = new TextBlock { FontSize = 12, Opacity = 0.7, Margin = new Thickness(0, 2, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap };
-            var text = new StackPanel();
-            text.Children.Add(firstLine);
-            if (workspace.Description is { } description)
-                text.Children.Add(new TextBlock { Text = description, FontSize = 12, Opacity = 0.8, Margin = new Thickness(0, 1, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap });
-            text.Children.Add(pill);
-            text.Children.Add(message);
-            // "N helpers running" under the status, as on macOS.
-            var helpersLine = HelpersLine(workspace.Id);
-            text.Children.Add(helpersLine);
-            // Status entries, markdown blocks, the latest log line and progress (macOS sidebar metadata).
-            var metadataLines = new StackPanel { Margin = new Thickness(0, 2, 0, 0), Visibility = Visibility.Collapsed };
-            text.Children.Add(metadataLines);
-            var branchLine = new TextBlock { FontSize = 12, Opacity = 0.7, Margin = new Thickness(0, 2, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap };
-            var directoryLine = new TextBlock { FontSize = 12, Opacity = 0.6, TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap };
-            text.Children.Add(branchLine);
-            text.Children.Add(directoryLine);
-            // The branch's pull request, a link to it (macOS sidebar PR row).
-            var pullRequestLine = new HyperlinkButton { Content = new TextBlock { FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis }, Padding = new Thickness(0), Margin = new Thickness(0, 1, 0, 0), Visibility = Visibility.Collapsed };
-            text.Children.Add(pullRequestLine);
-            var row = new Grid { Padding = new Thickness(0, 6, 0, 6) };
-            // A worktree workspace sits indented under its repository's workspace.
-            if (workspace.ParentId is not null) row.Margin = new Thickness(18, 0, 0, 0);
-            // The workspace color as a bar along the row's leading edge.
-            if (workspace.Color is { Length: 7 } color)
-            {
-                row.BorderBrush = new SolidColorBrush(ParseColor(color));
-                row.BorderThickness = new Thickness(3, 0, 0, 0);
-                row.Padding = new Thickness(7, 6, 0, 6);
-            }
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            row.Children.Add(icon);
-            row.Children.Add(text);
-            Grid.SetColumn(text, 1);
-
-            var item = new ListViewItem { Content = row, Tag = workspace.Id, ContextFlyout = WorkspaceMenu(workspace) };
-            list.Items.Add(item);
-            if (workspace.Id == SelectedWorkspace()?.Id) list.SelectedItem = item;
-            _sidebarRows[workspace.Id] = new SidebarRow(item, icon, title, unread, elapsed, pill, pillIcon, pillLabel, message, branchLine, directoryLine, pullRequestLine, helpersLine, metadataLines);
-            UpdateSidebarRow(workspace.Id);
-        }
-        list.SelectionChanged += (_, _) =>
-        {
-            if (!_projecting && list.SelectedItem is ListViewItem { Tag: string id } && id != _snapshot.SelectedWorkspaceId)
-                Apply(new { command = "select_workspace", workspace_id = id });
-        };
-
-        var resize = new Thumb { Width = 4, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
-        AutomationProperties.SetName(resize, Localizer.Get("ToggleSidebar"));
-        resize.DragDelta += (_, args) =>
-        {
-            _sidebarWidth = Math.Clamp(_sidebarWidth + args.HorizontalChange, 160, 480);
-            Root.ColumnDefinitions[0].Width = new GridLength(_sidebarWidth);
-        };
-        resize.DragCompleted += (_, _) => UpdateDragRegions();
-        // The sidebar runs up into the title bar row, as on macOS, and ends with a footer.
-        var sidebar = new Grid();
-        sidebar.RowDefinitions.Add(new RowDefinition { Height = new GridLength(TitleBarHeight) });
-        sidebar.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        sidebar.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        sidebar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        sidebar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var footer = SidebarFooter();
-        sidebar.Children.Add(list);
-        sidebar.Children.Add(footer);
-        sidebar.Children.Add(resize);
-        Grid.SetRow(list, 1);
-        Grid.SetRow(footer, 2);
-        Grid.SetColumn(resize, 1);
-        Grid.SetRowSpan(resize, 3);
-        return sidebar;
-    }
-
     private static MenuFlyoutItem MenuItem(string text, Action handler)
     {
         var item = new MenuFlyoutItem { Text = text };
@@ -363,73 +243,6 @@ public sealed partial class MainWindow : Window
         return workspace.Title ?? (focusedId is null ? null : SurfaceTitle(focusedId)) ?? DisplayTitle(focused?.Title)
             ?? (focusedId is null ? null : _panels.GetValueOrDefault(focusedId)?.Title ?? (_restorePanels.TryGetValue(focusedId, out var path) ? Path.GetFileName(path) : null))
             ?? string.Format(Localizer.Get("WorkspaceDefaultTitle"), _snapshot.Workspaces.ToList().FindIndex(item => item.Id == workspace.Id) + 1);
-    }
-
-    /// <summary>Refreshes one sidebar row from its workspace's terminals: the user's title or the
-    /// focused terminal's, the agent's logo, and the agent pill with the time since its last report.</summary>
-    private void UpdateSidebarRow(string workspaceId)
-    {
-        var index = _snapshot.Workspaces.ToList().FindIndex(item => item.Id == workspaceId);
-        if (index < 0 || !_sidebarRows.TryGetValue(workspaceId, out var row)) return;
-        var workspace = _snapshot.Workspaces[index];
-        var terminals = workspace.Panes.SelectMany(pane => pane.Surfaces)
-            .Select(surface => _terminals.GetValueOrDefault(surface.Id)).OfType<TerminalView>().ToList();
-        var focusedId = workspace.SelectedPane?.SelectedSurfaceId;
-        var focused = focusedId is null ? null : _terminals.GetValueOrDefault(focusedId);
-        var title = WorkspaceTitle(workspace);
-        var now = DateTimeOffset.Now;
-        var indicator = AgentIndicator.From(
-            terminals.Where(terminal => terminal.EffectiveStatus is not null).Select(terminal => (terminal.EffectiveStatus!, terminal.ProgramStatusChangedAt)),
-            now);
-
-        row.Title.Text = title;
-        var unread = _notifications.UnreadCount(workspaceId);
-        row.Unread.Value = unread;
-        row.Unread.Visibility = unread > 0 ? Visibility.Visible : Visibility.Collapsed;
-        row.Icon.Content = HasChildren(workspace) ? FolderToggle(workspace) : AgentLogo(indicator?.App, 16) ?? new FontIcon { Glyph = "", FontSize = 14 };
-        // The branch and directory lines of the focused terminal; the directory is left out when it
-        // is home or repeats the title, as on macOS.
-        var branch = focusedId is null ? null : _branches.GetValueOrDefault(focusedId);
-        var directory = focused?.Cwd is { } cwd ? GitInfo.AbbreviateHome(cwd) : null;
-        if (directory == "~" || string.Equals(directory, title, StringComparison.OrdinalIgnoreCase)) directory = null;
-        row.Branch.Text = branch ?? string.Empty;
-        row.Branch.Visibility = branch is null ? Visibility.Collapsed : Visibility.Visible;
-        row.Directory.Text = directory ?? string.Empty;
-        row.Directory.Visibility = directory is null ? Visibility.Collapsed : Visibility.Visible;
-        UpdatePullRequestLine(workspace, row.PullRequest);
-        UpdateHelpersLine(workspace.Id, row.Helpers);
-        // With no agent, the status line is the latest log message, as on macOS.
-        var latestLog = indicator is null ? SidebarMetadata.Of(workspaceId)?.Log.LastOrDefault() : null;
-        UpdateMetadataLines(workspaceId, row.Metadata, statusShowsLog: latestLog is not null);
-        if (indicator is null)
-        {
-            row.Pill.Visibility = Visibility.Collapsed;
-            row.Message.Text = latestLog?.Message ?? string.Empty;
-            row.Message.Visibility = latestLog is null ? Visibility.Collapsed : Visibility.Visible;
-            row.Elapsed.Text = latestLog is null ? string.Empty
-                : AgentIndicator.Elapsed(now - latestLog.At) is var (logKey, logValue) ? string.Format(Localizer.Get(logKey), logValue) : Localizer.Get("ElapsedNow");
-            AutomationProperties.SetName(row.Item, latestLog is null ? title : $"{title}, {latestLog.Message}");
-            return;
-        }
-        var label = Localizer.Get(indicator.LabelKey);
-        var tint = ThemeBrush(indicator.State switch
-        {
-            "blocked" or "error" => "SystemFillColorCriticalBrush",
-            "working" => "AccentTextFillColorPrimaryBrush",
-            "done" => "SystemFillColorSuccessBrush",
-            _ => "TextFillColorSecondaryBrush",
-        });
-        row.PillIcon.Glyph = indicator.Glyph;
-        row.PillIcon.Foreground = row.PillLabel.Foreground = tint;
-        row.PillLabel.Text = label;
-        row.Pill.Opacity = indicator.IsStale ? 0.55 : 1;
-        row.Pill.Visibility = Visibility.Visible;
-        row.Elapsed.Text = AgentIndicator.Elapsed(now - indicator.LastEventAt) is var (key, value)
-            ? string.Format(Localizer.Get(key), value)
-            : Localizer.Get("ElapsedNow");
-        row.Message.Text = indicator.Message ?? string.Empty;
-        row.Message.Visibility = indicator.Message is null ? Visibility.Collapsed : Visibility.Visible;
-        AutomationProperties.SetName(row.Item, $"{title}, {label}");
     }
 
     private static Brush ThemeBrush(string key) => (Brush)Application.Current.Resources[key];
@@ -1017,7 +830,6 @@ public sealed partial class MainWindow : Window
         _core.Dispose();
     }
 
-    private sealed record SidebarRow(ListViewItem Item, ContentControl Icon, TextBlock Title, InfoBadge Unread, TextBlock Elapsed, Border Pill, FontIcon PillIcon, TextBlock PillLabel, TextBlock Message, TextBlock Branch, TextBlock Directory, HyperlinkButton PullRequest, HyperlinkButton Helpers, StackPanel Metadata);
     private sealed record PaneTag(string WorkspaceId, string PaneId);
     private sealed record SurfaceTag(string WorkspaceId, string PaneId, string SurfaceId);
     private sealed record TabDragPayload(string WorkspaceId, string PaneId, string SurfaceId);

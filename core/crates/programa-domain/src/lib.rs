@@ -48,6 +48,10 @@ pub struct Workspace {
     /// A parent whose children the sidebar hides.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub collapsed: bool,
+    /// The repository this workspace is the worktree folder of (macOS Use as Worktree Folder):
+    /// new worktree workspaces of it nest here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worktree_repo: Option<String>,
     pub selected_pane_id: String,
     pub panes: Vec<Pane>,
     pub layout: LayoutNode,
@@ -162,6 +166,12 @@ pub enum Command {
     SetWorkspaceCollapsed {
         workspace_id: String,
         collapsed: bool,
+    },
+    /// Makes a workspace its repository's worktree folder (a top-level one: it leaves its parent),
+    /// or with null stops: its children go back to the top level.
+    SetWorkspaceWorktreeFolder {
+        workspace_id: String,
+        repo: Option<String>,
     },
     /// Adds a whole workspace from another core as is (the Windows app moving it between
     /// windows), and selects it. Its ids must be new to this core.
@@ -325,6 +335,7 @@ impl Snapshot {
                         description: None,
                         parent_id: None,
                         collapsed: false,
+                        worktree_repo: None,
                         selected_pane_id: pane_id.clone(),
                         panes: vec![Pane {
                             id: pane_id.clone(),
@@ -394,6 +405,31 @@ impl Snapshot {
                 }
                 workspace.collapsed = collapsed;
                 Ok(true)
+            }
+            Command::SetWorkspaceWorktreeFolder { workspace_id, repo } => {
+                let repo = repo
+                    .map(|repo| repo.trim().to_owned())
+                    .filter(|repo| !repo.is_empty());
+                let index = workspace_index(self, &workspace_id)?;
+                let mut changed = self.workspaces[index].worktree_repo != repo;
+                if repo.is_none() {
+                    for child in &mut self.workspaces {
+                        if child.parent_id.as_deref() == Some(workspace_id.as_str()) {
+                            child.parent_id = None;
+                            changed = true;
+                        }
+                    }
+                }
+                let workspace = &mut self.workspaces[index];
+                if repo.is_some() && workspace.parent_id.is_some() {
+                    workspace.parent_id = None;
+                    changed = true;
+                }
+                if changed {
+                    workspace.collapsed = false;
+                }
+                workspace.worktree_repo = repo;
+                Ok(changed)
             }
             Command::CloseWorkspace { workspace_id } => {
                 let index = workspace_index(self, &workspace_id)?;

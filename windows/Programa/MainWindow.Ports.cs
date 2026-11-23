@@ -76,6 +76,7 @@ public sealed partial class MainWindow
         _ports = ports;
         _leftRunning = orphans.Select(item => new LeftRunningEntry(item.Key, _portOwners[item.Key].Command, item.Value, _portOwners[item.Key].WorkspaceTitle, _portOwners[item.Key].ClosedAt!.Value)).ToList();
         UpdatePortsButton();
+        RefreshSidebarPorts();
     }
 
     /// <summary>The footer's Ports button: a count of listening ports, shown only while something listens.</summary>

@@ -32,7 +32,7 @@ public sealed partial class MainWindow
         foreach (var (workspaceId, sidebar) in saved.Sidebar ?? [])
             if (_snapshot.Workspaces.Any(workspace => workspace.Id == workspaceId)) SidebarMetadata.Restore(workspaceId, sidebar);
         _sidebarVisible = saved.SidebarVisible;
-        _sidebarWidth = Math.Clamp(saved.SidebarWidth, 160, 480);
+        _sidebarWidth = double.IsFinite(saved.SidebarWidth) ? Math.Clamp(saved.SidebarWidth, SidebarMinWidth, SidebarMaxWidth) : SidebarMinWidth;
         if (saved.Window is { } window) ApplyWindowPlacement(window);
         return true;
     }

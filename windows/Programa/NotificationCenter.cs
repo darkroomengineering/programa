@@ -34,6 +34,9 @@ internal sealed class NotificationCenter
 
     internal AppNotification? LatestUnread => _items.LastOrDefault(item => !item.IsRead);
 
+    /// <summary>The workspace's newest notification, read or not (the sidebar row's status line).</summary>
+    internal AppNotification? Latest(string workspaceId) => _items.LastOrDefault(item => item.WorkspaceId == workspaceId);
+
     internal int UnreadCount(string workspaceId) => _items.Count(item => !item.IsRead && item.WorkspaceId == workspaceId);
 
     internal bool HasUnreadFor(string surfaceId) => _items.Any(item => !item.IsRead && item.SurfaceId == surfaceId);
