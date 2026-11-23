@@ -465,6 +465,7 @@ struct SessionWorkspaceSnapshot: Codable, Sendable {
     var isWorktreeFolderCollapsed: Bool? = nil
     var worktreeBranch: String? = nil
     var id: UUID? = nil
+    var referenceID: UUID? = nil
     var worktreeParentWorkspaceId: UUID? = nil
 }
 

@@ -71,11 +71,13 @@ extension Workspace {
             isWorktreeFolderCollapsed: isWorktreeFolderCollapsed,
             worktreeBranch: worktreeBranch,
             id: id,
+            referenceID: referenceID,
             worktreeParentWorkspaceId: worktreeParentWorkspaceId
         )
     }
 
     func restoreSessionSnapshot(_ snapshot: SessionWorkspaceSnapshot) {
+        referenceID = snapshot.referenceID ?? snapshot.id ?? id
         restoredTerminalScrollbackByPanelId.removeAll(keepingCapacity: false)
 
         // Bump the restore generation and open the settle gate before any panel/surface gets

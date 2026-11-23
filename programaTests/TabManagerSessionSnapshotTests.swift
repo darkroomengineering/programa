@@ -8,6 +8,40 @@ import XCTest
 
 @MainActor
 final class TabManagerSessionSnapshotTests: XCTestCase {
+    func testWorkspaceReferencePersistsAcrossRestoresIncludingLegacySnapshots() throws {
+        let manager = TabManager()
+        var snapshot = manager.sessionSnapshot(includeScrollback: false)
+        let original = try XCTUnwrap(snapshot.workspaces.first?.id)
+        snapshot.workspaces[0].referenceID = nil
+        for _ in 0..<2 {
+            let restored = TabManager()
+            let data = try JSONEncoder().encode(snapshot)
+            restored.restoreSessionSnapshot(try JSONDecoder().decode(SessionTabManagerSnapshot.self, from: data))
+            let workspace = try XCTUnwrap(restored.selectedWorkspace)
+            XCTAssertNotEqual(workspace.id, original)
+            XCTAssertEqual(workspace.referenceID, original)
+            snapshot = restored.sessionSnapshot(includeScrollback: false)
+            XCTAssertEqual(snapshot.workspaces.first?.referenceID, original)
+        }
+    }
+
+    func testWorkspaceAndChatReferencesRejectUnexpectedTargets() {
+        let id = UUID()
+        let link = AppReference.workspace.string(for: id)
+        XCTAssertEqual(AppReference.workspace.id(from: link), id)
+        for value in [link + "/", link + "?shell=true", link + "#x", "programa://workspace:9/" + id.uuidString,
+                      "programa://user@workspace/" + id.uuidString, "programa://workspace/%2F" + id.uuidString,
+                      "file:///tmp/example", AppReference.chat.string(for: id)] {
+            XCTAssertNil(AppReference.workspace.id(from: value), value)
+        }
+        let chat = AppReference.chat.string(for: id)
+        XCTAssertEqual(AppReference.chatURL(fromClipboard: id.uuidString)?.absoluteString, chat)
+        XCTAssertEqual(AppReference.chatURL(fromClipboard: chat)?.absoluteString, chat)
+        for value in [chat + "?x", chat + "/extra", chat + "#", "file:///tmp/example", link, "x " + id.uuidString] {
+            XCTAssertNil(AppReference.chatURL(fromClipboard: value), value)
+        }
+    }
+
     func testSessionSnapshotSerializesWorkspacesAndRestoreRebuildsSelection() {
         let manager = TabManager()
         guard let firstWorkspace = manager.selectedWorkspace else {

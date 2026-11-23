@@ -472,6 +472,10 @@ struct programaApp: App {
                     AppDelegate.shared?.showOpenFolderPanel()
                 }
 
+                Button(String(localized: "menu.file.openBrowseeChat", defaultValue: "Open Browsee Chat from Clipboard")) {
+                    AppDelegate.shared?.openBrowseeChatFromClipboard()
+                }
+
                 Button(
                     String(
                         localized: "menu.file.installClaudeIntegration",

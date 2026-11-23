@@ -1,6 +1,30 @@
 import AppKit
 import Foundation
 
+enum AppReference: String {
+    case workspace = "programa://workspace/"
+    case chat = "browsee://chat/"
+
+    func id(from text: String) -> UUID? {
+        let value = text.lowercased()
+        guard value.hasPrefix(rawValue) else { return nil }
+        let suffix = String(value.dropFirst(rawValue.count))
+        guard suffix.utf8.count == 36, let id = UUID(uuidString: suffix),
+              id.uuidString.lowercased() == suffix else { return nil }
+        return id
+    }
+
+    func string(for id: UUID) -> String {
+        rawValue + id.uuidString.lowercased()
+    }
+
+    static func chatURL(fromClipboard text: String) -> URL? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let id = chat.id(from: trimmed) ?? chat.id(from: chat.rawValue + trimmed) else { return nil }
+        return URL(string: chat.string(for: id))
+    }
+}
+
 /// One policy for every hand-off to another app. http, https and mailto open silently;
 /// everything else asks first, naming the app that would receive the target.
 enum ExternalOpenPolicy {
