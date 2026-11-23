@@ -124,6 +124,10 @@ public static class BuildIdentity
 
     public static string Version => Get("ProgramaVersion");
 
+    public static string Build => Get("ProgramaBuild");
+
+    public static string Commit => Get("ProgramaCommit");
+
     private static string Get(string key) => Metadata.TryGetValue(key, out var value) ? value : "unknown";
 
     internal static bool IsSmoke { get; } = Environment.GetCommandLineArgs().Contains("--smoke", StringComparer.Ordinal);

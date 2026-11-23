@@ -22,7 +22,7 @@ public sealed partial class MainWindow
     private static readonly string[] WorkspaceActions =
     [
         "pin", "unpin", "rename", "clear_name", "set_description", "clear_description", "move_up", "move_down", "move_top",
-        "close_others", "close_above", "close_below", "mark_read", "set_color", "clear_color",
+        "close_others", "close_above", "close_below", "mark_read", "mark_unread", "set_color", "clear_color",
     ];
 
     private MenuFlyout WorkspaceMenu(WorkspaceSnapshot workspace)
@@ -50,6 +50,7 @@ public sealed partial class MainWindow
         menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(MenuItem(Localizer.Get("CloseOtherWorkspaces"), () => TryWorkspaceAction(id, "close_others")));
         menu.Items.Add(MenuItem(Localizer.Get("CloseWorkspace"), () => CloseWorkspace(id)));
+        foreach (var item in WorkspaceNotificationMenuItems(id)) menu.Items.Add(item);
         return menu;
     }
 
@@ -91,6 +92,7 @@ public sealed partial class MainWindow
                 _notifications.MarkRead(workspaces[index].Panes.SelectMany(pane => pane.Surfaces).Select(surface => surface.Id).ToHashSet());
                 RefreshUnreadIndicators();
                 break;
+            case "mark_unread": _notifications.MarkUnread(workspaceId); break;
             default: throw new ControlException("invalid_params", $"action '{action}' is not one of {string.Join(", ", WorkspaceActions)}.");
         }
     }

@@ -183,4 +183,44 @@
   <data name="DesktopNotificationsOn" xml:space="preserve"><value>Windows は Programa の通知を表示します。</value></data>
   <data name="DesktopNotificationsOff" xml:space="preserve"><value>Windows は Programa の通知を表示しません。Windows の設定でオンにしてください。</value></data>
   <data name="OpenWindowsNotificationSettings" xml:space="preserve"><value>Windows の通知設定を開く</value></data>
+  <!-- INC-1653: notification read state, Help menu, About, updates -->
+  <data name="MarkAllRead" xml:space="preserve"><value>すべて既読にする</value></data>
+  <data name="ClearNotification" xml:space="preserve"><value>通知を削除</value></data>
+  <data name="MarkAsRead" xml:space="preserve"><value>既読にする</value></data>
+  <data name="MarkAsUnread" xml:space="preserve"><value>未読にする</value></data>
+  <data name="NotificationRead" xml:space="preserve"><value>既読</value></data>
+  <data name="NotificationUnread" xml:space="preserve"><value>未読</value></data>
+  <data name="MarkTabRead" xml:space="preserve"><value>タブを既読にする</value></data>
+  <data name="MarkTabUnread" xml:space="preserve"><value>タブを未読にする</value></data>
+  <data name="MarkWorkspaceRead" xml:space="preserve"><value>ワークスペースを既読にする</value></data>
+  <data name="MarkWorkspaceUnread" xml:space="preserve"><value>ワークスペースを未読にする</value></data>
+  <data name="ClearLatestNotification" xml:space="preserve"><value>最新の通知を削除</value></data>
+  <data name="BlockedAgentsOne" xml:space="preserve"><value>ブロックされているエージェントが1件</value></data>
+  <data name="BlockedAgentsOther" xml:space="preserve"><value>ブロックされているエージェントが{0}件</value></data>
+  <data name="BlockedAgentsTooltip" xml:space="preserve"><value>クリックしてブロックされているエージェントに移動します</value></data>
+  <data name="JumpToBlockedAgent" xml:space="preserve"><value>ブロックされているエージェントに移動</value></data>
+  <data name="Help" xml:space="preserve"><value>ヘルプ</value></data>
+  <data name="HelpWelcome" xml:space="preserve"><value>Programaへようこそ！</value></data>
+  <data name="HelpSendFeedback" xml:space="preserve"><value>フィードバックを送信</value></data>
+  <data name="HelpDocs" xml:space="preserve"><value>ドキュメント</value></data>
+  <data name="HelpChangelog" xml:space="preserve"><value>変更履歴</value></data>
+  <data name="HelpGitHub" xml:space="preserve"><value>GitHub</value></data>
+  <data name="HelpGitHubIssues" xml:space="preserve"><value>GitHub Issues</value></data>
+  <data name="HelpTwitter" xml:space="preserve"><value>X（Twitter）</value></data>
+  <data name="HelpWebsite" xml:space="preserve"><value>Darkroom</value></data>
+  <data name="CheckForUpdates" xml:space="preserve"><value>アップデートを確認</value></data>
+  <data name="AboutPrograma" xml:space="preserve"><value>Programaについて</value></data>
+  <data name="GhosttySettings" xml:space="preserve"><value>Ghosttyの設定…</value></data>
+  <data name="InstallCodexIntegration" xml:space="preserve"><value>Codex 連携をインストール…</value></data>
+  <data name="Integrations" xml:space="preserve"><value>連携</value></data>
+  <data name="ShowWelcome" xml:space="preserve"><value>ようこそ画面を表示</value></data>
+  <data name="AboutAppName" xml:space="preserve"><value>Programa</value></data>
+  <data name="AboutDescription" xml:space="preserve"><value>縦型タブと通知パネルを備えた、GhosttyベースのWindows用ターミナルです。</value></data>
+  <data name="AboutVersion" xml:space="preserve"><value>バージョン</value></data>
+  <data name="AboutBuild" xml:space="preserve"><value>ビルド</value></data>
+  <data name="AboutCommit" xml:space="preserve"><value>コミット</value></data>
+  <data name="AboutLicenses" xml:space="preserve"><value>ライセンス</value></data>
+  <data name="AboutLicensesTitle" xml:space="preserve"><value>サードパーティライセンス</value></data>
+  <data name="AboutLicensesNotFound" xml:space="preserve"><value>ライセンスファイルが見つかりません。</value></data>
+  <data name="AboutIncubatorCredit" xml:space="preserve"><value>A sidequest by Darkroom Engineering Incubator</value></data>
 </root>

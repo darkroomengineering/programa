@@ -40,10 +40,7 @@ internal sealed class TerminalAppearance
         {
             if (!Cache.TryGetValue(dark, out var appearance))
             {
-                var configHome = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME") is { Length: > 0 } xdg
-                    ? xdg
-                    : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
-                var ghostty = Path.Combine(configHome, "ghostty");
+                var ghostty = GhosttyDirectory;
                 Cache[dark] = appearance = Load(
                     dark,
                     [Path.Combine(ghostty, "config"), Path.Combine(ghostty, "config.ghostty")],
@@ -53,6 +50,17 @@ internal sealed class TerminalAppearance
             return appearance;
         }
     }
+
+    /// <summary>Ghostty's config folder: %XDG_CONFIG_HOME%\ghostty, else ~\.config\ghostty.</summary>
+    internal static string GhosttyDirectory => Path.Combine(
+        Environment.GetEnvironmentVariable("XDG_CONFIG_HOME") is { Length: > 0 } xdg ? xdg : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config"),
+        "ghostty");
+
+    /// <summary>The config file Ghostty Settings… opens: config.ghostty, else config, else a new config.ghostty
+    /// (the name current Ghostty creates). The terminal reads both.</summary>
+    internal static string ConfigFileToEdit(string ghosttyDirectory) =>
+        new[] { "config.ghostty", "config" }.Select(name => Path.Combine(ghosttyDirectory, name)).FirstOrDefault(File.Exists)
+            ?? Path.Combine(ghosttyDirectory, "config.ghostty");
 
     /// <summary>Forgets the loaded appearances, so the next <see cref="For"/> reads the files again.</summary>
     internal static void Reload()
