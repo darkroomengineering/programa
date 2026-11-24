@@ -13,10 +13,11 @@ When we change the fork, update this document and the parent submodule SHA.
 
 ## Current fork changes
 
-The pinned fork head is `60f5a29b7` on the fork branch `inc-1281-fork-patches`, which is also the
-fork's `main`. It sits on `e4b6b6bc6` (branch `inc-1279-merge-upstream`), a merge of upstream
-`ghostty-org/ghostty` `main` (`7fa26e8b6`) into the previous pin `957dbd797`. Never delete either
-branch: the pins and their xcframework releases point at them. It builds with Zig 0.17.1 and carries
+The pinned fork head is `e5eb93b00` on the fork branch `inc-1723-merge-upstream`, which is also the
+fork's `main`. It is a merge of upstream `ghostty-org/ghostty` `main` (`77c2f8b9f`) into the
+previous pin `60f5a29b7` (branch `inc-1281-fork-patches`), which sits on `e4b6b6bc6` (branch
+`inc-1279-merge-upstream`). Never delete these branches: the pins and their xcframework releases
+point at them. It builds with Zig 0.17.1 and carries
 eleven patch groups: display-link restart, resize stale-frame mitigation, OSC 99
 notification dispatch, color scheme mode 2031, keyboard copy mode selection API, layer-background
 flag, occluded-surface throttle, offscreen renderer realization, session introspection and revival
@@ -274,6 +275,11 @@ These files change frequently upstream; be careful when rebasing the fork:
     state, `kitty_notification_pending`, the `end` prong) and keep the `capture`/`captureTrailing()`
     API usage intact. A sync that drops them leaves `kitty_notification.zig` compiled but unreachable.
 
+- `src/config/url.zig`
+  - The fork's spaced-path branches replace upstream's simpler path branch, so upstream changes to
+    path matching never apply cleanly. Port each one into every fork branch it affects, and keep
+    both test tables.
+
 - `src/terminal/osc/parsers.zig`
   - Ensure `kitty_notification` stays imported after upstream parser reorganizations.
 
@@ -390,3 +396,18 @@ patches or the C API (`include/ghostty.h`). The merge moves the minimum Zig vers
 Upstream changed `copy-on-select` to default to the selection clipboard on macOS. Programa loads
 `copy-on-select = false` before the user's config files (`loadDefaultConfigFilesWithLegacyFallback`
 in `Sources/GhosttyApp.swift`), so selecting text still does not copy it unless the user opts in.
+
+### November 24, 2026 upstream sync (INC-1723)
+
+Merged upstream `main` (`77c2f8b9f`, 67 commits) into `60f5a29b7`. Upstream did not change the C
+API (`include/ghostty.h`), `src/config/Config.zig`, `src/apprt/embedded.zig`, the minimum Zig
+version or the libxev pin. Two files conflicted:
+
+- `src/Surface.zig`: upstream landed the same binding-mods comparison the fork carried in
+  `modsChanged` and the key-event link highlight check. The merge takes upstream's version.
+- `src/config/url.zig`: the fork keeps its spaced-path matching, and the merge applies upstream's
+  `ff61ef60d` on top of it. A path no longer ends in `:`, `.`, `;`, `!` or `?`, except for the dots of
+  a `.` or `..` segment, and a space after `;`, `!` or `?` ends it. A bare relative path needs a dot
+  before its last character. The fork's `trailing_spaces_at_eol`, which upstream removed in
+  `9fc2a3085`, is gone too, so a path never includes the blank cells after it. The fork's and
+  upstream's test cases both pass.
