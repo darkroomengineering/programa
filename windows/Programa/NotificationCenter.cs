@@ -34,6 +34,9 @@ internal sealed class NotificationCenter
 
     internal AppNotification? LatestUnread => _items.LastOrDefault(item => !item.IsRead);
 
+    /// <summary>The workspace's newest notification, read or not (the sidebar row's status line).</summary>
+    internal AppNotification? Latest(string workspaceId) => _items.LastOrDefault(item => item.WorkspaceId == workspaceId);
+
     internal int UnreadCount(string workspaceId) => _items.Count(item => !item.IsRead && item.WorkspaceId == workspaceId);
 
     internal bool HasUnreadFor(string surfaceId) => _items.Any(item => !item.IsRead && item.SurfaceId == surfaceId);
@@ -63,6 +66,55 @@ internal sealed class NotificationCenter
         return changed;
     }
 
+    internal bool HasReadIn(string workspaceId) => _items.Any(item => item.IsRead && item.WorkspaceId == workspaceId);
+
+    internal bool HasAnyIn(string workspaceId) => _items.Any(item => item.WorkspaceId == workspaceId);
+
+    internal void MarkAllRead()
+    {
+        var unread = _items.Where(item => !item.IsRead).ToList();
+        unread.ForEach(item => item.IsRead = true);
+        if (unread.Count > 0) Changed?.Invoke();
+    }
+
+    /// <summary>Marks one notification read or unread. One marked unread moves to the top of the
+    /// list, as on macOS, so it is easy to find again.</summary>
+    internal void SetRead(long id, bool read)
+    {
+        if (_items.FirstOrDefault(item => item.Id == id) is not { } item || item.IsRead == read) return;
+        item.IsRead = read;
+        if (!read) BumpToNewest([item]);
+        Changed?.Invoke();
+    }
+
+    /// <summary>Marks a workspace's read notifications unread and moves them to the top (macOS markUnread(forTabId:)).</summary>
+    internal void MarkUnread(string workspaceId)
+    {
+        var read = _items.Where(item => item.IsRead && item.WorkspaceId == workspaceId).ToList();
+        if (read.Count == 0) return;
+        read.ForEach(item => item.IsRead = false);
+        BumpToNewest(read);
+        Changed?.Invoke();
+    }
+
+    private void BumpToNewest(List<AppNotification> changed)
+    {
+        var ids = changed.Select(item => item.Id).ToHashSet();
+        _items.RemoveAll(item => ids.Contains(item.Id));
+        _items.AddRange(changed);
+    }
+
+    internal void Remove(long id)
+    {
+        if (_items.RemoveAll(item => item.Id == id) > 0) Changed?.Invoke();
+    }
+
+    /// <summary>Removes a workspace's newest notification (Clear Latest Notification).</summary>
+    internal void ClearLatest(string workspaceId)
+    {
+        if (_items.LastOrDefault(item => item.WorkspaceId == workspaceId) is { } latest) Remove(latest.Id);
+    }
+
     /// <summary>Removes one workspace's notifications (notification.clear with a workspace).</summary>
     internal void Clear(string workspaceId)
     {
@@ -74,6 +126,16 @@ internal sealed class NotificationCenter
         _items.Clear();
         Changed?.Invoke();
         if (_toastsRegistered) _ = AppNotificationManager.Default.RemoveAllAsync();
+    }
+
+    /// <summary>Whether Windows shows this app's toasts (Settings > System > Notifications).</summary>
+    internal static bool DesktopNotificationsEnabled
+    {
+        get
+        {
+            try { return AppNotificationManager.Default.Setting == AppNotificationSetting.Enabled; }
+            catch (Exception error) when (error is System.Runtime.InteropServices.COMException or InvalidOperationException) { return false; }
+        }
     }
 
     /// <summary>Registers for toasts once; an unpackaged app that cannot register keeps working without them.</summary>
@@ -104,7 +166,7 @@ internal sealed class NotificationCenter
         {
             var builder = new AppNotificationBuilder().AddText(title);
             if (body.Length > 0) builder.AddText(body);
-            if (AppSettings.Load().Silent) builder.MuteAudio();
+            ApplySound(builder);
             AppNotificationManager.Default.Show(builder.BuildNotification());
         }
         catch (Exception error)
@@ -125,7 +187,7 @@ internal sealed class NotificationCenter
         try
         {
             var builder = new AppNotificationBuilder().AddArgument("destination", "storage").AddText(Localizer.Get("StorageWarningTitle")).AddText(body);
-            if (AppSettings.Load().Silent) builder.MuteAudio();
+            ApplySound(builder);
             AppNotificationManager.Default.Show(builder.BuildNotification());
         }
         catch (Exception error)
@@ -141,7 +203,7 @@ internal sealed class NotificationCenter
         {
             var builder = new AppNotificationBuilder().AddArgument("surface", notification.SurfaceId).AddText(notification.Title);
             if (notification.Body.Length > 0) builder.AddText(notification.Body);
-            if (AppSettings.Load().Silent) builder.MuteAudio();
+            ApplySound(builder);
             AppNotificationManager.Default.Show(builder.BuildNotification());
         }
         catch (Exception error)
@@ -149,4 +211,21 @@ internal sealed class NotificationCenter
             LaunchLog.Write($"notifications: toast failed: {error.Message}");
         }
     }
+
+    /// <summary>notifications.sound on a toast: muted for none, else the Windows sound its name maps to.</summary>
+    private static void ApplySound(AppNotificationBuilder builder)
+    {
+        if (AppSettings.SoundEventFor(AppSettings.Load().Sound) is not { } sound) builder.MuteAudio();
+        else builder.SetAudioEvent(Enum.Parse<AppNotificationSoundEvent>(sound));
+    }
+
+    /// <summary>Settings' Play Sound: the sound a toast would play, from the Windows sound scheme; none plays nothing.</summary>
+    internal static void PlaySound(string? soundEvent)
+    {
+        const uint async = 0x1, noDefault = 0x2, alias = 0x10000;
+        if (soundEvent is not null) PlaySoundW($"Notification.{soundEvent}", 0, alias | async | noDefault);
+    }
+
+    [System.Runtime.InteropServices.DllImport("winmm.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern bool PlaySoundW(string sound, nint module, uint flags);
 }

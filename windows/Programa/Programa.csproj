@@ -71,6 +71,10 @@
     <Content Include="..\..\Resources\ghostty\themes\*" Link="themes\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <!-- Screen-based agent detection manifests, shared with macOS (docs/agent-detection-manifests.md). -->
     <Content Include="..\..\Resources\AgentDetection\*.json" Link="AgentDetection\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- The macOS agent logos for tabs and sidebar rows (Lobe Icons, MIT; ATTRIBUTIONS.md beside them). -->
+    <EmbeddedResource Include="..\..\Assets.xcassets\AgentIcons\*.imageset\*.svg" LogicalName="AgentIcons.%(Filename)%(Extension)" />
+    <!-- About Programa > Licenses. -->
+    <Content Include="..\..\THIRD_PARTY_LICENSES.md" Link="THIRD_PARTY_LICENSES.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <!-- The offline mermaid.js the macOS markdown panel bundles, for ```mermaid diagrams. -->
     <Content Include="..\..\Resources\mermaid.min.js" Link="Markdown\mermaid.min.js" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>

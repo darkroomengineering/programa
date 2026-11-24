@@ -22,7 +22,7 @@ All surfaces write the same managed block in `~/Library/Application Support/com.
 The Windows app resolves the terminal look the same way, without a Settings page or `programa themes` yet:
 
 - With no configuration it matches Ghostty's defaults as the macOS app shows them: JetBrains Mono 13 (bundled, since Windows does not ship it), background `#282C34`, foreground `#FFFFFF`, Ghostty's palette, a block cursor and inverted selection.
-- It reads `%USERPROFILE%\.config\ghostty\config` and `config.ghostty` (or `%XDG_CONFIG_HOME%\ghostty\`), so a Ghostty config copied from a Mac works. Supported keys: `theme` (including `light:…,dark:…`, which follows Windows' app mode), `font-family`, `font-size`, `background`, `foreground`, `palette`, `cursor-color`, `cursor-text`, `selection-background` and `selection-foreground`.
+- It reads `%USERPROFILE%\.config\ghostty\config` and `config.ghostty` (or `%XDG_CONFIG_HOME%\ghostty\`), so a Ghostty config copied from a Mac works. Supported keys: `theme` (including `light:…,dark:…`, which follows Windows' app mode), `font-family`, `font-size`, `background`, `foreground`, `palette`, `cursor-color`, `cursor-text`, `selection-background` and `selection-foreground`, plus `command` and `initial-command`, the program new terminals start ([Windows behavior](../windows/README.md#windows-behavior)). Files named by `config-file` are not read.
 - Themes come from the same bundled catalog, plus `~\.config\ghostty\themes\`.
 - `app.terminalTheme` and `app.terminalFont` in `%USERPROFILE%\.config\programa\settings.json` override the Ghostty config, as on macOS.
 - `font-size` is in DIPs, which matches macOS points on comparable displays, so a Mac config looks the same size.

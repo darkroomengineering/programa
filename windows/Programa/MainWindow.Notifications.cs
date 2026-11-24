@@ -115,17 +115,17 @@ public sealed partial class MainWindow
 
     private bool HasUnread(string surfaceId) => _notifications.HasUnreadFor(surfaceId) || _manualUnread.Contains(surfaceId);
 
-    /// <summary>The tab's title, after a pin when it is pinned, with a dot while it is unread.</summary>
-    private object TabHeader(TerminalView terminal)
+    private object TabHeader(TerminalView terminal) => TabHeader(TabTitle(terminal), IsPinnedSurface(terminal.SurfaceId), HasUnread(terminal.SurfaceId));
+
+    /// <summary>The tab's title, with a dot while it is unread and, when it is pinned, a pin where
+    /// the close button would be (macOS).</summary>
+    private static object TabHeader(string title, bool pinned, bool unread)
     {
-        var title = TabTitle(terminal);
-        var pinned = IsPinnedSurface(terminal.SurfaceId);
-        var unread = HasUnread(terminal.SurfaceId);
         if (!pinned && !unread) return title;
         var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        if (pinned) header.Children.Add(new FontIcon { Glyph = char.ConvertFromUtf32(0xE718), FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
         header.Children.Add(new TextBlock { Text = title });
         if (unread) header.Children.Add(new InfoBadge { Width = 8, Height = 8, VerticalAlignment = VerticalAlignment.Center });
+        if (pinned) header.Children.Add(new FontIcon { Glyph = char.ConvertFromUtf32(0xE718), FontSize = 11, Margin = new Thickness(4, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
         return header;
     }
 
@@ -147,67 +147,163 @@ public sealed partial class MainWindow
         return ring;
     }
 
+    /// <summary>The panel, as on macOS: Mark All Read and Clear All, and per entry an unread dot, a
+    /// clear button and Mark as Read or Unread on right-click. It redraws while open.</summary>
     private void ShowNotificationsPanel()
     {
         if (_bell is null) return;
         var flyout = new Flyout();
         var panel = new StackPanel { Width = 380, Spacing = 8 };
-        var header = new Grid();
-        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        header.Children.Add(new TextBlock { Text = Localizer.Get("Notifications"), Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"] });
-        var items = _notifications.Items;
-        if (items.Count > 0)
+        void Fill()
         {
-            var clear = new Button { Content = Localizer.Get("ClearAll") };
-            clear.Click += (_, _) => { _notifications.Clear(); flyout.Hide(); };
-            header.Children.Add(clear);
-            Grid.SetColumn(clear, 1);
-        }
-        panel.Children.Add(header);
-
-        if (items.Count == 0)
-        {
-            panel.Children.Add(new TextBlock { Text = Localizer.Get("NoNotificationsTitle"), Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] });
-            panel.Children.Add(new TextBlock { Text = Localizer.Get("NoNotificationsSubtitle"), Opacity = 0.7, TextWrapping = TextWrapping.Wrap });
-        }
-        else
-        {
-            var list = new ListView { SelectionMode = ListViewSelectionMode.None, IsItemClickEnabled = true, MaxHeight = 440 };
-            foreach (var notification in items)
+            panel.Children.Clear();
+            var header = new Grid();
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            header.Children.Add(new TextBlock { Text = Localizer.Get("Notifications"), Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"] });
+            var items = _notifications.Items;
+            if (items.Count > 0)
             {
-                var workspaceIndex = _snapshot.Workspaces.ToList().FindIndex(item => item.Id == notification.WorkspaceId);
-                var workspaceName = workspaceIndex < 0 ? null : _sidebarRows.GetValueOrDefault(notification.WorkspaceId)?.Title.Text;
-                var elapsed = AgentIndicator.Elapsed(DateTimeOffset.Now - notification.CreatedAt) is var (key, value)
-                    ? string.Format(Localizer.Get(key), value)
-                    : Localizer.Get("ElapsedNow");
-                var entry = new StackPanel { Padding = new Thickness(0, 6, 0, 6), Spacing = 2, Opacity = notification.IsRead ? 0.7 : 1, Tag = notification.SurfaceId };
-                entry.Children.Add(new TextBlock { Text = notification.Title, FontWeight = notification.IsRead ? Microsoft.UI.Text.FontWeights.Normal : Microsoft.UI.Text.FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
-                if (notification.Body.Length > 0)
-                    entry.Children.Add(new TextBlock { Text = notification.Body, TextWrapping = TextWrapping.Wrap, MaxLines = 3, TextTrimming = TextTrimming.CharacterEllipsis });
-                entry.Children.Add(new TextBlock { Text = workspaceName is null ? elapsed : $"{workspaceName} · {elapsed}", FontSize = 12, Opacity = 0.6 });
-                var item = new ListViewItem { Content = entry, Tag = notification.SurfaceId };
-                AutomationProperties.SetName(item, $"{notification.Title}, {notification.Body}");
-                list.Items.Add(item);
+                var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+                var markAll = new Button { Content = Localizer.Get("MarkAllRead"), IsEnabled = _notifications.HasUnread };
+                markAll.Click += (_, _) => _notifications.MarkAllRead();
+                var clear = new Button { Content = Localizer.Get("ClearAll") };
+                clear.Click += (_, _) => { _notifications.Clear(); flyout.Hide(); };
+                actions.Children.Add(markAll);
+                actions.Children.Add(clear);
+                header.Children.Add(actions);
+                Grid.SetColumn(actions, 1);
             }
-            list.ItemClick += (_, args) =>
+            panel.Children.Add(header);
+
+            if (items.Count == 0)
             {
-                // The clicked item is the ListViewItem or its content; both carry the surface id.
-                if (args.ClickedItem is FrameworkElement { Tag: string surfaceId })
+                panel.Children.Add(new TextBlock { Text = Localizer.Get("NoNotificationsTitle"), Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] });
+                panel.Children.Add(new TextBlock { Text = Localizer.Get("NoNotificationsSubtitle"), Opacity = 0.7, TextWrapping = TextWrapping.Wrap });
+            }
+            else
+            {
+                var list = new ListView { SelectionMode = ListViewSelectionMode.None, IsItemClickEnabled = true, MaxHeight = 440 };
+                foreach (var notification in items) list.Items.Add(NotificationRow(notification));
+                list.ItemClick += (_, args) =>
                 {
-                    flyout.Hide();
-                    JumpToSurface(surfaceId);
+                    // The clicked item is the ListViewItem or its content; both carry the surface id.
+                    if (args.ClickedItem is FrameworkElement { Tag: string surfaceId })
+                    {
+                        flyout.Hide();
+                        JumpToSurface(surfaceId);
+                    }
+                };
+                panel.Children.Add(list);
+                if (_notifications.HasUnread)
+                {
+                    var jump = new Button { Content = $"{Localizer.Get("JumpToLatestUnread")} ({ShortcutSettings.Display(_shortcuts.Values["jump_to_unread"])})", HorizontalAlignment = HorizontalAlignment.Stretch };
+                    jump.Click += (_, _) => { flyout.Hide(); JumpToLatestUnread(); };
+                    panel.Children.Add(jump);
                 }
-            };
-            panel.Children.Add(list);
-            if (_notifications.HasUnread)
+            }
+            // The macOS menu bar's "N agents blocked".
+            if (BlockedAgentsLabel() is { } blocked)
             {
-                var jump = new Button { Content = $"{Localizer.Get("JumpToLatestUnread")} ({ShortcutSettings.Display(_shortcuts.Values["jump_to_unread"])})", HorizontalAlignment = HorizontalAlignment.Stretch };
-                jump.Click += (_, _) => { flyout.Hide(); JumpToLatestUnread(); };
+                var jump = new Button { Content = blocked, HorizontalAlignment = HorizontalAlignment.Stretch };
+                ToolTipService.SetToolTip(jump, Localizer.Get("BlockedAgentsTooltip"));
+                jump.Click += (_, _) => { flyout.Hide(); JumpToFirstBlockedAgent(); };
                 panel.Children.Add(jump);
             }
         }
+        Fill();
+        _notifications.Changed += Fill;
+        flyout.Closed += (_, _) => _notifications.Changed -= Fill;
         flyout.Content = panel;
         flyout.ShowAt(_bell);
+    }
+
+    private ListViewItem NotificationRow(AppNotification notification)
+    {
+        var workspaceName = _snapshot.Workspaces.Any(item => item.Id == notification.WorkspaceId) ? _sidebarRows.GetValueOrDefault(notification.WorkspaceId)?.Title.Text : null;
+        var elapsed = AgentIndicator.Elapsed(DateTimeOffset.Now - notification.CreatedAt) is var (key, value)
+            ? string.Format(Localizer.Get(key), value)
+            : Localizer.Get("ElapsedNow");
+        var row = new Grid { ColumnSpacing = 10, Padding = new Thickness(0, 6, 0, 6), Tag = notification.SurfaceId };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var accent = ThemeBrush("AccentFillColorDefaultBrush");
+        // Filled while unread, a faint ring once read, as on macOS.
+        row.Children.Add(new Microsoft.UI.Xaml.Shapes.Ellipse
+        {
+            Width = 8, Height = 8, Margin = new Thickness(0, 6, 0, 0), VerticalAlignment = VerticalAlignment.Top, StrokeThickness = 1, Stroke = accent,
+            Fill = notification.IsRead ? null : accent, Opacity = notification.IsRead ? 0.2 : 1,
+        });
+        var entry = new StackPanel { Spacing = 2, Opacity = notification.IsRead ? 0.7 : 1 };
+        entry.Children.Add(new TextBlock { Text = notification.Title, FontWeight = notification.IsRead ? Microsoft.UI.Text.FontWeights.Normal : Microsoft.UI.Text.FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
+        if (notification.Body.Length > 0)
+            entry.Children.Add(new TextBlock { Text = notification.Body, TextWrapping = TextWrapping.Wrap, MaxLines = 3, TextTrimming = TextTrimming.CharacterEllipsis });
+        entry.Children.Add(new TextBlock { Text = workspaceName is null ? elapsed : $"{workspaceName} · {elapsed}", FontSize = 12, Opacity = 0.6 });
+        row.Children.Add(entry);
+        Grid.SetColumn(entry, 1);
+        var clear = new Button { Content = new FontIcon { Glyph = char.ConvertFromUtf32(0xE711), FontSize = 10 }, Padding = new Thickness(6), VerticalAlignment = VerticalAlignment.Top, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), BorderThickness = new Thickness(0) };
+        AutomationProperties.SetName(clear, Localizer.Get("ClearNotification"));
+        ToolTipService.SetToolTip(clear, Localizer.Get("ClearNotification"));
+        clear.Click += (_, _) => _notifications.Remove(notification.Id);
+        row.Children.Add(clear);
+        Grid.SetColumn(clear, 2);
+        var item = new ListViewItem { Content = row, Tag = notification.SurfaceId };
+        var menu = new MenuFlyout();
+        menu.Items.Add(MenuItem(Localizer.Get(notification.IsRead ? "MarkAsUnread" : "MarkAsRead"), () => _notifications.SetRead(notification.Id, !notification.IsRead)));
+        item.ContextFlyout = menu;
+        var state = Localizer.Get(notification.IsRead ? "NotificationRead" : "NotificationUnread");
+        AutomationProperties.SetName(item, $"{notification.Title}, {notification.Body}, {state}");
+        return item;
+    }
+
+    /// <summary>Mark Tab as Read or Unread, from the tab menu (the same as tab.action mark_read and mark_unread).</summary>
+    private MenuFlyoutItem TabReadMenuItem(string surfaceId)
+    {
+        var unread = HasUnread(surfaceId);
+        return MenuItem(Localizer.Get(unread ? "MarkTabRead" : "MarkTabUnread"), () =>
+        {
+            if (unread)
+            {
+                _manualUnread.Remove(surfaceId);
+                _notifications.MarkRead(new HashSet<string>(StringComparer.Ordinal) { surfaceId });
+            }
+            else _manualUnread.Add(surfaceId);
+            RefreshUnreadIndicators();
+        });
+    }
+
+    /// <summary>The workspace menu's Mark Workspace as Read and Unread and Clear Latest Notification, enabled as on macOS.</summary>
+    private IEnumerable<MenuFlyoutItemBase> WorkspaceNotificationMenuItems(string workspaceId)
+    {
+        yield return new MenuFlyoutSeparator();
+        var read = MenuItem(Localizer.Get("MarkWorkspaceRead"), () => TryWorkspaceAction(workspaceId, "mark_read"));
+        read.IsEnabled = _notifications.UnreadCount(workspaceId) > 0;
+        yield return read;
+        var unread = MenuItem(Localizer.Get("MarkWorkspaceUnread"), () => TryWorkspaceAction(workspaceId, "mark_unread"));
+        unread.IsEnabled = _notifications.HasReadIn(workspaceId);
+        yield return unread;
+        var clear = MenuItem(Localizer.Get("ClearLatestNotification"), () => _notifications.ClearLatest(workspaceId));
+        clear.IsEnabled = _notifications.HasAnyIn(workspaceId);
+        yield return clear;
+    }
+
+    /// <summary>Every terminal whose agent is waiting on you, in every window, in sidebar order.</summary>
+    private static List<string> BlockedAgentSurfaces() =>
+        WindowRegistry.Windows.SelectMany(window => window._snapshot.Workspaces.SelectMany(window.TerminalsOf))
+            .Where(terminal => terminal.AgentState.State == "blocked").Select(terminal => terminal.SurfaceId).ToList();
+
+    /// <summary>"N agents blocked", or null when none is.</summary>
+    private static string? BlockedAgentsLabel() => BlockedAgentSurfaces().Count switch
+    {
+        0 => null,
+        1 => Localizer.Get("BlockedAgentsOne"),
+        var count => string.Format(Localizer.Get("BlockedAgentsOther"), count),
+    };
+
+    /// <summary>Goes to the first agent waiting on you (macOS jumpToFirstBlockedAgent).</summary>
+    private void JumpToFirstBlockedAgent()
+    {
+        if (BlockedAgentSurfaces().FirstOrDefault() is { } surfaceId) JumpToSurface(surfaceId);
     }
 }

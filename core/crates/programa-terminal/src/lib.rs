@@ -305,6 +305,8 @@ pub(crate) struct CreateConfig {
     shell: Option<String>,
     #[serde(default)]
     args: Vec<String>,
+    /// Ghostty's `command` line, resolved into shell and args at create (`apply_command`).
+    command: Option<String>,
     working_directory: Option<String>,
     #[serde(default)]
     env: HashMap<String, String>,
@@ -593,6 +595,13 @@ fn local_pty(config: &CreateConfig, size: TermSize) -> Result<(tty::Pty, u32), S
         env.entry(key.to_owned())
             .or_insert_with(|| value.to_owned());
     }
+    // alacritty puts the program into the command line as it is, so a path with spaces is quoted.
+    #[cfg(windows)]
+    let shell_path = if shell_path.contains(' ') && !shell_path.starts_with('"') {
+        format!("\"{shell_path}\"")
+    } else {
+        shell_path
+    };
     let mut options = PtyOptions::default();
     options.shell = Some(Shell::new(shell_path, args));
     options.working_directory = config
@@ -877,19 +886,122 @@ fn powershell_integration_args() -> Vec<String> {
     ]
 }
 
+/// Resolves Ghostty's `command` into the shell and args, unless an explicit shell is set. When
+/// it cannot be used the default shell starts, and the reason is returned for the app's log.
+fn apply_command(mut config: CreateConfig) -> (CreateConfig, Option<String>) {
+    let Some(line) = config.command.take().filter(|line| !line.trim().is_empty()) else {
+        return (config, None);
+    };
+    if config.shell.is_some() {
+        return (config, None);
+    }
+    // The shell's PATH: the one the frontend passes in env, else this process's.
+    let path = config
+        .env
+        .iter()
+        .find(|(key, _)| key.eq_ignore_ascii_case("PATH"))
+        .map(|(_, value)| std::ffi::OsString::from(value))
+        .or_else(|| std::env::var_os("PATH"));
+    match command_shell(&line, path.as_deref(), config.shell_integration) {
+        Ok((shell, args)) => {
+            config.shell = Some(shell);
+            config.args = args;
+            (config, None)
+        }
+        Err(reason) => (
+            config,
+            Some(format!(
+                "terminal: command `{line}` {reason}; starting the default shell"
+            )),
+        ),
+    }
+}
+
+/// Ghostty's `command` as the program and args to start: a quoted or bare program, looked up on
+/// `path` when it names no directory, then its arguments verbatim, since a Windows program parses
+/// its own command line. `direct:` (Ghostty's prefix for exactly this) is dropped; `shell:` runs
+/// the rest with `cmd.exe /S /C`. PowerShell keeps the shell integration (`integration`) unless
+/// its arguments already run a command or script.
+fn command_shell(
+    line: &str,
+    path: Option<&std::ffi::OsStr>,
+    integration: bool,
+) -> Result<(String, Vec<String>), String> {
+    let line = line.trim();
+    if let Some(rest) = line.strip_prefix("shell:") {
+        let cmd = find_program("cmd.exe", path).ok_or("needs cmd.exe, which was not found")?;
+        let args = ["/S", "/C"].map(str::to_owned).into_iter();
+        let args = args.chain([format!("\"{}\"", rest.trim())]).collect();
+        return Ok((cmd.to_string_lossy().into_owned(), args));
+    }
+    let line = line.strip_prefix("direct:").unwrap_or(line).trim();
+    let (program, rest) = match line.strip_prefix('"') {
+        Some(quoted) => quoted.split_once('"').ok_or("has an unclosed quote")?,
+        None => line.split_once(char::is_whitespace).unwrap_or((line, "")),
+    };
+    if program.is_empty() {
+        return Err("names no program".to_owned());
+    }
+    let found = find_program(program, path).ok_or("was not found")?;
+    let rest = rest.trim();
+    let mut args: Vec<String> = (!rest.is_empty())
+        .then(|| rest.to_owned())
+        .into_iter()
+        .collect();
+    let powershell = found.file_stem().is_some_and(|stem| {
+        stem.eq_ignore_ascii_case("pwsh") || stem.eq_ignore_ascii_case("powershell")
+    });
+    #[cfg(windows)]
+    if integration && powershell && !powershell_runs_something(rest) {
+        // A bare PowerShell starts exactly like the default one; otherwise its own args come first.
+        let integration = powershell_integration_args();
+        let skip = usize::from(!args.is_empty());
+        args.extend(integration.into_iter().skip(skip));
+    }
+    #[cfg(not(windows))]
+    let _ = (integration, powershell);
+    Ok((found.to_string_lossy().into_owned(), args))
+}
+
+/// Whether PowerShell arguments name something to run (`-Command`, `-File`, `-EncodedCommand` or
+/// an abbreviation), which the integration's own `-NoExit -EncodedCommand` would clash with.
+// ponytail: a bare script path (pwsh's positional -File) is not detected; the integration's
+// arguments then follow it as script arguments. Detect positionals if someone configures that.
+fn powershell_runs_something(args: &str) -> bool {
+    args.split_whitespace().any(|arg| {
+        let name = arg.trim_start_matches(['-', '/']).to_ascii_lowercase();
+        name.len() < arg.len()
+            && !name.is_empty()
+            && (name == "ec"
+                || ["command", "file", "encodedcommand"]
+                    .iter()
+                    .any(|full| full.starts_with(&name)))
+    })
+}
+
+/// `program` as an existing file, with `.exe` added when it has no extension (as CreateProcess
+/// does): a path as given, or a bare name in the first `path` directory that has it.
+fn find_program(program: &str, path: Option<&std::ffi::OsStr>) -> Option<std::path::PathBuf> {
+    let mut name = std::path::PathBuf::from(program);
+    if cfg!(windows) && name.extension().is_none() {
+        name.set_extension("exe");
+    }
+    if name.is_absolute() || name.components().count() > 1 {
+        return name.is_file().then_some(name);
+    }
+    std::env::split_paths(path?)
+        .map(|dir| dir.join(&name))
+        .find(|candidate| candidate.is_file())
+}
+
 /// PowerShell 7 when installed, then Windows PowerShell, then COMSPEC: the closest Windows
 /// match to a macOS login shell. Default args only apply to a shell this function picked;
 /// `integration` adds the shell integration to PowerShell.
 fn default_shell(args: Vec<String>, integration: bool) -> (String, Vec<String>) {
     #[cfg(windows)]
     {
-        let on_path = |name: &str| {
-            std::env::var_os("PATH").and_then(|path| {
-                std::env::split_paths(&path)
-                    .map(|dir| dir.join(name))
-                    .find(|candidate| candidate.is_file())
-            })
-        };
+        let path = std::env::var_os("PATH");
+        let on_path = |name: &str| find_program(name, path.as_deref());
         let powershell = on_path("pwsh.exe").or_else(|| on_path("powershell.exe"));
         if let Some(path) = powershell {
             let args = match (args.is_empty(), integration) {
@@ -1177,9 +1289,16 @@ pub unsafe extern "C" fn programa_terminal_create(
         } else {
             serde_json::from_slice(config).map_err(|e| e.to_string())?
         };
-        ProgramaTerminalSession::spawn(config)
+        let (config, warning) = apply_command(config);
+        ProgramaTerminalSession::spawn(config).map(|session| (session, warning))
     })) {
-        Ok(Ok(value)) => Box::into_raw(Box::new(value)),
+        Ok(Ok((value, warning))) => {
+            // A command that could not be used: the default shell started, and error says why.
+            if let Some(warning) = warning {
+                let _ = set_buffer(error, warning.into_bytes());
+            }
+            Box::into_raw(Box::new(value))
+        }
         Ok(Err(message)) => {
             let _ = set_buffer(error, message.into_bytes());
             ptr::null_mut()
@@ -1688,6 +1807,20 @@ pub unsafe extern "C" fn programa_terminal_clear_scrollback(
     ffi_status(|| {
         let value = session(value)?;
         value.term.lock().grid_mut().clear_history();
+        value.state.changed();
+        Ok(())
+    })
+}
+
+/// # Safety
+///
+/// `value` is null or a live handle from `programa_terminal_create`.
+#[no_mangle]
+pub unsafe extern "C" fn programa_terminal_reset(value: *mut ProgramaTerminalSession) -> i32 {
+    ffi_status(|| {
+        let value = session(value)?;
+        // RIS, what Ghostty's reset binding does.
+        alacritty_terminal::vte::ansi::Handler::reset_state(&mut *value.term.lock());
         value.state.changed();
         Ok(())
     })
@@ -2813,6 +2946,164 @@ mod tests {
             unsafe { programa_terminal_program_status_generation(session.0) },
             status["generation"].as_u64().unwrap()
         );
+    }
+
+    /// A temporary directory holding empty stand-ins for the named programs.
+    #[cfg(windows)]
+    fn fake_programs(name: &str, programs: &[&str]) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("programa-command-{}", std::process::id()));
+        let dir = dir.join(name);
+        std::fs::create_dir_all(&dir).unwrap();
+        for program in programs {
+            std::fs::write(dir.join(program), b"").unwrap();
+        }
+        dir
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn command_parses_quoted_paths_and_keeps_arguments_verbatim() {
+        let bin = fake_programs("bin", &["cmd.exe", "nu.exe"]);
+        let spaced = fake_programs("Program Files", &["bash.exe"]);
+        let path = bin.clone().into_os_string();
+        let path = Some(path.as_os_str());
+        let cmd = bin.join("cmd.exe").to_string_lossy().into_owned();
+        let bash = spaced.join("bash.exe").to_string_lossy().into_owned();
+        let parsed = |line: &str| command_shell(line, path, true);
+        // A bare name is found on PATH, with .exe added.
+        assert_eq!(parsed(" cmd "), Ok((cmd.clone(), vec![])));
+        // A quoted path with spaces, then its arguments as written.
+        assert_eq!(
+            parsed(&format!("\"{bash}\"  --login -i")),
+            Ok((bash.clone(), vec!["--login -i".to_owned()]))
+        );
+        // Ghostty's direct: prefix; quotes in the arguments are left to the program.
+        assert_eq!(
+            parsed(r#"direct:cmd /k "echo a  b""#),
+            Ok((cmd.clone(), vec![r#"/k "echo a  b""#.to_owned()]))
+        );
+        assert_eq!(
+            parsed("shell:echo a && nu"),
+            Ok((
+                cmd,
+                ["/S", "/C", "\"echo a && nu\""].map(str::to_owned).to_vec()
+            ))
+        );
+        // Unparseable or missing programs.
+        assert!(parsed(&format!("\"{bash} --login")).is_err());
+        assert!(parsed("\"\" --login").is_err());
+        assert!(parsed("no-such-shell -l").is_err());
+        assert!(parsed(&spaced.join("missing.exe").to_string_lossy()).is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn powershell_commands_keep_the_shell_integration() {
+        let bin = fake_programs("powershell", &["powershell.exe", "pwsh.exe"]);
+        let path = bin.into_os_string();
+        let args = |line: &str, integration: bool| {
+            command_shell(line, Some(path.as_os_str()), integration)
+                .unwrap()
+                .1
+        };
+        let integration = powershell_integration_args();
+        // A bare PowerShell starts like the default one.
+        assert_eq!(args("powershell", true), integration);
+        assert!(args("powershell", false).is_empty());
+        // Its own arguments, then the integration without -NoLogo.
+        let mut expected = vec!["-NoProfile -ExecutionPolicy Bypass".to_owned()];
+        expected.extend_from_slice(&integration[1..]);
+        assert_eq!(
+            args("PWSH -NoProfile -ExecutionPolicy Bypass", true),
+            expected
+        );
+        // Arguments that already run something are left alone.
+        for line in [
+            "powershell -NoProfile -c Get-Date",
+            "pwsh -File C:\\x.ps1",
+            "pwsh -ec ZQBjAGgAbwA=",
+            "powershell -NoExit -Command Get-Date",
+        ] {
+            assert_eq!(args(line, true).len(), 1, "{line}");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn an_unusable_command_falls_back_to_the_default_shell() {
+        let config = |command: &str| CreateConfig {
+            command: Some(command.to_owned()),
+            ..CreateConfig::default()
+        };
+        let (fallback, warning) = apply_command(config("no-such-shell --flag"));
+        assert!(fallback.shell.is_none() && fallback.args.is_empty());
+        assert_eq!(
+            warning.as_deref(),
+            Some("terminal: command `no-such-shell --flag` was not found; starting the default shell")
+        );
+        // An explicit shell wins, and the frontend's PATH is the one searched.
+        let explicit = CreateConfig {
+            shell: Some("cmd.exe".to_owned()),
+            ..config("no-such-shell")
+        };
+        let (explicit, warning) = apply_command(explicit);
+        assert_eq!(
+            (explicit.shell.as_deref(), warning),
+            (Some("cmd.exe"), None)
+        );
+        let bin = fake_programs("env-path", &["nu.exe"]);
+        let mut found = config("nu --login");
+        found
+            .env
+            .insert("Path".to_owned(), bin.to_string_lossy().into_owned());
+        let (found, warning) = apply_command(found);
+        let nu = bin.join("nu.exe").to_string_lossy().into_owned();
+        assert_eq!(
+            (found.shell, found.args, warning),
+            (Some(nu), vec!["--login".to_owned()], None)
+        );
+    }
+
+    /// A command naming a program under a path with spaces starts it with its arguments; one that
+    /// names a missing program still opens a terminal, with the reason in the error buffer.
+    #[cfg(windows)]
+    #[test]
+    fn create_starts_the_command_or_falls_back() {
+        let dir = fake_programs("Command Shell", &[]);
+        let cmd = dir.join("cmd.exe");
+        let system = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".to_owned());
+        std::fs::copy(format!("{system}\\System32\\cmd.exe"), &cmd).unwrap();
+        let create = |command: String| {
+            let config = serde_json::to_vec(&serde_json::json!({ "command": command })).unwrap();
+            let mut error = ProgramaTerminalBuffer::default();
+            let raw =
+                unsafe { programa_terminal_create(config.as_ptr(), config.len(), &mut error) };
+            (SessionGuard(raw), take_buffer(error))
+        };
+        let (session, error) = create(format!(
+            "\"{}\" /d /k echo started-%COMSPEC:~0,0%marker",
+            cmd.display()
+        ));
+        assert!(!session.0.is_null() && error.is_empty(), "{error}");
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut visible = String::new();
+        while Instant::now() < deadline && !visible.contains("started-marker") {
+            std::thread::sleep(Duration::from_millis(50));
+            let mut output = ProgramaTerminalBuffer::default();
+            unsafe { programa_terminal_snapshot_json(session.0, &mut output) };
+            let snapshot: serde_json::Value = serde_json::from_str(&take_buffer(output)).unwrap();
+            visible = snapshot["cells"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter_map(|cell| cell["text"].as_str())
+                .collect();
+        }
+        assert!(visible.contains("started-marker"), "{visible}");
+
+        let (fallback, error) = create("no-such-shell".to_owned());
+        assert!(!fallback.0.is_null());
+        assert!(error.contains("starting the default shell"), "{error}");
     }
 
     struct SessionGuard(*mut ProgramaTerminalSession);

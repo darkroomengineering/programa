@@ -179,31 +179,11 @@ public sealed partial class MainWindow
         Apply(new { command = "select_surface", workspace_id = workspace.Id, pane_id = target.Id, surface_id = target.SelectedSurfaceId });
     }
 
-    private MenuFlyout TabMenu(string workspaceId, string paneId, string surfaceId)
-    {
-        var menu = new MenuFlyout();
-        menu.Items.Add(MenuItem(Localizer.Get("RenameTab"), () => _ = RenameTabAsync(workspaceId, paneId, surfaceId)));
-        var pinned = IsPinnedSurface(surfaceId);
-        menu.Items.Add(MenuItem(Localizer.Get(pinned ? "UnpinTab" : "PinTab"), () => Apply(new { command = "set_surface_pinned", workspace_id = workspaceId, pane_id = paneId, surface_id = surfaceId, pinned = !pinned })));
-        menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(MenuItem(Localizer.Get("MoveTabToNewWindow"), () => WindowRegistry.MoveSurfaceToNewWindow(workspaceId, paneId, surfaceId)));
-        menu.Items.Add(new MenuFlyoutSeparator());
-        menu.Items.Add(MenuItem(Localizer.Get("CloseTab"), () => CloseSurface(workspaceId, paneId, surfaceId)));
-        menu.Items.Add(MenuItem(Localizer.Get("CloseOtherTabs"), () => CloseOtherTabs(workspaceId, paneId, surfaceId)));
-        return menu;
-    }
-
+    /// <summary>Close Other Tabs: pinned tabs stay, as on macOS.</summary>
     private void CloseOtherTabs(string workspaceId, string paneId, string keepSurfaceId)
     {
-        var pane = _snapshot.Workspaces.FirstOrDefault(item => item.Id == workspaceId)?.Panes.FirstOrDefault(item => item.Id == paneId);
-        if (pane is null) return;
-        try
-        {
-            foreach (var surface in pane.Surfaces.Where(surface => surface.Id != keepSurfaceId).ToList())
-                _snapshot = Dispatch(new { command = "close_surface", workspace_id = workspaceId, pane_id = paneId, surface_id = surface.Id });
-        }
+        try { CloseTabs(workspaceId, paneId, keepSurfaceId, "close_others"); }
         catch (Exception error) { _ = ShowErrorAsync(Localizer.Get("CoreError"), error.Message); }
-        ProjectSnapshot();
     }
 
     private async Task RenameTabAsync(string workspaceId, string paneId, string surfaceId)
@@ -281,19 +261,30 @@ public sealed partial class MainWindow
             if (ActiveTerminal() is { LastAgentSession: not null } resumable && !IsBusy(resumable)) entries.Add((Localizer.Get("ResumeAgentSession"), string.Empty, () => ResumeAgentFromPalette(resumable)));
             entries.Add((Localizer.Get("MoveTabToNewWindow"), string.Empty, () => WindowRegistry.MoveSurfaceToNewWindow(current.Id, pane.Id, surfaceId)));
         }
+        var allSurfaces = workspacesOnly && AppSettings.Load().CommandPaletteSearchesAllSurfaces;
         foreach (var workspace in _snapshot.Workspaces)
         {
             var id = workspace.Id;
             var name = _sidebarRows.GetValueOrDefault(id)?.Title.Text ?? workspace.Title ?? id;
             entries.Add((workspacesOnly ? name : string.Format(Localizer.Get("GoToWorkspace"), name), string.Empty, () => Apply(new { command = "select_workspace", workspace_id = id })));
+            // app.commandPaletteSearchesAllSurfaces: the switcher also matches every tab, as macOS's Cmd+P.
+            if (allSurfaces)
+                foreach (var tabPane in workspace.Panes)
+                    foreach (var surface in tabPane.Surfaces)
+                    {
+                        var (paneId, surfaceId) = (tabPane.Id, surface.Id);
+                        var tab = SurfaceTitle(surfaceId) ?? _tabItems.GetValueOrDefault(surfaceId)?.Header as string ?? surfaceId;
+                        entries.Add(($"{tab} — {name}", string.Empty, () => Apply(new { command = "select_surface", workspace_id = id, pane_id = paneId, surface_id = surfaceId })));
+                    }
         }
         var keywords = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (label, hint, words, run) in workspacesOnly ? [] : ConfigPaletteEntries().ToList())
+        foreach (var (label, hint, words, run) in workspacesOnly ? [] : ConfigPaletteEntries().Concat(HelpPaletteEntries()).ToList())
         {
             entries.Add((label, hint, run));
             keywords[label] = words;
         }
         if (!workspacesOnly) entries.AddRange(LayoutPaletteEntries());
+        if (!workspacesOnly) entries.Add((Localizer.Get("OpenSettingsJson"), string.Empty, OpenSettingsFile));
 
         var query = new TextBox { PlaceholderText = Localizer.Get(workspacesOnly ? "GoToWorkspacePlaceholder" : "CommandPalettePlaceholder"), MinWidth = 480 };
         AutomationProperties.SetName(query, Localizer.Get(workspacesOnly ? "Shortcut_go_to_workspace" : "Shortcut_command_palette"));
@@ -363,8 +354,9 @@ public sealed partial class MainWindow
     internal bool PaletteOpen => _palette is not null;
 
     /// <summary>Dev builds: debug.command_palette.toggle opens or closes the palette, .results lists its
-    /// rows, debug.type types into its query, a newline running the highlighted row, and
-    /// debug.shortcut.simulate runs the action a key combination is bound to.</summary>
+    /// rows, debug.type types into its query, a newline running the highlighted row,
+    /// debug.shortcut.simulate runs the action a key combination is bound to, and debug.menu.open
+    /// opens a tab's or terminal's menu.</summary>
     internal object PaletteDebug(string method, JsonElement p)
     {
         switch (method)
@@ -391,6 +383,15 @@ public sealed partial class MainWindow
                     throw new ControlException("not_found", $"No action is bound to {combo}.");
                 run();
                 return new { action };
+            case "debug.menu.open":
+                // A tab's menu, or with kind "terminal" its terminal's, opened as a right-click
+                // opens it, for UI Automation to read and invoke.
+                var surfaceId = Text(p, "surface_id") ?? SelectedWorkspace()?.SelectedPane?.SelectedSurfaceId ?? throw new ControlException("not_found", "No focused tab.");
+                if (Text(p, "kind") == "terminal")
+                    (_terminals.GetValueOrDefault(surfaceId) ?? throw new ControlException("not_found", "Not a terminal.")).ShowContextMenu();
+                else if (_tabItems.GetValueOrDefault(surfaceId) is { ContextFlyout: { } flyout } tab) flyout.ShowAt(tab);
+                else throw new ControlException("not_found", "The tab is not on screen.");
+                return new { surface_id = surfaceId };
             default: // debug.type
                 // Without a palette, a terminal in copy mode takes the keys (Escape and control characters included).
                 if (_palette is null && ActiveTerminal() is { InCopyMode: true } copying)

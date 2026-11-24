@@ -35,9 +35,8 @@ public sealed partial class MainWindow
         var title = SurfaceTitle(surfaceId) ?? panel.Title;
         var item = new TabViewItem
         {
-            Header = title,
+            Header = TabHeader(title, IsPinnedSurface(surfaceId), unread: false),
             IconSource = new FontIconSource { Glyph = panel.Glyph },
-            IsClosable = true,
             Tag = new SurfaceTag(workspaceId, paneId, surfaceId),
             ContextFlyout = TabMenu(workspaceId, paneId, surfaceId),
         };
@@ -48,23 +47,17 @@ public sealed partial class MainWindow
     }
 
     /// <summary>Splits a new pane holding <paramref name="panel"/> beside the target surface, keeping the
-    /// selection where it was unless <paramref name="focus"/>. Windows splits only right or down, so
-    /// left and up open right and down.</summary>
+    /// selection where it was unless <paramref name="focus"/>; left and up put it first.</summary>
     private (string SurfaceId, string PaneId, string WorkspaceId) SplitPanel(JsonElement p, IPanel panel, bool focus)
     {
         var (workspace, pane, _) = SplitSource(p);
-        var direction = (Text(p, "direction") ?? "right") switch
-        {
-            "right" or "left" => "vertical",
-            "down" or "up" => "horizontal",
-            var other => throw new ControlException("invalid_params", $"direction '{other}' is not right, down, left or up."),
-        };
+        var (direction, insertFirst) = SplitPlacement(Text(p, "direction") ?? "right");
         var previous = SelectedWorkspace();
         var previousPane = previous?.SelectedPane;
         var newPane = Id("pane");
         var surfaceId = Id("surface");
         _panels[surfaceId] = panel;
-        _snapshot = Dispatch(new { command = "split_pane", workspace_id = workspace.Id, pane_id = pane.Id, split_id = Id("split"), new_pane_id = newPane, new_surface_id = surfaceId, session_id = Id("session"), direction, ratio = 0.5 });
+        _snapshot = Dispatch(new { command = "split_pane", workspace_id = workspace.Id, pane_id = pane.Id, split_id = Id("split"), new_pane_id = newPane, new_surface_id = surfaceId, session_id = Id("session"), direction, ratio = 0.5, insert_first = insertFirst });
         if (focus) _snapshot = Dispatch(new { command = "select_workspace", workspace_id = workspace.Id });
         else if (previous is not null && previousPane is not null)
             _snapshot = Dispatch(new { command = "select_surface", workspace_id = previous.Id, pane_id = previousPane.Id, surface_id = previousPane.SelectedSurfaceId });
@@ -134,26 +127,65 @@ public sealed partial class MainWindow
         _ = ConfirmOpenAsync(target);
     }
 
-    /// <summary>macOS ExternalOpenPolicy's prompt: "Open in the default app?" with the target.</summary>
+    /// <summary>browser.externalAppOpenAllowlist's entry for opening <paramref name="target"/> with the app that
+    /// handles its scheme, `handler|scheme` as macOS's `bundleId|scheme`, the handler being its ProgId (or its exe
+    /// when it has none). Null for a file, which always asks, as on macOS: the file is the risk, not the app.</summary>
+    internal static string? AllowlistEntry(Uri target, string? handler) =>
+        target.IsFile || string.IsNullOrEmpty(handler) || handler.Contains('|') ? null : $"{handler}|{target.Scheme.ToLowerInvariant()}";
+
+    /// <summary>The app a URL scheme opens in: the ProgId you chose for it, else the exe its own registration runs.</summary>
+    private static string? SchemeHandler(string scheme)
+    {
+        try
+        {
+            var choice = $@"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\{scheme}\";
+            if ((Microsoft.Win32.Registry.CurrentUser.OpenSubKey(choice + "UserChoiceLatest")?.GetValue("ProgId")
+                ?? Microsoft.Win32.Registry.CurrentUser.OpenSubKey(choice + "UserChoice")?.GetValue("ProgId")) is string { Length: > 0 } progId)
+                return progId;
+            var command = Microsoft.Win32.Registry.ClassesRoot.OpenSubKey($@"{scheme}\shell\open\command")?.GetValue(null) as string;
+            if (string.IsNullOrWhiteSpace(command)) return null;
+            var exe = command.TrimStart().StartsWith('"') ? command.TrimStart()[1..].Split('"')[0] : command.Trim().Split(' ')[0];
+            return Path.GetFileName(exe) is { Length: > 0 } name ? name : null;
+        }
+        catch (Exception error) when (error is System.Security.SecurityException or IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>macOS ExternalOpenPolicy's prompt: "Open in the default app?" with the target, and for a scheme
+    /// link "Always allow for this app", which browser.externalAppOpenAllowlist remembers.</summary>
     private async Task ConfirmOpenAsync(Uri target)
     {
         if (_dialogOpen || Root.XamlRoot is null) return;
         var shown = target.IsFile ? target.LocalPath : target.AbsoluteUri;
-        _dialogOpen = true;
-        try
+        var entry = AllowlistEntry(target, target.IsFile ? null : SchemeHandler(target.Scheme));
+        var allowlist = AppSettings.Load().ExternalAppOpenAllowlist;
+        if (entry is null || !allowlist.Contains(entry, StringComparer.OrdinalIgnoreCase))
         {
-            var dialog = new ContentDialog
+            var always = new CheckBox { Content = Localizer.Get("ExternalOpenAlwaysAllow"), Visibility = entry is null ? Visibility.Collapsed : Visibility.Visible };
+            _dialogOpen = true;
+            try
             {
-                XamlRoot = Root.XamlRoot,
-                Title = string.Format(Localizer.Get("ExternalOpenTitle"), Localizer.Get("ExternalOpenDefaultApp")),
-                Content = new TextBlock { Text = shown, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true },
-                PrimaryButtonText = Localizer.Get("ExternalOpenOpen"),
-                CloseButtonText = Localizer.Get("Cancel"),
-                DefaultButton = ContentDialogButton.Close,
-            };
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+                var dialog = new ContentDialog
+                {
+                    XamlRoot = Root.XamlRoot,
+                    Title = string.Format(Localizer.Get("ExternalOpenTitle"), Localizer.Get("ExternalOpenDefaultApp")),
+                    Content = new StackPanel { Spacing = 12, Children = { new TextBlock { Text = shown, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true }, always } },
+                    PrimaryButtonText = Localizer.Get("ExternalOpenOpen"),
+                    CloseButtonText = Localizer.Get("Cancel"),
+                    DefaultButton = ContentDialogButton.Close,
+                };
+                if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+            }
+            finally { _dialogOpen = false; }
+            // At most 200 remembered, as on macOS; entries that are not app|scheme are dropped on the way.
+            if (always.IsChecked == true && entry is not null && allowlist.Count < 200)
+            {
+                try { ShortcutSettings.SetValues([("browser", "externalAppOpenAllowlist", new System.Text.Json.Nodes.JsonArray([.. allowlist.Append(entry).Select(item => (System.Text.Json.Nodes.JsonNode?)item)]))]); }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException) { LaunchLog.Write($"external open: not remembered: {error.Message}"); }
+            }
         }
-        finally { _dialogOpen = false; }
         try
         {
             if (target.IsFile) Process.Start(new ProcessStartInfo(target.LocalPath) { UseShellExecute = true })?.Dispose();

@@ -1,11 +1,9 @@
 using System.Text.RegularExpressions;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 
 namespace Programa;
 
-/// <summary>Each sidebar row's pull request line ("PR #12 open"), as on macOS: the focused
-/// terminal's branch looked up with `gh`, refreshed every 30 seconds and when the branch changes.</summary>
+/// <summary>Each sidebar row's pull requests ("PR #12 open"), as on macOS: every terminal's branch
+/// looked up with `gh`, refreshed every 30 seconds and when a branch changes, plus any a shell reported.</summary>
 public sealed partial class MainWindow
 {
     /// <summary>Lookups by directory and branch; a null value means no pull request.</summary>
@@ -22,48 +20,56 @@ public sealed partial class MainWindow
         Closed += (_, _) => timer.Stop();
     }
 
-    private (string Directory, string Branch)? PullRequestKey(WorkspaceSnapshot workspace)
+    /// <summary>The focused terminal's lookup key (workspace.sidebar_state's pull request).</summary>
+    private (string Directory, string Branch)? PullRequestKey(WorkspaceSnapshot workspace) =>
+        workspace.SelectedPane?.SelectedSurfaceId is { } focused ? PullRequestKey(focused) : null;
+
+    private (string Directory, string Branch)? PullRequestKey(string surfaceId)
     {
-        var focusedId = workspace.SelectedPane?.SelectedSurfaceId;
-        if (focusedId is null || _branches.GetValueOrDefault(focusedId) is not { } branch) return null;
+        if (_branches.GetValueOrDefault(surfaceId) is not { } branch) return null;
         // A detached HEAD shows as a short commit, which has no pull request.
         if (Regex.IsMatch(branch, "^[0-9a-f]{7}$")) return null;
-        return _terminals.GetValueOrDefault(focusedId)?.Cwd is { } cwd ? (cwd, branch) : null;
+        return _terminals.GetValueOrDefault(surfaceId)?.Cwd is { } cwd ? (cwd, branch) : null;
     }
 
-    /// <summary>Starts a lookup for the workspace's branch unless one is running; without
-    /// <paramref name="refresh"/>, only when that branch has never been looked up.</summary>
+    /// <summary>Starts a lookup for each of the workspace's branches unless one is running; without
+    /// <paramref name="refresh"/>, only for a branch never looked up.</summary>
     private void LookUpPullRequest(WorkspaceSnapshot workspace, bool refresh)
     {
-        if (!PullRequests.Available || PullRequestKey(workspace) is not { } key) return;
-        if (!refresh && _pullRequests.ContainsKey(key)) return;
-        if (!_pullRequestLookups.Add(key)) return;
-        _ = Task.Run(async () =>
+        if (!PullRequests.Available) return;
+        foreach (var surface in workspace.Panes.SelectMany(pane => pane.Surfaces))
         {
-            var pullRequest = await PullRequests.LookupAsync(key.Directory, key.Branch);
-            DispatcherQueue.TryEnqueue(() =>
+            if (PullRequestKey(surface.Id) is not { } key) continue;
+            if (!refresh && _pullRequests.ContainsKey(key)) continue;
+            if (!_pullRequestLookups.Add(key)) continue;
+            _ = Task.Run(async () =>
             {
-                _pullRequestLookups.Remove(key);
-                var changed = !_pullRequests.TryGetValue(key, out var previous) || previous != pullRequest;
-                _pullRequests[key] = pullRequest;
-                if (!changed) return;
-                foreach (var item in _snapshot.Workspaces.Where(item => PullRequestKey(item) == key)) UpdateSidebarRow(item.Id);
+                var pullRequest = await PullRequests.LookupAsync(key.Directory, key.Branch);
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    _pullRequestLookups.Remove(key);
+                    var changed = !_pullRequests.TryGetValue(key, out var previous) || previous != pullRequest;
+                    _pullRequests[key] = pullRequest;
+                    if (!changed) return;
+                    foreach (var item in _snapshot.Workspaces.Where(item => item.Panes.SelectMany(pane => pane.Surfaces).Any(surface => PullRequestKey(surface.Id) == key)))
+                        UpdateSidebarRow(item.Id);
+                });
             });
-        });
+        }
     }
 
-    private void UpdatePullRequestLine(WorkspaceSnapshot workspace, HyperlinkButton link)
+    /// <summary>Each tab's pull request in tab order, once each: one its shell reported (when it is for
+    /// the tab's branch), else the one looked up for its branch.</summary>
+    private List<ReportedPullRequest> WorkspacePullRequests(IEnumerable<string> surfaceIds)
     {
-        var pullRequest = PullRequestFor(workspace);
-        if (pullRequest is null)
+        var found = new List<ReportedPullRequest>();
+        foreach (var surfaceId in surfaceIds)
         {
-            link.Visibility = Visibility.Collapsed;
-            return;
+            var branch = _branches.GetValueOrDefault(surfaceId);
+            if (_reportedPullRequests.TryGetValue(surfaceId, out var reported) && (reported.Branch is null || reported.Branch == branch)) found.Add(reported);
+            else if (PullRequestKey(surfaceId) is { } key && _pullRequests.GetValueOrDefault(key) is { } looked)
+                found.Add(new ReportedPullRequest(looked.Number, "PR", looked.Url, looked.State, key.Branch, null));
         }
-        var state = Localizer.Get(pullRequest.State switch { "open" => "PullRequestOpen", "merged" => "PullRequestMerged", _ => "PullRequestClosed" });
-        ((TextBlock)link.Content).Text = $"{pullRequest.Label} #{pullRequest.Number} {state}";
-        link.NavigateUri = new Uri(pullRequest.Url);
-        ToolTipService.SetToolTip(link, pullRequest.Url);
-        link.Visibility = Visibility.Visible;
+        return found.DistinctBy(pullRequest => (pullRequest.Label.ToLowerInvariant(), pullRequest.Number, pullRequest.Url)).ToList();
     }
 }

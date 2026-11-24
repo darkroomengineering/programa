@@ -48,6 +48,10 @@ pub struct Workspace {
     /// A parent whose children the sidebar hides.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub collapsed: bool,
+    /// The repository this workspace is the worktree folder of (macOS Use as Worktree Folder):
+    /// new worktree workspaces of it nest here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worktree_repo: Option<String>,
     pub selected_pane_id: String,
     pub panes: Vec<Pane>,
     pub layout: LayoutNode,
@@ -71,6 +75,9 @@ pub struct Surface {
     /// A name the user gave the tab; frontends show the program's title when it is absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /// The tab's tint, `#RRGGBB`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -86,6 +93,17 @@ pub enum LayoutNode {
         first: Box<LayoutNode>,
         second: Box<LayoutNode>,
     },
+}
+
+/// Where a new workspace goes in the list, as macOS's `app.newWorkspacePlacement`; pinned
+/// workspaces stay first either way.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspacePlacement {
+    Top,
+    AfterCurrent,
+    #[default]
+    End,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -106,6 +124,8 @@ pub enum Command {
         pane_id: String,
         surface_id: String,
         session_id: String,
+        #[serde(default)]
+        placement: WorkspacePlacement,
     },
     SelectWorkspace {
         workspace_id: String,
@@ -150,6 +170,12 @@ pub enum Command {
         workspace_id: String,
         collapsed: bool,
     },
+    /// Makes a workspace its repository's worktree folder (a top-level one: it leaves its parent),
+    /// or with null stops: its children go back to the top level.
+    SetWorkspaceWorktreeFolder {
+        workspace_id: String,
+        repo: Option<String>,
+    },
     /// Adds a whole workspace from another core as is (the Windows app moving it between
     /// windows), and selects it. Its ids must be new to this core.
     AdoptWorkspace {
@@ -176,6 +202,13 @@ pub enum Command {
         pane_id: String,
         surface_id: String,
         pinned: bool,
+    },
+    /// `#RRGGBB`; null or blank removes the tab's color.
+    SetSurfaceColor {
+        workspace_id: String,
+        pane_id: String,
+        surface_id: String,
+        color: Option<String>,
     },
     CreateSurface {
         workspace_id: String,
@@ -297,30 +330,37 @@ impl Snapshot {
                 pane_id,
                 surface_id,
                 session_id,
+                placement,
             } => {
                 validate_new_ids(self, [&workspace_id, &pane_id, &surface_id])?;
                 validate_id("session_id", &session_id)?;
-                self.workspaces.push(Workspace {
-                    id: workspace_id.clone(),
-                    title: None,
-                    pinned: false,
-                    color: None,
-                    description: None,
-                    parent_id: None,
-                    collapsed: false,
-                    selected_pane_id: pane_id.clone(),
-                    panes: vec![Pane {
-                        id: pane_id.clone(),
-                        selected_surface_id: surface_id.clone(),
-                        surfaces: vec![Surface {
-                            id: surface_id,
-                            session_id,
-                            is_pinned: false,
-                            title: None,
+                let index = new_workspace_index(self, placement);
+                self.workspaces.insert(
+                    index,
+                    Workspace {
+                        id: workspace_id.clone(),
+                        title: None,
+                        pinned: false,
+                        color: None,
+                        description: None,
+                        parent_id: None,
+                        collapsed: false,
+                        worktree_repo: None,
+                        selected_pane_id: pane_id.clone(),
+                        panes: vec![Pane {
+                            id: pane_id.clone(),
+                            selected_surface_id: surface_id.clone(),
+                            surfaces: vec![Surface {
+                                id: surface_id,
+                                session_id,
+                                is_pinned: false,
+                                title: None,
+                                color: None,
+                            }],
                         }],
-                    }],
-                    layout: LayoutNode::Pane { pane_id },
-                });
+                        layout: LayoutNode::Pane { pane_id },
+                    },
+                );
                 self.selected_workspace_id = Some(workspace_id);
                 Ok(true)
             }
@@ -377,6 +417,31 @@ impl Snapshot {
                 workspace.collapsed = collapsed;
                 Ok(true)
             }
+            Command::SetWorkspaceWorktreeFolder { workspace_id, repo } => {
+                let repo = repo
+                    .map(|repo| repo.trim().to_owned())
+                    .filter(|repo| !repo.is_empty());
+                let index = workspace_index(self, &workspace_id)?;
+                let mut changed = self.workspaces[index].worktree_repo != repo;
+                if repo.is_none() {
+                    for child in &mut self.workspaces {
+                        if child.parent_id.as_deref() == Some(workspace_id.as_str()) {
+                            child.parent_id = None;
+                            changed = true;
+                        }
+                    }
+                }
+                let workspace = &mut self.workspaces[index];
+                if repo.is_some() && workspace.parent_id.is_some() {
+                    workspace.parent_id = None;
+                    changed = true;
+                }
+                if changed {
+                    workspace.collapsed = false;
+                }
+                workspace.worktree_repo = repo;
+                Ok(changed)
+            }
             Command::CloseWorkspace { workspace_id } => {
                 let index = workspace_index(self, &workspace_id)?;
                 remove_workspace(self, index);
@@ -414,18 +479,7 @@ impl Snapshot {
                 workspace_id,
                 color,
             } => {
-                let color = color
-                    .map(|color| color.trim().to_ascii_uppercase())
-                    .filter(|color| !color.is_empty());
-                if let Some(color) = &color {
-                    let hex = color.strip_prefix('#').unwrap_or_default();
-                    if hex.len() != 6 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
-                        return Err(DomainError::new(
-                            "invalid_color",
-                            format!("{color} is not a #RRGGBB color"),
-                        ));
-                    }
-                }
+                let color = normalized_color(color)?;
                 let workspace = workspace_mut(self, &workspace_id)?;
                 if workspace.color == color {
                     return Ok(false);
@@ -537,6 +591,22 @@ impl Snapshot {
                 pane.surfaces.insert(pinned_count, surface);
                 Ok(true)
             }
+            Command::SetSurfaceColor {
+                workspace_id,
+                pane_id,
+                surface_id,
+                color,
+            } => {
+                let color = normalized_color(color)?;
+                let pane = pane_mut(workspace_mut(self, &workspace_id)?, &pane_id)?;
+                let index = surface_index(pane, &surface_id)?;
+                let surface = &mut pane.surfaces[index];
+                if surface.color == color {
+                    return Ok(false);
+                }
+                surface.color = color;
+                Ok(true)
+            }
             Command::CreateSurface {
                 workspace_id,
                 pane_id,
@@ -552,6 +622,7 @@ impl Snapshot {
                     session_id,
                     is_pinned: false,
                     title: None,
+                    color: None,
                 });
                 pane.selected_surface_id = surface_id;
                 workspace.selected_pane_id = pane_id;
@@ -725,6 +796,7 @@ impl Snapshot {
                         session_id,
                         is_pinned: false,
                         title: None,
+                        color: None,
                     }],
                 });
                 workspace.selected_pane_id = new_pane_id;
@@ -1191,8 +1263,57 @@ fn clamped_insert_index(pane: &Pane, moved: &Surface, requested: usize) -> usize
     }
 }
 
+/// `#RRGGBB` in upper case, or None for a null or blank color.
+fn normalized_color(color: Option<String>) -> Result<Option<String>, DomainError> {
+    let color = color
+        .map(|color| color.trim().to_ascii_uppercase())
+        .filter(|color| !color.is_empty());
+    if let Some(color) = &color {
+        let hex = color.strip_prefix('#').unwrap_or_default();
+        if hex.len() != 6 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err(DomainError::new(
+                "invalid_color",
+                format!("{color} is not a #RRGGBB color"),
+            ));
+        }
+    }
+    Ok(color)
+}
+
 fn not_found(kind: &str, id: &str) -> DomainError {
     DomainError::new("not_found", format!("{kind} '{id}' was not found"))
+}
+
+/// The new workspace's index, as macOS's `WorkspacePlacementSettings.insertionIndex`: top goes after
+/// the pinned workspaces, after-current after the selected one (after the pinned ones when it is
+/// pinned), and past the worktree children kept right after their parent.
+fn new_workspace_index(snapshot: &Snapshot, placement: WorkspacePlacement) -> usize {
+    let workspaces = &snapshot.workspaces;
+    let pinned = workspaces.iter().take_while(|w| w.pinned).count();
+    let selected = snapshot
+        .selected_workspace_id
+        .as_deref()
+        .and_then(|id| workspaces.iter().position(|w| w.id == id));
+    match (placement, selected) {
+        (WorkspacePlacement::Top, _) => pinned,
+        (WorkspacePlacement::AfterCurrent, Some(index)) if workspaces[index].pinned => pinned,
+        (WorkspacePlacement::AfterCurrent, Some(index)) => {
+            let root = workspaces[index]
+                .parent_id
+                .as_deref()
+                .unwrap_or(&workspaces[index].id);
+            let start = workspaces
+                .iter()
+                .position(|w| w.id == root)
+                .unwrap_or(index);
+            let children = workspaces[start + 1..]
+                .iter()
+                .take_while(|w| w.parent_id.as_deref() == Some(root))
+                .count();
+            start + 1 + children
+        }
+        _ => workspaces.len(),
+    }
 }
 
 /// Swaps the new split's children, so the new pane comes first and keeps the same share.

@@ -55,6 +55,19 @@ public sealed class TerminalAppearanceTests
     }
 
     [TestMethod]
+    public void CommandKeepsAQuotedProgramPath()
+    {
+        var appearance = TerminalAppearance.Load(dark: true, [], null, []);
+        Assert.IsNull(appearance.Command);
+        appearance.Parse("command = \"C:\\Program Files\\Git\\bin\\bash.exe\" --login -i\ninitial-command = \"cmd.exe /k\"\n");
+        Assert.AreEqual("\"C:\\Program Files\\Git\\bin\\bash.exe\" --login -i", appearance.Command);
+        Assert.AreEqual("cmd.exe /k", appearance.InitialCommand);
+        // A later empty value restores the default, as in Ghostty.
+        appearance.Parse("command =\n");
+        Assert.IsNull(appearance.Command);
+    }
+
+    [TestMethod]
     public void BundledThemesAndFontShipWithTheApp()
     {
         Assert.IsTrue(File.Exists(Path.Combine(AppContext.BaseDirectory, "themes", "Catppuccin Mocha")));

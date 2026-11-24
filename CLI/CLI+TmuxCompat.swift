@@ -1910,6 +1910,12 @@ extension ProgramaCLI {
         guard fd >= 0 else {
             throw CLIError(message: "Failed to create wait-for signal")
         }
+        // O_CREAT | O_EXCL made this file, so only the umask can loosen its mode. It is not checked
+        // by path after closing: a waiter may already have consumed (unlinked) it.
+        guard fchmod(fd, 0o600) == 0 else {
+            Darwin.close(fd)
+            throw CLIError(message: "Failed to secure wait-for signal")
+        }
         let payload = Data("signal\n".utf8)
         do {
             try payload.withUnsafeBytes { bytes in
@@ -1934,7 +1940,6 @@ extension ProgramaCLI {
         guard Darwin.close(fd) == 0 else {
             throw CLIError(message: "Failed to close wait-for signal")
         }
-        try tmuxValidateWaitForSignal(url)
     }
 
     func runTmuxCompatCommand(

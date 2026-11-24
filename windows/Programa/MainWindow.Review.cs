@@ -113,7 +113,7 @@ public sealed partial class MainWindow
         if (panel.Comments.Count == 0) return new { sent_count = 0, target_surface_id = panel.SourceSurfaceId };
         if (!_terminals.TryGetValue(panel.SourceSurfaceId, out var terminal) || terminal.HasExited)
             throw new ControlException("unavailable", Localizer.Get("ReviewSourceUnavailable"));
-        if (terminal.EffectiveStatus?.State == "blocked")
+        if (terminal.EffectiveStatus?.State == "blocked" && AppSettings.Load().ProtectApprovalPrompts)
             throw new ControlException("agent_awaiting_approval", Localizer.Get("ReviewAwaitingApproval"));
         var count = panel.Comments.Count;
         terminal.PasteText(ReviewDiff.Serialize(panel.Comments, preamble));

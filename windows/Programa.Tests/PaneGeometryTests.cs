@@ -62,6 +62,24 @@ public sealed class PaneGeometryTests
     }
 
     [TestMethod]
+    public void TheAdjacentPaneIsTheOneBesideThatSideWithTheMostOverlap()
+    {
+        // a | (b / c): left of b or c is a; right of a, b and c overlap it equally, so the nearer
+        // one wins, b first in layout order.
+        Assert.AreEqual("a", PaneGeometry.Adjacent(Layout, "b", -1, 0));
+        Assert.AreEqual("a", PaneGeometry.Adjacent(Layout, "c", -1, 0));
+        Assert.AreEqual("b", PaneGeometry.Adjacent(Layout, "a", 1, 0));
+        Assert.AreEqual("b", PaneGeometry.Adjacent(Layout, "c", 0, -1));
+        Assert.IsNull(PaneGeometry.Adjacent(Layout, "a", -1, 0));
+        Assert.IsNull(PaneGeometry.Adjacent(Layout, "b", 1, 0));
+        // (a / b) | c, with b taller: right of a is c, and left of c is b, which overlaps it most.
+        var stacked = Split("outer", "vertical", 0.5, Split("inner", "horizontal", 0.3, Pane("a"), Pane("b")), Pane("c"));
+        Assert.AreEqual("c", PaneGeometry.Adjacent(stacked, "a", 1, 0));
+        Assert.AreEqual("b", PaneGeometry.Adjacent(stacked, "c", -1, 0));
+        Assert.IsNull(PaneGeometry.Adjacent(Pane("a"), "a", 1, 0));
+    }
+
+    [TestMethod]
     public void EqualizingGivesEveryPaneTheSameShareAndCanKeepToOneOrientation()
     {
         var all = PaneGeometry.Equalized(Layout, null);

@@ -32,7 +32,7 @@ public sealed partial class MainWindow
         foreach (var (workspaceId, sidebar) in saved.Sidebar ?? [])
             if (_snapshot.Workspaces.Any(workspace => workspace.Id == workspaceId)) SidebarMetadata.Restore(workspaceId, sidebar);
         _sidebarVisible = saved.SidebarVisible;
-        _sidebarWidth = Math.Clamp(saved.SidebarWidth, 160, 480);
+        _sidebarWidth = double.IsFinite(saved.SidebarWidth) ? Math.Clamp(saved.SidebarWidth, SidebarMinWidth, SidebarMaxWidth) : SidebarMinWidth;
         if (saved.Window is { } window) ApplyWindowPlacement(window);
         return true;
     }
@@ -46,6 +46,8 @@ public sealed partial class MainWindow
     {
         if (_snapshot.Workspaces.Count == 0) return null;
         var terminals = new Dictionary<string, SessionTerminal>(StringComparer.Ordinal);
+        // app.saveScrollbackOnQuit off: terminal output is never written to disk.
+        var saveScrollback = AppSettings.Load().SaveScrollbackOnQuit;
         var busyShells = ProcessTree.ChildrenOf(_terminals.Values.Select(terminal => terminal.ShellPid).Where(pid => pid != 0).ToHashSet()).Keys.ToHashSet();
         foreach (var surface in _snapshot.Workspaces.SelectMany(workspace => workspace.Panes).SelectMany(pane => pane.Surfaces))
         {
@@ -55,11 +57,14 @@ public sealed partial class MainWindow
                 // An idle shell's last line is its prompt, which the restored shell prints again.
                 if (terminal.ShellPid != 0 && !busyShells.Contains(terminal.ShellPid)) text = SessionStore.WithoutLastLine(text);
                 if (text.Length == 0) text = terminal.PendingRestoreText ?? string.Empty;
-                terminals[surface.Id] = new SessionTerminal(terminal.WorkingDirectory, text.Length > 0 ? text : null, terminal.FontSizeOverride, terminal.LastAgentSession);
+                // The agent is still running when its shell is busy and the badge names its provider.
+                var agentRunning = terminal.LastAgentSession is { } agent && busyShells.Contains(terminal.ShellPid) &&
+                    terminal.EffectiveStatus?.App == (agent.Provider == "claude" ? "claude-code" : agent.Provider);
+                terminals[surface.Id] = new SessionTerminal(terminal.WorkingDirectory, saveScrollback && text.Length > 0 ? text : null, terminal.FontSizeOverride, terminal.LastAgentSession, agentRunning);
             }
             else if (_restore.TryGetValue(surface.Id, out var pending))
             {
-                terminals[surface.Id] = pending;
+                terminals[surface.Id] = saveScrollback ? pending : pending with { Text = null };
             }
         }
         try

@@ -66,4 +66,14 @@ public sealed class LayoutTests
             Layouts.Folder = previous;
         }
     }
+
+    [TestMethod]
+    public void LeftAndUpSplitsPutTheNewPaneFirst()
+    {
+        Assert.AreEqual(("vertical", true), MainWindow.SplitPlacement("left"));
+        Assert.AreEqual(("vertical", false), MainWindow.SplitPlacement("Right"));
+        Assert.AreEqual(("horizontal", true), MainWindow.SplitPlacement("up"));
+        Assert.AreEqual(("horizontal", false), MainWindow.SplitPlacement("down"));
+        Assert.AreEqual("invalid_params", Assert.ThrowsExactly<ControlException>(() => MainWindow.SplitPlacement("sideways")).Code);
+    }
 }

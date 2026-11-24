@@ -45,7 +45,8 @@ Commands:
   rename-workspace <TITLE> [--workspace ID]
   focus-surface <ID>
   close-surface [--surface ID]
-  send [--surface ID] <TEXT>            Escapes: \n \r \t \e \\
+  send [--surface ID] [--force] [--answer-prompt] <TEXT>
+                                        Escapes: \n \r \t \e \\
   read-screen [--surface ID] [--lines N] [--scrollback]
   notify --title T [--subtitle S] [--body B] [--workspace ID] [--surface ID]
   list-notifications
@@ -1806,13 +1807,23 @@ fn build_params(
             put(&mut params, "surface_id", Some(id));
         }
         Command::Send => {
-            let opts = parse_opts(command, args, &["--surface"], &[])?;
+            let opts = parse_opts(
+                command,
+                args,
+                &["--surface"],
+                &["--force", "--answer-prompt"],
+            )?;
             if opts.positionals.is_empty() {
                 return Err(UsageError("send: missing text".into()));
             }
             put(&mut params, "surface_id", surface(&opts));
             let text = decode_escapes(&opts.positionals.join(" "));
             put(&mut params, "text", Some(text));
+            for (flag, key) in [("--force", "force"), ("--answer-prompt", "answer_prompt")] {
+                if opts.has(flag) {
+                    params.insert(key.to_owned(), json!(true));
+                }
+            }
         }
         Command::ReadScreen => {
             let opts = parse_opts(command, args, &["--surface", "--lines"], &["--scrollback"])?;
@@ -3460,6 +3471,11 @@ mod tests {
         assert_eq!(usage_error(&["send"]), "send: missing text");
         let req = request(&["send", "--", "-x"]);
         assert_eq!(req.params, params(json!({"text": "-x"})));
+        let req = request(&["send", "--force", "--answer-prompt", "y"]);
+        assert_eq!(
+            req.params,
+            params(json!({"text": "y", "force": true, "answer_prompt": true}))
+        );
     }
 
     #[test]

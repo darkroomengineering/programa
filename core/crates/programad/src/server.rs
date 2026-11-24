@@ -728,8 +728,10 @@ fn validate_command_sessions(
         | DomainCommand::AdoptSurface { .. }
         | DomainCommand::SetWorkspaceParent { .. }
         | DomainCommand::SetWorkspaceCollapsed { .. }
+        | DomainCommand::SetWorkspaceWorktreeFolder { .. }
         | DomainCommand::RenameSurface { .. }
         | DomainCommand::SetSurfacePinned { .. }
+        | DomainCommand::SetSurfaceColor { .. }
         | DomainCommand::SelectSurface { .. }
         | DomainCommand::CloseSurface { .. }
         | DomainCommand::ReorderSurface { .. }

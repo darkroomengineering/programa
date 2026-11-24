@@ -45,11 +45,14 @@ public sealed partial class MainWindow
         return (workspace, surface, TerminalFor(workspace.Id, surface));
     }
 
+    /// <summary>automation.protectApprovalPrompts and automation.holdAgentTextWhileTyping, on unless turned off.</summary>
     private static void RefuseWrite(JsonElement p, TerminalView terminal, string surfaceId)
     {
-        if (!Flag(p, "answer_prompt") && terminal.AgentState.State == "blocked")
+        // ponytail: reads settings.json per write; cache it if writes ever get hot.
+        var settings = AppSettings.Load();
+        if (settings.ProtectApprovalPrompts && !Flag(p, "answer_prompt") && terminal.AgentState.State == "blocked")
             throw new ControlException("agent_awaiting_approval", $"{surfaceId} is waiting on an approval prompt; nothing was sent", new { surface_id = surfaceId });
-        if (!Flag(p, "force") && terminal.HasDraft)
+        if (settings.HoldAgentTextWhileTyping && !Flag(p, "force") && terminal.HasDraft)
             throw new ControlException("draft_in_progress", $"{surfaceId} has unsent typed input; nothing was sent", new { surface_id = surfaceId });
     }
 
@@ -235,32 +238,11 @@ public sealed partial class MainWindow
                 RefreshUnreadIndicators();
                 break;
             case "new_terminal_right":
-                var created = Id("surface");
-                var next = pane.Surfaces.SkipWhile(surface => surface.Id != surfaceId).Skip(1).FirstOrDefault()?.Id;
-                CreateKeepingSelection(new { command = "create_surface", workspace_id = workspace.Id, pane_id = pane.Id, surface_id = created, session_id = Id("session") },
-                    workspace.Id, created, _terminals.GetValueOrDefault(surfaceId)?.WorkingDirectory, null);
-                if (next is not null) Apply(new { command = "reorder_surface", workspace_id = workspace.Id, pane_id = pane.Id, surface_id = created, before_surface_id = next });
+                var created = NewTerminalToRight(workspace.Id, pane.Id, surfaceId, focus: false);
                 extras["created_surface_id"] = extras["created_tab_id"] = created;
                 break;
             default:
-                // close_left, close_right, close_others: pinned tabs stay, and the workspace keeps at least one tab.
-                var ids = pane.Surfaces.Select(surface => surface.Id).ToList();
-                var at = ids.IndexOf(surfaceId);
-                var targets = action switch
-                {
-                    "close_left" => ids[..at],
-                    "close_right" => ids[(at + 1)..],
-                    _ => ids.Where(id => id != surfaceId).ToList(),
-                };
-                int closed = 0, skippedPinned = 0;
-                foreach (var id in targets)
-                {
-                    if (pane.Surfaces.First(surface => surface.Id == id).IsPinned) { skippedPinned++; continue; }
-                    if (_snapshot.Workspaces.First(item => item.Id == workspace.Id).Panes.Sum(item => item.Surfaces.Count) <= 1) break;
-                    _snapshot = Dispatch(new { command = "close_surface", workspace_id = workspace.Id, pane_id = pane.Id, surface_id = id });
-                    closed++;
-                }
-                if (closed > 0) ProjectSnapshot();
+                var (closed, skippedPinned) = CloseTabs(workspace.Id, pane.Id, surfaceId, action);
                 extras["closed"] = closed;
                 extras["skipped_pinned"] = skippedPinned;
                 break;

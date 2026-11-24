@@ -111,7 +111,7 @@ public sealed partial class MainWindow
         {
             var (workspaceId, paneId, surfaceId) = (Id("workspace"), Id("pane"), Id("surface"));
             _pendingTerminals[surfaceId] = new TerminalSpec(WorkspaceDirectory(parent), initialCommand, environment.Count > 0 ? environment : null);
-            CreateKeepingSelection(new { command = "create_workspace", workspace_id = workspaceId, pane_id = paneId, surface_id = surfaceId, session_id = Id("session") }, workspaceId, surfaceId, null, null);
+            CreateKeepingSelection(new { command = "create_workspace", workspace_id = workspaceId, pane_id = paneId, surface_id = surfaceId, session_id = Id("session"), placement = WorkspacePlacement }, workspaceId, surfaceId, null, null);
             Apply(new { command = "rename_workspace", workspace_id = workspaceId, title });
             try { Apply(new { command = "set_workspace_parent", workspace_id = workspaceId, parent_id = nestUnder }); }
             catch (CoreCommandException) { }

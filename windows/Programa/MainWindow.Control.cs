@@ -80,7 +80,9 @@ public sealed partial class MainWindow
         "surface.send_text" => Run(() =>
         {
             var (workspace, _, surface) = SurfaceTarget(p);
-            TerminalFor(workspace.Id, surface).SendText(Required(p, "text"));
+            var terminal = TerminalFor(workspace.Id, surface);
+            RefuseWrite(p, terminal, surface);
+            terminal.SendText(Required(p, "text"));
         }),
         "surface.read_text" => ReadTextFromControl(p),
         "surface.report_agent_state" => Run(() => ReportAgentStateFromControl(p)),
@@ -225,7 +227,7 @@ public sealed partial class MainWindow
     {
         var workspaceId = Id("workspace");
         var surfaceId = Id("surface");
-        CreateKeepingSelection(new { command = "create_workspace", workspace_id = workspaceId, pane_id = Id("pane"), surface_id = surfaceId, session_id = Id("session") },
+        CreateKeepingSelection(new { command = "create_workspace", workspace_id = workspaceId, pane_id = Id("pane"), surface_id = surfaceId, session_id = Id("session"), placement = WorkspacePlacement },
             workspaceId, surfaceId, Text(p, "cwd"), Text(p, "initial_command"));
         if (Text(p, "title") is { Length: > 0 } title) Apply(new { command = "rename_workspace", workspace_id = workspaceId, title });
         return new { workspace_id = workspaceId, surface_id = surfaceId };
@@ -249,17 +251,23 @@ public sealed partial class MainWindow
         return Split(workspace, pane, surface, Text(p, "direction") ?? "right", Text(p, "cwd"), Text(p, "initial_command"));
     }
 
+    /// <summary>app.newWorkspacePlacement as create_workspace's placement.</summary>
+    private static string WorkspacePlacement => AppSettings.Load().NewWorkspacePlacement switch { "top" => "top", "end" => "end", _ => "after_current" };
+
+    /// <summary>A split direction as the core's orientation; left and up put the new pane first.</summary>
+    internal static (string Orientation, bool InsertFirst) SplitPlacement(string requested) => requested.ToLowerInvariant() switch
+    {
+        "right" or "vertical" => ("vertical", false),
+        "left" => ("vertical", true),
+        "down" or "horizontal" => ("horizontal", false),
+        "up" => ("horizontal", true),
+        var other => throw new ControlException("invalid_params", $"direction '{other}' is not left, right, up or down."),
+    };
+
     /// <summary>A new terminal beside <paramref name="surface"/>'s pane; left and up put it first. The selection stays.</summary>
     private object Split(WorkspaceSnapshot workspace, PaneSnapshot pane, string surface, string requested, string? cwd, string? initialCommand)
     {
-        var (direction, insertFirst) = requested.ToLowerInvariant() switch
-        {
-            "right" or "vertical" => ("vertical", false),
-            "left" => ("vertical", true),
-            "down" or "horizontal" => ("horizontal", false),
-            "up" => ("horizontal", true),
-            var other => throw new ControlException("invalid_params", $"direction '{other}' is not left, right, up or down."),
-        };
+        var (direction, insertFirst) = SplitPlacement(requested);
         var newPaneId = Id("pane");
         var surfaceId = Id("surface");
         var directory = cwd ?? _terminals.GetValueOrDefault(surface)?.WorkingDirectory;

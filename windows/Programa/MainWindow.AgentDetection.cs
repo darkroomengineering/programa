@@ -21,9 +21,18 @@ public sealed partial class MainWindow
         Closed += (_, _) => timer.Stop();
     }
 
+    /// <summary>automation.agentScreenDetection, refreshed when settings change.</summary>
+    private bool _screenDetection = AppSettings.Load().AgentScreenDetection;
+
     private void DetectAgents()
     {
         foreach (var closed in _detectedAgents.Keys.Where(id => !_terminals.ContainsKey(id)).ToList()) _detectedAgents.Remove(closed);
+        if (!_screenDetection)
+        {
+            // Turned off: what was read off the screen goes; hook and program reports stay.
+            foreach (var id in _detectedAgents.Keys.ToList()) if (_detectedAgents.Remove(id) && _terminals.TryGetValue(id, out var shown)) shown.ReportDetectedState(null, null);
+            return;
+        }
         var shells = _terminals.Values.Select(terminal => terminal.ShellPid).Where(pid => pid != 0).ToHashSet();
         var busy = ProcessTree.ChildrenOf(shells).Keys.ToHashSet();
         foreach (var terminal in _terminals.Values.ToList())

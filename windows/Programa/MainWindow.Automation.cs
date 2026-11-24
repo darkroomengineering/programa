@@ -99,8 +99,10 @@ public sealed partial class MainWindow
         if (text.Length == 0) throw new ControlException("invalid_params", "text is empty.");
         var timeout = TimeoutMs(p, 120_000);
         var grace = Math.Max(0, Number(p, "working_grace_ms") ?? 3000);
-        var force = Flag(p, "force");
-        var answerPrompt = Flag(p, "answer_prompt");
+        // automation.holdAgentTextWhileTyping and automation.protectApprovalPrompts off act as force and answer_prompt.
+        var settings = AppSettings.Load();
+        var force = Flag(p, "force") || !settings.HoldAgentTextWhileTyping;
+        var answerPrompt = Flag(p, "answer_prompt") || !settings.ProtectApprovalPrompts;
         var clock = Stopwatch.StartNew();
         long Remaining() => Math.Max(0, timeout - clock.ElapsedMilliseconds);
         var sawState = terminal.AgentState.State is not null;
