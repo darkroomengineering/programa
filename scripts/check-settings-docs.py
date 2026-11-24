@@ -32,6 +32,8 @@ FILE_ONLY_KEYS = {
         "Only affects macOS 14 and 15, where the sidebar has no system glass; set it in the file."
     ),
     "windows.shortcuts": "Read by the Windows app only.",
+    "windows.shell": "Read by the Windows app only.",
+    "windows.startingDirectory": "Read by the Windows app only.",
 }
 
 # Settings window rows with no settings.json key, on purpose (SettingsRow cases with no raw value).

@@ -204,7 +204,9 @@ public sealed partial class TerminalView : UserControl, IDisposable
     internal string? Cwd { get; private set; }
 
     /// <summary>Where the shell is: its last report, or the directory it started in.</summary>
-    internal string? WorkingDirectory => Cwd ?? _initialDirectory;
+    internal string? WorkingDirectory => Cwd ?? _initialDirectory ?? _startedDirectory;
+    // windows.startingDirectory, kept for a shell such as cmd.exe that never reports OSC 7.
+    private string? _startedDirectory;
 
     /// <summary>Raised on the UI thread with the surface id at each directory report (each prompt).</summary>
     internal event Action<string>? CwdChanged;
@@ -666,16 +668,18 @@ public sealed partial class TerminalView : UserControl, IDisposable
         }
         // A layout's per-terminal variables (docs/programa-json.md, surfaces[].env).
         if (_extraEnvironment is not null) foreach (var (key, value) in _extraEnvironment) environment[key] = value;
-        var directory = Cwd ?? _initialDirectory;
+        var terminalSettings = TerminalSettings.LoadOrDefaults();
+        var directory = Cwd ?? _initialDirectory ?? terminalSettings.StartingDirectory;
+        if (directory is not null && !Directory.Exists(directory)) directory = null;
         // The shell runs in the terminal host and outlives the app; one still running there from
         // before this launch is reattached as it is, so its start command does not run again.
         var host = TerminalHost.Current is { } connection ? new { pipe = connection.Pipe, token = connection.Token, id = SurfaceId } : null;
         var reattach = TerminalHost.LiveAtLaunch.Remove(SurfaceId);
         if (reattach) _initialCommand = null;
         // Ghostty's command picks the program; initial-command replaces it for the first terminal
-        // this launch starts, as Ghostty does on macOS.
-        var command = reattach ? null : (Interlocked.Exchange(ref _shellStarted, 1) == 0 ? _appearance.InitialCommand : null) ?? _appearance.Command;
-        var config = JsonSerializer.SerializeToUtf8Bytes(new { cols = 80, rows = 24, cell_width = (ushort)MathF.Ceiling(_cellWidth), cell_height = (ushort)MathF.Ceiling(_cellHeight), colors = _appearance.CoreColors, restore_text = _restoreText, shell_integration = true, command, working_directory = directory is not null && Directory.Exists(directory) ? directory : null, env = environment, host });
+        // this launch starts, as Ghostty does on macOS. windows.shell replaces Ghostty's command.
+        var command = reattach ? null : (Interlocked.Exchange(ref _shellStarted, 1) == 0 ? _appearance.InitialCommand : null) ?? terminalSettings.Command ?? _appearance.Command;
+        var config = JsonSerializer.SerializeToUtf8Bytes(new { cols = 80, rows = 24, cell_width = (ushort)MathF.Ceiling(_cellWidth), cell_height = (ushort)MathF.Ceiling(_cellHeight), colors = _appearance.CoreColors, restore_text = _restoreText, shell_integration = true, command, working_directory = directory, env = environment, host });
         var session = NativeTerminal.Create(config, out var error);
         _restoreText = null;
         if (session is null || session.IsInvalid)
@@ -687,6 +691,7 @@ public sealed partial class TerminalView : UserControl, IDisposable
         // The command could not be used and the default shell started; error says why.
         if (!string.IsNullOrEmpty(error)) LaunchLog.Write(error);
         _session = session;
+        _startedDirectory = directory;
         // PowerShell discards input typed before its first prompt, so the initial command waits for
         // the prompt's OSC 7 (see Refresh); a shell without the integration gets it after 5 seconds.
         if (_initialCommand is { Length: > 0 })

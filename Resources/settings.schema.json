@@ -365,6 +365,14 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "shell": {
+          "description": "An absolute path to an .exe file for new Windows terminals. Omit or use null to launch the default Windows shell.",
+          "type": ["string", "null"]
+        },
+        "startingDirectory": {
+          "description": "An absolute starting directory for new Windows terminals. Omit or use null to start in the user's home directory.",
+          "type": ["string", "null"]
+        },
         "shortcuts": {
           "title": "shortcuts",
           "description": "Windows keyboard bindings keyed by action. A binding is modifiers and one key joined by hyphens, for example ctrl-shift-t. Modifiers are ctrl, alt and shift; the key is one letter or digit, comma, insert, pageup, pagedown, tab, enter, left, right, up, down, equals or minus. ctrl-c, ctrl-d and ctrl-w are reserved for the terminal, and no two actions can share a binding.",

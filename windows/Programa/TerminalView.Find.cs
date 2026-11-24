@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
@@ -36,6 +37,8 @@ public sealed partial class TerminalView
         _findStatus.VerticalAlignment = VerticalAlignment.Center;
         _findStatus.FontSize = 12;
         _findStatus.Opacity = 0.7;
+        // "No matches" is announced without moving focus out of the query.
+        AutomationProperties.SetLiveSetting(_findStatus, AutomationLiveSetting.Polite);
 
         var bar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
         bar.Children.Add(_findBox);
@@ -58,7 +61,7 @@ public sealed partial class TerminalView
 
     private static Button FindButton(string glyph, string labelKey, Action handler)
     {
-        var button = new Button { Content = new FontIcon { Glyph = glyph, FontSize = 12 }, Padding = new Thickness(8, 6, 8, 6) };
+        var button = new Button { Content = new FontIcon { Glyph = glyph, FontSize = 12 }, Padding = new Thickness(8, 6, 8, 6), MinWidth = 44, MinHeight = 44 };
         AutomationProperties.SetName(button, Localizer.Get(labelKey));
         ToolTipService.SetToolTip(button, Localizer.Get(labelKey));
         button.Click += (_, _) => handler();
@@ -120,5 +123,7 @@ public sealed partial class TerminalView
         }
         var found = NativeTerminal.Find(_session, Encoding.UTF8.GetBytes(_findBox.Text), forward);
         _findStatus.Text = found ? string.Empty : Localizer.Get("FindNoMatches");
+        if (!found && FrameworkElementAutomationPeer.FromElement(_findStatus) is { } peer)
+            peer.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
     }
 }
