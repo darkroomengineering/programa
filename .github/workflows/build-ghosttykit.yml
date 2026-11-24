@@ -40,7 +40,9 @@ permissions:
 jobs:
   build-ghosttykit:
     runs-on: macos-15
-    timeout-minutes: 20
+    # A Zig version missing from the toolchain cache downloads from ziglang.org, which has taken
+    # 13 minutes on hosted runners; the cache only saves on success, so 20 minutes never recovers.
+    timeout-minutes: 40
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

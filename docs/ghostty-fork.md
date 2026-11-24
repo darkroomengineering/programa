@@ -13,9 +13,10 @@ When we change the fork, update this document and the parent submodule SHA.
 
 ## Current fork changes
 
-The pinned fork head is `e5eb93b00` on the fork branch `inc-1723-merge-upstream`, which is also the
-fork's `main`. It is a merge of upstream `ghostty-org/ghostty` `main` (`77c2f8b9f`) into the
-previous pin `60f5a29b7` (branch `inc-1281-fork-patches`), which sits on `e4b6b6bc6` (branch
+The pinned fork head is `5ea82415c` on the fork branch `inc-1731-merge-upstream`, which is also the
+fork's `main`. It is a merge of upstream `ghostty-org/ghostty` `main` (`64a6fedfd`) into the
+previous pin `e5eb93b00` (branch `inc-1723-merge-upstream`), which merged upstream into
+`60f5a29b7` (branch `inc-1281-fork-patches`), which sits on `e4b6b6bc6` (branch
 `inc-1279-merge-upstream`). Never delete these branches: the pins and their xcframework releases
 point at them. It builds with Zig 0.17.1 and carries
 eleven patch groups: display-link restart, resize stale-frame mitigation, OSC 99
@@ -411,3 +412,12 @@ version or the libxev pin. Two files conflicted:
   before its last character. The fork's `trailing_spaces_at_eol`, which upstream removed in
   `9fc2a3085`, is gone too, so a path never includes the blank cells after it. The fork's and
   upstream's test cases both pass.
+
+### November 24, 2026 second upstream sync (INC-1731)
+
+Merged upstream `main` (`64a6fedfd`, 6 commits) into `e5eb93b00` with no conflicts. Emoji followed
+by a skin tone modifier now shape as emoji in both the CoreText and HarfBuzz shapers. Upstream
+lowered the minimum Zig version to 0.17.0 and released libghostty-vt 1.0.2; the pinned commit
+declares the next development version, `1.0.3-dev`. The C API
+(`include/ghostty.h`), `src/config/Config.zig`, `src/apprt/embedded.zig` and the libxev pin are
+unchanged.
