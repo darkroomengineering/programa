@@ -17,7 +17,11 @@ internal sealed record TerminalSettings(string? Shell, string? StartingDirectory
         try { text = File.ReadAllText(ShortcutSettings.SettingsPath); }
         catch (FileNotFoundException) { return Defaults; }
         catch (DirectoryNotFoundException) { return Defaults; }
+        return Parse(text);
+    }
 
+    internal static TerminalSettings Parse(string text)
+    {
         if (string.IsNullOrWhiteSpace(text)) return Defaults;
         using var document = JsonDocument.Parse(text, DocumentOptions);
         var root = document.RootElement;
@@ -42,8 +46,21 @@ internal sealed record TerminalSettings(string? Shell, string? StartingDirectory
         return new(shell, directory);
     }
 
-    // ConPTY's command-line builder inserts the executable verbatim, before escaping arguments.
-    public string? NativeShell => Shell is null ? null : $"\"{Shell}\"";
+    /// <summary>The settings in the file, or the defaults when it cannot be read; the reason goes
+    /// to launch.log so a typo does not stop terminals from starting.</summary>
+    public static TerminalSettings LoadOrDefaults()
+    {
+        try { return Load(); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or JsonException)
+        {
+            LaunchLog.Write($"settings: windows.shell and windows.startingDirectory ignored: {error.Message}");
+            return Defaults;
+        }
+    }
+
+    /// <summary>windows.shell as a Ghostty command line: quoted, so the core finds the program and
+    /// keeps PowerShell's integration as it does for Ghostty's command.</summary>
+    public string? Command => Shell is null ? null : $"\"{Shell}\"";
 
     private static string? ReadOptionalString(JsonElement windows, string key)
     {

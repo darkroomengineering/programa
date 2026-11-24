@@ -130,10 +130,10 @@ Settings read by the Windows frontend only. The macOS app ignores this section.
 | Key | Type | Default | What it does |
 |---|---|---|---|
 | `shortcuts` | object | see below | Windows keyboard bindings keyed by action id. |
-| `shell` | string or null | `null` | Absolute path to an `.exe` file. Defaults to `COMSPEC` or `cmd.exe`. |
-| `startingDirectory` | string or null | `null` | Absolute directory for each new terminal. Defaults to the user's home directory. |
+| `shell` | string or null | `null` | Absolute path to an `.exe` file for new terminals. Replaces Ghostty's `command`; without either, the default shell starts. |
+| `startingDirectory` | string or null | `null` | Absolute directory for a new terminal that has no directory to inherit. Defaults to the user's home directory. |
 
-Programa reads the shell and starting directory when it starts a terminal. Existing terminals retain their current shell and directory.
+Programa reads the shell and starting directory each time it starts a terminal, so existing terminals keep their shell and directory. A split or a new tab starts in the directory of the terminal it came from. An invalid value is written to `launch.log` and ignored.
 
 A binding is modifiers and one key joined by hyphens, for example `ctrl-shift-t`. Modifiers are
 `ctrl`, `alt` and `shift`; the key is one letter or digit, `comma`, `insert`, `pageup`, `pagedown`, `tab`, `enter`, `left`, `right`, `up`, `down`, `equals`, `minus` or `f1` to `f12`. Only a function key can go without a modifier. An empty string leaves the action without a shortcut. `ctrl-c`,

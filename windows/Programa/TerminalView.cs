@@ -666,15 +666,16 @@ public sealed partial class TerminalView : UserControl, IDisposable
         }
         // A layout's per-terminal variables (docs/programa-json.md, surfaces[].env).
         if (_extraEnvironment is not null) foreach (var (key, value) in _extraEnvironment) environment[key] = value;
-        var directory = Cwd ?? _initialDirectory;
+        var settings = TerminalSettings.LoadOrDefaults();
+        var directory = Cwd ?? _initialDirectory ?? settings.StartingDirectory;
         // The shell runs in the terminal host and outlives the app; one still running there from
         // before this launch is reattached as it is, so its start command does not run again.
         var host = TerminalHost.Current is { } connection ? new { pipe = connection.Pipe, token = connection.Token, id = SurfaceId } : null;
         var reattach = TerminalHost.LiveAtLaunch.Remove(SurfaceId);
         if (reattach) _initialCommand = null;
         // Ghostty's command picks the program; initial-command replaces it for the first terminal
-        // this launch starts, as Ghostty does on macOS.
-        var command = reattach ? null : (Interlocked.Exchange(ref _shellStarted, 1) == 0 ? _appearance.InitialCommand : null) ?? _appearance.Command;
+        // this launch starts, as Ghostty does on macOS. windows.shell replaces Ghostty's command.
+        var command = reattach ? null : (Interlocked.Exchange(ref _shellStarted, 1) == 0 ? _appearance.InitialCommand : null) ?? settings.Command ?? _appearance.Command;
         var config = JsonSerializer.SerializeToUtf8Bytes(new { cols = 80, rows = 24, cell_width = (ushort)MathF.Ceiling(_cellWidth), cell_height = (ushort)MathF.Ceiling(_cellHeight), colors = _appearance.CoreColors, restore_text = _restoreText, shell_integration = true, command, working_directory = directory is not null && Directory.Exists(directory) ? directory : null, env = environment, host });
         var session = NativeTerminal.Create(config, out var error);
         _restoreText = null;
