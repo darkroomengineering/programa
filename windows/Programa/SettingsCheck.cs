@@ -8,8 +8,8 @@ namespace Programa;
 /// SettingsFileCheck: reads settings.json without applying it and prints each problem as
 /// <c>settings.json:LINE: key.path: message</c>. Exits 0 when the file is valid or absent, 1 when it
 /// has problems, 2 when an explicit path does not exist. It checks what the Windows app reads with
-/// the macOS messages: the JSONC syntax, app.appearance, app.terminalTheme, app.terminalFont and
-/// customCommands.trustedDirectories.
+/// the macOS messages: the JSONC syntax, app.appearance, app.terminalTheme, app.terminalFont,
+/// customCommands.trustedDirectories, windows.shell and windows.startingDirectory.
 /// </summary>
 internal static class SettingsCheck
 {
@@ -96,6 +96,7 @@ internal static class SettingsCheck
                 && Member(commands, "trustedDirectories") is { } roots && roots.ValueKind != JsonValueKind.Null
                 && !(roots.ValueKind == JsonValueKind.Array && roots.EnumerateArray().All(item => item.ValueKind == JsonValueKind.String)))
                 found.Add(("customCommands.trustedDirectories", "expected an array of strings"));
+            TerminalSettings.Read(root, found);
             var lines = KeyLines(data);
             return [.. found
                 .Select(item => new Problem(LineOf(lines, item.Path), item.Path, item.Message))
