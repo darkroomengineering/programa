@@ -417,6 +417,7 @@ version or the libxev pin. Two files conflicted:
 
 Merged upstream `main` (`64a6fedfd`, 6 commits) into `e5eb93b00` with no conflicts. Emoji followed
 by a skin tone modifier now shape as emoji in both the CoreText and HarfBuzz shapers. Upstream
-lowered the minimum Zig version to 0.17.0 and bumped libghostty-vt to 1.0.2. The C API
+lowered the minimum Zig version to 0.17.0 and released libghostty-vt 1.0.2; the pinned commit
+declares the next development version, `1.0.3-dev`. The C API
 (`include/ghostty.h`), `src/config/Config.zig`, `src/apprt/embedded.zig` and the libxev pin are
 unchanged.
