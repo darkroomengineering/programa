@@ -1,11 +1,10 @@
 # settings.json
 
-This reference describes macOS. The Windows frontend stores its
-editable shortcuts under `windows.shortcuts` in
+The Windows frontend reads the `windows` section in
 `%USERPROFILE%\\.config\\programa\\settings.json`; see the
 [Windows configuration guide](../windows/README.md#windows-behavior).
 
-Programa reads `~/.config/programa/settings.json` on launch and reloads it whenever the file changes, so edits apply without a restart. Almost every key also has a row in the Settings window, and a key set in the file wins over its row until you remove the key from the file. While the file sets a key, its row is disabled and says "Managed in settings.json". The keys without a row are `sidebarAppearance.matchTerminalBackground` and the Windows-only `windows.shortcuts`. The file may contain `//` comments. The full contract is `Resources/settings.schema.json` in the repository. This page is maintained by hand. `scripts/check-settings-docs.py` fails when a schema key is missing from it (or the reverse), and when a schema key has no Settings row or a Settings row has no key, apart from the exceptions it lists.
+On macOS, Programa reads `~/.config/programa/settings.json` on launch and reloads it whenever the file changes, so edits apply without a restart. Almost every macOS key also has a row in the Settings window, and a key set in the file wins over its row until you remove the key from the file. While the file sets a key, its row is disabled and says "Managed in settings.json". The macOS key without a row is `sidebarAppearance.matchTerminalBackground`. The file may contain `//` comments. The full contract is `Resources/settings.schema.json` in the repository. This page is maintained by hand. `scripts/check-settings-docs.py` fails when a schema key is missing from it (or the reverse), and when a schema key has no Settings row or a Settings row has no key, apart from the exceptions it lists.
 
 Keys you do not set fall back to the defaults listed below. Keyboard shortcuts live under `shortcuts.bindings` and are documented in [keyboard-shortcuts.md](keyboard-shortcuts.md); terminal theme and font keys are explained in [terminal-themes.md](terminal-themes.md).
 
@@ -131,6 +130,10 @@ Settings read by the Windows frontend only. The macOS app ignores this section.
 | Key | Type | Default | What it does |
 |---|---|---|---|
 | `shortcuts` | object | see below | Windows keyboard bindings keyed by action id. |
+| `shell` | string or null | `null` | Absolute path to an `.exe` file. Defaults to `COMSPEC` or `cmd.exe`. |
+| `startingDirectory` | string or null | `null` | Absolute directory for each new terminal. Defaults to the user's home directory. |
+
+Programa reads the shell and starting directory when it starts a terminal. Existing terminals retain their current shell and directory.
 
 A binding is modifiers and one key joined by hyphens, for example `ctrl-shift-t`. Modifiers are
 `ctrl`, `alt` and `shift`; the key is one letter or digit, `comma`, `insert`, `pageup`, `pagedown`, `tab`, `enter`, `left`, `right`, `up`, `down`, `equals`, `minus` or `f1` to `f12`. Only a function key can go without a modifier. An empty string leaves the action without a shortcut. `ctrl-c`,
