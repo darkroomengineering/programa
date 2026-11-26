@@ -66,3 +66,4 @@ jobs:
           name: windows-lane-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/shipit-windows-*
           if-no-files-found: ignore
+          retention-days: 7

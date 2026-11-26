@@ -348,6 +348,7 @@ jobs:
           name: programa-windows-ci
           path: ${{ runner.temp }}/programa-windows-ci/*.exe
           if-no-files-found: error
+          retention-days: 7
 
   # Build the Debug app + UI test bundle once and share it with every job that
   # only needs to *run* it (socket-integration-tests, tests-build-and-lag,
