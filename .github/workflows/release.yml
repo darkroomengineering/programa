@@ -646,6 +646,7 @@ jobs:
           overwrite: true
           path: ${{ runner.temp }}/programa-windows-payload/
           if-no-files-found: error
+          retention-days: 7
 
   # Second half of the supersession check: a newer main commit landing while the builds ran
   # means this run must not stage or promote. It ends successfully with a notice; the newer
@@ -845,6 +846,7 @@ jobs:
           name: programa-release-dry-run
           path: ${{ env.PAYLOAD_DIR }}/
           if-no-files-found: error
+          retention-days: 7
 
   promote-rolling:
     needs: [release-identity, assemble-release]

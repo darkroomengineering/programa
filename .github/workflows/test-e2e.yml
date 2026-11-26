@@ -321,6 +321,7 @@ jobs:
             /tmp/programa-e2e.xcresult
             /tmp/programa-e2e-diagnostics
           if-no-files-found: warn
+          retention-days: 7
 
       - name: Stop recording and trim
         if: ${{ always() && inputs.record_video && env.RECORD_PID != '' }}
@@ -370,6 +371,7 @@ jobs:
           name: test-recording
           path: /tmp/test-recording.mp4
           if-no-files-found: warn
+          retention-days: 7
 
   # The token never reaches a job that ran the dispatched ref's code: that code
   # could rewrite $GITHUB_PATH or $GITHUB_ENV and capture it.
