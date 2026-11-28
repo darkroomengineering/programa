@@ -105,8 +105,6 @@ Programa keeps what tmux is good at and adds what agents need:
 - A machine-readable socket API contract (`contracts/v2/methods.json`) that generates the app's command catalog and the CLI's method names, so those two cannot drift from it.
 - Native Windows.
 
-Things cmux has that Programa removed on purpose, to stay lean: SSH remote workspaces and an iOS companion. Both are documented under `docs/removed/`, with the reasons and what a future version should do differently.
-
 Programa is a terminal, notifications, workspaces, and a CLI to control all of it: primitives you compose yourself rather than a prescribed workflow. What you build with them is yours.
 
 ## Shortcuts
