@@ -20,6 +20,7 @@ import Observation
     private(set) var connection: Connection = .loading
     private(set) var repositories: [MobileChatRepository] = []
     private(set) var jobs: [MobileChatJob] = []
+    private var acknowledged: [UUID: MobileChatMessage] = [:]
     private let client = CompanionClient()
     private var pairingGeneration = UUID()
     private var jobsGeneration = 0
@@ -59,6 +60,7 @@ import Observation
             try await client.forget()
             repositories = []
             jobs = []
+            acknowledged = [:]
             connection = .unpaired(nil)
         } catch {
             connection = .offline(mac, CompanionIssue(error))
@@ -97,6 +99,13 @@ import Observation
 
     func submit(_ request: MobileChatRequest) async throws -> MobileChatJob {
         guard case let .job(job) = try await self.request(request) else { throw CompanionIssue.unexpectedReply }
+        switch request {
+        case let .start(jobID, messageID, _, prompt), let .reply(jobID, messageID, prompt):
+            guard jobID == job.id else { throw CompanionIssue.unexpectedReply }
+            acknowledged[jobID] = MobileChatMessage(id: messageID, role: .user, text: prompt, createdAt: job.updatedAt)
+        default:
+            break
+        }
         merge(job)
         return job
     }
@@ -105,7 +114,14 @@ import Observation
         guard case let .conversation(page) = try await request(.history(jobID: jobID, before: before)),
               page.job.id == jobID else { throw CompanionIssue.unexpectedReply }
         merge(page.job)
+        if let message = acknowledged[jobID], page.messages.contains(where: { $0.id == message.id }) {
+            acknowledged[jobID] = nil
+        }
         return page
+    }
+
+    func acknowledgedMessage(for jobID: UUID) -> MobileChatMessage? {
+        acknowledged[jobID]
     }
 
     func job(_ id: UUID) -> MobileChatJob? {

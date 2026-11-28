@@ -161,6 +161,12 @@ struct ConversationView: View {
 
     private var job: MobileChatJob? { store.job(jobID) }
 
+    private var acknowledgedHistory: LoadedHistory? {
+        guard job != nil else { return nil }
+        let messages = store.acknowledgedMessage(for: jobID).map { [$0] } ?? []
+        return LoadedHistory(messages: messages, earlier: .none, includesEarlier: false)
+    }
+
     private var workspaceURL: URL? {
         guard let reference = job?.workspaceReference else { return nil }
         return URL(string: "programa://workspace/\(reference.uuidString.lowercased())")
@@ -170,14 +176,23 @@ struct ConversationView: View {
         Group {
             switch history {
             case .loading:
-                ProgressView()
+                if let acknowledgedHistory {
+                    transcript(acknowledgedHistory)
+                } else {
+                    ProgressView()
+                }
             case let .failed(issue):
-                ContentUnavailableView {
-                    Label(String(localized: "thread.unavailable", defaultValue: "Conversation Unavailable"), systemImage: "exclamationmark.bubble")
-                } description: {
-                    Text(issue.label)
-                } actions: {
-                    Button(String(localized: "common.retry", defaultValue: "Try Again")) { newReplies += 1 }
+                if let acknowledgedHistory {
+                    transcript(acknowledgedHistory)
+                        .safeAreaInset(edge: .top, spacing: 0) { connectionNotice(issue) }
+                } else {
+                    ContentUnavailableView {
+                        Label(String(localized: "thread.unavailable", defaultValue: "Conversation Unavailable"), systemImage: "exclamationmark.bubble")
+                    } description: {
+                        Text(issue.label)
+                    } actions: {
+                        Button(String(localized: "common.retry", defaultValue: "Try Again")) { newReplies += 1 }
+                    }
                 }
             case let .loaded(page):
                 transcript(page)
@@ -200,12 +215,31 @@ struct ConversationView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) { composer }
     }
 
+    private func connectionNotice(_ issue: CompanionIssue) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(issue.label)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Button(String(localized: "common.retry", defaultValue: "Try Again")) { newReplies += 1 }
+                .frame(minHeight: 44)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal)
+        .padding(.top, 8)
+        .background(.bar)
+    }
+
     private func transcript(_ page: LoadedHistory) -> some View {
-        ScrollViewReader { reader in
+        var messages = page.messages
+        if let lastAccepted = store.acknowledgedMessage(for: jobID),
+           !messages.contains(where: { $0.id == lastAccepted.id }) {
+            messages.append(lastAccepted)
+        }
+        return ScrollViewReader { reader in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 20) {
                     earlierControl(page.earlier)
-                    ForEach(page.messages) { message in
+                    ForEach(messages) { message in
                         messageRow(message)
                             .id(message.id)
                     }
@@ -223,7 +257,7 @@ struct ConversationView: View {
             }
             .defaultScrollAnchor(.bottom, for: .initialOffset)
             .refreshable { await refresh() }
-            .onChange(of: page.messages.last?.id) { oldID, newID in
+            .onChange(of: messages.last?.id) { oldID, newID in
                 if oldID != nil, let newID { reader.scrollTo(newID, anchor: .bottom) }
             }
         }
@@ -264,6 +298,8 @@ struct ConversationView: View {
                 Text(issue.label).font(.footnote).foregroundStyle(.secondary)
             } else if case let .offline(_, issue) = store.connection, case .loaded = history {
                 Text(issue.label).font(.footnote).foregroundStyle(.secondary)
+                Button(String(localized: "common.retry", defaultValue: "Try Again")) { newReplies += 1 }
+                    .frame(minHeight: 44)
             } else if reply.preparedPrompt.utf8.count > MobileChatWire.maximumPromptBytes {
                 Text(String(localized: "task.tooLong", defaultValue: "This message is too long. Shorten it and try again."))
                     .font(.footnote)

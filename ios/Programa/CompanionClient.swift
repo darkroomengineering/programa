@@ -1,5 +1,6 @@
 import Foundation
 import IrohLib
+import OSLog
 import Security
 
 struct PairedMac: Codable, Sendable {
@@ -48,6 +49,7 @@ enum CompanionIssue: Error, Sendable {
 }
 
 actor CompanionClient {
+    private static let transportLog = Logger(subsystem: "com.darkroom.programa.iphone", category: "CompanionTransport")
     private var endpoint: (id: UUID, task: Task<Endpoint, Error>)?
 
     func savedMac() throws -> PairedMac? {
@@ -62,7 +64,7 @@ actor CompanionClient {
     func pair(with text: String, deviceName: String) async throws -> PairedMac {
         guard let code = MobileChatPairingCode.parse(text) else { throw CompanionIssue.malformedCode }
         let mac = PairedMac(ticket: code.ticket, name: code.macName)
-        let response = try await exchange(.pair(code: code.token, deviceName: deviceName), with: mac)
+        let response = try await exchangeWithRetry(.pair(code: code.token, deviceName: deviceName), with: mac)
         guard case .paired = response else { throw CompanionIssue.pairingRefused }
         try CompanionKeychain.set(JSONEncoder().encode(mac), account: "paired-mac")
         return mac
@@ -82,9 +84,18 @@ actor CompanionClient {
     }
 
     func request(_ request: MobileChatRequest, on mac: PairedMac) async throws -> MobileChatResponse {
-        let response = try await exchange(request, with: mac)
+        let response = try await exchangeWithRetry(request, with: mac)
         if case let .failure(reason) = response { throw CompanionIssue.refused(reason) }
         return response
+    }
+
+    private func exchangeWithRetry(_ request: MobileChatRequest, with mac: PairedMac) async throws -> MobileChatResponse {
+        do {
+            return try await exchange(request, with: mac)
+        } catch CompanionIssue.unreachable {
+            try await Task.sleep(for: .milliseconds(400))
+            return try await exchange(request, with: mac)
+        }
     }
 
     private func boundEndpoint() async throws -> Endpoint {
@@ -114,6 +125,7 @@ actor CompanionClient {
     }
 
     private func exchange(_ request: MobileChatRequest, with mac: PairedMac) async throws -> MobileChatResponse {
+        try Task.checkCancellation()
         let ticket: EndpointTicket
         do {
             ticket = try EndpointTicket.fromString(str: mac.ticket)
@@ -123,27 +135,44 @@ actor CompanionClient {
         let data = try JSONEncoder().encode(request)
         guard data.count <= MobileChatWire.maximumRequestBytes else { throw CompanionIssue.refused(.invalidRequest) }
         let address = ticket.endpointAddr()
-        let bound = try await boundEndpoint()
-        let connection = try await Self.withDeadline(.seconds(20)) {
-            try await bound.connect(addr: address, alpn: MobileChatWire.alpn)
+        let bound = try await transport("bind") { try await boundEndpoint() }
+        let connection = try await transport("connect") {
+            try await Self.withDeadline(.seconds(20)) {
+                try await bound.connect(addr: address, alpn: MobileChatWire.alpn)
+            }
         }
         defer { try? connection.close(errorCode: 0, reason: Data()) }
         let close: @Sendable () -> Void = { try? connection.close(errorCode: 0, reason: Data()) }
-        let response = try await withTaskCancellationHandler {
-            try await Self.withDeadline(.seconds(15), abort: close) {
-                let stream = try await connection.openBi()
-                let send = stream.send()
-                try await send.writeAll(buf: data)
-                try await send.finish()
-                return try await stream.recv().readToEnd(sizeLimit: UInt32(MobileChatWire.maximumResponseBytes))
+        let response = try await transport("stream") {
+            try await withTaskCancellationHandler {
+                try await Self.withDeadline(.seconds(15), abort: close) {
+                    let stream = try await connection.openBi()
+                    let send = stream.send()
+                    try await send.writeAll(buf: data)
+                    try await send.finish()
+                    return try await stream.recv().readToEnd(sizeLimit: UInt32(MobileChatWire.maximumResponseBytes))
+                }
+            } onCancel: {
+                close()
             }
-        } onCancel: {
-            close()
         }
         do {
             return try JSONDecoder().decode(MobileChatResponse.self, from: response)
         } catch {
             throw CompanionIssue.unexpectedReply
+        }
+    }
+
+    private func transport<Value>(_ phase: String, operation: () async throws -> Value) async throws -> Value {
+        do {
+            return try await operation()
+        } catch {
+            try Task.checkCancellation()
+            if error is CancellationError { throw error }
+            if let issue = error as? CompanionIssue, case .credential = issue { throw issue }
+            let kind = String(reflecting: type(of: error))
+            Self.transportLog.error("Companion transport failed during \(phase, privacy: .public) (\(kind, privacy: .public))")
+            throw CompanionIssue.unreachable
         }
     }
 
