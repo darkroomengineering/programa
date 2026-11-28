@@ -161,7 +161,8 @@ struct GitWorktreeManager {
         repoRoot: String,
         branch: String,
         base: String?,
-        path: String
+        path: String,
+        runCheckoutHooks: Bool = true
     ) -> AddOutcome {
         if FileManager.default.fileExists(atPath: path) {
             return .worktreePathExists
@@ -170,7 +171,8 @@ struct GitWorktreeManager {
         // `--` ends option parsing, so a caller-supplied path or base such as `--detach` is
         // read as a path or ref name, never as an option. `-b <branch>` is an option value and
         // is safe before it.
-        var arguments = ["worktree", "add"]
+        let gitConfiguration = runCheckoutHooks ? [] : ["-c", "core.hooksPath=/dev/null"]
+        var arguments = gitConfiguration + ["worktree", "add"]
         guard let branchExisted = branchExistsLocally(branch, repoRoot: repoRoot) else {
             return .gitCommandFailed(message: "Could not determine whether branch '\(branch)' already exists")
         }
@@ -186,7 +188,7 @@ struct GitWorktreeManager {
         }
         guard !result.timedOut, result.exitStatus == 0 else {
             if !branchExisted {
-                deleteBranchIfUnused(branch, repoRoot: repoRoot)
+                _ = deleteBranchIfUnused(branch, repoRoot: repoRoot, gitConfiguration: gitConfiguration)
             }
             if result.timedOut {
                 return .gitCommandFailed(message: "git worktree add timed out")
@@ -208,12 +210,16 @@ struct GitWorktreeManager {
     /// without touching anything when git cannot say whether the branch exists.
     @discardableResult
     nonisolated static func deleteBranchIfUnused(_ branch: String, repoRoot: String) -> Bool {
+        deleteBranchIfUnused(branch, repoRoot: repoRoot, gitConfiguration: [])
+    }
+
+    private nonisolated static func deleteBranchIfUnused(_ branch: String, repoRoot: String, gitConfiguration: [String]) -> Bool {
         guard let exists = branchExistsLocally(branch, repoRoot: repoRoot) else { return false }
         guard exists else { return true }
         guard worktreeEntry(forBranch: branch, repoRoot: repoRoot) == nil else { return false }
         let result = runGitCommand(
             directory: repoRoot,
-            arguments: ["update-ref", "-d", "refs/heads/\(branch)"]
+            arguments: gitConfiguration + ["update-ref", "-d", "refs/heads/\(branch)"]
         )
         return result?.exitStatus == 0 && result?.timedOut == false
     }

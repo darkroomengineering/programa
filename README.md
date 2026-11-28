@@ -105,8 +105,6 @@ Programa keeps what tmux is good at and adds what agents need:
 - A machine-readable socket API contract (`contracts/v2/methods.json`) that generates the app's command catalog and the CLI's method names, so those two cannot drift from it.
 - Native Windows.
 
-Things cmux has that Programa removed on purpose, to stay lean: SSH remote workspaces and an iOS companion. Both are documented under `docs/removed/`, with the reasons and what a future version should do differently.
-
 Programa is a terminal, notifications, workspaces, and a CLI to control all of it: primitives you compose yourself rather than a prescribed workflow. What you build with them is yours.
 
 ## Shortcuts
@@ -118,6 +116,9 @@ On macOS, ⌘⇧P opens the command palette, which lists every action. Full refe
 Choose separate light and dark Ghostty themes in `Settings → Appearance → Terminal`, with matching CLI and `settings.json` support. See [docs/terminal-themes.md](docs/terminal-themes.md).
 
 ## Agent skill
+
+Use the [iPhone companion](docs/iphone-companion.md) to start and continue Claude Code
+worktree conversations from your phone over cellular.
 
 Agents running inside programa (Claude Code, Codex, OpenCode) can drive the app itself, splitting panes, reading a sibling pane's output, spawning and coordinating a helper agent, all without stealing your focus. `programa claude/codex/opencode install-integration` installs [`SKILL.md`](SKILL.md) alongside the existing hooks; see [docs/agent-skill.md](docs/agent-skill.md) for the full walkthrough.
 

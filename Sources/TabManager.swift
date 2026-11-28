@@ -1385,7 +1385,8 @@ class TabManager: ObservableObject {
         repoRoot: String,
         layoutName: String? = nil,
         parentWorkspaceId: UUID? = nil,
-        select: Bool
+        select: Bool,
+        eagerLoadTerminal: Bool = true
     ) -> Workspace {
         let parent: Workspace?
         if let parentWorkspaceId {
@@ -1401,7 +1402,7 @@ class TabManager: ObservableObject {
         let workspace = addWorkspace(
             workingDirectory: path,
             select: select,
-            eagerLoadTerminal: !select
+            eagerLoadTerminal: !select && eagerLoadTerminal
         )
         workspace.worktreeBranch = branch
         if let parent {
