@@ -1,0 +1,294 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "common.cancel" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "キャンセル" } }
+      }
+    },
+    "common.retry" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Try Again" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "再試行" } }
+      }
+    },
+    "devices.forget" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Forget Mac" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Macの登録を解除" } }
+      }
+    },
+    "devices.forgetMessage" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Tasks stay on the Mac. You can pair with it again any time." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "タスクはMacに残ります。いつでも再ペアリングできます。" } }
+      }
+    },
+    "devices.forgetTitle" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Forget this Mac?" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このMacの登録を解除しますか？" } }
+      }
+    },
+    "error.busy" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The Mac is busy. Try again in a moment." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Macが処理中です。しばらくしてからお試しください。" } }
+      }
+    },
+    "error.host" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Programa is unavailable on your Mac." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "MacのProgramaを利用できません。" } }
+      }
+    },
+    "error.keychain" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Programa could not access its credentials. Unlock your iPhone and try again." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Programaの認証情報にアクセスできませんでした。iPhoneのロックを解除して再試行してください。" } }
+      }
+    },
+    "error.missing" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This job or repository is unavailable on your Mac." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このタスクまたはリポジトリはMacで利用できません。" } }
+      }
+    },
+    "error.pairCode" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Scan or paste the full pairing code from your Mac." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Macに表示されたペアリングコード全体をスキャンするか、貼り付けてください。" } }
+      }
+    },
+    "error.pairExpired" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The Mac refused this pairing code. Generate a new code and try again." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Macがペアリングコードを拒否しました。新しいコードを発行して再試行してください。" } }
+      }
+    },
+    "error.reply" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Programa received an unexpected reply. Check that both apps are up to date." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Programaが予期しない応答を受信しました。両方のアプリが最新か確認してください。" } }
+      }
+    },
+    "error.request" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The Mac could not accept this request." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Macがこのリクエストを受け付けられませんでした。" } }
+      }
+    },
+    "error.revoked" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This iPhone no longer has access. Pair it again on your Mac." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "このiPhoneのアクセス権がありません。Macで再ペアリングしてください。" } }
+      }
+    },
+    "error.storage" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The Mac could not read or save this job." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Macでこのタスクを読み込むか保存できませんでした。" } }
+      }
+    },
+    "error.unreachable" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Could not reach your Mac. Check that it is awake and Programa is running." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Macに接続できませんでした。Macがスリープしておらず、Programaが起動していることを確認してください。" } }
+      }
+    },
+    "inbox.empty.description" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Start a task to work on a repository from your Mac." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "タスクを開始すると、Mac上のリポジトリで作業できます。" } }
+      }
+    },
+    "inbox.empty.repositories" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add a repository in Programa on your Mac to start a task." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "タスクを開始するには、MacのProgramaでリポジトリを追加してください。" } }
+      }
+    },
+    "inbox.empty.title" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No Tasks Yet" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "タスクはまだありません" } }
+      }
+    },
+    "job.failed" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Failed" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "失敗" } }
+      }
+    },
+    "job.interrupted" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Interrupted" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "中断" } }
+      }
+    },
+    "job.queued" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Queued" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "待機中" } }
+      }
+    },
+    "job.ready" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ready" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "準備完了" } }
+      }
+    },
+    "job.running" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Working" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "作業中" } }
+      }
+    },
+    "pair.cameraUnavailable" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Camera Unavailable" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "カメラを利用できません" } }
+      }
+    },
+    "pair.code" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pairing code" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ペアリングコード" } }
+      }
+    },
+    "pair.connect" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続" } }
+      }
+    },
+    "pair.connecting" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connecting" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続中" } }
+      }
+    },
+    "pair.instructions" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open Programa on your Mac to display a pairing code. Scan it or paste it here." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "MacのProgramaでペアリングコードを表示し、スキャンするか、ここに貼り付けてください。" } }
+      }
+    },
+    "pair.pasteInstead" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Paste the pairing code from your Mac instead." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "代わりにMacのペアリングコードを貼り付けてください。" } }
+      }
+    },
+    "pair.scan" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Scan Pairing Code" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ペアリングコードをスキャン" } }
+      }
+    },
+    "pair.title" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pair Your Mac" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Macとペアリング" } }
+      }
+    },
+    "task.new" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New Task" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "新規タスク" } }
+      }
+    },
+    "task.prompt" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "What should Programa do?" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Programaへの指示を入力" } }
+      }
+    },
+    "task.repository" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Repository" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "リポジトリ" } }
+      }
+    },
+    "task.sending" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sending" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "送信中" } }
+      }
+    },
+    "task.start" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Start" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "開始" } }
+      }
+    },
+    "task.tooLong" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This message is too long. Shorten it and try again." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "メッセージが長すぎます。短くして再試行してください。" } }
+      }
+    },
+    "thread.loadingOlder" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Loading Earlier Messages" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "以前のメッセージを読み込み中" } }
+      }
+    },
+    "thread.older" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Load Earlier Messages" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "以前のメッセージを読み込む" } }
+      }
+    },
+    "thread.reply" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Message" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "メッセージ" } }
+      }
+    },
+    "thread.role.agent" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Agent" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "エージェント" } }
+      }
+    },
+    "thread.role.programa" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Programa" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Programa" } }
+      }
+    },
+    "thread.role.user" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "You" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "あなた" } }
+      }
+    },
+    "thread.send" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Send Message" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "メッセージを送信" } }
+      }
+    },
+    "thread.shareMac" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Share Mac Workspace Link" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Macのワークスペースリンクを共有" } }
+      }
+    },
+    "thread.title" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Conversation" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "会話" } }
+      }
+    },
+    "thread.unavailable" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Conversation Unavailable" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "会話を表示できません" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}

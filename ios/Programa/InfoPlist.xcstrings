@@ -1,0 +1,12 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "NSCameraUsageDescription" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Scan the pairing code displayed by Programa on your Mac." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "MacのProgramaに表示されたペアリングコードをスキャンします。" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}
