@@ -382,26 +382,30 @@ struct MobileChatCompanionView: View {
     var body: some View {
         Form {
             Section(String(localized: "mobileChat.section.project", defaultValue: "Project")) {
-                LabeledContent {
+                HStack {
+                    Text(String(localized: "mobileChat.repository", defaultValue: "Repository"))
+                    Spacer(minLength: 12)
                     pathLabel(model.checkout)
                     Button(String(localized: "mobileChat.choose", defaultValue: "Choose")) {
                         Task { await model.chooseRepository() }
                     }
+                    .buttonStyle(.bordered)
                     .accessibilityLabel(Text(String(localized: "mobileChat.chooseRepository", defaultValue: "Choose Repository")))
                     .disabled(!model.canChooseRepository)
-                } label: {
-                    Text(String(localized: "mobileChat.repository", defaultValue: "Repository"))
                 }
-                LabeledContent {
+                .accessibilityElement(children: .contain)
+                HStack {
+                    Text(String(localized: "mobileChat.executable", defaultValue: "Claude Code"))
+                    Spacer(minLength: 12)
                     pathLabel(model.executable)
                     Button(String(localized: "mobileChat.choose", defaultValue: "Choose")) {
                         Task { await model.chooseExecutable() }
                     }
+                    .buttonStyle(.bordered)
                     .accessibilityLabel(Text(String(localized: "mobileChat.chooseExecutable", defaultValue: "Choose Claude Code")))
                     .disabled(!model.canChooseExecutable)
-                } label: {
-                    Text(String(localized: "mobileChat.executable", defaultValue: "Claude Code"))
                 }
+                .accessibilityElement(children: .contain)
             }
             Section {
                 serviceControls

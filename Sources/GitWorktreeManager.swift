@@ -188,7 +188,7 @@ struct GitWorktreeManager {
         }
         guard !result.timedOut, result.exitStatus == 0 else {
             if !branchExisted {
-                deleteBranchIfUnused(branch, repoRoot: repoRoot, gitConfiguration: gitConfiguration)
+                _ = deleteBranchIfUnused(branch, repoRoot: repoRoot, gitConfiguration: gitConfiguration)
             }
             if result.timedOut {
                 return .gitCommandFailed(message: "git worktree add timed out")
