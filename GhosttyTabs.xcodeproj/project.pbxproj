@@ -9,6 +9,11 @@
 		/* Begin PBXBuildFile section */
 			TOML0003 /* TOML in Frameworks */ = {isa = PBXBuildFile; productRef = TOML0002 /* TOML */; };
 			A5001001 /* ProgramaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001011 /* ProgramaApp.swift */; };
+			AB1C00000000000000000001 /* CompanionWire.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1C00000000000000000011 /* CompanionWire.swift */; };
+			AB1C00000000000000000002 /* MobileChatHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1C00000000000000000012 /* MobileChatHost.swift */; };
+			AB1C00000000000000000003 /* MobileChatJobs.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1C00000000000000000013 /* MobileChatJobs.swift */; };
+			AB1C00000000000000000004 /* MobileChatCompanionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1C00000000000000000014 /* MobileChatCompanionView.swift */; };
+			AB1C00000000000000000005 /* IrohLib in Frameworks */ = {isa = PBXBuildFile; productRef = AB1C00000000000000000022 /* IrohLib */; };
 		NRPA00003 /* DebugWindows.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRPA00004 /* DebugWindows.swift */; };
 		NRPA00005 /* SettingsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRPA00006 /* SettingsModels.swift */; };
 		NRPA00007 /* SettingsComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = NRPA00008 /* SettingsComponents.swift */; };
@@ -510,6 +515,10 @@
 			F1000002A1B2C3D4E5F60718 /* programaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = programaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 			7E7E6EF344A568AC7FEE3715 /* programaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = programaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 			A5001011 /* ProgramaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramaApp.swift; sourceTree = "<group>"; };
+			AB1C00000000000000000011 /* CompanionWire.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileChat/CompanionWire.swift; sourceTree = SOURCE_ROOT; };
+			AB1C00000000000000000012 /* MobileChatHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileChatHost.swift; sourceTree = "<group>"; };
+			AB1C00000000000000000013 /* MobileChatJobs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileChatJobs.swift; sourceTree = "<group>"; };
+			AB1C00000000000000000014 /* MobileChatCompanionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileChatCompanionView.swift; sourceTree = "<group>"; };
 		NRPA00004 /* DebugWindows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugWindows.swift; sourceTree = "<group>"; };
 		NRPA00006 /* SettingsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsModels.swift; sourceTree = "<group>"; };
 		NRPA00008 /* SettingsComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsComponents.swift; sourceTree = "<group>"; };
@@ -925,6 +934,7 @@
 					A5001006 /* GhosttyKit.xcframework in Frameworks */,
 					A5001230 /* Sparkle in Frameworks */,
 					A5001290 /* MarkdownUI in Frameworks */,
+					AB1C00000000000000000005 /* IrohLib in Frameworks */,
 				);
 				runOnlyForDeploymentPostprocessing = 0;
 			};
@@ -1060,6 +1070,10 @@
 				isa = PBXGroup;
 				children = (
 					A5001011 /* ProgramaApp.swift */,
+					AB1C00000000000000000011 /* CompanionWire.swift */,
+					AB1C00000000000000000012 /* MobileChatHost.swift */,
+					AB1C00000000000000000013 /* MobileChatJobs.swift */,
+					AB1C00000000000000000014 /* MobileChatCompanionView.swift */,
 					NRPA00004 /* DebugWindows.swift */,
 					NRPA00006 /* SettingsModels.swift */,
 					NRPA00008 /* SettingsComponents.swift */,
@@ -1551,6 +1565,7 @@
 					A5001231 /* Sparkle */,
 					A5001261 /* Bonsplit */,
 					A5001291 /* MarkdownUI */,
+					AB1C00000000000000000022 /* IrohLib */,
 				);
 			name = GhosttyTabs;
 			productName = GhosttyTabs;
@@ -1673,6 +1688,7 @@
 				A5001260 /* XCLocalSwiftPackageReference "bonsplit" */,
 				05A57C4D24BA3C92ED8757AB /* XCRemoteSwiftPackageReference "swift-sdk" */,
 				TOML0001 /* XCRemoteSwiftPackageReference "swift-toml" */,
+				AB1C00000000000000000021 /* XCRemoteSwiftPackageReference "iroh-ffi" */,
 			);
 			productRefGroup = A5001042 /* Products */;
 			projectDirPath = "";
@@ -1694,6 +1710,10 @@
 				buildActionMask = 2147483647;
 				files = (
 					A5001001 /* ProgramaApp.swift in Sources */,
+					AB1C00000000000000000001 /* CompanionWire.swift in Sources */,
+					AB1C00000000000000000002 /* MobileChatHost.swift in Sources */,
+					AB1C00000000000000000003 /* MobileChatJobs.swift in Sources */,
+					AB1C00000000000000000004 /* MobileChatCompanionView.swift in Sources */,
 					NRPA00003 /* DebugWindows.swift in Sources */,
 					NRPA00005 /* SettingsModels.swift in Sources */,
 					NRPA00007 /* SettingsComponents.swift in Sources */,
@@ -2546,6 +2566,14 @@
 				version = 2.1.1;
 			};
 		};
+		AB1C00000000000000000021 /* XCRemoteSwiftPackageReference "iroh-ffi" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/manaflow-ai/iroh-ffi.git";
+			requirement = {
+				kind = exactVersion;
+				version = "1.0.2-cmux.3";
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -2573,6 +2601,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = TOML0001 /* XCRemoteSwiftPackageReference "swift-toml" */;
 			productName = TOML;
+		};
+		AB1C00000000000000000022 /* IrohLib */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AB1C00000000000000000021 /* XCRemoteSwiftPackageReference "iroh-ffi" */;
+			productName = IrohLib;
 		};
 /* End XCSwiftPackageProductDependency section */
 

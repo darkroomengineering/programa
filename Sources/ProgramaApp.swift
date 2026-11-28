@@ -68,6 +68,7 @@ final class PrimaryTabManagerStore: ObservableObject {
 
 @main
 struct programaApp: App {
+    @Environment(\.openWindow) private var openWindow
     @StateObject private var primaryTabManagerStore: PrimaryTabManagerStore
     @StateObject private var notificationStore = TerminalNotificationStore.shared
     @StateObject private var sidebarState = SidebarState()
@@ -261,6 +262,7 @@ struct programaApp: App {
 #endif
                     updateSocketController()
                     appDelegate.configure(tabManager: tabManager, notificationStore: notificationStore, sidebarState: sidebarState)
+                    Task { await MobileChatCompanionModel.shared.resumeIfEnabled() }
                     programaConfigStore.wireDirectoryTracking(tabManager: tabManager)
                     programaConfigStore.loadAll()
                     applyAppearance()
@@ -515,6 +517,10 @@ struct programaApp: App {
 
             // Close tab/workspace
             CommandGroup(after: .newItem) {
+                Button(String(localized: "menu.file.mobileChatCompanion", defaultValue: "iPhone Companion…")) {
+                    openWindow(id: "mobile-chat-companion")
+                }
+
                 splitCommandButton(title: String(localized: "menu.file.goToWorkspace", defaultValue: "Go to Workspace…"), shortcut: menuShortcut(for: .goToWorkspace)) {
                     let targetWindow = NSApp.keyWindow ?? NSApp.mainWindow
                     NotificationCenter.default.post(name: .commandPaletteSwitcherRequested, object: targetWindow)
@@ -682,6 +688,11 @@ struct programaApp: App {
                 }
             }
         }
+
+        Window(String(localized: "window.mobileChatCompanion.title", defaultValue: "iPhone Companion"), id: "mobile-chat-companion") {
+            MobileChatCompanionView()
+        }
+        .defaultSize(width: 460, height: 450)
     }
 
     private func showAboutPanel() {

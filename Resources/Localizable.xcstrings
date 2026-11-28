@@ -1,6 +1,244 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "mobileChat.keepOpen": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Keep Programa open and this Mac awake to run jobs from your iPhone." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "iPhoneからジョブを実行するには、Programaを開いたままにして、このMacをスリープさせないでください。" } }
+      }
+    },
+    "mobileChat.macName": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Mac" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "Mac" } }
+      }
+    },
+    "mobileChat.chooseRepository": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Choose Repository" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "リポジトリを選択" } }
+      }
+    },
+    "mobileChat.chooseExecutable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Choose Claude Code" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "Claude Codeを選択" } }
+      }
+    },
+    "menu.file.mobileChatCompanion": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "iPhone Companion…" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "iPhoneコンパニオン…" } }
+      }
+    },
+    "window.mobileChatCompanion.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "iPhone Companion" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "iPhoneコンパニオン" } }
+      }
+    },
+    "mobileChat.error.repository": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Choose a Git checkout that Programa can open." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "Programaで開けるGitチェックアウトを選んでください。" } }
+      }
+    },
+    "mobileChat.error.executable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Choose an executable Claude Code binary." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "実行可能なClaude Codeのバイナリを選んでください。" } }
+      }
+    },
+    "mobileChat.error.start": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Programa couldn’t start the iPhone connection. Try again." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "iPhoneとの接続を開始できませんでした。もう一度お試しください。" } }
+      }
+    },
+    "mobileChat.error.invitation": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Programa couldn’t prepare a pairing code. Try again." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ペアリングコードを作成できませんでした。もう一度お試しください。" } }
+      }
+    },
+    "mobileChat.error.revoke": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Programa couldn’t remove access for the paired iPhone. Try again." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ペアリング済みのiPhoneのアクセス権を取り消せませんでした。もう一度お試しください。" } }
+      }
+    },
+    "mobileChat.choose": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Choose" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "選択" } }
+      }
+    },
+    "mobileChat.section.project": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Project" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "プロジェクト" } }
+      }
+    },
+    "mobileChat.repository": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Repository" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "リポジトリ" } }
+      }
+    },
+    "mobileChat.executable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Claude Code" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "Claude Code" } }
+      }
+    },
+    "mobileChat.section.connection": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "iPhone Connection" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "iPhone接続" } }
+      }
+    },
+    "mobileChat.revoke.confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Remove access for this iPhone?" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "このiPhoneのアクセス権を取り消しますか？" } }
+      }
+    },
+    "mobileChat.revoke": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Remove Access" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "アクセス権を取り消す" } }
+      }
+    },
+    "mobileChat.disable.confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Turn off iPhone access on this Mac?" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "このMacへのiPhoneからのアクセスを無効にしますか？" } }
+      }
+    },
+    "mobileChat.disable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Turn Off" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "無効にする" } }
+      }
+    },
+    "mobileChat.disable.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "A paired iPhone will need to pair again. Existing worktrees stay on this Mac." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "iPhoneを再度ペアリングする必要があります。既存のワークツリーはこのMacに残ります。" } }
+      }
+    },
+    "mobileChat.enable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Turn On iPhone Access" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "iPhoneからのアクセスを有効にする" } }
+      }
+    },
+    "mobileChat.starting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Starting the iPhone connection…" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "iPhone接続を開始中…" } }
+      }
+    },
+    "mobileChat.stopping": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Turning off iPhone access…" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "iPhoneからのアクセスを無効化中…" } }
+      }
+    },
+    "mobileChat.pair": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Pair an iPhone…" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "iPhoneをペアリング…" } }
+      }
+    },
+    "mobileChat.preparingCode": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Preparing a pairing code…" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ペアリングコードを準備中…" } }
+      }
+    },
+    "mobileChat.cancellingCode": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Cancelling pairing…" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ペアリングをキャンセル中…" } }
+      }
+    },
+    "mobileChat.pairedDevice": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Paired iPhone" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ペアリング済みのiPhone" } }
+      }
+    },
+    "mobileChat.revoking": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Removing access…" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "アクセス権を取り消し中…" } }
+      }
+    },
+    "mobileChat.scan": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Scan this code in Programa on your iPhone." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "iPhoneのProgramaでこのコードをスキャンしてください。" } }
+      }
+    },
+    "mobileChat.expires": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Code expires in" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "コードの有効期限" } }
+      }
+    },
+    "mobileChat.copyCode": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Copy Pairing Code" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ペアリングコードをコピー" } }
+      }
+    },
+    "mobileChat.cancelPairing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Cancel Pairing" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ペアリングをキャンセル" } }
+      }
+    },
+    "mobileChat.noRepository": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "No repository selected" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "リポジトリが選択されていません" } }
+      }
+    },
     "command.restoreSession.title": {
       "extractionState": "manual",
       "localizations": {
