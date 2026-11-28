@@ -19,7 +19,7 @@ actor MobileChatJobs {
     }
 
     private enum JobError: Error {
-        case invalidConfiguration, worktreeUnavailable, workerFailed
+        case invalidConfiguration, worktreeUnavailable, workerDidNotLaunch, workerFailed
     }
 
     private let directory: URL
@@ -204,6 +204,7 @@ actor MobileChatJobs {
             schedule()
         }
         guard var record = records[jobID], let prompt = record.messages.last?.text else { return }
+        let resume = record.attemptedClaude
         do {
             guard repositories.contains(where: { $0.id == record.job.repositoryID && $0.checkout == record.checkout }) else {
                 throw JobError.invalidConfiguration
@@ -219,7 +220,6 @@ actor MobileChatJobs {
             let reference = await Self.openWorkspace(tree, branch: branch, reference: record.job.workspaceReference)
             record.worktree = tree.url
             record.job = Self.update(record.job, state: .running, workspaceReference: reference)
-            let resume = record.attemptedClaude
             record.attemptedClaude = true
             try persist(record)
             let executable = claudeExecutable
@@ -234,6 +234,9 @@ actor MobileChatJobs {
             record.messages.append(MobileChatMessage(id: UUID(), role: .assistant, text: result, createdAt: Date()))
             try persist(record)
         } catch {
+            if case .workerDidNotLaunch? = error as? JobError {
+                record.attemptedClaude = resume
+            }
             record.job = Self.update(record.job, state: .failed)
             do {
                 try persist(record)
@@ -388,7 +391,11 @@ actor MobileChatJobs {
         ]
         let allowed = Set(["HOME", "USER", "LOGNAME", "TMPDIR", "PATH", "LANG", "LC_ALL"])
         process.environment = ProcessInfo.processInfo.environment.filter { allowed.contains($0.key) }
-        try process.run()
+        do {
+            try process.run()
+        } catch {
+            throw JobError.workerDidNotLaunch
+        }
         try? output.fileHandleForWriting.close()
         let timeout = DispatchWorkItem {
             if process.isRunning { Darwin.kill(process.processIdentifier, SIGKILL) }
